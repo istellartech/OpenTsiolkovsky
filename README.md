@@ -1,6 +1,7 @@
-# OpenTsiolkovsky
+# OpenTsiolkovsky [![Build Status](https://travis-ci.org/istellartech/OpenTsiolkovsky.svg?branch=master)](https://travis-ci.org/istellartech/OpenTsiolkovsky)
 
 ![OpenTsiolkovsky](doc/OpenTsiolkovsky_Logo_small.png)
+
 
 OpenTsiolkovsky is a free , specific usage rocket flight simulator that allow you calcurate rocket trajectry.
 
