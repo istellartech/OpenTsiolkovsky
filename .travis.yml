@@ -1,3 +1,6 @@
+sudo: required
+dis: trusty
 language: cpp
-compiler: gcc-4.8
+compiler:
+  - gcc-4.8
 script: make
