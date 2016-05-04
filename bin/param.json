@@ -1,0 +1,128 @@
+{
+	"name": "test",
+	"output file name": "test",
+	"calculate condition": {
+		"start time[s]": 0,
+		"end time[s]": 260,
+		"time step[s]": 0.05
+	},
+	"launch": {
+		"position LLH[deg,deg,m]": [40.0, 140.0, 10.0],
+		"velocity NED[m/s]": [0.0, 0.0, 0.0],
+		"time": [2016,1,1,12,0,0]
+	},
+	"1st stage": {
+		"mass initial[kg]": 200.0,
+		"thrust": {
+			"Isp[s]": 200.0,
+			"file exist": false,
+			"file name": "thrust.csv",
+			"const thrust[N]": 5000,
+			"burn start time[s]": 0.0,
+			"burn end time[s]": 40.0,
+			"throat diameter[m]": 0.1,
+			"nozzle expansion ratio": 10,
+			"nozzle exhaust pressure[Pa]": 101300
+		},
+		"aero": {
+			"body diameter[m]": 0.1,
+			"lift coefficient file exist": false,
+			"lift coefficient file name": "CL.csv",
+			"lift coefficient": 0.0,
+			"drag coefficient file exist": false,
+			"drag coefficient file name": "CD.csv",
+			"drag coefficient": 0.2
+		},
+		"attitude": {
+			"file exist": false,
+			"file name": "attitude.csv",
+			"initial elevation[deg]": 90.0,
+			"initial azimth[deg]": 0
+		},
+		"stage": {
+			"following stage exist": true,
+			"separation time[s]": 150
+		}
+	},
+	"2nd stage": {
+		"mass initial[kg]": 50.0,
+		"thrust": {
+			"Isp[s]": 200.0,
+			"file exist": false,
+			"file name": "thrust.csv",
+			"const thrust[N]": 1000,
+			"burn start time[s]": 0.0,
+			"burn end time[s]": 40.0,
+			"throat diameter[m]": 0.1,
+			"nozzle expansion ratio": 10,
+			"nozzle exhaust pressure[Pa]": 0
+		},
+		"aero": {
+			"body diameter[m]": 0.1,
+			"lift coefficient file exist": false,
+			"lift coefficient file name": "CL.csv",
+			"lift coefficient": 0.0,
+			"drag coefficient file exist": false,
+			"drag coefficient file name": "CD.csv",
+			"drag coefficient": 0.2
+		},
+		"attitude": {
+			"file exist": false,
+			"file name": "attitude.csv",
+			"initial elevation[deg]": 90.0,
+			"initial azimth[deg]": 0
+		},
+		"stage": {
+			"following stage exist": true,
+			"separation time[s]": 100
+		}
+	},
+	"3rd stage": {
+		"mass initial[kg]": 200.0,
+		"thrust": {
+			"Isp[s]": 200.0,
+			"file exist": false,
+			"file name": "thrust.csv",
+			"const thrust[N]": 5000,
+			"burn start time[s]": 0.0,
+			"burn end time[s]": 40.0,
+			"throat diameter[m]": 0.1,
+			"nozzle expansion ratio": 10,
+			"nozzle exhaust pressure[Pa]": 0
+		},
+		"aero": {
+			"body diameter[m]": 0.1,
+			"lift coefficient file exist": false,
+			"lift coefficient file name": "CL.csv",
+			"lift coefficient": 0.0,
+			"drag coefficient file exist": false,
+			"drag coefficient file name": "CD.csv",
+			"drag coefficient": 0.2
+		},
+		"attitude": {
+			"file exist": false,
+			"file name": "attitude.csv",
+			"initial elevation[deg]": 90.0,
+			"initial azimth[deg]": 0
+		},
+		"stage": {
+			"following stage exist": false,
+			"separation time[s]": 100
+		}
+	},
+	"payload": {
+		"weight": 1,
+		"deploy time": 10000
+	},
+	"parachute": {
+		"exist": false,
+		"drag coefficient": 1.0,
+		"diameter": 1.5,
+		"deploy time": 100
+	},
+	"wind": {
+		"file exist": false,
+		"file name": "wind.csv",
+		"const wind": [0.0, 0.0]
+	}
+}

@@ -1,0 +1,309 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A31646B71C9137C1000FA98B /* fileio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A31646B51C9137C1000FA98B /* fileio.cpp */; };
+		A36D52A51BF98A30001864D3 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A36D52A41BF98A30001864D3 /* main.cpp */; };
+		A36D52AC1BF98B6C001864D3 /* README.md in Sources */ = {isa = PBXBuildFile; fileRef = A36D52AB1BF98B6C001864D3 /* README.md */; };
+		A3CCE1461C03301500BC21D0 /* gravity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1441C03301500BC21D0 /* gravity.cpp */; };
+		A3CCE1491C0348CB00BC21D0 /* air.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1471C0348CB00BC21D0 /* air.cpp */; };
+		A3CCE1561C09676C00BC21D0 /* rocket.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1541C09676C00BC21D0 /* rocket.cpp */; };
+		A3E82ACB1CAA0E62007CC708 /* Orbit.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3E82AC91CAA0E62007CC708 /* Orbit.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A36D529F1BF98A30001864D3 /* Copy Files */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = usr/share/man/man1;
+			dstSubfolderSpec = 16;
+			files = (
+			);
+			name = "Copy Files";
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		A31646B51C9137C1000FA98B /* fileio.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = fileio.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A31646B61C9137C1000FA98B /* fileio.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = fileio.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A31646B81C928591000FA98B /* lib */ = {isa = PBXFileReference; lastKnownFileType = folder; path = lib; sourceTree = "<group>"; };
+		A36D52A11BF98A30001864D3 /* OpenTsiolkovsky */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = OpenTsiolkovsky; sourceTree = BUILT_PRODUCTS_DIR; };
+		A36D52A41BF98A30001864D3 /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = main.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A36D52AB1BF98B6C001864D3 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; lineEnding = 0; path = README.md; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.markdown; };
+		A3CCE1441C03301500BC21D0 /* gravity.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = gravity.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3CCE1451C03301500BC21D0 /* gravity.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = gravity.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3CCE1471C0348CB00BC21D0 /* air.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = air.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3CCE1481C0348CB00BC21D0 /* air.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = air.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3CCE1541C09676C00BC21D0 /* rocket.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = rocket.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3CCE1551C09676C00BC21D0 /* rocket.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = rocket.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3E82AC91CAA0E62007CC708 /* Orbit.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = Orbit.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3E82ACA1CAA0E62007CC708 /* Orbit.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = Orbit.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A36D529E1BF98A30001864D3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A36D52981BF98A30001864D3 = {
+			isa = PBXGroup;
+			children = (
+				A36D52AB1BF98B6C001864D3 /* README.md */,
+				A36D52A31BF98A30001864D3 /* scr */,
+				A36D52A21BF98A30001864D3 /* Products */,
+				A31646B81C928591000FA98B /* lib */,
+			);
+			sourceTree = "<group>";
+		};
+		A36D52A21BF98A30001864D3 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A36D52A11BF98A30001864D3 /* OpenTsiolkovsky */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A36D52A31BF98A30001864D3 /* scr */ = {
+			isa = PBXGroup;
+			children = (
+				A36D52A41BF98A30001864D3 /* main.cpp */,
+				A3CCE1541C09676C00BC21D0 /* rocket.cpp */,
+				A3CCE1551C09676C00BC21D0 /* rocket.hpp */,
+				A3CCE1441C03301500BC21D0 /* gravity.cpp */,
+				A3CCE1451C03301500BC21D0 /* gravity.hpp */,
+				A3CCE1471C0348CB00BC21D0 /* air.cpp */,
+				A3CCE1481C0348CB00BC21D0 /* air.hpp */,
+				A31646B51C9137C1000FA98B /* fileio.cpp */,
+				A31646B61C9137C1000FA98B /* fileio.hpp */,
+				A3E82AC91CAA0E62007CC708 /* Orbit.cpp */,
+				A3E82ACA1CAA0E62007CC708 /* Orbit.hpp */,
+			);
+			path = scr;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A36D52A01BF98A30001864D3 /* OpenTsiolkovsky */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A36D52A81BF98A30001864D3 /* Build configuration list for PBXNativeTarget "OpenTsiolkovsky" */;
+			buildPhases = (
+				A36D529D1BF98A30001864D3 /* Sources */,
+				A36D529E1BF98A30001864D3 /* Frameworks */,
+				A36D529F1BF98A30001864D3 /* Copy Files */,
+				A31646AD1C8FC521000FA98B /* ShellScript */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OpenTsiolkovsky;
+			productName = Tsiolkovskiy;
+			productReference = A36D52A11BF98A30001864D3 /* OpenTsiolkovsky */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A36D52991BF98A30001864D3 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0710;
+				ORGANIZATIONNAME = ina111;
+				TargetAttributes = {
+					A36D52A01BF98A30001864D3 = {
+						CreatedOnToolsVersion = 7.1;
+					};
+				};
+			};
+			buildConfigurationList = A36D529C1BF98A30001864D3 /* Build configuration list for PBXProject "OpenTsiolkovsky" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = A36D52981BF98A30001864D3;
+			productRefGroup = A36D52A21BF98A30001864D3 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A36D52A01BF98A30001864D3 /* OpenTsiolkovsky */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A31646AD1C8FC521000FA98B /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cp $BUILT_PRODUCTS_DIR/OpenTsiolkovsky $SRCROOT/bin/";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A36D529D1BF98A30001864D3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A3CCE1491C0348CB00BC21D0 /* air.cpp in Sources */,
+				A3CCE1461C03301500BC21D0 /* gravity.cpp in Sources */,
+				A31646B71C9137C1000FA98B /* fileio.cpp in Sources */,
+				A3E82ACB1CAA0E62007CC708 /* Orbit.cpp in Sources */,
+				A36D52AC1BF98B6C001864D3 /* README.md in Sources */,
+				A36D52A51BF98A30001864D3 /* main.cpp in Sources */,
+				A3CCE1561C09676C00BC21D0 /* rocket.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A36D52A61BF98A30001864D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.11;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		A36D52A71BF98A30001864D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "-";
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.11;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		A36D52A91BF98A30001864D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = YES;
+				HEADER_SEARCH_PATHS = /opt/local/include;
+				LIBRARY_SEARCH_PATHS = /opt/local/lib;
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = OpenTsiolkovsky;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)";
+			};
+			name = Debug;
+		};
+		A36D52AA1BF98A30001864D3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = YES;
+				HEADER_SEARCH_PATHS = /opt/local/include;
+				LIBRARY_SEARCH_PATHS = /opt/local/lib;
+				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = OpenTsiolkovsky;
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A36D529C1BF98A30001864D3 /* Build configuration list for PBXProject "OpenTsiolkovsky" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A36D52A61BF98A30001864D3 /* Debug */,
+				A36D52A71BF98A30001864D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A36D52A81BF98A30001864D3 /* Build configuration list for PBXNativeTarget "OpenTsiolkovsky" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A36D52A91BF98A30001864D3 /* Debug */,
+				A36D52AA1BF98A30001864D3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A36D52991BF98A30001864D3 /* Project object */;
+}
