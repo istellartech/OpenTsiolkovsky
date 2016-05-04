@@ -15,7 +15,9 @@ The main features include:
 * It depends on boost library
 * Cross-platform(modern C++ based)
 
-Read more about it on the ![Wiki](https://github.com/istellartech/OpenTsiolkovsky/wiki/input_file)
+Read more about it on the [Wiki](https://github.com/istellartech/OpenTsiolkovsky/wiki)
+
+Input file format is following [input file format](https://github.com/istellartech/OpenTsiolkovsky/wiki/input_file)
 
 ## License
 OpenTsiolkovsky is an Open Source project licensed under the MIT License
