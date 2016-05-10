@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		A31646B71C9137C1000FA98B /* fileio.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A31646B51C9137C1000FA98B /* fileio.cpp */; };
 		A36D52A51BF98A30001864D3 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A36D52A41BF98A30001864D3 /* main.cpp */; };
-		A36D52AC1BF98B6C001864D3 /* README.md in Sources */ = {isa = PBXBuildFile; fileRef = A36D52AB1BF98B6C001864D3 /* README.md */; };
 		A3CCE1461C03301500BC21D0 /* gravity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1441C03301500BC21D0 /* gravity.cpp */; };
 		A3CCE1491C0348CB00BC21D0 /* air.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1471C0348CB00BC21D0 /* air.cpp */; };
 		A3CCE1561C09676C00BC21D0 /* rocket.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1541C09676C00BC21D0 /* rocket.cpp */; };
@@ -170,7 +169,6 @@
 				A3CCE1461C03301500BC21D0 /* gravity.cpp in Sources */,
 				A31646B71C9137C1000FA98B /* fileio.cpp in Sources */,
 				A3E82ACB1CAA0E62007CC708 /* Orbit.cpp in Sources */,
-				A36D52AC1BF98B6C001864D3 /* README.md in Sources */,
 				A36D52A51BF98A30001864D3 /* main.cpp in Sources */,
 				A3CCE1561C09676C00BC21D0 /* rocket.cpp in Sources */,
 			);
