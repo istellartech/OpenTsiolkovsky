@@ -87,6 +87,9 @@ Rocket::Rocket(Rocket& obj){
     thrust_file_name_1st        = obj.thrust_file_name_1st;
     thrust_file_name_2nd        = obj.thrust_file_name_2nd;
     thrust_file_name_3rd        = obj.thrust_file_name_3rd;
+    thrust_mat_1st              = obj.thrust_mat_1st;
+    thrust_mat_2nd              = obj.thrust_mat_2nd;
+    thrust_mat_3rd              = obj.thrust_mat_3rd;
     thrust_1st                  = obj.thrust_1st;
     thrust_2nd                  = obj.thrust_2nd;
     thrust_3rd                  = obj.thrust_3rd;
@@ -123,6 +126,9 @@ Rocket::Rocket(Rocket& obj){
     CL_file_name_1st            = obj.CL_file_name_1st;
     CL_file_name_2nd            = obj.CL_file_name_2nd;
     CL_file_name_3rd            = obj.CL_file_name_3rd;
+    CL_mat_1st                  = obj.CL_mat_1st;
+    CL_mat_2nd                  = obj.CL_mat_2nd;
+    CL_mat_3rd                  = obj.CL_mat_3rd;
     CLa_1st                     = obj.CLa_1st;
     CLa_2nd                     = obj.CLa_2nd;
     CLa_3rd                     = obj.CLa_3rd;
@@ -135,6 +141,9 @@ Rocket::Rocket(Rocket& obj){
     CD_file_name_1st            = obj.CD_file_name_1st;
     CD_file_name_2nd            = obj.CD_file_name_2nd;
     CD_file_name_3rd            = obj.CD_file_name_3rd;
+    CD_mat_1st                  = obj.CD_mat_1st;
+    CD_mat_2nd                  = obj.CD_mat_2nd;
+    CD_mat_3rd                  = obj.CD_mat_3rd;
     CD_1st                      = obj.CD_1st;
     CD_2nd                      = obj.CD_2nd;
     CD_3rd                      = obj.CD_3rd;
@@ -144,6 +153,9 @@ Rocket::Rocket(Rocket& obj){
     attitude_file_name_1st      = obj.attitude_file_name_1st;
     attitude_file_name_2nd      = obj.attitude_file_name_2nd;
     attitude_file_name_3rd      = obj.attitude_file_name_3rd;
+    attitude_mat_1st            = obj.attitude_mat_1st;
+    attitude_mat_2nd            = obj.attitude_mat_2nd;
+    attitude_mat_3rd            = obj.attitude_mat_3rd;
     attitude_azimth_1st         = obj.attitude_azimth_1st;
     attitude_azimth_2nd         = obj.attitude_azimth_2nd;
     attitude_azimth_3rd         = obj.attitude_azimth_3rd;

@@ -42,6 +42,7 @@ def make_kml(name, div, stage):
 	for i in range(len(time)/div):
 		index = i * div
 		cood.append((lon[index], lat[index], altitude[index]))
+	cood.append((lon[-1], lat[-1], altitude[-1]))
 	# print cood
 	ls = kml.newlinestring(name=u"name")
 	ls.style.linestyle.width = 8
