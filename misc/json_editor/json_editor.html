@@ -1,0 +1,811 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>OpenTsiolkovsky Parameter JSON Editor</title>
+    <!-- Foundation CSS framework (Bootstrap and jQueryUI also supported) -->
+    <link rel='stylesheet' href='//cdn.jsdelivr.net/foundation/5.0.2/css/foundation.min.css'>
+    <!-- Font Awesome icons (Bootstrap, Foundation, and jQueryUI also supported) -->
+    <link rel='stylesheet' href='//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.0.3/css/font-awesome.css'>
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+  	<link href="css/bootstrap-theme.min.css" rel="stylesheet">
+
+    <script src="js/jsoneditor.js"></script>
+    <script>
+    // Set the default CSS theme and icon library globally
+    JSONEditor.defaults.options.theme = 'bootstrap3';
+    JSONEditor.defaults.options.iconlib = 'fontawesome4';
+    </script>
+  </head>
+  <body>
+    <div class='container'>
+      <div class='medium-12 columns'>
+        <h1>OpenTsiolkovsky Parameter JSON Editor</h1>
+      </div>
+    </div>
+
+    <div class='container'>
+      <div id='editor_holder' class='medium-12 columns'></div>
+    </div>
+    <div class='container'>
+      <button class="btn btn-success btn-lg" id='submit'>Submit(console.log)</button>
+    </div>
+
+    <script>
+      // Initialize the editor with a JSON schema
+      JSONEditor.defaults.editors.object.options.disable_collapse = true;
+      JSONEditor.defaults.editors.object.options.disable_edit_json = true;
+      JSONEditor.defaults.editors.object.options.disable_properties = true;
+      var editor = new JSONEditor(document.getElementById('editor_holder'),{
+        schema: {
+          type: "object",
+          title: "Rocket",
+          properties: {
+            name: {
+              type: "string",
+              default : "test"
+            },
+            "output file name": {
+              type: "string",
+              default : "test"
+            },
+            "calculate condition": {
+              type: "object",
+              title: "calculate condition",
+              format: "grid",
+              "properties": {
+                "start time[s]": {
+                  type: "number",
+                  default: 0,
+                  minimum: 0
+                },
+                "end time[s]": {
+                  type: "number",
+                  default: 1000,
+                  minimum: 0
+                },
+                "time step[s]": {
+                  type: "number",
+                  default: 0.01,
+                  minimum: 0
+                }
+              }
+            },
+            "launch": {
+              type: "object",
+              title: "launch",
+              "options": {
+                "grid_columns": 3
+              },
+              format: "grid",
+              "properties": {
+                "position LLH[deg,deg,m]": {
+                  type: "array",
+                  "format": "tabs",
+                  "items": [
+                    {
+                      type: "number",
+                      title: "latitude"
+                    },
+                    {
+                      type: "number",
+                      title: "longitude"
+                    },
+                    {
+                      type: "number",
+                      title: "altitude"
+                    },
+                  ],
+                  "minItems": 3,
+                  "maxItems": 3,
+                },
+                "velocity NED[m/s]": {
+                  type: "array",
+                  "format": "tabs",
+                  "items": [
+                    {
+                      type: "number",
+                      title: "North"
+                    },
+                    {
+                      type: "number",
+                      title: "East"
+                    },
+                    {
+                      type: "number",
+                      title: "Down"
+                    },
+                  ],
+                  "minItems": 3,
+                  "maxItems": 3,
+                },
+                "time": {
+                  type: "array",
+                  "format": "tabs",
+                  "items": [
+                    {
+                      type: "number",
+                      title: "Year"
+                    },
+                    {
+                      type: "number",
+                      title: "Month"
+                    },
+                    {
+                      type: "number",
+                      title: "Day"
+                    },
+                    {
+                      type: "number",
+                      title: "Hour"
+                    },
+                    {
+                      type: "number",
+                      title: "Minute"
+                    },
+                    {
+                      type: "number",
+                      title: "Second"
+                    },
+                  ],
+                  "minItems": 6,
+                  "maxItems": 6,
+                }
+              }
+            },
+            "1st stage": {
+              type: "object",
+              title: "1st stage",
+              "properties": {
+                "mass initial[kg]": {
+                  type: "number",
+                  minimum: 0
+                },
+                "thrust": {
+                  type: "object",
+                  title: "thrust",
+                  format: "grid",
+                  properties: {
+                    "Isp[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 12
+                      }
+                    },
+                    "file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "file name": {
+                      type: "string",
+                      default: "thrust.csv",
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "const thrust[N]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "burn start time[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "burn end time[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "throat diameter[m]": {
+                      type: "number",
+                      minimum: 0
+                    },
+                    "nozzle expansion ratio": {
+                      type: "number",
+                      minimum: 0
+                    },
+                    "nozzle exhaust pressure[Pa]": {
+                      type: "number",
+                      minimum: 0
+                    }
+                  }
+                },
+                "aero": {
+                  type: "object",
+                  title: "aero",
+                  format: "grid",
+                  properties: {
+                    "body diameter[m]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 12
+                      }
+                    },
+                    "lift coefficient file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "lift coefficient file name": {
+                      type: "string",
+                      default: "CL.csv",
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "lift coefficient": {
+                      type: "number",
+                      minimum: 0,
+                      default: 0.0,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient file name": {
+                      type: "string",
+                      default: "CD.csv",
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient": {
+                      type: "number",
+                      minimum: 0,
+                      default: 0.2,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    }
+                  }
+                },
+                "attitude": {
+                  type: "object",
+                  title: "attitude",
+                  format: "grid",
+                  properties: {
+                    "file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "file name": {
+                      type: "string",
+                      default: "attitude.csv",
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "initial elevation[deg]": {
+                      type: "number",
+                      minimum: 0,
+                      maximum: 90,
+                      default: 90.0,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "initial azimth[deg]": {
+                      type: "number",
+                      minimum: 0,
+                      maximum: 360,
+                      default: 0,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    }
+                  }
+                },
+                "stage": {
+                  type: "object",
+                  title: "stage",
+                  format: "grid",
+                  properties: {
+                    "following stage exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "separation time[s]": {
+                      type: "number",
+                      default: 10000,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "2nd stage": {
+              type: "object",
+              title: "2nd stage",
+              "properties": {
+                "mass initial[kg]": {
+                  type: "number",
+                  minimum: 0
+                },
+                "thrust": {
+                  type: "object",
+                  title: "thrust",
+                  format: "grid",
+                  properties: {
+                    "Isp[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 12
+                      }
+                    },
+                    "file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "file name": {
+                      type: "string",
+                      default: "thrust.csv",
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "const thrust[N]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "burn start time[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "burn end time[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "throat diameter[m]": {
+                      type: "number",
+                      minimum: 0
+                    },
+                    "nozzle expansion ratio": {
+                      type: "number",
+                      minimum: 0
+                    },
+                    "nozzle exhaust pressure[Pa]": {
+                      type: "number",
+                      minimum: 0
+                    }
+                  }
+                },
+                "aero": {
+                  type: "object",
+                  title: "aero",
+                  format: "grid",
+                  properties: {
+                    "body diameter[m]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 12
+                      }
+                    },
+                    "lift coefficient file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "lift coefficient file name": {
+                      type: "string",
+                      default: "CL.csv",
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "lift coefficient": {
+                      type: "number",
+                      minimum: 0,
+                      default: 0.0,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient file name": {
+                      type: "string",
+                      default: "CD.csv",
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient": {
+                      type: "number",
+                      minimum: 0,
+                      default: 0.2,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    }
+                  }
+                },
+                "attitude": {
+                  type: "object",
+                  title: "attitude",
+                  format: "grid",
+                  properties: {
+                    "file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "file name": {
+                      type: "string",
+                      default: "attitude.csv",
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "initial elevation[deg]": {
+                      type: "number",
+                      minimum: 0,
+                      maximum: 90,
+                      default: 90.0,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "initial azimth[deg]": {
+                      type: "number",
+                      minimum: 0,
+                      maximum: 360,
+                      default: 0,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    }
+                  }
+                },
+                "stage": {
+                  type: "object",
+                  title: "stage",
+                  format: "grid",
+                  properties: {
+                    "following stage exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "separation time[s]": {
+                      type: "number",
+                      default: 10000,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "3rd stage": {
+              type: "object",
+              title: "3rd stage",
+              "properties": {
+                "mass initial[kg]": {
+                  type: "number",
+                  minimum: 0
+                },
+                "thrust": {
+                  type: "object",
+                  title: "thrust",
+                  format: "grid",
+                  properties: {
+                    "Isp[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 12
+                      }
+                    },
+                    "file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "file name": {
+                      type: "string",
+                      default: "thrust.csv",
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "const thrust[N]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "burn start time[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "burn end time[s]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 4
+                      }
+                    },
+                    "throat diameter[m]": {
+                      type: "number",
+                      minimum: 0
+                    },
+                    "nozzle expansion ratio": {
+                      type: "number",
+                      minimum: 0
+                    },
+                    "nozzle exhaust pressure[Pa]": {
+                      type: "number",
+                      minimum: 0
+                    }
+                  }
+                },
+                "aero": {
+                  type: "object",
+                  title: "aero",
+                  format: "grid",
+                  properties: {
+                    "body diameter[m]": {
+                      type: "number",
+                      minimum: 0,
+                      "options": {
+                        "grid_columns": 12
+                      }
+                    },
+                    "lift coefficient file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "lift coefficient file name": {
+                      type: "string",
+                      default: "CL.csv",
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "lift coefficient": {
+                      type: "number",
+                      minimum: 0,
+                      default: 0.0,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient file name": {
+                      type: "string",
+                      default: "CD.csv",
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    },
+                    "drag coefficient": {
+                      type: "number",
+                      minimum: 0,
+                      default: 0.2,
+                      "options": {
+                        "grid_columns": 4
+                      },
+                    }
+                  }
+                },
+                "attitude": {
+                  type: "object",
+                  title: "attitude",
+                  format: "grid",
+                  properties: {
+                    "file exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "file name": {
+                      type: "string",
+                      default: "attitude.csv",
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "initial elevation[deg]": {
+                      type: "number",
+                      minimum: 0,
+                      maximum: 90,
+                      default: 90.0,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    },
+                    "initial azimth[deg]": {
+                      type: "number",
+                      minimum: 0,
+                      maximum: 360,
+                      default: 0,
+                      "options": {
+                        "grid_columns": 6
+                      },
+                    }
+                  }
+                },
+                "stage": {
+                  type: "object",
+                  title: "stage",
+                  format: "grid",
+                  properties: {
+                    "following stage exist": {
+                      type: "boolean",
+                      default: false,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    },
+                    "separation time[s]": {
+                      type: "number",
+                      default: 10000,
+                      "options": {
+                        "grid_columns": 6
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "payload": {
+              type: "object",
+              title: "payload",
+              format: "grid",
+              properties: {
+                "weight": {
+                  type: "number",
+                  default: 0
+                },
+                "deploy time": {
+                  type: "number",
+                  default: 10000
+                }
+              }
+            },
+            "parachute": {
+              type: "object",
+              title: "parachute",
+              format: "grid",
+              properties: {
+                "exist": {
+                  type: "boolean",
+                  default: false
+                },
+                "drag coefficient": {
+                  type: "number",
+                  minimum: 0,
+                  default: 0.1
+                },
+                "diameter": {
+                  type: "number",
+                  minimum: 0,
+                  default: 1
+                },
+                "deploy time": {
+                  type: "number",
+                  minimum: 0,
+                  default: 10000
+                }
+              }
+            },
+            "wind": {
+              type: "object",
+              title: "wind",
+              format: "grid",
+              properties: {
+                "file exist": {
+                  type: "boolean",
+                  default: false
+                },
+                "file name": {
+                  type: "string",
+                  default: "wind.csv"
+                },
+                "const wind": {
+                  type: "array",
+                  "format": "tabs",
+                  "items": [
+                    {
+                      type: "number",
+                      title: "wind speed",
+                      minimum: 0,
+                      maximum: 100
+                    },
+                    {
+                      type: "number",
+                      title: "wind direction",
+                      minimum: 0,
+                      maximum: 360
+                    },
+                  ],
+                  "minItems": 2,
+                  "maxItems": 2,
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // Hook up the submit button to log to the console
+      document.getElementById('submit').addEventListener('click',function() {
+        // Get the value from the editor
+        console.log(editor.getValue());
+      });
+    </script>
+  </body>
+</html>
