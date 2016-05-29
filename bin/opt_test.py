@@ -41,7 +41,11 @@ def test_opt(burn_time):
 	f = open(temp_file, "w")
 	json.dump(data, f, indent=4)
 	f.close()
-	cmd = './OpenTsiolkovsky ' + temp_file
+	if 'Windows' == platform.system():
+		execute = 'OpenTsiolkovsky.exe'
+	else:
+		execute = './OpenTsiolkovsky'
+	cmd = execute + ' ' + temp_file
 	p = subprocess.Popen([cmd], shell = True, stdout=subprocess.PIPE)
 	output = p.communicate()[0]
 	outputlist = output.split()

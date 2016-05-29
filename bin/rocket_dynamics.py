@@ -15,20 +15,20 @@ from math import sin, cos, acos, radians
 # Basemap 未インストールの場合は $ conda install basemapでインストール
 
 if 'Windows' == platform.system():
-	fp = FontProperties(fname=r'C:\WINDOWS\Fonts\MSGothic.ttf')
+	font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
 
 if 'Darwin' == platform.system(): # for Mac
 	font_path = '/Library/Fonts/Osaka.ttf'
-	font_prop = matplotlib.font_manager.FontProperties(fname=font_path)
-	matplotlib.rcParams['font.family'] = font_prop.get_name()
-	# pdfのフォントをTrueTypeに変更
-	matplotlib.rcParams['pdf.fonttype'] = 42
-	# defaultのdpi=100から変更
-	matplotlib.rcParams['savefig.dpi'] = 300
-	# 数式（Latex)のフォントを変更
-	matplotlib.rcParams['mathtext.default'] = 'regular'
 
+font_prop = FontProperties(fname=font_path)
+mpl.rcParams['font.family'] = font_prop.get_name()
 plt.close('all')
+plt.style.use('ggplot')
+mpl.rcParams['axes.grid'] = True
+mpl.rcParams['figure.autolayout'] = True
+mpl.rcParams['pdf.fonttype'] = 42 # pdfのフォントをTrueTypeに変更
+mpl.rcParams['savefig.dpi'] = 300 # defaultのdpi=100から変更
+mpl.rcParams['mathtext.default'] = 'regular' # 数式（Latex)のフォントを変更
 
 
 argvs = sys.argv  # コマンドライン引数を格納したリストの取得
