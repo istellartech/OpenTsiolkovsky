@@ -5,6 +5,7 @@ import platform
 # デフォルトの文字コードを変更する．
 sys.setdefaultencoding('utf-8')
 
+import os
 import numpy as np
 from scipy import optimize
 import subprocess
@@ -52,6 +53,8 @@ def test_opt(burn_time):
 	max_alt_index = outputlist.index("altitude[m]:")
 	max_alt_index = max_alt_index+1
 	max_alt = float(outputlist[max_alt_index])
+	f.close()
+	os.remove(temp_file)
 	print("burn time = %.2f\tdistance = %.1f" % (burn_time, abs(100000 - max_alt)))
 	return abs(100000 - max_alt)
 
