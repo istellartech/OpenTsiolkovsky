@@ -404,7 +404,8 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.Isp = 0.0;
                 }
             } else {
-                if(time < rocket.burn_time_1st){
+                if(time > rocket.burn_start_time_1st &&
+                   time < rocket.burn_time_1st){
                     rocket.thrust = rocket.thrust_1st + rocket.throat_area_1st *
                                     rocket.nozzle_expansion_ratio_1st *
                                     (rocket.nozzle_exhaust_pressure_1st  - air.pressure);
@@ -452,7 +453,8 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.Isp = 0.0;
                 }
             } else {
-                if(time < rocket.stage_separation_time_1st + rocket.burn_time_2nd){
+                if(time > rocket.stage_separation_time_1st + rocket.burn_start_time_2nd &&
+                   time < rocket.stage_separation_time_1st + rocket.burn_start_time_2nd + rocket.burn_time_2nd){
                     rocket.thrust = rocket.thrust_2nd + rocket.throat_area_2nd *
                                     rocket.nozzle_expansion_ratio_2nd *
                                     (rocket.nozzle_exhaust_pressure_2nd  - air.pressure);
@@ -499,7 +501,8 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.Isp = 0.0;
                 }
             } else {
-                if(time < rocket.stage_separation_time_2nd + rocket.burn_time_3rd){
+                if(time > rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd &&
+                   time < rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd + rocket.burn_time_3rd){
                     rocket.thrust = rocket.thrust_3rd + rocket.throat_area_3rd *
                                     rocket.nozzle_expansion_ratio_3rd *
                                     (rocket.nozzle_exhaust_pressure_3rd  - air.pressure);
