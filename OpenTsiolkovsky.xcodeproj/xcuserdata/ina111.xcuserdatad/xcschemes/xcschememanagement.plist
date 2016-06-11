@@ -4,6 +4,11 @@
 <dict>
 	<key>SchemeUserState</key>
 	<dict>
+		<key>OpenTsiolkovsky_SS520.xcscheme</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>2</integer>
+		</dict>
 		<key>Tsiolkovsky.xcscheme</key>
 		<dict>
 			<key>isShown</key>

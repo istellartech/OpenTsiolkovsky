@@ -357,13 +357,13 @@ Rocket::Rocket(const std::string& FileName): fin(FileName){
         CL_mat_3rd = read_csv_vector_2d("./" + CL_file_name_3rd, "mach", "CL");
     }
     if (CD_file_exist_1st) {
-        CD_mat_1st = read_csv_vector_2d("./" + CD_file_name_1st, "mach", "CL");
+        CD_mat_1st = read_csv_vector_2d("./" + CD_file_name_1st, "mach", "Cd");
     }
     if (CD_file_exist_2nd) {
-        CD_mat_2nd = read_csv_vector_2d("./" + CD_file_name_2nd, "mach", "CL");
+        CD_mat_2nd = read_csv_vector_2d("./" + CD_file_name_2nd, "mach", "Cd");
     }
     if (CD_file_exist_3rd) {
-        CD_mat_3rd = read_csv_vector_2d("./" + CD_file_name_3rd, "mach", "CL");
+        CD_mat_3rd = read_csv_vector_2d("./" + CD_file_name_3rd, "mach", "Cd");
     }
     if (attitude_file_exist_1st) {
         attitude_mat_1st = read_csv_vector_3d("./" + attitude_file_name_1st, "time", "azimth", "elevation");
