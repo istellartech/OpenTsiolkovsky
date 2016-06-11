@@ -339,13 +339,16 @@ Rocket::Rocket(const std::string& FileName): fin(FileName){
 //    ファイル読み込み
 //    thrust(time,thrust), CL(mach,CL), CD(mach,CD), attitude(time, azimth, elevation)
     if (thrust_file_exist_1st) {
-        thrust_mat_1st = read_csv_vector_2d("./" + thrust_file_name_1st, "time", "thrust"); // TODO:例外を入れる
+        thrust_mat_1st = read_csv_vector_3d("./" + thrust_file_name_1st,
+                                            "time", "thrust", "nozzle_exhaust_pressure[Pa]"); // TODO:例外を入れる
     }
     if (thrust_file_exist_2nd) {
-        thrust_mat_2nd = read_csv_vector_2d("./" + thrust_file_name_2nd, "time", "thrust");
+        thrust_mat_2nd = read_csv_vector_3d("./" + thrust_file_name_2nd,
+                                            "time", "thrust", "nozzle_exhaust_pressure[Pa]");
     }
     if (thrust_file_exist_3rd) {
-        thrust_mat_3rd = read_csv_vector_2d("./" + thrust_file_name_3rd, "time", "thrust");
+        thrust_mat_3rd = read_csv_vector_3d("./" + thrust_file_name_3rd,
+                                            "time", "thrust", "nozzle_exhaust_pressure[Pa]");
     }
     if (CL_file_exist_1st) {
         CL_mat_1st = read_csv_vector_2d("./" + CL_file_name_1st, "mach", "CL");
@@ -393,14 +396,20 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             //  推力はファイルがある場合はMatrixから補間して読み込み、ない場合は一定値を燃焼時間分だけ
             if (rocket.thrust_file_exist_1st){
                 rocket.thrust = interp_matrix(time, rocket.thrust_mat_1st);
-                rocket.thrust = rocket.thrust + rocket.throat_area_1st *
-                                rocket.nozzle_expansion_ratio_1st *
-                                (rocket.nozzle_exhaust_pressure_1st - air.pressure);
-                rocket.m_dot = interp_matrix(time, rocket.thrust_mat_1st) /
-                               rocket.Isp_1st / g0;
-                if (rocket.m_dot > 0.0001) {
-                    rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                if (rocket.thrust != 0) {
+                    rocket.m_dot = rocket.thrust / rocket.Isp_1st / g0;
+                    rocket.nozzle_exhaust_pressure_1st = interp_matrix(time, rocket.thrust_mat_1st, 2);
+                    rocket.thrust = rocket.thrust + rocket.throat_area_1st *
+                                    rocket.nozzle_expansion_ratio_1st *
+                                    (rocket.nozzle_exhaust_pressure_1st - air.pressure);
+                    if (rocket.m_dot > 0.0001) {
+                        rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                    } else {
+                        rocket.Isp = 0.0;
+                    }
                 } else {
+                    rocket.thrust = 0.0;
+                    rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
                 }
             } else {
@@ -442,14 +451,20 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
         case Rocket::STAGE2:
             if (rocket.thrust_file_exist_2nd){
                 rocket.thrust = interp_matrix(time - rocket.stage_separation_time_1st, rocket.thrust_mat_2nd);
-                rocket.thrust = rocket.thrust + rocket.throat_area_2nd *
-                                rocket.nozzle_expansion_ratio_2nd *
-                                (rocket.nozzle_exhaust_pressure_2nd  - air.pressure);
-                rocket.m_dot = interp_matrix(time, rocket.thrust_mat_2nd) /
-                                rocket.Isp_2nd / g0;
-                if (rocket.m_dot > 0.0001) {
-                    rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                if (rocket.thrust != 0) {
+                    rocket.m_dot = rocket.thrust / rocket.Isp_2nd / g0;
+                    rocket.nozzle_exhaust_pressure_2nd = interp_matrix(time, rocket.thrust_mat_2nd, 2);
+                    rocket.thrust = rocket.thrust + rocket.throat_area_2nd *
+                    rocket.nozzle_expansion_ratio_2nd *
+                    (rocket.nozzle_exhaust_pressure_2nd - air.pressure);
+                    if (rocket.m_dot > 0.0001) {
+                        rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                    } else {
+                        rocket.Isp = 0.0;
+                    }
                 } else {
+                    rocket.thrust = 0.0;
+                    rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
                 }
             } else {
@@ -490,14 +505,20 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
         case Rocket::STAGE3:
             if (rocket.thrust_file_exist_3rd){
                 rocket.thrust = interp_matrix(time - rocket.stage_separation_time_2nd, rocket.thrust_mat_3rd);
-                rocket.thrust = rocket.thrust + rocket.throat_area_3rd *
-                                rocket.nozzle_expansion_ratio_3rd *
-                                (rocket.nozzle_exhaust_pressure_3rd  - air.pressure);
-                rocket.m_dot = interp_matrix(time, rocket.thrust_mat_3rd) /
-                                rocket.Isp_3rd / g0;
-                if (rocket.m_dot > 0.0001) {
-                    rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                if (rocket.thrust != 0) {
+                    rocket.m_dot = rocket.thrust / rocket.Isp_3rd / g0;
+                    rocket.nozzle_exhaust_pressure_3rd = interp_matrix(time, rocket.thrust_mat_3rd, 2);
+                    rocket.thrust = rocket.thrust + rocket.throat_area_3rd *
+                    rocket.nozzle_expansion_ratio_3rd *
+                    (rocket.nozzle_exhaust_pressure_3rd - air.pressure);
+                    if (rocket.m_dot > 0.0001) {
+                        rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                    } else {
+                        rocket.Isp = 0.0;
+                    }
                 } else {
+                    rocket.thrust = 0.0;
+                    rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
                 }
             } else {
