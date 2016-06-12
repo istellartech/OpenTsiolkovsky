@@ -2,7 +2,7 @@
 sudo: required
 dist: trusty
 language: cpp
-cache: apt
+# cache: apt
 compiler:
   - gcc
 
