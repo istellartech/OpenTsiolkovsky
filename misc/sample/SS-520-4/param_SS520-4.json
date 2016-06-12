@@ -3,7 +3,7 @@
 	"output file name": "SS520",
 	"calculate condition": {
 		"start time[s]": 0,
-		"end time[s]": 450,
+		"end time[s]": 10000,
 		"time step[s]": 0.2
 	},
 	"launch": {
@@ -45,7 +45,7 @@
 		}
 	},
 	"2nd stage": {
-		"mass initial[kg]": 530.0,
+		"mass initial[kg]": 510.0,
 		"thrust": {
 			"Isp[s]": 264.8,
 			"file exist": true,
@@ -78,7 +78,7 @@
 		}
 	},
 	"3rd stage": {
-		"mass initial[kg]": 92.0,
+		"mass initial[kg]": 86.0,
 		"thrust": {
 			"Isp[s]": 264.8,
 			"file exist": true,
