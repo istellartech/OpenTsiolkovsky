@@ -33,10 +33,12 @@ extern bool impact_flag;
 
 void flight_simulation(string input_filename, string output_filename,
                        Rocket::State state){
+    bool is_control_stepper = true; // control stepperのバグが取れない　2016/06/18
     Rocket rocket(input_filename);
     rocket.state = state;
     rocket_dynamics System(rocket); // システム
-    double start_time;
+    double start_time = 0;
+    double separation_time = 10e100; // 分離時間
     double end_time = rocket.calc_end_time;
     double step_time = rocket.calc_step_time;
     double mass_init;
@@ -47,9 +49,15 @@ void flight_simulation(string input_filename, string output_filename,
         posECI_init_g = posECI_init(posLLH_init_g);
         velECI_init_g = velECI_init(vel_NED_init_g, posLLH_init_g);
         start_time = rocket.calc_start_time;
+        if (rocket.following_stage_exist_1st) {
+            separation_time = rocket.stage_separation_time_1st;
+        }
     } else if (rocket.state == Rocket::STAGE2){
         mass_init = rocket.mass_init_2nd;
         start_time = rocket.stage_separation_time_1st;
+        if (rocket.following_stage_exist_2nd) {
+            separation_time = rocket.stage_separation_time_2nd;
+        }
     } else if (rocket.state == Rocket::STAGE3){
         mass_init = rocket.mass_init_3rd;
         start_time = rocket.stage_separation_time_2nd;
@@ -57,13 +65,40 @@ void flight_simulation(string input_filename, string output_filename,
     rocket_dynamics::state State = {mass_init,
         posECI_init_g[0], posECI_init_g[1], posECI_init_g[2],
         velECI_init_g[0], velECI_init_g[1], velECI_init_g[2]};
-    boost::numeric::odeint::runge_kutta4<rocket_dynamics::state> Stepper;
-    csv_observer Observer(rocket, output_filename);
-    boost::numeric::odeint::integrate_adaptive(Stepper, System, State,
-                                               start_time,
-                                               end_time,
-                                               step_time,
-                                               std::ref(Observer));
+    if (is_control_stepper == true){ // 常微分方程式のStepperがcontrol stepperかどうかで場合わけ
+//        controlの場合は、分離の時間によって時間を固定する
+        using base_stepper_type = boost::numeric::odeint::runge_kutta_dopri5<rocket_dynamics::state>;
+        auto Stepper = make_dense_output( 1.0e-9 , 1.0e-9 , base_stepper_type());
+        if (separation_time < end_time) {
+            csv_observer Observer0(rocket, output_filename, false);
+            boost::numeric::odeint::integrate_const(Stepper, System, State,
+                                                    start_time,
+                                                    separation_time,
+                                                    step_time,
+                                                    std::ref(Observer0));
+            csv_observer Observer1(rocket, output_filename, true);
+            boost::numeric::odeint::integrate_const(Stepper, System, State,
+                                                    separation_time,
+                                                    end_time,
+                                                    step_time,
+                                                    std::ref(Observer1));
+        } else {
+            csv_observer Observer(rocket, output_filename, false);
+            boost::numeric::odeint::integrate_const(Stepper, System, State,
+                                                    start_time,
+                                                    end_time,
+                                                    step_time,
+                                                    std::ref(Observer));
+        }
+    } else {
+        boost::numeric::odeint::runge_kutta4<rocket_dynamics::state> Stepper;
+        csv_observer Observer(rocket, output_filename);
+        boost::numeric::odeint::integrate_adaptive(Stepper, System, State,
+                                                   start_time,
+                                                   end_time,
+                                                   step_time,
+                                                   std::ref(Observer));
+    }
     return;
 }
 

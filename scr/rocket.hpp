@@ -297,9 +297,13 @@ struct csv_observer{
     Rocket rocket;
     std::ofstream fout;
 
-    csv_observer(Rocket rocket_, const std::string& FileName) : rocket(rocket_),
-                                                                fout(FileName){
-        fout << "time(s), mass(kg), thrust(N), lat(deg), lon(deg), altitude(m),  pos_ECI_X(m), pos_ECI_Y(m), pos_ECI_Z(m),vel_ECI_X(m/s), vel_ECI_Y(m/s), vel_ECI_Z(m/s), vel_NED_X(m/s), vel_NED_Y(m/s), vel_NED_Z(m/s), acc_ECI_X(m/s2), acc_ECI_Y(m/s2), acc_ECI_Z(m/s2), Isp(s), Mach number, attitude_azimth(deg), attitude_elevation(deg), attack of angle alpha(deg), attack of angle beta(deg), dynamic pressure(Pa), aero Drag(N), aero Lift(N), wind speed(m/s), wind direction(deg), " << std::endl;
+    csv_observer(Rocket rocket_, const std::string& FileName, bool isAddition = false) : rocket(rocket_){
+        if (isAddition == false){ // 追加書き込みモードかどうか
+            fout.open(FileName, std::ios_base::out);
+            fout << "time(s), mass(kg), thrust(N), lat(deg), lon(deg), altitude(m),  pos_ECI_X(m), pos_ECI_Y(m), pos_ECI_Z(m),vel_ECI_X(m/s), vel_ECI_Y(m/s), vel_ECI_Z(m/s), vel_NED_X(m/s), vel_NED_Y(m/s), vel_NED_Z(m/s), acc_ECI_X(m/s2), acc_ECI_Y(m/s2), acc_ECI_Z(m/s2), Isp(s), Mach number, attitude_azimth(deg), attitude_elevation(deg), attack of angle alpha(deg), attack of angle beta(deg), dynamic pressure(Pa), aero Drag(N), aero Lift(N), wind speed(m/s), wind direction(deg), " << std::endl;
+        } else {
+            fout.open(FileName, std::ios_base::out | std::ios_base::app); // 追加書き込みモード
+        }
     };
     
     void operator()(const state& x, double t);
