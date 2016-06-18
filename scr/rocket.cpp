@@ -636,12 +636,12 @@ void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamic
 //    set_rocket_state(t);
 //    set_rocket_state(rocket, t, posLLH_[2]); //↑に移動
     //    分離　分離時の位置速度をグローバル変数に代入し、次の段の計算の初期位置へ
-    if (rocket.state == Rocket::STAGE1 && separation_flag_12 == false && t > rocket.stage_separation_time_1st){
+    if (rocket.state == Rocket::STAGE1 && separation_flag_12 == false && t >= rocket.stage_separation_time_1st){
         separation_flag_12 = true;
         posECI_init_g = posECI_;
         velECI_init_g = velECI_;
     } // 2/3段分離
-    if (rocket.state == Rocket::STAGE2 && separation_flag_23 == false && t > rocket.stage_separation_time_2nd){
+    if (rocket.state == Rocket::STAGE2 && separation_flag_23 == false && t >= rocket.stage_separation_time_2nd){
         separation_flag_23 = true;
         posECI_init_g = posECI_;
         velECI_init_g = velECI_;
@@ -1047,12 +1047,13 @@ Vector3d velOrbit2ECI(Orbit element){
 }
 
 // コンソールにプログレス表示
+#define STR(var) #var   //引数にした変数を変数名を示す文字列リテラルとして返すマクロ関数
 void progress(double time_now, Rocket rocket){
     double time_total;
     time_total = rocket.calc_end_time - rocket.calc_start_time;
 //    cout.precision(1);
     cout << fixed << setprecision(0);
-    cout << time_now << "sec / " << time_total << "sec\r" << flush;
+    cout << time_now << "sec / " << time_total << "sec\t@Stage" << rocket.state << "\r" << flush;
     return;
 }
 
