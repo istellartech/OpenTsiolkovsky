@@ -729,6 +729,12 @@ void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamic
 }
 
 void csv_observer::operator()(const state& x, double t){
+    
+    // 落下フラグが立っていると何もしない
+    if ( impact_flag == true) {
+        return;
+    }
+    
     posECI_ << x[1], x[2], x[3];
     velECI_ << x[4], x[5], x[6];
     
