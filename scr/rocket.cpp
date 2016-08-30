@@ -635,6 +635,7 @@ void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamic
     wind_direction = rocket.wind_direction;
     azimth = rocket.azimth;
     elevation = rocket.elevation;
+    area = rocket.area;
 
 //    座標変換
     dcmECI2ECEF_ = dcmECI2ECEF(t);
@@ -748,6 +749,7 @@ void csv_observer::operator()(const state& x, double t){
     wind_direction = rocket.wind_direction;
     azimth = rocket.azimth;
     elevation = rocket.elevation;
+    area = rocket.area;
     
     dcmECI2ECEF_ = dcmECI2ECEF(t);
     posECEF_ = posECEF(dcmECI2ECEF_, posECI_);
