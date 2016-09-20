@@ -464,16 +464,16 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
 //            rocket.Isp = rocket.Isp_1st;
 //            rocket.m_dot = rocket.thrust / rocket.Isp_1st / g0;
             //            CL,CD値はファイルがある場合は読み込み
-            if (rocket.CD_file_exist_1st) {
-                rocket.CD = interp_matrix(time, rocket.CD_mat_1st);
-            } else {
-                rocket.CD = rocket.CD_1st;
-            }
-            if (rocket.CL_file_exist_1st) {
-                rocket.CL = interp_matrix(time, rocket.CL_mat_1st);
-            } else {
-                rocket.CL = rocket.CL_1st;
-            }
+//            if (rocket.CD_file_exist_1st) {
+//                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_1st);
+//            } else {
+//                rocket.CD = rocket.CD_1st;
+//            }
+//            if (rocket.CL_file_exist_1st) {
+//                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_1st);
+//            } else {
+//                rocket.CL = rocket.CL_1st;
+//            }
             if (rocket.attitude_file_exist_1st) {
                 rocket.azimth = deg2rad(interp_matrix(time, rocket.attitude_mat_1st, 1));
                 rocket.elevation = deg2rad(interp_matrix(time, rocket.attitude_mat_1st, 2));
@@ -518,16 +518,16 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             }
 //            rocket.Isp = rocket.Isp_2nd;
 //            rocket.m_dot = rocket.thrust / rocket.Isp_2nd / g0;
-            if (rocket.CD_file_exist_2nd) {
-                rocket.CD = interp_matrix(time, rocket.CD_mat_2nd);
-            } else {
-                rocket.CD = rocket.CD_2nd;
-            }
-            if (rocket.CL_file_exist_2nd) {
-                rocket.CL = interp_matrix(time, rocket.CL_mat_2nd);
-            } else {
-                rocket.CL = rocket.CL_2nd;
-            }
+//            if (rocket.CD_file_exist_2nd) {
+//                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_2nd);
+//            } else {
+//                rocket.CD = rocket.CD_2nd;
+//            }
+//            if (rocket.CL_file_exist_2nd) {
+//                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_2nd);
+//            } else {
+//                rocket.CL = rocket.CL_2nd;
+//            }
             if (rocket.attitude_file_exist_2nd) {
                 rocket.azimth = deg2rad(interp_matrix(time - rocket.stage_separation_time_1st, rocket.attitude_mat_2nd, 1));
                 rocket.elevation = deg2rad(interp_matrix(time - rocket.stage_separation_time_1st, rocket.attitude_mat_2nd, 2));
@@ -572,16 +572,16 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             }
 //            rocket.Isp = rocket.Isp_3rd;
 //            rocket.m_dot = rocket.thrust / rocket.Isp_3rd / g0;
-            if (rocket.CD_file_exist_3rd) {
-                rocket.CD = interp_matrix(time, rocket.CD_mat_3rd);
-            } else {
-                rocket.CD = rocket.CD_3rd;
-            }
-            if (rocket.CL_file_exist_3rd) {
-                rocket.CL = interp_matrix(time, rocket.CL_mat_3rd);
-            } else {
-                rocket.CL = rocket.CL_3rd;
-            }
+//            if (rocket.CD_file_exist_3rd) {
+//                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_3rd);
+//            } else {
+//                rocket.CD = rocket.CD_3rd;
+//            }
+//            if (rocket.CL_file_exist_3rd) {
+//                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_3rd);
+//            } else {
+//                rocket.CL = rocket.CL_3rd;
+//            }
             if (rocket.attitude_file_exist_3rd) {
                 rocket.azimth = deg2rad(interp_matrix(time - rocket.stage_separation_time_2nd, rocket.attitude_mat_3rd, 1));
                 rocket.elevation = deg2rad(interp_matrix(time - rocket.stage_separation_time_2nd, rocket.attitude_mat_3rd, 2));
@@ -603,6 +603,52 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     }
 }
 
+void set_rocket_state_aero(Rocket& rocket, double mach_number){
+    //    時間によってState変化とrocketインスタンスの値を変更する
+    //    enum State{GROUND = 0, STAGE1 = 1, STAGE2 = 2,
+    //               STAGE3 = 3, PAYLOAD = 4, PARACHUTE = 5;}
+    switch (rocket.state) {
+        case Rocket::STAGE1:
+            if (rocket.CD_file_exist_1st) {
+                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_1st);
+            } else {
+                rocket.CD = rocket.CD_1st;
+            }
+            if (rocket.CL_file_exist_1st) {
+                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_1st);
+            } else {
+                rocket.CL = rocket.CL_1st;
+            }
+            break;
+        case Rocket::STAGE2:
+
+            if (rocket.CD_file_exist_2nd) {
+                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_2nd);
+            } else {
+                rocket.CD = rocket.CD_2nd;
+            }
+            if (rocket.CL_file_exist_2nd) {
+                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_2nd);
+            } else {
+                rocket.CL = rocket.CL_2nd;
+            }
+            break;
+        case Rocket::STAGE3:
+            if (rocket.CD_file_exist_3rd) {
+                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_3rd);
+            } else {
+                rocket.CD = rocket.CD_3rd;
+            }
+            if (rocket.CL_file_exist_3rd) {
+                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_3rd);
+            } else {
+                rocket.CL = rocket.CL_3rd;
+            }
+            break;
+        default:
+            break;
+    }
+}
 
 void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamics::state& dx, double t){
     //  x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI]
@@ -629,8 +675,6 @@ void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamic
     thrust = rocket.thrust;
     Isp = rocket.Isp;
     m_dot = rocket.m_dot;
-    CD = rocket.CD;
-    CL = rocket.CL;
     wind_speed = rocket.wind_speed;
     wind_direction = rocket.wind_direction;
     azimth = rocket.azimth;
@@ -688,6 +732,10 @@ void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamic
 //    空力項
     air = air.altitude(posLLH_[2]);
     vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
+    mach_number = vel_AIR_BODYframe_abs / air.airspeed;
+    set_rocket_state_aero(rocket, mach_number);
+    CD = rocket.CD;
+    CL = rocket.CL;
     dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
     force_drag = CD * dynamic_pressure * area;
     force_lift = CL * dynamic_pressure * area;
@@ -743,8 +791,6 @@ void csv_observer::operator()(const state& x, double t){
     thrust = rocket.thrust;
     Isp = rocket.Isp;
     m_dot = rocket.m_dot;
-    CD = rocket.CD;
-    CL = rocket.CL;
     wind_speed = rocket.wind_speed;
     wind_direction = rocket.wind_direction;
     azimth = rocket.azimth;
@@ -782,6 +828,10 @@ void csv_observer::operator()(const state& x, double t){
     force_thrust_vector << thrust, 0.0, 0.0;
     air = air.altitude(posLLH_[2]);
     vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
+    mach_number = vel_AIR_BODYframe_abs / air.airspeed;
+    set_rocket_state_aero(rocket, mach_number);
+    CD = rocket.CD;
+    CL = rocket.CL;
     dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
     force_drag = CD * dynamic_pressure * area;
     force_lift = CL * dynamic_pressure * area;
@@ -791,7 +841,6 @@ void csv_observer::operator()(const state& x, double t){
     + dcmNED2ECI_ * gravity_vector;
     accBODY_ = dcmECI2BODY_ * accECI_;
     
-    mach_number = vel_AIR_BODYframe_abs / air.airspeed;
     downrange = distance_surface(rocket.launch_pos_LLH, posLLH_);
     
 ////    地面に落下していたら出力無し

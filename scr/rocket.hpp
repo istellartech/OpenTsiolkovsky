@@ -177,6 +177,7 @@ public:
     double wind_direction = 0.0;
     double azimth = 0;
     double elevation = pi/2;
+    double mach_number = 0.0;
 
 public:
     Rocket(Rocket& obj); // コピーコンストラクタ
@@ -184,7 +185,7 @@ public:
 };
 
 void set_rocket_state(Rocket& rocket, double time, double altitude);
-
+void set_rocket_state_aero(Rocket& rocket, double mach_number);
 
 struct rocket_dynamics{
 private:
@@ -202,6 +203,7 @@ private:
     double force_drag;
     double force_lift;
     Air air;
+    double mach_number;
 public:
 //    using state = boost::array<double, 7>;
     using state = std::array<double, 7>;
