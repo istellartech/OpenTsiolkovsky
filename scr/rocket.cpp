@@ -424,8 +424,9 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     //               STAGE3 = 3, PAYLOAD = 4, PARACHUTE = 5;}
     //    time[s],altitude[m]
     double g0 = 9.80665;
-    Air air;
+    Air air, air_ground;
     air = air.altitude(altitude);
+    air_ground = air.altitude(rocket.launch_pos_LLH[2]); // paramファイルのファイルのthrustはランチパッドの標高推力であることが前提
     switch (rocket.state) {
         case Rocket::STAGE1:
             //  推力はファイルがある場合はMatrixから補間して読み込み、ない場合は一定値を燃焼時間分だけ
@@ -436,7 +437,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.nozzle_exhaust_pressure_1st = interp_matrix(time, rocket.thrust_mat_1st, 2);
                     rocket.thrust = rocket.thrust + rocket.throat_area_1st *
                                     rocket.nozzle_expansion_ratio_1st *
-                                    (rocket.nozzle_exhaust_pressure_1st - air.pressure);
+                                    (air_ground.pressure - air.pressure);
                     if (rocket.m_dot > 0.0001) {
                         rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                     } else {
@@ -452,7 +453,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                    time < rocket.burn_time_1st){
                     rocket.thrust = rocket.thrust_1st + rocket.throat_area_1st *
                                     rocket.nozzle_expansion_ratio_1st *
-                                    (rocket.nozzle_exhaust_pressure_1st  - air.pressure);
+                                    (air_ground.pressure - air.pressure);
                     rocket.m_dot = rocket.thrust_1st / rocket.Isp_1st / g0;
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                 } else {
@@ -491,7 +492,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.nozzle_exhaust_pressure_2nd = interp_matrix(time, rocket.thrust_mat_2nd, 2);
                     rocket.thrust = rocket.thrust + rocket.throat_area_2nd *
                     rocket.nozzle_expansion_ratio_2nd *
-                    (rocket.nozzle_exhaust_pressure_2nd - air.pressure);
+                    (air_ground.pressure - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
                     if (rocket.m_dot > 0.0001) {
                         rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                     } else {
@@ -507,7 +508,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                    time < rocket.stage_separation_time_1st + rocket.burn_start_time_2nd + rocket.burn_time_2nd){
                     rocket.thrust = rocket.thrust_2nd + rocket.throat_area_2nd *
                                     rocket.nozzle_expansion_ratio_2nd *
-                                    (rocket.nozzle_exhaust_pressure_2nd  - air.pressure);
+                                    (air_ground.pressure - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
                     rocket.m_dot = rocket.thrust_2nd / rocket.Isp_2nd / g0;
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                 } else {
@@ -545,7 +546,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.nozzle_exhaust_pressure_3rd = interp_matrix(time, rocket.thrust_mat_3rd, 2);
                     rocket.thrust = rocket.thrust + rocket.throat_area_3rd *
                     rocket.nozzle_expansion_ratio_3rd *
-                    (rocket.nozzle_exhaust_pressure_3rd - air.pressure);
+                    (air_ground.pressure - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
                     if (rocket.m_dot > 0.0001) {
                         rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                     } else {
@@ -561,7 +562,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                    time < rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd + rocket.burn_time_3rd){
                     rocket.thrust = rocket.thrust_3rd + rocket.throat_area_3rd *
                                     rocket.nozzle_expansion_ratio_3rd *
-                                    (rocket.nozzle_exhaust_pressure_3rd  - air.pressure);
+                                    (air_ground.pressure - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
                     rocket.m_dot = rocket.thrust_3rd / rocket.Isp_3rd / g0;
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                 } else {
