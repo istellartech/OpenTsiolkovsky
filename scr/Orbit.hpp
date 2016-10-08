@@ -11,8 +11,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <cmath>
+#include "../lib/Eigen/Core"
+#include "../lib/Eigen/Geometry"
 
-//using namespace std;
+using namespace Eigen;
+using namespace std;
 
 class Orbit{
 public:
@@ -49,5 +53,10 @@ private:
     
 };
 
+Orbit elementECI2Orbit(Vector3d posECI_, Vector3d velECI_);
+Matrix3d dcmPQW2ECI(Orbit element);
+Vector3d posOrbit2ECI(Orbit element);
+Vector3d velOrbit2ECI(Orbit element);
+bool success_orbit(Orbit element);
 
 #endif /* Orbit_hpp */

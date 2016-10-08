@@ -7,19 +7,6 @@
 //
 
 #include "fileio.hpp"
-#include "../lib/Eigen/Core"
-#include <iostream>
-#include <iomanip>
-#include <fstream>
-#include <sstream>
-#include <string.h>
-#include <cmath>
-#include <vector>
-#include "../lib/csv.h"
-
-using namespace std;
-using namespace Eigen;
-
 
 double interp_matrix(double x, MatrixXd matrix, int col_num){
     // 線形補間をする、外挿は無し。点の外は最外点そのまま
@@ -44,9 +31,8 @@ double interp_matrix(double x, MatrixXd matrix, int col_num){
     return y;
 }
 
-
 MatrixXd read_csv_vector_2d(string filename, string col_name0, string col_name1){
-//    ファイル名と列数を入れるとMatrixxdを返す
+//    ファイル名と列名を入れるとMatrixXd(n行2列)を返す
     int col_number = 2;
     io::CSVReader<2> in(filename);
     in.read_header(io::ignore_extra_column, col_name0, col_name1);
@@ -57,7 +43,7 @@ MatrixXd read_csv_vector_2d(string filename, string col_name0, string col_name1)
     while(in.read_row(value0, value1)){
         value.conservativeResize(max_col, col_number);
         value(now_col, 0) = value0;
-        value(now_col, 1)  =value1;
+        value(now_col, 1) = value1;
         now_col++; max_col++;
     }
     return value;
@@ -65,7 +51,7 @@ MatrixXd read_csv_vector_2d(string filename, string col_name0, string col_name1)
 
 MatrixXd read_csv_vector_3d(string filename,
                             string col_name0, string col_name1, string col_name2){
-    //    ファイル名と列数を入れるとMatrixxdを返す
+    //    ファイル名と列数を入れるとMatrixXd(n行3列)を返す
     int col_number = 3;
     io::CSVReader<3> in(filename);
     in.read_header(io::ignore_extra_column, col_name0, col_name1, col_name2);
@@ -76,8 +62,8 @@ MatrixXd read_csv_vector_3d(string filename,
     while(in.read_row(value0, value1, value2)){
         value.conservativeResize(max_col, col_number);
         value(now_col, 0) = value0;
-        value(now_col, 1)  =value1;
-        value(now_col, 2)  =value2;
+        value(now_col, 1) = value1;
+        value(now_col, 2) = value2;
         now_col++; max_col++;
     }
     return value;

@@ -10,6 +10,11 @@
 #define gravity_hpp
 
 #include <stdio.h>
+#include <iostream>
+#include <fstream>
+#include <cmath>
+
+using namespace std;
 
 double gravity(double altitude, double latitude);
 void test_gravity();

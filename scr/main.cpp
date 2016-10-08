@@ -44,7 +44,6 @@ int main(int argc, const char * argv[]) {
     std::cout << "Hello, OpenTsiolkovsky!\n";
 //    test_gravity();
 //    test_air();
-//    test_coef_drag();
 //    test_LLH_ECEF();
 //    testCoordinate();
     

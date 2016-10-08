@@ -10,8 +10,15 @@
 #define fileio_hpp
 
 #include <stdio.h>
-#include "../lib/Eigen/Core"
+#include <iostream>
+#include <iomanip>
+#include <fstream>
+#include <sstream>
+#include <string.h>
+#include <cmath>
 #include <vector>
+#include "../lib/Eigen/Core"
+#include "../lib/csv.h"
 
 using namespace std;
 using namespace Eigen;

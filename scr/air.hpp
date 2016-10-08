@@ -39,8 +39,5 @@ public:
 };
 
 void test_air();
-double coef_drag(double mach);
-void test_coef_drag();
-MatrixXd read_coef_drag();
 
 #endif /* air_hpp */

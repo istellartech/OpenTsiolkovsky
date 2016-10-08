@@ -1057,87 +1057,7 @@ Vector3d velECI_init(Vector3d vel_ECEF_NEDframe_, Vector3d posLLH_){
     return vel_ECI_ECIframe(dcmNED2ECI_, vel_ECEF_NEDframe_, posECI_init_);
 }
 
-// ECI座標系の位置、速度から軌道６要素を取得
-Orbit elementECI2Orbit(Vector3d posECI_, Vector3d velECI_){
-//    output
-//    a     Semi-major Axis(km)         長半径(km)
-//    e     Eccentricity(-)             離心率(-)
-//    i     Inclination(rad)            軌道傾斜角(rad)
-//    Omega RAAN(rad)                   昇交点赤経(rad)
-//    omega Argument of Perigee(rad)    近地点引数(rad)
-//    nu    true Anomaly                真近地点離角(rad)
-//    M     Mean Anomaly                平均近地点(rad)
-    Orbit element = Orbit();
-    double a, e, i, Omega, omega, nu;
-    double mu = 3.986004418e5;        // earth gravitational constant 地球の重力定数(km3/s2)
-    Vector3d momentumECI_;
-    double momentum_abs_;
-    double posECI_abs_;
-    double velECI_abs_;
-    posECI_ = posECI_ / 1000; //m -> km
-    velECI_ = velECI_ / 1000;
-    momentumECI_ = posECI_.cross(velECI_);
-    momentum_abs_ = momentumECI_.norm();
-    posECI_abs_ = posECI_.norm();
-    velECI_abs_ = velECI_.norm();
-    double specific_energy = velECI_abs_ * velECI_abs_ / 2 - mu / posECI_abs_;
-    a = - mu / 2 / specific_energy;
-    e = pow(1 - momentum_abs_ * momentum_abs_ / a / mu, 0.5);
-    i = acos(momentumECI_[2] / momentum_abs_);
-    Omega = atan2(momentumECI_[0], -momentumECI_[1]);
-    nu = acos((a * (1 - e*e) - posECI_abs_) / e / posECI_abs_);
-    element.semi_major = a;
-    element.eccentricity = e;
-    element.inclination = i;
-    element.raan = Omega;
-    element.arg_perigee = omega;
-    element.true_anomaly = nu;
-    return element;
-}
 
-// 軌道要素からECI座標系の位置速度を算出するための座標変換行列
-// 楕円座標系としてPQW座標系
-Matrix3d dcmPQW2ECI(Orbit element){
-    Matrix3d dcmPQW2ECI_ = Matrix3d::Zero();
-    double Omega = element.raan;
-    double omega = element.arg_perigee;
-    double i = element.inclination;
-    double cO = cos(Omega); double sO = sin(Omega);
-    double co = cos(omega); double so = sin(omega);
-    double ci = cos(i);     double si = sin(i);
-    dcmPQW2ECI_ << cO*co-sO*ci*so, -cO*so-sO*ci*co,  sO*si,
-                   sO*co+cO*ci*so, -sO*so+cO*ci*co, -cO*si,
-                   si*so,           si*co,           ci;
-    return dcmPQW2ECI_;
-}
-
-// cf. Fundamental of Astrodynamic Application
-Vector3d posOrbit2ECI(Orbit element){
-    double p = element.semi_latus_rectum;
-    double nu = element.true_anomaly;
-    double e = element.eccentricity;
-    Vector3d posPQW_;
-    Vector3d posECI_;
-    posPQW_ << p*cos(nu)/(1+e*cos(nu)),
-               p*sin(nu)/(1+e*cos(nu)),
-               0;
-    posECI_ = dcmPQW2ECI(element) * posPQW_;
-    return posECI_;
-}
-
-Vector3d velOrbit2ECI(Orbit element){
-    double p = element.semi_latus_rectum;
-    double nu = element.true_anomaly;
-    double e = element.eccentricity;
-    double mu = element.mu;
-    Vector3d velPQW_;
-    Vector3d velECI_;
-    velPQW_ << -sqrt(mu/p)*sin(nu),
-                sqrt(mu/p)*(e+cos(nu)),
-                0;
-    velECI_ = dcmPQW2ECI(element) * velPQW_;
-    return velECI_;
-}
 
 // コンソールにプログレス表示
 #define STR(var) #var   //引数にした変数を変数名を示す文字列リテラルとして返すマクロ関数
@@ -1148,28 +1068,6 @@ void progress(double time_now, Rocket rocket){
     cout << fixed << setprecision(0);
     cout << time_now << "sec / " << time_total << "sec\t@Stage" << rocket.state << "\r" << flush;
     return;
-}
-
-// 軌道要素から人工衛星になっているかどうかのチェック
-// 1. 現在時刻でのECI座標系での位置・速度取得
-// 1. ECI位置速度から軌道要素を計算
-// 1. 軌道要素からM=0もしくはν=0のとき（近地点）のECI座標系での位置を計算
-// 1. 近地点での位置がわかるので、軌道投入されたかの閾値演算
-// 1. 軌道投入に成功したかの判断
-// ### 軌道投入の閾値について
-// 軌道は必ず円錐曲線になる。その中でも楕円軌道になる。楕円の焦点の一つは地球中心になる。
-// その中で、地表に落下せずに人工衛星になるための条件は下記
-// - 近地点距離が地球半径以上
-bool success_orbit(Orbit element){
-    double const earth_radius = 6378.137; // 地球半径 km
-    Vector3d posECI_check;
-    element.true_anomaly = 0;
-    posECI_check = posOrbit2ECI(element);
-    if (posECI_check.norm() > earth_radius) {
-        return true;
-    } else {
-        return false;
-    }
 }
 
 // 緯度経度高度で記述された距離2地点間の地球表面の距離を算出
@@ -1263,8 +1161,4 @@ void testCoordinate(){
     ofs << "dcmECEF2ECI" << endl << dcmECI2ECEF(second).transpose() << endl;
     ofs << "posECI\t" << posECI_init[0] << "\t" << posECI_init[1] << "\t" << posECI_init[2] << endl;
     ofs << "vel_ECI_ECIframe\t" << vel_ECI_ECIframe_init(0) << "\t" << vel_ECI_ECIframe_init(1) << "\t" << vel_ECI_ECIframe_init(2) << endl;
-
 }
-
-
-

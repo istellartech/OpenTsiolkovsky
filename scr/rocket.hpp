@@ -336,13 +336,7 @@ Vector3d vel_ECI_ECIframe(Matrix3d dcmNED2ECI_, Vector3d vel_ECEF_NEDframe_, Vec
 // 初期値設定 Initialize
 Vector3d posECI_init(Vector3d posLLH_);
 Vector3d velECI_init(Vector3d vel_ECEF_NEDframe_, Vector3d posLLH_);
-//　ECI座標系から軌道要素取得
-Orbit elementECI2Orbit(Vector3d posECI_, Vector3d velECI_);
-Matrix3d dcmPQW2ECI(Orbit element);
-Vector3d posOrbit2ECI(Orbit element);
-Vector3d velOrbit2ECI(Orbit element);
 void progress(double time_now, Rocket rocket);
-bool success_orbit(Orbit element);
 double distance_surface(Vector3d pos0_LLH, Vector3d pos1_LLH);
 
 inline double deg2rad(double deg){

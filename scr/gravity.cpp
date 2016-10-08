@@ -6,12 +6,7 @@
 //  Copyright © 2015 Takahiro Inagawa. All rights reserved.
 //
 
-#include <iostream>
-#include <fstream>
-#include <cmath>
 #include "gravity.hpp"
-
-using namespace std;
 
 double gravity(double altitude, double latitude){
 //    altitude m

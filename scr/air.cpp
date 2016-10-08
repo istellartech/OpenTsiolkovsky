@@ -17,9 +17,6 @@
 #include <vector>
 //#include "unsupported/Eigen/Splines"
 
-using namespace std;
-using namespace Eigen;
-
 Air Air::altitude(double altitude){
     Air air;
     if ( altitude > HAL[0] && altitude < HAL[1] ){
@@ -100,73 +97,3 @@ void test_air(){
 //% 主に温度上昇と重力加速度とガス状数が変化することに対応すること。
 //% ----
 
-
-double coef_drag(double mach){
-    double Cd = 0.0;
-    double alpha;
-    vector<double> mach_data{0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.1, 1.2, 1.4, 1.6,
-                             1.8, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0};
-    vector<double> cd_data{0.28, 0.28, 0.28, 0.29, 0.35, 0.64, 0.67, 0.69, 0.66,
-                           0.62, 0.58, 0.55, 0.48, 0.42, 0.38, 0.355, 0.33};
-//    線形補間
-    for (int i = 0; i < mach_data.size()-1; i++) {
-        if (mach >= mach_data[i] && mach < mach_data[i+1]) {
-            alpha = (mach - mach_data[i]) / (mach_data[i+1] - mach_data[i]);
-            Cd = cd_data[i] + alpha * (cd_data[i+1] - cd_data[i]);
-            break;
-        }
-        if (mach < mach_data[0]) {
-            Cd = cd_data[0];
-        }else if (mach >= mach_data[mach_data.size()]){
-            Cd = cd_data[cd_data.size()-1];
-        }
-    }
-    return Cd;
-}
-
-void test_coef_drag(){
-    double cd;
-    std::ofstream ofs( "./output/drag.csv");
-    if (!ofs) {
-        std::cerr << "ファイルオープンに失敗" << std::endl;
-        std::exit(1);
-    }
-    ofs << "Mach number(-)" << "\t" << "Cd (-)" << endl;
-    
-    for (double Mach = 0; Mach < 10.0; Mach = Mach + 0.01) {
-        cd = coef_drag(Mach);
-        ofs << Mach << "\t" << cd << endl;
-    }
-}
-
-MatrixXd read_coef_drag(){
-    MatrixXd value = MatrixXd::Zero(2,2);
-    ifstream ifs("./Cd.csv");
-    if(!ifs){
-        cout<<"input file error";
-    }
-    string str;
-    string name;
-    int col = 0;
-    int max_col = 2;
-    while( getline( ifs, str ) ){
-        string token;
-        stringstream ss0, ss1;
-        istringstream stream( str );
-        int row = 0;
-        while( getline( stream, token, ',' ) ) {
-            switch (row) {
-                case 0:
-                    value(col, row) = stof(token); break;
-                case 1:
-                    value(col, row) = stof(token); break;
-            }
-            row++;
-        }
-        max_col++;
-        value.conservativeResize(max_col, 2);
-        col++;
-    }
-    value.conservativeResize(max_col-2, 2);
-    return value;
-}
