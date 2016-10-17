@@ -39,7 +39,7 @@ def make_kml(name, div, stage):
                                             usecols = (0,3,4,5))
 	kml = simplekml.Kml(open=1)
 	cood = []
-	for i in range(len(time)/div):
+	for i in range(len(time)//div):
 		index = i * div
 		cood.append((lon[index], lat[index], altitude[index]))
 	cood.append((lon[-1], lat[-1], altitude[-1]))
