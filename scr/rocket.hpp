@@ -39,6 +39,8 @@ public:
     State state;                    // 状態を決める関数
     string name;                    // 名前
     string output_filename;         // 出力ファイル名
+//    ==== フラグ ====
+    bool is_aerodynamically_stable = false;  // 空力的に安定しているモードかどうか, 燃焼後やペイロードを想定
 //    ====計算の変数====
     double calc_start_time;
     double calc_end_time;
@@ -328,6 +330,7 @@ Vector2d attack_of_angle(Vector3d vel_AIR_BODYframe_);
 Matrix3d dcmBODY2AIR(Vector2d attack_of_angle_);
 //Matrix3d dcmBODY2NED(double azimth, double elevation);
 Matrix3d dcmNED2BODY(double azimth, double elevation);
+Vector2d azimth_elevaztion(Vector3d vel_BODY_NEDframe);
 Matrix3d dcmECI2BODY(Matrix3d dcmNED2BODY_, Matrix3d dcmECI2NED_);
 // Initialize
 Vector3d posECEF(Vector3d posLLH_);

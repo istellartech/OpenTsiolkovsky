@@ -10,11 +10,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "870"
-            endingLineNumber = "870"
+            startingLineNumber = "895"
+            endingLineNumber = "895"
             landmarkName = "csv_observer::operator()(const state&amp; x, double t)"
             landmarkType = "7">
          </BreakpointContent>
@@ -26,11 +26,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "968"
-            endingLineNumber = "968"
+            startingLineNumber = "993"
+            endingLineNumber = "993"
             landmarkName = "attack_of_angle(Vector3d vel_AIR_BODYframe_)"
             landmarkType = "9">
          </BreakpointContent>
@@ -42,11 +42,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "962"
-            endingLineNumber = "962"
+            startingLineNumber = "987"
+            endingLineNumber = "987"
             landmarkName = "attack_of_angle(Vector3d vel_AIR_BODYframe_)"
             landmarkType = "9">
          </BreakpointContent>
@@ -90,11 +90,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "597"
-            endingLineNumber = "597"
+            startingLineNumber = "609"
+            endingLineNumber = "609"
             landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
             landmarkType = "9">
          </BreakpointContent>
@@ -122,11 +122,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499181218.635936"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "453"
-            endingLineNumber = "453"
+            startingLineNumber = "455"
+            endingLineNumber = "455"
             landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
             landmarkType = "9">
          </BreakpointContent>
@@ -138,11 +138,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "1042"
-            endingLineNumber = "1042"
+            startingLineNumber = "1079"
+            endingLineNumber = "1079"
             landmarkName = "posECI_init(Vector3d posLLH_)"
             landmarkType = "9">
          </BreakpointContent>
@@ -154,11 +154,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "655"
-            endingLineNumber = "655"
+            startingLineNumber = "667"
+            endingLineNumber = "667"
             landmarkName = "rocket_dynamics::operator()(const rocket_dynamics::state&amp; x, rocket_dynamics::state&amp; dx, double t)"
             landmarkType = "7">
          </BreakpointContent>
@@ -280,11 +280,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "478"
-            endingLineNumber = "478"
+            startingLineNumber = "482"
+            endingLineNumber = "482"
             landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
             landmarkType = "9">
          </BreakpointContent>
@@ -296,11 +296,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "791"
-            endingLineNumber = "791"
+            startingLineNumber = "809"
+            endingLineNumber = "809"
             landmarkName = "csv_observer::operator()(const state&amp; x, double t)"
             landmarkType = "7">
          </BreakpointContent>
@@ -408,11 +408,11 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "496044060.610799"
+            timestampString = "499182930.618017"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "486"
-            endingLineNumber = "486"
+            startingLineNumber = "490"
+            endingLineNumber = "490"
             landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
             landmarkType = "9">
          </BreakpointContent>
@@ -431,6 +431,38 @@
             endingLineNumber = "56"
             landmarkName = "flight_simulation(string input_filename, string output_filename, Rocket::State state)"
             landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket.cpp"
+            timestampString = "499182930.618017"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "1026"
+            endingLineNumber = "1026"
+            landmarkName = "azimth_elevaztion(Vector3d vel_BODY_NEDframe)"
+            landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket.cpp"
+            timestampString = "499182930.618017"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "714"
+            endingLineNumber = "714"
+            landmarkName = "rocket_dynamics::operator()(const rocket_dynamics::state&amp; x, rocket_dynamics::state&amp; dx, double t)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

@@ -443,10 +443,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     } else {
                         rocket.Isp = 0.0;
                     }
+                    rocket.is_aerodynamically_stable = false;
                 } else {
                     rocket.thrust = 0.0;
                     rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
+                    rocket.is_aerodynamically_stable = true;
                 }
             } else {
                 if(time > rocket.burn_start_time_1st &&
@@ -456,10 +458,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                                     (air_ground.pressure - air.pressure);
                     rocket.m_dot = rocket.thrust_1st / rocket.Isp_1st / g0;
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                    rocket.is_aerodynamically_stable = false;
                 } else {
                     rocket.thrust = 0.0;
                     rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
+                    rocket.is_aerodynamically_stable = true;
                 }
             }
 //            rocket.Isp = rocket.Isp_1st;
@@ -498,10 +502,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     } else {
                         rocket.Isp = 0.0;
                     }
+                    rocket.is_aerodynamically_stable = false;
                 } else {
                     rocket.thrust = 0.0;
                     rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
+                    rocket.is_aerodynamically_stable = true;
                 }
             } else {
                 if(time > rocket.stage_separation_time_1st + rocket.burn_start_time_2nd &&
@@ -511,10 +517,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                                     (rocket.nozzle_exhaust_pressure_2nd  - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
                     rocket.m_dot = rocket.thrust_2nd / rocket.Isp_2nd / g0;
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                    rocket.is_aerodynamically_stable = false;
                 } else {
                     rocket.thrust = 0.0;
                     rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
+                    rocket.is_aerodynamically_stable = true;
                 }
             }
 //            rocket.Isp = rocket.Isp_2nd;
@@ -552,10 +560,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     } else {
                         rocket.Isp = 0.0;
                     }
+                    rocket.is_aerodynamically_stable = false;
                 } else {
                     rocket.thrust = 0.0;
                     rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
+                    rocket.is_aerodynamically_stable = true;
                 }
             } else {
                 if(time > rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd &&
@@ -565,10 +575,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                                     (rocket.nozzle_exhaust_pressure_3rd - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
                     rocket.m_dot = rocket.thrust_3rd / rocket.Isp_3rd / g0;
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+                    rocket.is_aerodynamically_stable = false;
                 } else {
                     rocket.thrust = 0.0;
                     rocket.m_dot = 0.0;
                     rocket.Isp = 0.0;
+                    rocket.is_aerodynamically_stable = true;
                 }
             }
 //            rocket.Isp = rocket.Isp_3rd;
@@ -692,14 +704,20 @@ void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamic
     dcmNED2ECI_ = dcmECI2NED_.transpose();
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
-//    ==== 2016/04/04 modify ====
-    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-    vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-//    vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2ECEF_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-//    ==== 2016/04/04 modify END ====
-    attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    if(!rocket.is_aerodynamically_stable){ // 姿勢指定モード（通常）
+        dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+        vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
+        attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    } else { // 姿勢を空力安定モード
+        attack_of_angle_ << 0.0, 0.0;
+        Vector3d vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
+        vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
+        Vector2d azel = azimth_elevaztion(vel_BODY_NEDframe_);
+        azimth = azel[0];
+        elevation = azel[1];
+        dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    }
     dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
-//    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
 //    ここにt=0の時のdcmECI2NEDを入れないといけない。
     dcmECEF2NED_init_ = dcmECEF2NED(rocket.launch_pos_LLH);
     dcmECI2NED_init_ = dcmECI2NED(dcmECEF2NED_init_, dcmECI2ECEF(0.0));
@@ -810,12 +828,19 @@ void csv_observer::operator()(const state& x, double t){
     dcmNED2ECI_ = dcmECI2NED_.transpose();
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
-    //    ==== 2016/04/04 modify ====
-    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-    vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-    //    vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2ECEF_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-    //    ==== 2016/04/04 modify END ====
-    attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    if(!rocket.is_aerodynamically_stable){ // 姿勢指定モード（通常）
+        dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+        vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
+        attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    } else { // 姿勢を空力安定モード
+        attack_of_angle_ << 0.0, 0.0;
+        Vector3d vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
+        vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
+        Vector2d azel = azimth_elevaztion(vel_BODY_NEDframe_);
+        azimth = azel[0];
+        elevation = azel[1];
+        dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    }
     dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
 //    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
     dcmECEF2NED_init_ = dcmECEF2NED(rocket.launch_pos_LLH);
@@ -991,6 +1016,18 @@ Matrix3d dcmNED2BODY(double azimth, double elevation){
     -sin(azimth),                cos(azimth),                 0,
     sin(elevation)*cos(azimth), sin(elevation)*sin(azimth),  cos(elevation);
     return dcm;
+}
+
+Vector2d azimth_elevaztion(Vector3d vel_BODY_NEDframe){
+    double north  = vel_BODY_NEDframe[0];
+    double east = vel_BODY_NEDframe[1];
+    double down = vel_BODY_NEDframe[2];
+    double azimth = pi/2.0 - atan2(north, east);
+    double elevation = atan2(-down, sqrt(north * north + east * east));
+    Vector2d azel;
+    azel[0] = azimth;
+    azel[1] = elevation;
+    return azel;
 }
 
 
