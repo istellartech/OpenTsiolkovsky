@@ -46,7 +46,7 @@ int main(int argc, const char * argv[]) {
 //    test_air();
 //    test_LLH_ECEF();
 //    testCoordinate();
-    
+
 //    main関数の引数を読み取って、jsonファイル読み出し、jsonの中身を読み取って、STAGEがいくつあるかを読み取り
 //    それによってflight_simulationを実行
     string input_file_name;
@@ -110,7 +110,7 @@ int main(int argc, const char * argv[]) {
         impact_point << 0.0,0.0;
         impact_flag = false;
     }
-    
+
     cout << fixed << setprecision(0);
     cout << "max altitude[m]:\t" << max_alt << endl;
     cout << "max downrange[m]:\t" << max_downrange << endl;
@@ -118,6 +118,6 @@ int main(int argc, const char * argv[]) {
     end = std::chrono::system_clock::now();  // 計測終了時間
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
     std::cout << "Processing time:" << elapsed << "[ms]" << std::endl;
-    
+
     return 0;
 }

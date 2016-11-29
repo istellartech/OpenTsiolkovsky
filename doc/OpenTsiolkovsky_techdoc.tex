@@ -1,0 +1,72 @@
+\documentclass[12pt]{jsarticle}
+\usepackage{here}
+\usepackage[dvipdfmx]{graphicx}
+\usepackage{wrapfig}
+\usepackage{listings}
+
+\title{OpenTsiolkovsky テクニカルドキュメント}
+\author{Interstellar Technologies Inc. 稲川貴大}
+\date{\today}
+
+
+\begin{document}
+% \begin{titlepage}
+\maketitle
+\begin{abstract}
+
+\end{abstract}
+% \thispagestyle{empty}
+% \end{titlepage}
+% \tableofcontents
+% ここから文章を書いて下さい。
+
+\tableofcontents
+
+\newpage
+\section{イントロダクション}
+OpenTsiolkovskyはロケット用フライトシミュレータです。
+地球の重力のみ考慮した、地球近傍でのロケットの軌道投入までの短時間の
+軌道計算を行なうことができます。
+地球中心の慣性座標系で計算を行います。
+
+ロケットの概念設計から、ミッション決定、既存のロケットの能力判別など、
+ロケットの軌道計算は様々なファイズで必要とされます。
+
+軌道計算は6自由度の運動方程式で記述可能です。並進3自由度（XYZ）、
+回転3自由度（ロールピッチヨー）です。
+基礎的な情報しか必要無いときは自由度を減らし、1自由度、2自由度、3自由度、
+5自由度など複数のシミュレーションで十分ですが、OpenTsiolkovskyでは
+6自由度で計算しています。
+
+運動方程式は常微分方程式となります。
+この常微分方程式のパラメータになるものをユーザが入力し、
+これをソルバー（OpenTsiolkovskyの機能）によって数値積分したものを
+出力します。
+
+つまり、OpenTsiokovskyとはロケットのパラメータファイルを
+パースして取り込み、常微分方程式を数値積分で解き、結果を整形して
+出力するソフトウエアです。
+
+ちなみにTsilkovskyとはロシア・ソ連のロケット研究者で、
+ツォルコフスキーの式と呼ばれるロケットの基礎的な理論を示した人物。
+名言としては下記があります。
+
+「今日の不可能は、明日可能になる」
+
+「地球は叡智の揺り籠だが、しかしその叡智が永遠に揺り籠に留まるべきではない。」
+
+\begin{equation}
+\Delta V = I_{sp} g_{0} \ln \frac{m_0}{m_T}
+\end{equation}
+
+
+\section{Program capabilities/Installation}
+
+\section{Basis of theory and model}
+
+\section{Input definition}
+
+\section{Output definition}
+
+% ここまで文章を書いて下さい。
+\end{document}

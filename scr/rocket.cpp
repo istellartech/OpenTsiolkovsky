@@ -924,7 +924,7 @@ Vector3d posLLH(Vector3d posECEF_){
     double b = a * (1.0 - 1.0 / one_f); // WGS84の短軸[m] b = 6356752.314245
     double e2 = (1.0 / one_f) * (2.0 - (1.0 / one_f));  // 第一離心率eの2乗
     double ed2 = (e2 * a * a / (b * b));// 第二離心率e'の2乗
-    double p = sqrt(posECEF_(0) * posECEF_(0) + posECEF_(1) * posECEF_(1));    // 現在位置での地心からの距離[m]
+    double p = sqrt(posECEF_(0) * posECEF_(0) + posECEF_(1) * posECEF_(1));    // 現在位置での地球回転軸からの距離[m]
     double theta = atan2(posECEF_(2)*a, p*b);    //[rad]
     posLLH[0] = rad2deg(atan2((posECEF_(2) + ed2 * b * pow(sin(theta),3)), p - e2 * a * pow(cos(theta),3)));
     posLLH[1] = rad2deg(atan2(posECEF_(1),posECEF_(0)));
@@ -1125,7 +1125,7 @@ double distance_surface(Vector3d pos0_LLH_, Vector3d pos1_LLH_){
  テスト
  */
 void testCoordinate(){
-    double second = 0.0;
+    double second = 100.0;
     Vector3d posECI_(-3957314.620, 3310254.137, 3737540.043);
     Vector3d velECI_(10.0, 20.0, 30.0);
     std::ofstream ofs( "./output/coordinate.csv");
@@ -1147,9 +1147,9 @@ void testCoordinate(){
     Matrix3d dcmBODY2NED_;
     Matrix3d dcmNED2BODY_;
     Matrix3d dcmECI2BODY_;
-    double wind_speed = 0.0;
+    double wind_speed = 10.0;
     double wind_direction = 0.0;
-    double azimth = 0.0;
+    double azimth = 10.0;
     double elevation = pi/2;
     dcmECI2ECEF_ = dcmECI2ECEF(second);
     posECEF_ = posECEF(dcmECI2ECEF_, posECI_);
@@ -1163,7 +1163,7 @@ void testCoordinate(){
     dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
 //    dcmBODY2NED_ = dcmBODY2NED(azimth, elevation);
     dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-    dcmECI2BODY_ = dcmECI2BODY(dcmBODY2NED_.transpose(), dcmECI2NED_);
+    dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
     // initalization
     Vector3d posECEF_init;
     Vector3d posECI_init;
@@ -1190,7 +1190,8 @@ void testCoordinate(){
     ofs << "vel_AIR_BODYframe\t" << vel_AIR_BODYframe_(0) << "\t" << vel_AIR_BODYframe_(1) << "\t" << vel_AIR_BODYframe_(2) << endl;
     ofs << "attack_of_angle" << "\t" << attack_of_angle_[0] << "\t" << attack_of_angle_[1] << endl;
     ofs << "dcmBODY2AIR" << endl << dcmBODY2AIR_ << endl;
-    ofs << "dcmBODY2NED" << endl << dcmBODY2NED_ << endl;
+    ofs << "dcmNED2BODY" << endl << dcmNED2BODY_ << endl;
+//    ofs << "dcmBODY2NED" << endl << dcmBODY2NED_ << endl;
     ofs << "dcmECI2BODY" << endl << dcmECI2BODY_ << endl;
     ofs << endl;
     ofs << "==== 初期化処理 ====" << endl;
