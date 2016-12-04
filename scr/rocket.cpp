@@ -868,6 +868,8 @@ void csv_observer::operator()(const state& x, double t){
     accBODY_ = dcmECI2BODY_ * accECI_;
     
     downrange = distance_surface(rocket.launch_pos_LLH, posLLH_);
+    posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
+
     
 ////    地面に落下していたら出力無し
     if ( posLLH_[2] > 0) {
@@ -886,7 +888,7 @@ void csv_observer::operator()(const state& x, double t){
         << rad2deg(attack_of_angle_[0]) << "," << rad2deg(attack_of_angle_[1]) << ","
         << dynamic_pressure << "," << force_drag << "," << force_lift << ","
         << wind_speed << "," << wind_direction << ","
-        << downrange << endl;
+        << downrange << "," << posLLH_IIP_[0] << "," << posLLH_IIP_[1] << endl;
     }
     
 //    element
@@ -1120,6 +1122,25 @@ double distance_surface(Vector3d pos0_LLH_, Vector3d pos1_LLH_){
     return earth_radius * theta;
 }
 
+// その時刻でのIIP（瞬間落下地点）をLLHで出力
+Vector3d posLLH_IIP(double t, Vector3d posECI_, Vector3d vel_ECEF_NEDframe_){
+    double g0 = 9.80665;
+    Matrix3d dcmECI2ECEF_ = dcmECI2ECEF(t);
+    Vector3d posLLH_ = posLLH(posECEF(dcmECI2ECEF_, posECI_));
+    Matrix3d dcmNED2ECI_ = dcmECI2NED(dcmECEF2NED(posLLH_), dcmECI2ECEF_).transpose();
+    double vel_north_ = vel_ECEF_NEDframe_(0);
+    double vel_east_ = vel_ECEF_NEDframe_(1);
+    double vel_up_ = - vel_ECEF_NEDframe_(2);
+    double h = posLLH_(2);
+    double tau = 1.0 / g0 * (vel_up_ + sqrt(vel_up_ * vel_up_ + 2 * h * g0));
+    Vector3d dist_IIP_from_now_NED;
+    Vector3d posECI_IIP_;
+    Vector3d posECEF_IIP_;
+    dist_IIP_from_now_NED << vel_north_ * tau, vel_east_ * tau, -h;
+    posECI_IIP_ = posECI_ + dcmNED2ECI_ * dist_IIP_from_now_NED;
+    posECEF_IIP_ = posECEF(dcmECI2ECEF(t), posECI_IIP_);
+    return posLLH(posECEF_IIP_);
+}
 
 /*
  テスト

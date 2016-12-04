@@ -241,7 +241,8 @@ public:
     Vector3d force_thrust_vector;
     Vector3d gravity_vector;
     double downrange;
-        
+    Vector3d posLLH_IIP_;
+    
     Rocket rocket;
     rocket_dynamics(Rocket rocket_): rocket(rocket_){}
     
@@ -293,6 +294,7 @@ struct csv_observer{
     Vector3d force_thrust_vector;
     Vector3d gravity_vector;
     double downrange;
+    Vector3d posLLH_IIP_;
 
     
 //    double max_alt = 0.0;
@@ -304,7 +306,8 @@ struct csv_observer{
     csv_observer(Rocket rocket_, const std::string& FileName, bool isAddition = false) : rocket(rocket_){
         if (isAddition == false){ // 追加書き込みモードかどうか
             fout.open(FileName, std::ios_base::out);
-            fout << "time(s), mass(kg), thrust(N), lat(deg), lon(deg), altitude(m),  pos_ECI_X(m), pos_ECI_Y(m), pos_ECI_Z(m),vel_ECI_X(m/s), vel_ECI_Y(m/s), vel_ECI_Z(m/s), vel_NED_X(m/s), vel_NED_Y(m/s), vel_NED_Z(m/s), acc_ECI_X(m/s2), acc_ECI_Y(m/s2), acc_ECI_Z(m/s2), acc_Body_X(m/s), acc_Body_Y(m/s), acc_Body_Z(m/s), Isp(s), Mach number, attitude_azimth(deg), attitude_elevation(deg), attack of angle alpha(deg), attack of angle beta(deg), dynamic pressure(Pa), aero Drag(N), aero Lift(N), wind speed(m/s), wind direction(deg), downrange(m)" << std::endl;
+            fout << "time(s), mass(kg), thrust(N), lat(deg), lon(deg), altitude(m),  pos_ECI_X(m), pos_ECI_Y(m), pos_ECI_Z(m),vel_ECI_X(m/s), vel_ECI_Y(m/s), vel_ECI_Z(m/s), vel_NED_X(m/s), vel_NED_Y(m/s), vel_NED_Z(m/s), acc_ECI_X(m/s2), acc_ECI_Y(m/s2), acc_ECI_Z(m/s2), acc_Body_X(m/s), acc_Body_Y(m/s), acc_Body_Z(m/s), Isp(s), Mach number, attitude_azimth(deg), attitude_elevation(deg), attack of angle alpha(deg), attack of angle beta(deg), dynamic pressure(Pa), aero Drag(N), aero Lift(N), wind speed(m/s), wind direction(deg), downrange(m), "
+                << "IIP_lat(deg), IIP_lon(deg)" << std::endl;
         } else {
             fout.open(FileName, std::ios_base::out | std::ios_base::app); // 追加書き込みモード
         }
@@ -341,6 +344,7 @@ Vector3d posECI_init(Vector3d posLLH_);
 Vector3d velECI_init(Vector3d vel_ECEF_NEDframe_, Vector3d posLLH_);
 void progress(double time_now, Rocket rocket);
 double distance_surface(Vector3d pos0_LLH, Vector3d pos1_LLH);
+Vector3d posLLH_IIP(double t, Vector3d posECI_, Vector3d vel_ECEF_NEDframe_);
 
 inline double deg2rad(double deg){
     return deg / 180.0 * pi;
