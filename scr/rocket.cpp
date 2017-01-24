@@ -113,6 +113,15 @@ Rocket::Rocket(Rocket& obj){
     mass_init_1st               = obj.mass_init_1st;
     mass_init_2nd               = obj.mass_init_2nd;
     mass_init_3rd               = obj.mass_init_3rd;
+    Isp_file_exist_1st          = obj.Isp_file_exist_1st;
+    Isp_file_exist_2nd          = obj.Isp_file_exist_2nd;
+    Isp_file_exist_3rd          = obj.Isp_file_exist_3rd;
+    Isp_file_name_1st           = obj.Isp_file_name_1st;
+    Isp_file_name_2nd           = obj.Isp_file_name_2nd;
+    Isp_file_name_3rd           = obj.Isp_file_name_3rd;
+    Isp_mat_1st                 = obj.Isp_mat_1st;
+    Isp_mat_2nd                 = obj.Isp_mat_2nd;
+    Isp_mat_3rd                 = obj.Isp_mat_3rd;
     Isp_1st                     = obj.Isp_1st;
     Isp_2nd                     = obj.Isp_2nd;
     Isp_3rd                     = obj.Isp_3rd;
@@ -251,7 +260,7 @@ Rocket::Rocket(const std::string& FileName): fin(FileName){
     picojson::object& o_parachute    = o["parachute"].get<picojson::object>();
     picojson::object& o_wind         = o["wind"].get<picojson::object>();
 
-    name =o["name"].get<string>();
+    name = o["name"].get<string>();
     output_filename = o["output file name"].get<string>();
     state = Rocket::GROUND;
     calc_start_time = o_calc["start time[s]"].get<double>();
@@ -259,6 +268,12 @@ Rocket::Rocket(const std::string& FileName): fin(FileName){
     calc_step_time = o_calc["time step[s]"].get<double>();
 //    ====1st stage====
     mass_init_1st = o_1st["mass initial[kg]"].get<double>();
+    if (! o_1st_thrust["Isp file exist"].is<picojson::null>() ){
+        Isp_file_exist_1st = o_1st_thrust["Isp file exist"].get<bool>();
+    }
+    if (! o_1st_thrust["Isp file name"].is<picojson::null>() ){
+        Isp_file_name_1st = o_1st_thrust["Isp file name"].get<string>();
+    }
     Isp_1st = o_1st_thrust["Isp[s]"].get<double>();
     thrust_file_exist_1st = o_1st_thrust["file exist"].get<bool>();
     thrust_file_name_1st = o_1st_thrust["file name"].get<string>();
@@ -287,6 +302,12 @@ Rocket::Rocket(const std::string& FileName): fin(FileName){
     }
 //    ====2nd stage====
     mass_init_2nd = o_2nd["mass initial[kg]"].get<double>();
+    if (! o_2nd_thrust["Isp file exist"].is<picojson::null>() ){
+        Isp_file_exist_2nd = o_2nd_thrust["Isp file exist"].get<bool>();
+    }
+    if (! o_2nd_thrust["Isp file name"].is<picojson::null>() ){
+        Isp_file_name_2nd = o_2nd_thrust["Isp file name"].get<string>();
+    }
     Isp_2nd = o_2nd_thrust["Isp[s]"].get<double>();
     thrust_file_exist_2nd = o_2nd_thrust["file exist"].get<bool>();
     thrust_file_name_2nd = o_2nd_thrust["file name"].get<string>();
@@ -315,6 +336,12 @@ Rocket::Rocket(const std::string& FileName): fin(FileName){
     }
 //    ====3rd stage====
     mass_init_3rd = o_3rd["mass initial[kg]"].get<double>();
+    if (! o_3rd_thrust["Isp file exist"].is<picojson::null>() ){
+        Isp_file_exist_3rd = o_3rd_thrust["Isp file exist"].get<bool>();
+    }
+    if (! o_3rd_thrust["Isp file name"].is<picojson::null>() ){
+        Isp_file_name_3rd = o_3rd_thrust["Isp file name"].get<string>();
+    }
     Isp_3rd = o_3rd_thrust["Isp[s]"].get<double>();
     thrust_file_exist_3rd = o_3rd_thrust["file exist"].get<bool>();
     thrust_file_name_3rd = o_3rd_thrust["file name"].get<string>();
@@ -373,6 +400,15 @@ Rocket::Rocket(const std::string& FileName): fin(FileName){
     
 //    ファイル読み込み
 //    thrust(time,thrust), CL(mach,CL), CD(mach,CD), attitude(time, azimth, elevation)
+    if (Isp_file_exist_1st) {
+        Isp_mat_1st = read_csv_vector_2d("./" + Isp_file_name_1st, "time", "Isp");
+    }
+    if (Isp_file_exist_2nd) {
+        Isp_mat_2nd = read_csv_vector_2d("./" + Isp_file_name_2nd, "time", "Isp");
+    }
+    if (Isp_file_exist_3rd) {
+        Isp_mat_3rd = read_csv_vector_2d("./" + Isp_file_name_3rd, "time", "Isp");
+    }
     if (thrust_file_exist_1st) {
         thrust_mat_1st = read_csv_vector_3d("./" + thrust_file_name_1st,
                                             "time", "thrust", "nozzle_exhaust_pressure[Pa]"); // TODO:例外を入れる
@@ -430,6 +466,9 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     switch (rocket.state) {
         case Rocket::STAGE1:
             //  推力はファイルがある場合はMatrixから補間して読み込み、ない場合は一定値を燃焼時間分だけ
+            if (rocket.Isp_file_exist_1st){
+                rocket.Isp_1st = interp_matrix(time, rocket.Isp_mat_1st);
+            }
             if (rocket.thrust_file_exist_1st){
                 rocket.thrust = interp_matrix(time, rocket.thrust_mat_1st);
                 if (rocket.thrust != 0) {
@@ -489,6 +528,9 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             rocket.area = rocket.body_area_1st;
             break;
         case Rocket::STAGE2:
+            if (rocket.Isp_file_exist_2nd){
+                rocket.Isp_2nd = interp_matrix(time, rocket.Isp_mat_2nd);
+            }
             if (rocket.thrust_file_exist_2nd){
                 rocket.thrust = interp_matrix(time - rocket.stage_separation_time_1st, rocket.thrust_mat_2nd);
                 if (rocket.thrust != 0) {
@@ -547,6 +589,9 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             rocket.area = rocket.body_area_2nd;
             break;
         case Rocket::STAGE3:
+            if (rocket.Isp_file_exist_3rd){
+                rocket.Isp_3rd = interp_matrix(time, rocket.Isp_mat_3rd);
+            }
             if (rocket.thrust_file_exist_3rd){
                 rocket.thrust = interp_matrix(time - rocket.stage_separation_time_2nd, rocket.thrust_mat_3rd);
                 if (rocket.thrust != 0) {

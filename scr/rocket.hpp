@@ -50,6 +50,15 @@ public:
     double mass_init_2nd;           // 初期質量[kg]
     double mass_init_3rd;           // 初期質量[kg]
 //    ==推力==
+    bool Isp_file_exist_1st = false;
+    bool Isp_file_exist_2nd = false;
+    bool Isp_file_exist_3rd = false;
+    string Isp_file_name_1st;
+    string Isp_file_name_2nd;
+    string Isp_file_name_3rd;
+    MatrixXd Isp_mat_1st;
+    MatrixXd Isp_mat_2nd;
+    MatrixXd Isp_mat_3rd;
     double Isp_1st;                 // 比推力[sec]
     double Isp_2nd;                 // 比推力[sec]
     double Isp_3rd;                 // 比推力[sec]

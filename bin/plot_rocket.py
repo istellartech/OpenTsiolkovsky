@@ -5,10 +5,10 @@
 # 改良案：段によって色を変えるなど見やすく。
 
 import sys
-reload(sys)
+# reload(sys)
 import platform
 # デフォルトの文字コードを変更する．
-sys.setdefaultencoding('utf-8')
+# sys.setdefaultencoding('utf-8')
 
 import numpy as np
 import matplotlib as mpl
