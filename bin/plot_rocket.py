@@ -37,14 +37,14 @@ import json
 import csv
 
 if 'Windows' == platform.system():
-	font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
-	font_prop = FontProperties(fname=font_path)
-	mpl.rcParams['font.family'] = font_prop.get_name()
+    font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
+    font_prop = FontProperties(fname=font_path)
+    mpl.rcParams['font.family'] = font_prop.get_name()
 #
 if 'Darwin' == platform.system(): # for Mac
-	font_path = '/Library/Fonts/Osaka.ttf'
-	font_prop = FontProperties(fname=font_path)
-	mpl.rcParams['font.family'] = font_prop.get_name()
+    font_path = '/Library/Fonts/Osaka.ttf'
+    font_prop = FontProperties(fname=font_path)
+    mpl.rcParams['font.family'] = font_prop.get_name()
 
 plt.close('all')
 # plt.style.use('ggplot')
@@ -55,9 +55,9 @@ mpl.rcParams['pdf.fonttype'] = 42 # change font to TrueType in pdf
 argvs = sys.argv
 argc = len(argvs)
 if (argc != 1):
-	file_name = argvs[1]
+    file_name = argvs[1]
 else:
-	file_name = "param.json"
+    file_name = "param.json"
 
 f = open(file_name)
 data = json.load(f)
@@ -208,10 +208,10 @@ for index in range(stage_num):
     (time, mass, thrust, lat, lon, altitude, pos_ECI_X, pos_ECI_Y,
      pos_ECI_Z, vel_ECI_X, vel_ECI_Y, vel_ECI_Z, vel_NED_X,
      vel_NED_Y, vel_NED_Z, acc_ECI_X, acc_ECI_Y, acc_ECI_Z,
-	 acc_BODY_X, acc_BODY_Y, acc_BODY_Z,
+     acc_BODY_X, acc_BODY_Y, acc_BODY_Z,
      Isp, mach, azimth, elevation, aoa_alpha, aoa_beta,
      dynamic_press, drag, lift,
-	 wind_speed, wind_direction, downrange) = np.genfromtxt(file_name,
+     wind_speed, wind_direction, downrange) = np.genfromtxt(file_name,
                                                 unpack=True, delimiter=",",
                                                 skip_header = 1,
                                                 usecols = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,
@@ -300,7 +300,8 @@ for index in range(stage_num):
     plt.plot(time, acc_BODY_Z/g, label="Z_body")
     plt.xlabel("time (sec)")
     plt.ylabel("acceleration (G)")
-	plt.legend(loc="best")
+    plt.legend(loc="best")
+    
 
     pdf.savefig(fig[index][1])
     fig[index][2] = plt.figure()
