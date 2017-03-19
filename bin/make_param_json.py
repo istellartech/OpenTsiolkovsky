@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import sys
-reload(sys)
+# reload(sys)
 import platform
 # デフォルトの文字コードを変更する．
 sys.setdefaultencoding('utf-8')

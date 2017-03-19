@@ -14,8 +14,8 @@ argc = len(argvs) # 引数の個数
 if (argc != 1):
 	file_name = argvs[1]
 else:
-	# file_name = u"param.json"
-	file_name = u"param_epsilon.json"
+	file_name = "param.json"
+	# file_name = u"param_epsilon.json"
 try:
 	f = open(file_name)
 	data = json.load(f)
@@ -44,7 +44,7 @@ def make_kml(name, div, stage):
 		cood.append((lon[index], lat[index], altitude[index]))
 	cood.append((lon[-1], lat[-1], altitude[-1]))
 	# print cood
-	ls = kml.newlinestring(name=u"name")
+	ls = kml.newlinestring(name="name")
 	ls.style.linestyle.width = 8
 	if (stage == 1):
 		ls.style.linestyle.color = simplekml.Color.blue
@@ -63,11 +63,13 @@ def make_kml(name, div, stage):
 	kml.save("output/" + name + str(stage) + ".kml")
 
 try:
+	print("INPUT FILE: %s" % (file_name))
 	make_kml(name, 20, 1)
 	print("create kml file:1st stage")
 	make_kml(name, 50, 2)
 	print("create kml file:2nd stage")
 	make_kml(name, 50, 3)
 	print("create kml file:3rd stage")
+	print("Done...")
 except:
-	print("finish...")
+	print("Done...")

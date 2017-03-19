@@ -1,19 +1,35 @@
 # -*- coding: utf-8 -*-
-# パラメータファイルを読み取り、推力などのファイルを読み取る。
-# 出力済みであれば、それを数枚のグラフにする
-# 引数はパラメータjsonファイル(ex.param.json)
-# 改良案：段によって色を変えるなど見やすく。
+# Copyright (c) 2017 Interstellar Technologies Inc. All Rights Reserved.
+# Authors : Takahiro Inagawa
+#
+# Lisence : MIT Lisence
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# ==============================================================================
 
 import sys
-# reload(sys)
 import platform
-# デフォルトの文字コードを変更する．
-# sys.setdefaultencoding('utf-8')
 
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.font_manager
+# import matplotlib.font_manager
 from matplotlib.font_manager import FontProperties
 from matplotlib.backends.backend_pdf import PdfPages
 from math import sin, cos, acos, radians
@@ -22,32 +38,31 @@ import csv
 
 if 'Windows' == platform.system():
 	font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
-
+	font_prop = FontProperties(fname=font_path)
+	mpl.rcParams['font.family'] = font_prop.get_name()
+#
 if 'Darwin' == platform.system(): # for Mac
 	font_path = '/Library/Fonts/Osaka.ttf'
+	font_prop = FontProperties(fname=font_path)
+	mpl.rcParams['font.family'] = font_prop.get_name()
 
-font_prop = FontProperties(fname=font_path)
-mpl.rcParams['font.family'] = font_prop.get_name()
 plt.close('all')
-plt.style.use('ggplot')
+# plt.style.use('ggplot')
 mpl.rcParams['axes.grid'] = True
 mpl.rcParams['figure.autolayout'] = True
-mpl.rcParams['pdf.fonttype'] = 42 # pdfのフォントをTrueTypeに変更
-mpl.rcParams['savefig.dpi'] = 300 # defaultのdpi=100から変更
-mpl.rcParams['mathtext.default'] = 'regular' # 数式（Latex)のフォントを変更
+mpl.rcParams['pdf.fonttype'] = 42 # change font to TrueType in pdf
 
-argvs = sys.argv  # コマンドライン引数を格納したリストの取得
-argc = len(argvs) # 引数の個数
+argvs = sys.argv
+argc = len(argvs)
 if (argc != 1):
 	file_name = argvs[1]
 else:
-	file_name = u"param.json"
-	# file_name = u"param_epsilon.json"
+	file_name = "param.json"
 
 f = open(file_name)
 data = json.load(f)
 
-# ==== JSON読み込み ====
+# ==== Read JSON file ====
 lift_file_exist = []
 lift_file = []
 lift_coef = []
@@ -63,7 +78,7 @@ rocket_name = data["name"]
 calc_time_end = data["calculate condition"]["end time[s]"]
 
 def load_rocket_json(stage):
-    index = len(lift_file_exist) # ステージ数
+    index = len(lift_file_exist) # number of stages
     stage_name = stage + " stage"
     lift_file_exist.append(data[stage_name]["aero"]["lift coefficient file exist"])
     lift_file.append(data[stage_name]["aero"]["lift coefficient file name"])
@@ -82,9 +97,9 @@ load_rocket_json("2nd")
 load_rocket_json("3rd")
 wind_file_exist = data["wind"]["file exist"]
 wind_file = data["wind"]["file name"]
-wind_const = 0 ## 取り敢えず
+wind_const = 0  # Temporarily
 
-# ==== 各パラメータファイル読み取り ====
+# ==== Read each parameter files ====
 stage_num = 1
 if (following_stage_exist[0]):
     stage_num = 2
@@ -133,50 +148,50 @@ else:
     wind_speed = [wind_const, wind_const]
     wind_direction = [0, 0]
 
-# ==== 入力JSONファイルのPLOT ====
+# ==== PLOT "input" JSON file ====
 pdf = PdfPages('output/' + rocket_name + '_input.pdf')
 plt.rc('figure', figsize=(11.69,8.27))
 grid_size = (3, 2)
-print(u"input data plotting...")
+print("input data plotting...")
 # plt.ion()
 for index in range(stage_num):
     fig = plt.figure()
     plt.subplot2grid(grid_size, (0, 0), rowspan=1, colspan=1)
     plt.plot(mach_CD[index], CD[index])
-    plt.xlabel(u"mach number (-)")
-    plt.ylabel(u"CD (-)")
+    plt.xlabel("mach number (-)")
+    plt.ylabel("CD (-)")
     plt.title("stage:%d" % (index+1))
 
     plt.subplot2grid(grid_size, (0, 1), rowspan=1, colspan=1)
     plt.plot(mach_CL[index], CL[index])
-    plt.xlabel(u"mach number (-)")
-    plt.ylabel(u"CL (-)")
+    plt.xlabel("mach number (-)")
+    plt.ylabel("CL (-)")
 
     plt.subplot2grid(grid_size, (1, 0), rowspan=1, colspan=1)
     plt.plot(time_attitude[index], azimth[index])
-    plt.xlabel(u"time (s)")
-    plt.ylabel(u"azimth (deg)")
+    plt.xlabel("time (s)")
+    plt.ylabel("azimth (deg)")
 
     plt.subplot2grid(grid_size, (1, 1), rowspan=1, colspan=1)
     plt.plot(time_attitude[index], elevation[index])
-    plt.xlabel(u"time (s)")
-    plt.ylabel(u"elevation (deg)")
+    plt.xlabel("time (s)")
+    plt.ylabel("elevation (deg)")
 
     plt.subplot2grid(grid_size, (2, 0), rowspan=1, colspan=1)
     plt.plot(altitude_wind, wind_speed)
-    plt.xlabel(u"altitude (m)")
-    plt.ylabel(u"wind speed (m/s)")
+    plt.xlabel("altitude (m)")
+    plt.ylabel("wind speed (m/s)")
 
     plt.subplot2grid(grid_size, (2, 1), rowspan=1, colspan=1)
     plt.plot(altitude_wind, wind_direction)
-    plt.xlabel(u"altitude (m)")
-    plt.ylabel(u"wind direction (deg)")
+    plt.xlabel("altitude (m)")
+    plt.ylabel("wind direction (deg)")
 
     pdf.savefig(fig)
 
 pdf.close()
 
-# ==== 出力CSVファイルPLOT ====
+# ==== PLOT "output" CSV file ====
 pdf = PdfPages('output/' + rocket_name + '_output.pdf')
 plt.rc('figure', figsize=(11.69,8.27))
 grid_size = (6, 4)
@@ -204,7 +219,7 @@ for index in range(stage_num):
     													   25,26,27,28,29,30,31,32))
     g = 9.80665
     acc = np.sqrt(acc_ECI_X ** 2 + acc_ECI_Y ** 2 + acc_ECI_Z ** 2)
-    # 最大高度の時間の算出とそれ以降のデータカット
+    # Calculation of maximum altitude time and cut subsequent data
     time_index_apogee = np.where(altitude == max(altitude))[0][0]
     time_cut = time[0:time_index_apogee]
     dynamic_press = dynamic_press[0:time_index_apogee]
@@ -219,34 +234,34 @@ for index in range(stage_num):
     fig[index][0] = plt.figure()
     plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
     plt.plot(time, mass)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"質量 (kg)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("mass (kg)")
     plt.title("stage:%d" % (index+1))
 
     plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
     plt.plot(time, thrust)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"推力 (N)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("thrust (N)")
 
     plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
     plt.plot(time, Isp)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"比推力 (s)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("Isp(specific impulse) (s)")
 
     plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
     plt.plot(time, altitude)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"高度 (m)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("altitude (m)")
 
     plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
     plt.plot(time, downrange)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"ダウンレンジ (m)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("downrange (m)")
 
     plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
     plt.plot(downrange, altitude)
-    plt.xlabel(u"ダウンレンジ (m)")
-    plt.ylabel(u"高度 (m)")
+    plt.xlabel("downrange (m)")
+    plt.ylabel("altitude (m)")
 
     pdf.savefig(fig[index][0])
     fig[index][1] = plt.figure()
@@ -254,75 +269,77 @@ for index in range(stage_num):
     plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
     plt.plot(time, vel_NED_X, label="North")
     plt.plot(time, vel_NED_Y, label="East")
-    plt.ylabel(u"速度 (m/s)")
-    plt.legend()
+    plt.xlabel("time (sec)")
+    plt.ylabel("velocity (m/s)")
+    plt.legend(loc="best")
 
     plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
     plt.plot(time, -vel_NED_Z, label="Up")
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"速度 (m/s)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("velocity (m/s)")
     plt.legend()
 
     plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, dynamic_press/1000)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"動圧 (kPa)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("dynamic pressure (kPa)")
 
     plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, mach)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"機体高度でのマッハ数 (-)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("Mach number at the altitude (-)")
 
     plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
     plt.plot(time, acc/g)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"加速度 (G)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("acceleration (G)")
 
     plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
-    plt.plot(time, acc_BODY_X/g)
-    plt.plot(time, acc_BODY_Y/g)
-    plt.plot(time, acc_BODY_Z/g)
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"加速度 (G)")
+    plt.plot(time, acc_BODY_X/g, label="X_body")
+    plt.plot(time, acc_BODY_Y/g, label="Y_body")
+    plt.plot(time, acc_BODY_Z/g, label="Z_body")
+    plt.xlabel("time (sec)")
+    plt.ylabel("acceleration (G)")
+	plt.legend(loc="best")
 
     pdf.savefig(fig[index][1])
     fig[index][2] = plt.figure()
 
     plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, azimth, label="azimth")
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"姿勢 (deg)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("attitude angle (deg)")
     plt.legend()
 
     plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, elevation, label="elevation")
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"姿勢 (deg)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("attitude angle (deg)")
     plt.legend()
 
     plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, aoa_alpha, label="alpha")
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"迎角 alpha (deg)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("attack of angle alpha (deg)")
     plt.legend(loc="best")
 
     plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, aoa_beta, label="beta")
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"迎角 beta (deg)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("attack of angle beta (deg)")
     plt.legend(loc="best")
 
     plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, drag, label="drag")
     plt.legend()
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"抗力 (N)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("drag force (N)")
 
     plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, lift, label="lift")
     plt.legend()
-    plt.xlabel(u"時刻 (sec)")
-    plt.ylabel(u"揚力 (N)")
+    plt.xlabel("time (sec)")
+    plt.ylabel("lift force (N)")
 
     pdf.savefig(fig[index][2])
 
@@ -334,4 +351,4 @@ for index in range(stage_num):
 
 pdf.close()
 # plt.show()
-print(u"Done")
+print("Done")
