@@ -1,4 +1,4 @@
-time, thrust
-0,0.5000
-35,5000
-40,0
+time, thrust, nozzle_exhaust_pressure[Pa]
+0, 0.5, 101300
+35, 5000, 101300
+40, 0, 101300
