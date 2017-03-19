@@ -29,12 +29,13 @@ OBJS += $(SRCDIR)/gravity.o
 OBJS += $(SRCDIR)/Orbit.o
 CC = g++
 CFLAGS = -Wall -O2 -std=gnu++11
+LDLIBS = -lpthread
 
 .SUFFIXES: .c .o
 .SUFFIXES: .cpp .o
 
 $(PROGRAM): $(OBJS)
-	$(CC) -o $(PROGRAM) $^
+	$(CC) -o $(PROGRAM) $^ $(LDLIBS)
 	mv OpenTsiolkovsky bin/
 
 .c.o:
