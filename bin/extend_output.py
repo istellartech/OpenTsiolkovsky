@@ -15,12 +15,7 @@
 # Copyright (c) 2016 Interstellar Technologies Inc. Takahiro Inagawa
 # Released under the MIT license
 import sys
-reload(sys)
 import platform
-# デフォルトの文字コードを変更する．
-sys.setdefaultencoding('utf-8')
-
-# from io import StringIO
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -32,19 +27,6 @@ import json
 from pyproj import Geod
 from collections import namedtuple
 from numpy import sin, cos, sqrt, arctan2, arcsin, pi
-
-if 'Windows' == platform.system():
-    font_path = r'C:\Windows\Fonts\ipaexg.ttf'
-
-if 'Darwin' == platform.system(): # for Mac
-    font_path = '/Library/Fonts/Osaka.ttf'
-
-font_prop = FontProperties(fname=font_path)
-mpl.rcParams['font.family'] = font_prop.get_name()
-plt.close('all')
-plt.style.use('ggplot')
-mpl.rcParams['axes.grid'] = True
-mpl.rcParams['savefig.dpi'] = 300 # defaultのdpi=100から変更
 
 plt.ion()
 
@@ -156,9 +138,9 @@ def radius_visible(altitude, invalid_angle_deg = 3):
 
 if __name__ == '__main__':
     # ==== USER INPUT ====
-    antenna_lat = 42.50605 # 地上局位置　緯度 (deg)
-    antenna_lon = 143.45652 # 地上局位置　経度 (deg)
-    antenna_alt = 10.0 # 地上局　高度 (m)
+    antenna_lat = 42.5038639 # 地上局位置　緯度 (deg)
+    antenna_lon = 143.449639 # 地上局位置　経度 (deg)
+    antenna_alt = 12.0 # 地上局　高度 (m)
     cutoff_time = 1.0 # IIP分散算出のためのエンジンカットオフ時間
     invalid_angle_deg = 3.0 # 可視範囲計算のための可視仰角の下限値 (deg)
     # ==== USER INPUT ====
@@ -232,6 +214,7 @@ if __name__ == '__main__':
         df["antenna lon(deg)"] = antenna_lon
         df["antenna azimth(deg)"] = az_a
         df["antenna elevation(deg)"] = el_a
+        df["antenna body difference(deg)"] =  df[" attitude_elevation(deg)"] - df["antenna elevation(deg)"]
         df["IIP radius(m)"] = radius_IIP_a
 
         # ファイル出力

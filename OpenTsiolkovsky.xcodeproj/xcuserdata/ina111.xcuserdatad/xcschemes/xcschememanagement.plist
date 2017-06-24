@@ -14,22 +14,10 @@
 			<key>orderHint</key>
 			<integer>2</integer>
 		</dict>
-		<key>OpenTsiolkovsky_thrust.xcscheme</key>
+		<key>OpenTsiolkovsky_thrust Release.xcscheme</key>
 		<dict>
 			<key>orderHint</key>
 			<integer>4</integer>
-		</dict>
-		<key>Tsiolkovsky.xcscheme</key>
-		<dict>
-			<key>isShown</key>
-			<true/>
-			<key>orderHint</key>
-			<integer>0</integer>
-		</dict>
-		<key>Tsiolkovsky_Epsilon.xcscheme</key>
-		<dict>
-			<key>orderHint</key>
-			<integer>1</integer>
 		</dict>
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
