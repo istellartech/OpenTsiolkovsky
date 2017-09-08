@@ -1,49 +1,52 @@
 # -*- coding: utf-8 -*-
+# Copyright (c) 2017 Interstellar Technologies Inc. All Rights Reserved.
+# Authors : Takahiro Inagawa
+# ==============================================================================
 import sys
 import os
 import simplekml
 import numpy as np
 import json
-
+import pandas as pd
 
 # コマンドライン引数にロケットの名前を入れて、そのファイルが多段式ならそれぞれのKMLにファイルを出力
-# デフォルト引数は"S310"
 
-argvs = sys.argv  # コマンドライン引数を格納したリストの取得
-argc = len(argvs) # 引数の個数
-if (argc != 1):
-	file_name = argvs[1]
+if (len(sys.argv) != 1):
+	file_name = sys.argv[1]
 else:
 	file_name = "param.json"
-	# file_name = u"param_epsilon.json"
 try:
-	f = open(file_name)
-	data = json.load(f)
+	data = json.load(open(file_name))
 	name = data["name"]
 except:
 	print("JSON file can not be read...finish")
 	sys.exit()
 
 def make_kml(name, div, stage):
-	# name : ロケット名(string)、div : 間引き数(int)，
-	# stage : 現在のステージ(int)
+	"""
+	Args:
+		name (str) : ロケット名(jsonファイルのname)
+		div (int) : 間引き数
+		stage (int) : 現在のステージ
+	"""
 	if (stage == 1):
 		csv_file = "output/" + name + "_dynamics_1st.csv"
 	elif (stage == 2):
 		csv_file = "output/" + name + "_dynamics_2nd.csv"
 	elif (stage == 3):
 		csv_file = "output/" + name + "_dynamics_3rd.csv"
-	(time, lat, lon, altitude) = np.genfromtxt(csv_file,
-                                            unpack=True, delimiter=",",
-                                            skip_header = 1,
-                                            usecols = (0,3,4,5))
+	df = pd.read_csv(csv_file)
+	time = df["time(s)"]
+	lat = df[" lat(deg)"]
+	lon = df[" lon(deg)"]
+	altitude = df[" altitude(m)"]
 	kml = simplekml.Kml(open=1)
 	cood = []
 	for i in range(len(time)//div):
 		index = i * div
 		cood.append((lon[index], lat[index], altitude[index]))
-	cood.append((lon[-1], lat[-1], altitude[-1]))
-	# print cood
+	cood.append((lon.iloc[-1], lat.iloc[-1], altitude.iloc[-1]))
+	# print(cood)
 	ls = kml.newlinestring(name="name")
 	ls.style.linestyle.width = 8
 	if (stage == 1):
@@ -60,7 +63,7 @@ def make_kml(name, div, stage):
 	ls.lookat.latitude = lat[0]
 	ls.lookat.longitude = lon[0]
 	ls.lookat.range = 200000
-	kml.save("output/" + name + str(stage) + ".kml")
+	kml.save("output/" + name + "_" + str(stage) + ".kml")
 
 try:
 	print("INPUT FILE: %s" % (file_name))
