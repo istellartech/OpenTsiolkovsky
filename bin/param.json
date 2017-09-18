@@ -15,7 +15,7 @@
 		"mass initial[kg]": 200.0,
 		"thrust": {
 			"Isp[s]": 200.0,
-			"Isp file exist": false,
+			"Isp file exist": true,
 			"Isp file name": "Isp.csv",
 			"file exist": false,
 			"file name": "thrust.csv",
@@ -50,6 +50,8 @@
 		"mass initial[kg]": 50.0,
 		"thrust": {
 			"Isp[s]": 200.0,
+			"Isp file exist": false,
+			"Isp file name": "Isp.csv",
 			"file exist": false,
 			"file name": "thrust.csv",
 			"const thrust[N]": 1000,
@@ -83,6 +85,8 @@
 		"mass initial[kg]": 200.0,
 		"thrust": {
 			"Isp[s]": 200.0,
+			"Isp file exist": false,
+			"Isp file name": "Isp.csv",
 			"file exist": false,
 			"file name": "thrust.csv",
 			"const thrust[N]": 5000,
