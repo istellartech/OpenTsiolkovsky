@@ -808,7 +808,11 @@ class Application(tk.Frame):
             return
         self.label_file["text"] = os.path.basename(self.filename_json)
         with open(self.filename_json, 'r') as f:
-            self.param = json.load(f)
+            try:
+                self.param = json.load(f)
+            except json.decoder.JSONDecodeError:
+                tkmsg.showerror("json error", "JSON decode error\nPlease correct the parameter file.")
+                return
         self.load_json(self.param)
 
         self.button_calc["state"] = tk.NORMAL
@@ -1208,7 +1212,7 @@ class Application(tk.Frame):
     def exec_calc(self):
         subprocess.run(["./OpenTsiolkovsky", self.label_file["text"]])
 
-    def save_json(self):
+    def read_GUI_json(self):
         p = {
             "name": "test",
             "output file name": "test",
@@ -1436,7 +1440,10 @@ class Application(tk.Frame):
         p["3rd stage"]["stage"]["following stage exist"] = True if(self.checkvar_stage3.get()==1) else False
         p["3rd stage"]["stage"]["separation time[s]"] = float(self.entry_stage13.get())
 
-        self.save_p = p
+        return p
+
+    def save_json(self):
+        self.save_p = self.read_GUI_json()
         f = tkfd.asksaveasfile(mode='w', defaultextension=".json")
         if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
             return
