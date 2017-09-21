@@ -1035,11 +1035,11 @@ class Application(tk.Frame):
         except KeyError:
             print("Error, wrong csv file!")
             self.status["text"] = title + ": Error, wrong csv file!"
+            tkmsg.showerror("csv error", "Error, wrong csv file\nPlease correct the csv file.")
         except FileNotFoundError:
             print("Error, file not found.you must put the file in the same directory OpenTsiolkovsky.py")
             self.status["text"] = title + ": Error, file not found. you must put the file in the same directory OpenTsiolkovsky.py"
-
-
+            tkmsg.showerror("file error", "Error, file not found.")
 
     def plot_mach(self, label_file, df_y, ylabel, title):
         """ plot mach vs data when click "plot" button.
@@ -1057,9 +1057,11 @@ class Application(tk.Frame):
         except KeyError:
             print("Error, wrong csv file!")
             self.status["text"] = title + ": Error, wrong csv file!"
+            tkmsg.showerror("csv error", "Error, wrong csv file\nPlease correct the csv file.")
         except FileNotFoundError:
             print("Error, file not found.you must put the file in the same directory OpenTsiolkovsky.py")
             self.status["text"] = title + ": Error, file not found. you must put the file in the same directory OpenTsiolkovsky.py"
+            tkmsg.showerror("file error", "Error, file not found.")
 
     def wind_plot(self):
         try:
@@ -1075,9 +1077,11 @@ class Application(tk.Frame):
         except KeyError:
             print("Error, wrong csv file!")
             self.status["text"] = title + ": Error, wrong csv file!"
+            tkmsg.showerror("csv error", "Error, wrong csv file\nPlease correct the csv file.")
         except FileNotFoundError:
             print("Error, file not found.you must put the file in the same directory OpenTsiolkovsky.py")
             self.status["text"] = title + ": Error, file not found. you must put the file in the same directory OpenTsiolkovsky.py"
+            tkmsg.showerror("file error", "Error, file not found.")
 
     def browse_csv_file(self, label_file):
         """ read csv function when "Browse..." button on.
