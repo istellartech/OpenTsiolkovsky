@@ -46,11 +46,31 @@ class Application(tk.Frame):
         self.f6.grid(row=7)
         self.f67_line.grid(row=8)
         self.f7.grid(row=9)
-        self.status = tk.Label(root, text="Hello, OpenTsiolkovsky",
-                                   borderwidth=2, relief="groove")
-        self.status.pack(side=tk.BOTTOM, fill=tk.X)
+        # self.status = tk.Label(root, text="Hello, OpenTsiolkovsky",
+        #                            borderwidth=2, relief="groove")
+        # self.status.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def int_validate(self, new_text):
+        if not new_text: return True
+        try:
+            entered_number = int(new_text)
+            return True
+        except ValueError:
+            return False
+
+    def float_validate(self, new_text):
+        if not new_text: return True
+        try:
+            entered_number = float(new_text)
+            return True
+        except ValueError:
+            return False
 
     def create_widgets(self):
+        """ validate on Entry """
+        int_vcmd = self.register(self.int_validate)
+        float_vcmd = self.register(self.float_validate)
+
         """ Frame 1 """
         self.label_read_file = tk.Label(self.f1, text='parameter file : ')
         self.label_read_file.pack(side="left")
@@ -90,11 +110,12 @@ class Application(tk.Frame):
         self.label_calc_con1.grid(row=0, column=8)
         self.label_calc_con2 = tk.Label(self.tab_0, text='time step [s]', width=w2)
         self.label_calc_con2.grid(row=0, column=9)
-        self.entry_calc_con0 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.var_calc_con0 = tk.DoubleVar().set(0)
+        self.entry_calc_con0 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_calc_con0.grid(row=1, column=7)
-        self.entry_calc_con1 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_calc_con1 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_calc_con1.grid(row=1, column=8)
-        self.entry_calc_con2 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_calc_con2 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_calc_con2.grid(row=1, column=9)
 
         canvas_hline300 = tk.Canvas(self.tab_0, width=940, height=8, bg = "white")
@@ -109,11 +130,11 @@ class Application(tk.Frame):
         self.label_launch_pos1.grid(row=3, column=3)
         self.label_launch_pos2 = tk.Label(self.tab_0, text='altitude [m]', width=w2)
         self.label_launch_pos2.grid(row=3, column=4)
-        self.entry_launch_pos0 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_pos0 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_launch_pos0.grid(row=4, column=2)
-        self.entry_launch_pos1 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_pos1 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_launch_pos1.grid(row=4, column=3)
-        self.entry_launch_pos2 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_pos2 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_launch_pos2.grid(row=4, column=4)
 
         self.label_launch_vel = tk.Label(self.tab_0, text='Velocity at launch', width=15, anchor="e")
@@ -124,11 +145,11 @@ class Application(tk.Frame):
         self.label_launch_vel1.grid(row=3, column=8)
         self.label_launch_vel2 = tk.Label(self.tab_0, text='Down [m/s]', width=w2)
         self.label_launch_vel2.grid(row=3, column=9)
-        self.entry_launch_vel0 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_vel0 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_launch_vel0.grid(row=4, column=7)
-        self.entry_launch_vel1 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_vel1 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_launch_vel1.grid(row=4, column=8)
-        self.entry_launch_vel2 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_vel2 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_launch_vel2.grid(row=4, column=9)
 
         self.label_launch_date = tk.Label(self.tab_0, text='Date at launch', width=15, anchor="e")
@@ -139,11 +160,11 @@ class Application(tk.Frame):
         self.label_launch_time1.grid(row=5, column=3)
         self.label_launch_time2 = tk.Label(self.tab_0, text='day', width=w2)
         self.label_launch_time2.grid(row=5, column=4)
-        self.entry_launch_time0 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_time0 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(int_vcmd, '%P'))
         self.entry_launch_time0.grid(row=6, column=2)
-        self.entry_launch_time1 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_time1 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(int_vcmd, '%P'))
         self.entry_launch_time1.grid(row=6, column=3)
-        self.entry_launch_time2 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_time2 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(int_vcmd, '%P'))
         self.entry_launch_time2.grid(row=6, column=4)
 
         self.label_launch_time = tk.Label(self.tab_0, text='Time at launch', width=15, anchor="e")
@@ -154,11 +175,11 @@ class Application(tk.Frame):
         self.label_launch_time4.grid(row=5, column=8)
         self.label_launch_time5 = tk.Label(self.tab_0, text='second', width=w2)
         self.label_launch_time5.grid(row=5, column=9)
-        self.entry_launch_time3 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_time3 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(int_vcmd, '%P'))
         self.entry_launch_time3.grid(row=6, column=7)
-        self.entry_launch_time4 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_time4 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(int_vcmd, '%P'))
         self.entry_launch_time4.grid(row=6, column=8)
-        self.entry_launch_time5 = tk.Entry(self.tab_0, text='', bd=1, width=w2)
+        self.entry_launch_time5 = tk.Entry(self.tab_0, text='', bd=1, width=w2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_launch_time5.grid(row=6, column=9)
 
         canvas_hline301 = tk.Canvas(self.tab_0, width=940, height=8, bg = "white")
@@ -187,15 +208,15 @@ class Application(tk.Frame):
         self.label_wind0.grid(row=9, column=2)
         self.label_wind1 = tk.Label(self.tab_0, text='wind speed [m/s]', width=w4*2, anchor='w')
         self.label_wind1.grid(row=9, column=3, columnspan=2, sticky='w')
-        self.entry_wind0 = tk.Entry(self.tab_0, text='', bd=1, width=w4)
+        self.entry_wind0 = tk.Entry(self.tab_0, text='', bd=1, width=w4, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_wind0.grid(row=10, column=2)
-        self.entry_wind1 = tk.Entry(self.tab_0, text='', bd=1, width=w4)
+        self.entry_wind1 = tk.Entry(self.tab_0, text='', bd=1, width=w4, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_wind1.grid(row=10, column=3)
 
         """ Frame 3 1st stage """
         self.label_mass_init1 = tk.Label(self.tab_1, text='initial mass [kg]', width=15, anchor="w", font=("",0,"bold"))
         self.label_mass_init1.grid(row=0, column=1, columnspan=2)
-        self.entry_mass_init1 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_mass_init1 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_mass_init1.grid(row=0, column=3)
 
         canvas_hline310 = tk.Canvas(self.tab_1, width=960, height=8, bg = "white")
@@ -226,7 +247,7 @@ class Application(tk.Frame):
         self.button_Isp_plot1.grid(row=2, column=5, sticky='e')
         self.label_Isp1 = tk.Label(self.tab_1, text='Isp [sec]', width=w3)
         self.label_Isp1.grid(row=3, column=3)
-        self.entry_Isp1 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_Isp1 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_Isp1.grid(row=4, column=3)
 
         self.label_thrust1 = tk.Label(self.tab_1, text='   thrust', width=w3l, anchor="w", font=("",0,"bold"))
@@ -253,11 +274,11 @@ class Application(tk.Frame):
         self.label_thrust11.grid(row=3, column=10)
         self.label_thrust21 = tk.Label(self.tab_1, text='end time [sec]', width=w3)
         self.label_thrust21.grid(row=3, column=11)
-        self.entry_thrust01 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_thrust01 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust01.grid(row=4, column=9)
-        self.entry_thrust11 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_thrust11 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust11.grid(row=4, column=10)
-        self.entry_thrust21 = tk.Entry(self.tab_1, text='', bd=1, width=w3+2)
+        self.entry_thrust21 = tk.Entry(self.tab_1, text='', bd=1, width=w3+2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust21.grid(row=4, column=11)
 
         self.label_nozzle1 = tk.Label(self.tab_1, text='nozzle', width=w3l, anchor="w", font=("",0,"bold"))
@@ -268,11 +289,11 @@ class Application(tk.Frame):
         self.label_nozzle11.grid(row=5, column=4)
         self.label_nozzle21 = tk.Label(self.tab_1, text='exhaust pressure [Pa]', width=w3*2, anchor='w')
         self.label_nozzle21.grid(row=5, column=5, columnspan=2, sticky='w')
-        self.entry_nozzle01 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_nozzle01 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle01.grid(row=6, column=3)
-        self.entry_nozzle11 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_nozzle11 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle11.grid(row=6, column=4)
-        self.entry_nozzle21 = tk.Entry(self.tab_1, text='', bd=1, width=w3+2)
+        self.entry_nozzle21 = tk.Entry(self.tab_1, text='', bd=1, width=w3+2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle21.grid(row=6, column=5, sticky='w')
 
         canvas_hline311 = tk.Canvas(self.tab_1, width=960, height=8, bg = "white")
@@ -285,7 +306,7 @@ class Application(tk.Frame):
 
         self.label_body_dia1 = tk.Label(self.tab_1, text='body diameter [m]', width=15, anchor="w", font=("",0,"bold"))
         self.label_body_dia1.grid(row=8, column=1, columnspan=2)
-        self.entry_body_dia1 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_body_dia1 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_body_dia1.grid(row=8, column=3)
 
         self.label_lift1 = tk.Label(self.tab_1, text='Lift coef.', width=w3l, anchor="w", font=("",0,"bold"))
@@ -306,7 +327,7 @@ class Application(tk.Frame):
         self.button_lift_plot1 = tk.Button(self.tab_1, text='plot', width=w3b-3,
             command=lambda:self.plot_mach(self.label_lift_file1, " CL", "CL", "Coef. Lift(CL) csv data"))
         self.button_lift_plot1.grid(row=9, column=5, sticky='e')
-        self.entry_lift1 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_lift1 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_lift1.grid(row=10, column=3)
 
         self.label_drag1 = tk.Label(self.tab_1, text='   Drag coef.', width=w3l+1, anchor="w", font=("",0,"bold"))
@@ -327,7 +348,7 @@ class Application(tk.Frame):
         self.button_drag_plot1 = tk.Button(self.tab_1, text='plot', width=w3b-3,
             command=lambda:self.plot_mach(self.label_drag_file1, " Cd", "CD", "Coef. Drag(CD) csv data"))
         self.button_drag_plot1.grid(row=9, column=11, sticky='e')
-        self.entry_drag1 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_drag1 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_drag1.grid(row=10, column=9)
 
         canvas_hline312 = tk.Canvas(self.tab_1, width=960, height=8, bg = "white")
@@ -358,9 +379,9 @@ class Application(tk.Frame):
         self.label_attitude01.grid(row=13, column=3)
         self.label_attitude11 = tk.Label(self.tab_1, text='elevation [deg]', width=w3)
         self.label_attitude11.grid(row=13, column=4)
-        self.entry_attitude01 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_attitude01 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_attitude01.grid(row=14, column=3)
-        self.entry_attitude11 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_attitude11 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_attitude11.grid(row=14, column=4)
 
         """ Frame 3 1st stage STAGE """
@@ -372,13 +393,13 @@ class Application(tk.Frame):
         self.checkbutton_stage1.grid(row=12, column=8, columnspan=2, sticky='w')
         self.label_stage11 = tk.Label(self.tab_1, text='separation time[sec]', width=w3*2, anchor='w')
         self.label_stage11.grid(row=13, column=8, columnspan=2, sticky='w')
-        self.entry_stage11 = tk.Entry(self.tab_1, text='', bd=1, width=w3)
+        self.entry_stage11 = tk.Entry(self.tab_1, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_stage11.grid(row=14, column=8)
 
         """ Frame 3 2nd stage """
         self.label_mass_init2 = tk.Label(self.tab_2, text='initial mass [kg]', width=15, anchor="w", font=("",0,"bold"))
         self.label_mass_init2.grid(row=0, column=1, columnspan=2)
-        self.entry_mass_init2 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_mass_init2 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_mass_init2.grid(row=0, column=3)
 
         canvas_hline320 = tk.Canvas(self.tab_2, width=960, height=8, bg = "white")
@@ -409,7 +430,7 @@ class Application(tk.Frame):
         self.button_Isp_plot2.grid(row=2, column=5, sticky='e')
         self.label_Isp2 = tk.Label(self.tab_2, text='Isp [sec]', width=w3)
         self.label_Isp2.grid(row=3, column=3)
-        self.entry_Isp2 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_Isp2 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_Isp2.grid(row=4, column=3)
 
         self.label_thrust2 = tk.Label(self.tab_2, text='   thrust', width=w3l, anchor="w", font=("",0,"bold"))
@@ -436,11 +457,11 @@ class Application(tk.Frame):
         self.label_thrust12.grid(row=3, column=10)
         self.label_thrust22 = tk.Label(self.tab_2, text='end time [sec]', width=w3)
         self.label_thrust22.grid(row=3, column=11)
-        self.entry_thrust02 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_thrust02 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust02.grid(row=4, column=9)
-        self.entry_thrust12 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_thrust12 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust12.grid(row=4, column=10)
-        self.entry_thrust22 = tk.Entry(self.tab_2, text='', bd=1, width=w3+2)
+        self.entry_thrust22 = tk.Entry(self.tab_2, text='', bd=1, width=w3+2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust22.grid(row=4, column=11)
 
         self.label_nozzle2 = tk.Label(self.tab_2, text='nozzle', width=w3l, anchor="w", font=("",0,"bold"))
@@ -451,11 +472,11 @@ class Application(tk.Frame):
         self.label_nozzle12.grid(row=5, column=4)
         self.label_nozzle22 = tk.Label(self.tab_2, text='exhaust pressure [Pa]', width=w3*2, anchor='w')
         self.label_nozzle22.grid(row=5, column=5, columnspan=2, sticky='w')
-        self.entry_nozzle02 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_nozzle02 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle02.grid(row=6, column=3)
-        self.entry_nozzle12 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_nozzle12 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle12.grid(row=6, column=4)
-        self.entry_nozzle22 = tk.Entry(self.tab_2, text='', bd=1, width=w3+2)
+        self.entry_nozzle22 = tk.Entry(self.tab_2, text='', bd=1, width=w3+2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle22.grid(row=6, column=5, sticky='w')
 
         canvas_hline321 = tk.Canvas(self.tab_2, width=960, height=8, bg = "white")
@@ -468,7 +489,7 @@ class Application(tk.Frame):
 
         self.label_body_dia2 = tk.Label(self.tab_2, text='body diameter [m]', width=15, anchor="w", font=("",0,"bold"))
         self.label_body_dia2.grid(row=8, column=1, columnspan=2)
-        self.entry_body_dia2 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_body_dia2 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_body_dia2.grid(row=8, column=3)
 
         self.label_lift2 = tk.Label(self.tab_2, text='Lift coef.', width=w3l, anchor="w", font=("",0,"bold"))
@@ -489,7 +510,7 @@ class Application(tk.Frame):
         self.button_lift_plot2 = tk.Button(self.tab_2, text='plot', width=w3b-3,
             command=lambda:self.plot_mach(self.label_lift_file2, " CL", "CL", "Coef. Lift(CL) csv data"))
         self.button_lift_plot2.grid(row=9, column=5, sticky='e')
-        self.entry_lift2 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_lift2 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_lift2.grid(row=10, column=3)
 
         self.label_drag2 = tk.Label(self.tab_2, text='   Drag coef.', width=w3l+1, anchor="w", font=("",0,"bold"))
@@ -510,7 +531,7 @@ class Application(tk.Frame):
         self.button_drag_plot2 = tk.Button(self.tab_2, text='plot', width=w3b-3,
             command=lambda:self.plot_mach(self.label_drag_file2, " Cd", "CD", "Coef. Drag(CD) csv data"))
         self.button_drag_plot2.grid(row=9, column=11, sticky='e')
-        self.entry_drag2 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_drag2 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_drag2.grid(row=10, column=9)
 
         canvas_hline322 = tk.Canvas(self.tab_2, width=960, height=8, bg = "white")
@@ -541,9 +562,9 @@ class Application(tk.Frame):
         self.label_attitude02.grid(row=13, column=3)
         self.label_attitude12 = tk.Label(self.tab_2, text='elevation [deg]', width=w3)
         self.label_attitude12.grid(row=13, column=4)
-        self.entry_attitude02 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_attitude02 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_attitude02.grid(row=14, column=3)
-        self.entry_attitude12 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_attitude12 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_attitude12.grid(row=14, column=4)
 
         """ Frame 3 2nd stage STAGE """
@@ -555,13 +576,13 @@ class Application(tk.Frame):
         self.checkbutton_stage2.grid(row=12, column=8, columnspan=2, sticky='w')
         self.label_stage12 = tk.Label(self.tab_2, text='separation time[sec]', width=w3*2, anchor='w')
         self.label_stage12.grid(row=13, column=8, columnspan=2, sticky='w')
-        self.entry_stage12 = tk.Entry(self.tab_2, text='', bd=1, width=w3)
+        self.entry_stage12 = tk.Entry(self.tab_2, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_stage12.grid(row=14, column=8)
 
         """ Frame 3 3rd stage """
         self.label_mass_init3 = tk.Label(self.tab_3, text='initial mass [kg]', width=15, anchor="w", font=("",0,"bold"))
         self.label_mass_init3.grid(row=0, column=1, columnspan=2)
-        self.entry_mass_init3 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_mass_init3 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_mass_init3.grid(row=0, column=3)
 
         canvas_hline330 = tk.Canvas(self.tab_3, width=960, height=8, bg = "white")
@@ -592,7 +613,7 @@ class Application(tk.Frame):
         self.button_Isp_plot3.grid(row=2, column=5, sticky='e')
         self.label_Isp3 = tk.Label(self.tab_3, text='Isp [sec]', width=w3)
         self.label_Isp3.grid(row=3, column=3)
-        self.entry_Isp3 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_Isp3 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_Isp3.grid(row=4, column=3)
 
         self.label_thrust3 = tk.Label(self.tab_3, text='   thrust', width=w3l, anchor="w", font=("",0,"bold"))
@@ -619,11 +640,11 @@ class Application(tk.Frame):
         self.label_thrust13.grid(row=3, column=10)
         self.label_thrust23 = tk.Label(self.tab_3, text='end time [sec]', width=w3)
         self.label_thrust23.grid(row=3, column=11)
-        self.entry_thrust03 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_thrust03 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust03.grid(row=4, column=9)
-        self.entry_thrust13 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_thrust13 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust13.grid(row=4, column=10)
-        self.entry_thrust23 = tk.Entry(self.tab_3, text='', bd=1, width=w3+2)
+        self.entry_thrust23 = tk.Entry(self.tab_3, text='', bd=1, width=w3+2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_thrust23.grid(row=4, column=11)
 
         self.label_nozzle3 = tk.Label(self.tab_3, text='nozzle', width=w3l, anchor="w", font=("",0,"bold"))
@@ -634,11 +655,11 @@ class Application(tk.Frame):
         self.label_nozzle13.grid(row=5, column=4)
         self.label_nozzle23 = tk.Label(self.tab_3, text='exhaust pressure [Pa]', width=w3*2, anchor='w')
         self.label_nozzle23.grid(row=5, column=5, columnspan=2, sticky='w')
-        self.entry_nozzle03 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_nozzle03 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle03.grid(row=6, column=3)
-        self.entry_nozzle13 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_nozzle13 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle13.grid(row=6, column=4)
-        self.entry_nozzle23 = tk.Entry(self.tab_3, text='', bd=1, width=w3+2)
+        self.entry_nozzle23 = tk.Entry(self.tab_3, text='', bd=1, width=w3+2, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_nozzle23.grid(row=6, column=5, sticky='w')
 
         canvas_hline331 = tk.Canvas(self.tab_3, width=960, height=8, bg = "white")
@@ -651,7 +672,7 @@ class Application(tk.Frame):
 
         self.label_body_dia3 = tk.Label(self.tab_3, text='body diameter [m]', width=15, anchor="w", font=("",0,"bold"))
         self.label_body_dia3.grid(row=8, column=1, columnspan=2)
-        self.entry_body_dia3 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_body_dia3 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_body_dia3.grid(row=8, column=3)
 
         self.label_lift3 = tk.Label(self.tab_3, text='Lift coef.', width=w3l, anchor="w", font=("",0,"bold"))
@@ -672,7 +693,7 @@ class Application(tk.Frame):
         self.button_lift_plot3 = tk.Button(self.tab_3, text='plot', width=w3b-3,
             command=lambda:self.plot_mach(self.label_lift_file3, " CL", "CL", "Coef. Lift(CL) csv data"))
         self.button_lift_plot3.grid(row=9, column=5, sticky='e')
-        self.entry_lift3 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_lift3 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_lift3.grid(row=10, column=3)
 
         self.label_drag3 = tk.Label(self.tab_3, text='   Drag coef.', width=w3l+1, anchor="w", font=("",0,"bold"))
@@ -693,7 +714,7 @@ class Application(tk.Frame):
         self.button_drag_plot3 = tk.Button(self.tab_3, text='plot', width=w3b-3,
             command=lambda:self.plot_mach(self.label_drag_file3, " Cd", "CD", "Coef. Drag(CD) csv data"))
         self.button_drag_plot3.grid(row=9, column=11, sticky='e')
-        self.entry_drag3 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_drag3 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_drag3.grid(row=10, column=9)
 
         canvas_hline332 = tk.Canvas(self.tab_3, width=960, height=8, bg = "white")
@@ -724,9 +745,9 @@ class Application(tk.Frame):
         self.label_attitude03.grid(row=13, column=3)
         self.label_attitude13 = tk.Label(self.tab_3, text='elevation [deg]', width=w3)
         self.label_attitude13.grid(row=13, column=4)
-        self.entry_attitude03 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_attitude03 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_attitude03.grid(row=14, column=3)
-        self.entry_attitude13 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_attitude13 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_attitude13.grid(row=14, column=4)
 
         """ Frame 3 3rd stage STAGE """
@@ -738,9 +759,8 @@ class Application(tk.Frame):
         # self.checkbutton_stage3.grid(row=12, column=8, columnspan=2, sticky='w')
         self.label_stage13 = tk.Label(self.tab_3, text='separation time[sec]', width=w3*2, anchor='w')
         self.label_stage13.grid(row=13, column=8, columnspan=2, sticky='w')
-        self.entry_stage13 = tk.Entry(self.tab_3, text='', bd=1, width=w3)
+        self.entry_stage13 = tk.Entry(self.tab_3, text='', bd=1, width=w3, validate="key", vcmd=(float_vcmd, '%P'))
         self.entry_stage13.grid(row=14, column=8)
-
 
         """ Frame 4 """
 
@@ -1214,6 +1234,24 @@ class Application(tk.Frame):
         pass
 
     def exec_calc(self):
+        filename_json = self.label_file["text"]
+        with open(filename_json, 'r') as f:
+            try:
+                param_file = json.load(f)
+            except json.decoder.JSONDecodeError:
+                tkmsg.showerror("json error", "JSON decode error\nPlease correct the parameter file.")
+                return
+
+        param_GUI = self.read_GUI_json()
+        if (param_file != param_GUI):
+            # the same function of self.save_json()
+            self.save_p = self.read_GUI_json()
+            f = tkfd.asksaveasfile(mode='w', defaultextension=".json")
+            if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
+                return
+            json.dump(self.save_p, f, ensure_ascii=False, indent=4, sort_keys=True, separators=(',', ': '))
+            self.label_file["text"] = os.path.basename(f.name)
+            f.close() # `()` was missing.
         subprocess.run(["./OpenTsiolkovsky", self.label_file["text"]])
 
     def read_GUI_json(self):
