@@ -21,7 +21,7 @@ class Application(tk.Frame):
     def __init__(self, master=None):
         super().__init__(master)
         master.title("OpenTsiolkovsky")
-        master.geometry("1100x610+100+100")
+        master.geometry("1100x580+100+100")
         self.pack()
 
         self.f1 = tk.Frame(self)
@@ -766,49 +766,96 @@ class Application(tk.Frame):
 
 
         """ Frame 5 """
-        self.button_calc = tk.Button(self.f5, text='Calc', command=self.exec_calc, width=10)
-        self.button_calc["state"] = tk.DISABLED
-        self.button_calc.pack(side="right")
-        self.button_save = tk.Button(self.f5, text='Save', command=self.save_json, width=10)
-        self.button_save["state"] = tk.DISABLED
-        self.button_save.pack(side="right")
-        self.button_read_file = tk.Button(self.f5, text='Read json file',command=self.read_json_file,  width=10)
-        self.button_read_file.pack(side="right")
+        self.img_read = tk.PhotoImage(file="img/Read.gif")
+        self.img_save = tk.PhotoImage(file="img/Save.gif")
+        self.img_calc = tk.PhotoImage(file="img/Calc.gif")
+        self.img_plot = tk.PhotoImage(file="img/Plot.gif")
+        self.img_html = tk.PhotoImage(file="img/HTML.gif")
+        self.img_kml = tk.PhotoImage(file="img/KML.gif")
+        self.img_nmea = tk.PhotoImage(file="img/NMEA.gif")
+        self.img_extend = tk.PhotoImage(file="img/Extend.gif")
+        self.img_quit = tk.PhotoImage(file="img/Quit.gif")
 
-        """ Frame 6 """
-        canvas_hline6 = tk.Canvas(self.f56_line, width=700, height=10, bg = "white")
-        canvas_hline6.create_line(0, 5, 700, 5, fill = "black")
-        canvas_hline6.pack()
-        self.label_output = tk.Label(self.f6, text='output : ').pack(side="left")
-        self.button_extend = tk.Button(self.f6, text='extend',
-            command=lambda:self.output_script("make_extend_output.py"), width=10)
+        self.quit = tk.Button(self.f5, image=self.img_quit, command=root.destroy)
+        self.quit.pack(side="right")
+
+        canvas_hline51 = tk.Canvas(self.f5, width=20, height=110, bg = "white")
+        canvas_hline51.create_line(12, 0, 12, 110, fill = "black")
+        canvas_hline51.pack(side="right")
+
+        self.button_extend = tk.Button(self.f5, image=self.img_extend,
+            command=lambda:self.output_script("make_extend_output.py"))
         self.button_extend["state"] = tk.DISABLED
         self.button_extend.pack(side="right")
-        self.button_NMEA = tk.Button(self.f6, text='NMEA',
-            command=lambda:self.output_script("make_nmea.py"), width=10)
+        self.button_NMEA = tk.Button(self.f5, image=self.img_nmea,
+            command=lambda:self.output_script("make_nmea.py"))
         self.button_NMEA["state"] = tk.DISABLED
         self.button_NMEA.pack(side="right")
-        self.button_KML = tk.Button(self.f6, text='KML',
-            command=lambda:self.output_script("make_kml.py"), width=10)
+        self.button_KML = tk.Button(self.f5, image=self.img_kml,
+            command=lambda:self.output_script("make_kml.py"))
         self.button_KML["state"] = tk.DISABLED
         self.button_KML.pack(side="right")
-        self.button_HTML = tk.Button(self.f6, text='HTML',
-            command=lambda:self.output_script("make_html.py"), width=10)
+        self.button_HTML = tk.Button(self.f5, image=self.img_html,
+            command=lambda:self.output_script("make_html.py"))
         self.button_HTML["state"] = tk.DISABLED
         self.button_HTML.pack(side="right")
-        self.button_plot = tk.Button(self.f6, text='plot',
-            command=lambda:self.output_script("make_plot.py"), width=10)
+        self.button_plot = tk.Button(self.f5, image=self.img_plot,
+            command=lambda:self.output_script("make_plot.py"))
         self. button_plot["state"] = tk.DISABLED
         self.button_plot.pack(side="right")
 
+        canvas_hline52 = tk.Canvas(self.f5, width=20, height=110, bg = "white")
+        canvas_hline52.create_line(12, 0, 12, 110, fill = "black")
+        canvas_hline52.pack(side="right")
+
+        self.button_calc = tk.Button(self.f5, command=self.exec_calc, image=self.img_calc)
+        self.button_calc["state"] = tk.DISABLED
+        self.button_calc.pack(side="right")
+        self.button_save = tk.Button(self.f5, command=self.save_json, image=self.img_save)
+        self.button_save["state"] = tk.DISABLED
+        self.button_save.pack(side="right")
+
+        canvas_hline53 = tk.Canvas(self.f5, width=20, height=110, bg = "white")
+        canvas_hline53.create_line(12, 0, 12, 110, fill = "black")
+        canvas_hline53.pack(side="right")
+
+        self.button_read_file = tk.Button(self.f5, command=self.read_json_file, image=self.img_read)
+        self.button_read_file.pack(side="right")
+
+        """ Frame 6 """
+        # canvas_hline6 = tk.Canvas(self.f56_line, width=700, height=10, bg = "white")
+        # canvas_hline6.create_line(0, 5, 700, 5, fill = "black")
+        # canvas_hline6.pack()
+        # self.label_output = tk.Label(self.f6, text='output : ').pack(side="left")
+        # self.button_extend = tk.Button(self.f6, text='extend',
+        #     command=lambda:self.output_script("make_extend_output.py"), width=10)
+        # self.button_extend["state"] = tk.DISABLED
+        # self.button_extend.pack(side="right")
+        # self.button_NMEA = tk.Button(self.f6, text='NMEA',
+        #     command=lambda:self.output_script("make_nmea.py"), width=10)
+        # self.button_NMEA["state"] = tk.DISABLED
+        # self.button_NMEA.pack(side="right")
+        # self.button_KML = tk.Button(self.f6, text='KML',
+        #     command=lambda:self.output_script("make_kml.py"), width=10)
+        # self.button_KML["state"] = tk.DISABLED
+        # self.button_KML.pack(side="right")
+        # self.button_HTML = tk.Button(self.f6, text='HTML',
+        #     command=lambda:self.output_script("make_html.py"), width=10)
+        # self.button_HTML["state"] = tk.DISABLED
+        # self.button_HTML.pack(side="right")
+        # self.button_plot = tk.Button(self.f6, text='plot',
+        #     command=lambda:self.output_script("make_plot.py"), width=10)
+        # self. button_plot["state"] = tk.DISABLED
+        # self.button_plot.pack(side="right")
+
 
         """ Frame 7 """
-        canvas_hline2 = tk.Canvas(self.f67_line, width=700, height=10, bg = "white")
-        canvas_hline2.create_line(0, 5, 700, 5, fill = "black")
-        canvas_hline2.pack()
-        self.quit = tk.Button(self.f7, text="QUIT", fg="red",
-                              command=root.destroy)
-        self.quit.pack()
+        # canvas_hline2 = tk.Canvas(self.f67_line, width=700, height=10, bg = "white")
+        # canvas_hline2.create_line(0, 5, 700, 5, fill = "black")
+        # canvas_hline2.pack()
+        # self.quit = tk.Button(self.f7, text="QUIT", fg="red",
+        #                       command=root.destroy)
+        # self.quit.pack()
 
         """ check radio button """
         # self.change_state_wind()
