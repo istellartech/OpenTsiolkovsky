@@ -764,7 +764,6 @@ class Application(tk.Frame):
 
         """ Frame 4 """
 
-
         """ Frame 5 """
         self.img_read = tk.PhotoImage(file="img/Read.gif")
         self.img_save = tk.PhotoImage(file="img/Save.gif")
@@ -823,50 +822,12 @@ class Application(tk.Frame):
         self.button_read_file.pack(side="right")
 
         """ Frame 6 """
-        # canvas_hline6 = tk.Canvas(self.f56_line, width=700, height=10, bg = "white")
-        # canvas_hline6.create_line(0, 5, 700, 5, fill = "black")
-        # canvas_hline6.pack()
-        # self.label_output = tk.Label(self.f6, text='output : ').pack(side="left")
-        # self.button_extend = tk.Button(self.f6, text='extend',
-        #     command=lambda:self.output_script("make_extend_output.py"), width=10)
-        # self.button_extend["state"] = tk.DISABLED
-        # self.button_extend.pack(side="right")
-        # self.button_NMEA = tk.Button(self.f6, text='NMEA',
-        #     command=lambda:self.output_script("make_nmea.py"), width=10)
-        # self.button_NMEA["state"] = tk.DISABLED
-        # self.button_NMEA.pack(side="right")
-        # self.button_KML = tk.Button(self.f6, text='KML',
-        #     command=lambda:self.output_script("make_kml.py"), width=10)
-        # self.button_KML["state"] = tk.DISABLED
-        # self.button_KML.pack(side="right")
-        # self.button_HTML = tk.Button(self.f6, text='HTML',
-        #     command=lambda:self.output_script("make_html.py"), width=10)
-        # self.button_HTML["state"] = tk.DISABLED
-        # self.button_HTML.pack(side="right")
-        # self.button_plot = tk.Button(self.f6, text='plot',
-        #     command=lambda:self.output_script("make_plot.py"), width=10)
-        # self. button_plot["state"] = tk.DISABLED
-        # self.button_plot.pack(side="right")
-
 
         """ Frame 7 """
-        # canvas_hline2 = tk.Canvas(self.f67_line, width=700, height=10, bg = "white")
-        # canvas_hline2.create_line(0, 5, 700, 5, fill = "black")
-        # canvas_hline2.pack()
-        # self.quit = tk.Button(self.f7, text="QUIT", fg="red",
-        #                       command=root.destroy)
-        # self.quit.pack()
-
-        """ check radio button """
-        # self.change_state_wind()
-        # self.change_state_Isp1()
-        # self.change_state_thrust1()
-        # self.change_state_lift1()
-        # self.change_state_drag1()
-        # self.change_state_attitude1()
 
 
     def read_json_file(self):
+        """ button click on "Raad file" """
         filename = tkfd.askopenfilename(filetypes=[('OpenTsiolkovsky parameter file','*.json')],
                                         initialdir=os.getcwd())
         if (filename != ""):
@@ -1281,6 +1242,7 @@ class Application(tk.Frame):
         pass
 
     def exec_calc(self):
+        """ button click on "Calc" """
         filename_json = self.label_file["text"]
         with open(filename_json, 'r') as f:
             try:
@@ -1532,6 +1494,7 @@ class Application(tk.Frame):
         return p
 
     def save_json(self):
+        """ button click "Save" """
         self.save_p = self.read_GUI_json()
         f = tkfd.asksaveasfile(mode='w', defaultextension=".json")
         if f is None: # asksaveasfile return `None` if dialog closed with "cancel".
@@ -1541,6 +1504,7 @@ class Application(tk.Frame):
         f.close() # `()` was missing.
 
     def output_script(self, script_file):
+        """ button click "Plot", "HTML", "KML", "NMEA", "Extend" """
         if (self.label_file["text"] == ""):
             print("Please read json file before output button")
             return
