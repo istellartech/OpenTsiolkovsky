@@ -103,3 +103,6 @@ __pycache__/
 *.synctex.gz
 *.synctex.gz(busy)
 *.pdfsync
+
+# user add
+/bin/img/*.ai
