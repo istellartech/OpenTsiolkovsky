@@ -3,6 +3,7 @@
 \usepackage[dvipdfmx]{graphicx}
 \usepackage{wrapfig}
 \usepackage{listings}
+\usepackage{bm}
 
 \title{OpenTsiolkovsky テクニカルドキュメント}
 \author{Interstellar Technologies Inc. 稲川貴大}
@@ -30,7 +31,7 @@ OpenTsiolkovskyはロケット用フライトシミュレータです。
 地球中心の慣性座標系で計算を行います。
 
 ロケットの概念設計から、ミッション決定、既存のロケットの能力判別など、
-ロケットの軌道計算は様々なファイズで必要とされます。
+ロケットの軌道計算は様々なフェイズで必要とされます。
 
 軌道計算は6自由度の運動方程式で記述可能です。並進3自由度（XYZ）、
 回転3自由度（ロールピッチヨー）です。
@@ -64,9 +65,268 @@ OpenTsiolkovskyはロケット用フライトシミュレータです。
 
 \section{Basis of theory and model}
 
+ロケットの運動方程式は座標の取り方によって様々な表し方がある。
+通常誘導・航法の解析には慣性座標系。制御や安定性の解析には機体座標系（運動座標系）が用いられる。
+運動方程式は並進の運動方程式、回転の運動方程式、振動の運動方程式に分解してそれぞれを解いていくが、
+OpenTsiolkovskyでは振動を考えず、回転についてはユーザーが指定し、並進の運動方程式のみを考えていく。
+
+\subsection{座標系の定義}
+
+OpenTsiolkovskyで使っている座標系をまとめる。
+
+\begin{table}[htb]
+  \caption{座標系の定義}
+  \label{座標系}
+  \scalebox{0.9}[1.0]{
+  \begin{tabular}{|c|l|l|l|} \hline
+     & 座標名 & 記号・原点 & \\ \hline \hline
+     & {\footnotesize 地球中心慣性座標系} & $(X_I, Y_I, Z_I)$ & $\bm{X}_I$: $t=0$のとき緯度0°経度0°方向 \\
+    {\small 慣性座標} & （I、ECI）& {\footnotesize $(X_{ECI}, Y_{ECI}, Z_{ECI})$} & $\bm{Z}_I$: 地球自転軸方向 \\
+     & & 原点：地球中心 & $\bm{Y}_I$: 右手直交系($\bm{Y}_I = \bm{Z}_I \times \bm{X}_I$) \\ \hline
+     & {\footnotesize 地球中心回転座標系} & $(X_E, Y_E, Z_E)$ & $\bm{X}_E$: 緯度0°経度0°方向 \\
+     & （E、ECEF）& {\footnotesize $(X_{ECEF}, Y_{ECEF}, Z_{ECEF})$} & $\bm{Z}_E$: 地球自転軸方向 \\
+     & & 原点：地球中心 & $\bm{Y}_E$: 右手直交系($\bm{Y}_E = \bm{Z}_E \times \bm{X}_E$) \\ \cline{2-4}
+     & 局所平面座標系 & $(X_H, Y_H, Z_H)$ &  $\bm{X}_H$: 局所水平面内で北方向 \\
+     & （H、NED） & {\footnotesize $(X_{NED}, Y_{NED}, Z_{NED})$} & $\bm{Y}_H$: 局所水平面内で東方向\\
+     & & 原点：機体質量中心 &  $\bm{Z}_H$: 機体から地心への方向 \\ \cline{2-4}
+     {\small 運動座標} & 速度座標系 & $(X_A, Y_A, Z_A)$ & $\bm{X}_A$: 対気速度ベクトル$\bm{V}_A$方向 \\
+     & （A、AIR） & {\footnotesize $(X_{AIR}, Y_{AIR}, Z_{AIR})$} & $\bm{Y}_A$: 飛行面に垂直方向$\bm{Y}_A = \bm{V}_A \times \bm{r}$ \\
+     & & 原点：機体質量中心 & $\bm{Z}_A$: 右手直交系($\bm{Z}_A = \bm{X}_A \times \bm{Y}_A$) \\ \cline{2-4}
+     & 機体座標系 & $(X_B, Y_B, Z_B)$ & $\bm{X}_B$: 機軸方向（ロール軸） \\
+     & （B、BODY） & {\footnotesize $(X_{BODY}, Y_{BODY}, Z_{BODY})$} & $\bm{Y}_B$: 頭上げ方向（ピッチ軸）\\
+     & & 原点：機体質量中心 & $\bm{Z}_B$: 右手直交系（ヨー軸）\\ \hline
+  \end{tabular}
+  }
+\end{table}
+
+\subsection{座標変換の記述方法}
+
+座標変換は座標変換行列（方向余弦行列：Direct Cosine Matrix（DCM）)を用いて
+例えば、ある力$F$があったときに、C座標系での力ベクトル$F_C$からD座標系での力ベクトル$F_D$
+を求めたいとしたときに、
+\begin{equation}
+  F_D = D_{C}^{D} \times F_C
+\end{equation}
+のように座標変換するDCMを。$D_{C}^{D}$と表す。
+
+したがって、ECI座標系からECEF座標系へのDCMは$D_{I}^{E} (= D_{ECI}^{ECEF})$と表す。
+
+\subsection{運動方程式}
+運動座標系（加速度座標系）では遠心力やコリオリ力などを考慮する必要がある。OpenTsiolkovskyでは
+慣性座標系で演算することによって座標系の回転を考慮する必要を無くし、シンプルな方程式で考えている。
+反面、座標変換を多用しなければならない。
+
+慣性座標系での並進の運動方程式は
+
+\begin{eqnarray}
+  \frac{d\bm{r}}{dt} &=& \bm{V}_{I} \\
+  \bm{a}_{I} = \frac{d\bm{V}_{I}}{dt} &=& \frac{1}{m}
+  \left( \bm{F}_{TI} + \bm{F}_{AI} + \bm{F}_{gI}\right) \\
+  &=& \frac{D^{I}_{B} \left( \bm{F}_{TB} + \bm{F}_{AB})
+   \right)}{m} + D_{H}^{I} \bm{g}_H \\
+  &=& \frac{1}{m} \left( D_{BODY}^{ECI} \left( \bm{F}_{TB} +
+    D_{AIR}^{BODY} \bm{F}_{AA} \right) \right) + D_{NED}^{ECI} \bm{g}_{NED}
+\end{eqnarray}
+
+したがって下記項目を詳細に考えていく、
+
+\subsubsection{外力}
+\begin{itemize}
+  \item 推力$\bm{F}_{TB}$ : 機体座標系での推力ベクトル
+  \item 空気力$\bm{F}_{AA}$ : 速度座標系での空気力ベクトル
+  \item 重力加速度$\bm{g}_{H}$ : 局所平面座標系での重力加速度ベクトル
+\end{itemize}
+
+\subsubsection{座標変換行列}
+\begin{itemize}
+  \item 機体座標系→ECI座標系 $D_{B}^{I} (= D_{BODY}^{ECI})$
+  \item 速度座標系→機体座標系 $D_{A}^{B} (= D_{AIR}^{BODY})$
+  \item NED座標系→ECI座標系 $D_{H}^{I} (= D_{NED}^{ECI})$
+\end{itemize}
+
+\subsection{外力}
+
+\subsubsection{空気モデル}
+Standard Atmosphere 1976　ISO 2533:1975
+
+
+\subsubsection{推力 $F_{TB}$}
+エンジンは複数個数を考えるのが正確ではあるが、OpenTsiolkovskyではエンジン首振りなし、1個で考える。
+
+\begin{eqnarray}
+  \bm{F}_{TB} &=& \left[
+  \begin{array}{ccc}
+    F_{TXB} & F_{TYB} & F_{TZB}
+  \end{array}
+  \right] \\
+  &=& \left[
+  \begin{array}{ccc}
+    F_{T} & 0 & 0
+  \end{array}
+  \right]
+\end{eqnarray}
+
+\begin{itemize}
+  \item
+\end{itemize}
+
+また、ユーザーによって、燃焼室推力$F_{vac}$[N]と燃焼室比推力${I_{sp}}_{vac}$[sec]と
+スロート径$d_{th}$、ノズル出口圧力$p_e$、ノズル開口面積比$\epsilon$を設定する。
+
+
+\begin{equation}
+  \dot{m} = \frac{F_{vac}}{{I_{sp}}_{vac} \cdot g_0} \ \ [kg/s]
+\end{equation}
+
+\begin{equation}
+  F = F_{vac} + d_{th} \epsilon \left( p_{e} - p_{a}\right)
+\end{equation}
+%
+% rocket.m_dot = rocket.thrust / rocket.Isp_1st / g0;
+% rocket.nozzle_exhaust_pressure_1st = interp_matrix(time, rocket.thrust_mat_1st, 2);
+% rocket.thrust = rocket.thrust + rocket.throat_area_1st *
+%                 rocket.nozzle_expansion_ratio_1st *
+%                 (air_ground.pressure - air.pressure);
+
+\subsubsection{空気力 $F_{AB}$}
+ロケットに加わる空気力を速度座標系で表すと速度ベクトル$\bm{V}_A$に平行で逆方向の抗力$F_A$と
+垂直方向の揚力（法線力）$F_L$からなる。
+
+\begin{eqnarray}
+  F_D &=& C_D \cdot q \cdot S \\
+  F_L &=& C_L \cdot q \cdot S \\
+  q &=& \rho (h) {V_A}^2 / 2
+\end{eqnarray}
+
+速度座標系での空気力を
+
+\begin{equation}
+  \bm{F}_{AA} = \left[
+  \begin{array}{ccc}
+    -F_{D} & 0 & F_{L}
+  \end{array}
+  \right]
+\end{equation}
+
+とすれば、機体座標系での空気力は
+
+\begin{equation}
+  \bm{F}_{AB} = D_{AIR}^{BODY} \bm{F_{AA}} = D_{AIR}^{BODY} \left[
+  \begin{array}{ccc}
+    -F_{D} & 0 & F_{L}
+  \end{array} \right]
+\end{equation}
+
+\begin{equation}
+  D_{AIR}^{BODY} = \left[
+  \begin{array}{ccc}
+    \cos\alpha & 0 & -\sin\alpha \\
+    0 & 1 & 0 \\
+    \sin\alpha & 0 & \cos\alpha
+  \end{array} \right] \left[
+  \begin{array}{ccc}
+    \cos\beta & -\sin\beta & 0 \\
+    \sin\beta & \cos\beta & 0 \\
+    0 & 0 & 1
+  \end{array} \right]
+\end{equation}
+
+
+\subsubsection{重力 $F_{gH}$}
+重力の
+
+\begin{equation}
+  r = h + r_e \left( 1 - \epsilon \sin^2(lat) \right)
+\end{equation}
+
+\begin{equation}
+  \bm{g}_H = \left[
+    \begin{array}{c}
+      \displaystyle　\frac{\mu}{r^2}\frac{3}{2}\left( \frac{r_e}{r}\right)^2 \sin2\phi \\[4mm]
+      0 \\[4mm]
+      \displaystyle　\frac{\mu}{r^2} \left[ 1 - \frac{3}{2}J_2\left( \frac{r_e}{r}\right)^2
+      (3\sin^2\phi - 1) \right]
+    \end{array} \right]
+\end{equation}
+
+\subsection{座標変換}
+
+\subsubsection{機体座標系→ECI座標系 $D_{B}^{I} (= D_{BODY}^{ECI})$}
+
+\begin{eqnarray}
+  D_{BODY}^{ECI} &=& {D_{ECI}^{BODY}}^{\mathrm{T}} \\
+  D_{ECI}^{BODY} &=& D_{NED}^{BODY} \times D_{ECI}^{NED}
+\end{eqnarray}
+
+前者の$D_{NED}^{BODY}$については
+\begin{equation}
+  D_{NED}^{BODY} = \left[
+  \begin{array}{ccc}
+    \cos(el)\cos(az) & \cos(el)\sin(az) & -\sin(el) \\[2mm]
+    -\sin(az) & \cos(az) & 0 \\[2mm]
+    \sin(el)\cos(az) & \sin(el)\sin(az) & \cos(el)
+  \end{array} \right]
+\end{equation}
+
+後者の$D_{ECI}^{NED}$については
+\begin{equation}
+  D_{ECI}^{NED} = D_{ECEF}^{NED} \times D_{ECI}^{ECEF}
+  \label{eq:ECI2NED}
+\end{equation}
+
+\begin{equation}
+  D_{ECEF}^{NED} = \left[
+  \begin{array}{ccc}
+    -\sin(lat)\cos(lon) & -\sin(lat)\sin(lon) & \cos(lat) \\[2mm]
+    -\sin(lon) & \cos(lon) & 0 \\[2mm]
+    -\cos(lat)\cos(lon) & -\cos(lat)\sin(lon) & -\sin(lat)
+  \end{array} \right]
+\end{equation}
+
+$D_{ECI}^{ECEF}$については、$\theta=\omega\times t$として、
+\begin{equation}
+  D_{ECI}^{ECEF} = \left[
+  \begin{array}{ccc}
+    \cos(\theta) & \sin(\theta) & 0 \\[1mm]
+    -\sin(\theta) & \cos(\theta) & 0 \\[1mm]
+    0 & 0 & 1
+  \end{array} \right]
+\end{equation}
+
+
+\subsubsection{速度座標系→機体座標系 $D_{A}^{B} (= D_{AIR}^{BODY})$}
+
+迎角を$\alpha$と$\beta$として、
+\begin{equation}
+  D_{BODY}^{AIR} = \left[
+  \begin{array}{ccc}
+    \cos(\alpha)\cos(\beta) & \sin(\beta) & \sin(\alpha)\cos(\beta) \\[2mm]
+    -\cos(\alpha)\sin(\beta) & \cos(\beta) & -\sin(\alpha)\sin(\beta) \\[2mm]
+    -\sin(\alpha) & 0 & \cos(\alpha)
+  \end{array} \right]
+\end{equation}
+
+\begin{equation}
+  D_{AIR}^{BODY} = {D_{BODY}^{AIR}}^T
+\end{equation}
+
+\subsubsection{NED座標系→ECI座標系 $D_{H}^{I} (= D_{NED}^{ECI})$}
+\begin{equation}
+  D_{NED}^{ECI} = {D_{ECI}^{NED}}^T
+\end{equation}
+式（\ref{eq:ECI2NED}）より求まる
+
+\newpage
 \section{Input definition}
 
+\newpage
 \section{Output definition}
+
+\newpage
+\begin{thebibliography}{9}
+  \bibitem{atmosphere1976} U.S. Standard Atmosphere, 1976.
+  \bibitem{binran} 航空宇宙工学便覧第3版.
+\end{thebibliography}
 
 % ここまで文章を書いて下さい。
 \end{document}
