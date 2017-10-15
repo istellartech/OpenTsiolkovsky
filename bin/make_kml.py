@@ -37,14 +37,14 @@ def make_kml(name, div, stage):
 		csv_file = "output/" + name + "_dynamics_3rd.csv"
 	df = pd.read_csv(csv_file)
 	time = df["time(s)"]
-	lat = df[" lat(deg)"]
-	lon = df[" lon(deg)"]
-	altitude = df[" altitude(m)"]
+	lat = df["lat(deg)"]
+	lon = df["lon(deg)"]
+	altitude = df["altitude(m)"]
 	kml = simplekml.Kml(open=1)
 	cood = []
 	for i in range(len(time)//div):
 		index = i * div
-		cood.append((lon[index], lat[index], altitude[index]))
+		cood.append((lon.iloc[index], lat.iloc[index], altitude.iloc[index]))
 	cood.append((lon.iloc[-1], lat.iloc[-1], altitude.iloc[-1]))
 	# print(cood)
 	ls = kml.newlinestring(name="name")
@@ -60,8 +60,8 @@ def make_kml(name, div, stage):
 	ls.coords = cood
 	ls.style.linestyle.color = simplekml.Color.white
 	ls.style.linestyle.colormode = simplekml.ColorMode.random
-	ls.lookat.latitude = lat[0]
-	ls.lookat.longitude = lon[0]
+	ls.lookat.latitude = lat.iloc[0]
+	ls.lookat.longitude = lon.iloc[0]
 	ls.lookat.range = 200000
 	kml.save("output/" + name + "_" + str(stage) + ".kml")
 

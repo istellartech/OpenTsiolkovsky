@@ -58,9 +58,9 @@ def make_nmea(name, div, stage):
 		csv_file = "output/" + name + "_dynamics_3rd.csv"
 	df = pd.read_csv(csv_file)
 	time = df["time(s)"]
-	lat = df[" lat(deg)"]
-	lon = df[" lon(deg)"]
-	altitude = df[" altitude(m)"]
+	lat = df["lat(deg)"]
+	lon = df["lon(deg)"]
+	altitude = df["altitude(m)"]
 	with open("output/" + name + "_" + str(stage) + ".nmea", "w") as f:
 		for i, t in enumerate(time):
 			dt_temp = d + datetime.timedelta(seconds=float(t))
