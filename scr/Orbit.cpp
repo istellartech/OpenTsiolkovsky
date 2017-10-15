@@ -18,6 +18,7 @@ Orbit elementECI2Orbit(Vector3d posECI_, Vector3d velECI_){
     //    omega Argument of Perigee(rad)    近地点引数(rad)
     //    nu    true Anomaly                真近地点離角(rad)
     //    M     Mean Anomaly                平均近地点(rad)
+    // cf. http://ccar.colorado.edu/asen5070/handouts/cart2kep2002.pdf
     Orbit element = Orbit();
     double a, e, i, Omega, omega, nu;
     double mu = 3.986004418e5;        // earth gravitational constant 地球の重力定数(km3/s2)
@@ -36,7 +37,9 @@ Orbit elementECI2Orbit(Vector3d posECI_, Vector3d velECI_){
     e = pow(1 - momentum_abs_ * momentum_abs_ / a / mu, 0.5);
     i = acos(momentumECI_[2] / momentum_abs_);
     Omega = atan2(momentumECI_[0], -momentumECI_[1]);
+    double argument_of_latitude = atan2(posECI_[2] / sin(i), posECI_[0] * cos(Omega) + posECI_[1] * sin(Omega));
     nu = acos((a * (1 - e*e) - posECI_abs_) / e / posECI_abs_);
+    omega = argument_of_latitude - nu;
     element.semi_major = a;
     element.eccentricity = e;
     element.inclination = i;
@@ -111,3 +114,25 @@ bool success_orbit(Orbit element){
         return false;
     }
 }
+
+// 日時からユリウス日の算出
+// ユリウス日はB.C4713年1月1日の正午（世界時）からの日数
+double julian_day(int year, int mon, int day, int hr, int minute, double sec){
+    /* Input UTC
+     *  inputs          description                    range / units
+     *    year        - year                           1900 .. 2100
+     *    mon         - month                          1 .. 12
+     *    day         - day                            1 .. 28,29,30,31
+     *    hr          - universal time hour            0 .. 23
+     *    min         - universal time min             0 .. 59
+     *    sec         - universal time sec             0.0 .. 59.999
+     *  outputs       :
+     *    jd          - julian date                    days from 4713 bc
+     * cf. sgp4ext.cpp */
+    double jd = 367.0 * year - floor((7 * (year + floor((mon + 9) / 12.0))) * 0.25) +
+                floor( 275 * mon / 9.0 ) + day + 1721013.5 +
+                ((sec / 60.0 + minute) / 60.0 + hr) / 24.0;  // ut in days
+    return jd;
+}
+
+

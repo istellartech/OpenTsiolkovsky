@@ -41,7 +41,7 @@ void flight_simulation(string input_filename, string output_filename,
     double separation_time = 10e100; // 分離時間
     double end_time = rocket.calc_end_time;
     double step_time = rocket.calc_step_time;
-    double mass_init;
+    double mass_init = 1.0;
     if (rocket.state == Rocket::STAGE1){
         mass_init = rocket.mass_init_1st;
         posLLH_init_g << rocket.launch_pos_LLH[0], rocket.launch_pos_LLH[1], rocket.launch_pos_LLH[2];
@@ -914,7 +914,6 @@ void csv_observer::operator()(const state& x, double t){
     
     downrange = distance_surface(rocket.launch_pos_LLH, posLLH_);
     posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
-
     
 ////    地面に落下していたら出力無し
     if ( posLLH_[2] > 0) {
@@ -933,7 +932,11 @@ void csv_observer::operator()(const state& x, double t){
         << rad2deg(attack_of_angle_[0]) << "," << rad2deg(attack_of_angle_[1]) << ","
         << dynamic_pressure << "," << force_drag << "," << force_lift << ","
         << wind_speed << "," << wind_direction << ","
-        << downrange << "," << posLLH_IIP_[0] << "," << posLLH_IIP_[1] << endl;
+        << downrange << "," << posLLH_IIP_[0] << "," << posLLH_IIP_[1] << ","
+        << dcmBODY2ECI_(0, 0) << "," << dcmBODY2ECI_(0, 1) << "," << dcmBODY2ECI_(0, 2) << ","
+        << dcmBODY2ECI_(1, 0) << "," << dcmBODY2ECI_(1, 1) << "," << dcmBODY2ECI_(1, 2) << ","
+        << dcmBODY2ECI_(2, 0) << "," << dcmBODY2ECI_(2, 1) << "," << dcmBODY2ECI_(2, 2) << ","
+        << endl;
     }
     
 //    element

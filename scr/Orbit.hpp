@@ -98,5 +98,6 @@ Matrix3d dcmPQW2ECI(Orbit element);
 Vector3d posOrbit2ECI(Orbit element);
 Vector3d velOrbit2ECI(Orbit element);
 bool success_orbit(Orbit element);
+double julian_day(int year, int mon, int day, int hr, int minute, double sec);
 
 #endif /* Orbit_hpp */
