@@ -65,7 +65,7 @@ for stage_str in ['1st', '2nd', '3rd']:
     st = stage_str + ' stage: ' # stage string for title
     file_name = "output/" + rocket_name + "_dynamics_" + stage_str + ".csv"
     if (os.path.exists(file_name) != True):continue
-    df1 = pd.read_csv(file_name)
+    df1 = pd.read_csv(file_name, index_col=False)
     # ==== 燃焼終了 or 遠地点までのプロットの場合コメントオンオフ ====
     time_burnout = df1[df1["thrust(N)"] == 0]["time(s)"][1:].min()
     time_apogee = df1[df1["altitude(m)"] == df1["altitude(m)"].max()]["time(s)"]
