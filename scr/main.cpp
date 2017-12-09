@@ -52,7 +52,7 @@ int main(int argc, const char * argv[]) {
 //    main関数の引数を読み取って、jsonファイル読み出し、jsonの中身を読み取って、STAGEがいくつあるかを読み取り
 //    それによってflight_simulationを実行
     string input_file_name;
-    string input_file_default = "param.json";
+    string input_file_default = "param_sample.json";
     if (argc == 1) {
         input_file_name = input_file_default;
     } else if (argc == 2) {
