@@ -460,162 +460,133 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     //               STAGE3 = 3, PAYLOAD = 4, PARACHUTE = 5;}
     //    time[s],altitude[m]
     double g0 = 9.80665;
-    Air air, air_ground;
+    bool Isp_file_exist = false;
+    MatrixXd Isp_mat;
+    bool thrust_file_exist = false;
+    MatrixXd thrust_mat;
+    double thrust = 0;
+    double Isp = 0;
+    double nozzle_exhaust_area = 0;
+    double nozzle_exhaust_pressure = 0;
+    double burn_start_time = 0;
+    double burn_time = 0;
+    bool attitude_file_exist = false;
+    MatrixXd attitude_mat;
+    double attitude_azimth = 0;
+    double attitude_elevation = 0;
+    double body_area = 0;
+    double stage_separation_time = 0;
+
+    Air air;
     air = air.altitude(altitude);
-    air_ground = air.altitude(rocket.launch_pos_LLH[2]); // paramファイルのファイルのthrustはランチパッドの標高推力であることが前提
+
     switch (rocket.state) {
         case Rocket::STAGE1:
-//            bool Isp_file_exit = rocket.Isp_file_exist_1st;
-//            MatrixXd Isp_mat = rocket.Isp_mat_1st;
-//            MatrixXd thrust_mat = rocket.thrust_mat_1st;
-//            double Isp = rocket.Isp_1st;
-//            double nozzle_exhaust_area = rocket.throat_area_1st * rocket.nozzle_expansion_ratio_1st;
-//            double nozzle_exhaust_pressure = rocket.nozzle_exhaust_pressure_1st;
-//            double
-            //  推力はファイルがある場合はMatrixから補間して読み込み、ない場合は一定値を燃焼時間分だけ
-            if (rocket.Isp_file_exist_1st){
-                rocket.Isp_1st = interp_matrix(time, rocket.Isp_mat_1st);
-            }
-            if (rocket.thrust_file_exist_1st){
-                rocket.thrust = interp_matrix(time, rocket.thrust_mat_1st);
-                if (rocket.thrust != 0) {
-                    rocket.is_powered = true;
-                    rocket.m_dot = rocket.thrust / rocket.Isp_1st / g0;
-                    rocket.nozzle_exhaust_pressure_1st = interp_matrix(time, rocket.thrust_mat_1st, 2);
-                    rocket.thrust = rocket.thrust + rocket.throat_area_1st *
-                                    rocket.nozzle_expansion_ratio_1st *
-                                    (air_ground.pressure - air.pressure);
-                    if (rocket.m_dot > 0.0001) {
-                        rocket.Isp = rocket.thrust / rocket.m_dot / g0;
-                    } else {
-                        rocket.Isp = 0.0;
-                    }
-                    rocket.is_aerodynamically_stable = false;
-                } else {
-                    rocket.is_powered = false;
-                }
-            } else {
-                if(time > rocket.burn_start_time_1st &&
-                   time < rocket.burn_time_1st){
-                    rocket.is_powered = true;
-                    rocket.thrust = rocket.thrust_1st + rocket.throat_area_1st *
-                                    rocket.nozzle_expansion_ratio_1st *
-                                    (air_ground.pressure - air.pressure);
-                    rocket.m_dot = rocket.thrust_1st / rocket.Isp_1st / g0;
-                    rocket.Isp = rocket.thrust / rocket.m_dot / g0;
-                    rocket.is_aerodynamically_stable = false;
-                } else {
-                    rocket.is_powered = false;
-                }
-            }
-            if (rocket.attitude_file_exist_1st) {
-                rocket.azimth = deg2rad(interp_matrix(time, rocket.attitude_mat_1st, 1));
-                rocket.elevation = deg2rad(interp_matrix(time, rocket.attitude_mat_1st, 2));
-            } else {
-                rocket.azimth = deg2rad(rocket.attitude_azimth_1st);
-                rocket.elevation = deg2rad(rocket.attitude_elevation_1st);
-            }
-            rocket.area = rocket.body_area_1st;
+            Isp_file_exist = rocket.Isp_file_exist_1st;
+            Isp_mat = rocket.Isp_mat_1st;
+            thrust_file_exist = rocket.thrust_file_exist_1st;
+            thrust_mat = rocket.thrust_mat_1st;
+            thrust = rocket.thrust_1st;
+            Isp = rocket.Isp_1st;
+            nozzle_exhaust_area = rocket.throat_area_1st * rocket.nozzle_expansion_ratio_1st;
+            nozzle_exhaust_pressure = rocket.nozzle_exhaust_pressure_1st;
+            rocket.nozzle_exhaust_pressure_1st = nozzle_exhaust_pressure;
+            burn_start_time = rocket.burn_start_time_1st;
+            burn_time = rocket.burn_time_1st;
+            stage_separation_time = 0;
+            attitude_file_exist = rocket.attitude_file_exist_1st;
+            attitude_mat = rocket.attitude_mat_1st;
+            attitude_azimth = rocket.attitude_azimth_1st;
+            attitude_elevation = rocket.attitude_elevation_1st;
+            body_area = rocket.body_area_1st;
             break;
         case Rocket::STAGE2:
-            if (rocket.Isp_file_exist_2nd){
-                rocket.Isp_2nd = interp_matrix(time, rocket.Isp_mat_2nd);
-            }
-            if (rocket.thrust_file_exist_2nd){
-                rocket.thrust = interp_matrix(time - rocket.stage_separation_time_1st, rocket.thrust_mat_2nd);
-                if (rocket.thrust != 0) {
-                    rocket.is_powered = true;
-                    rocket.m_dot = rocket.thrust / rocket.Isp_2nd / g0;
-                    rocket.nozzle_exhaust_pressure_2nd = interp_matrix(time, rocket.thrust_mat_2nd, 2);
-                    rocket.thrust = rocket.thrust + rocket.throat_area_2nd *
-                    rocket.nozzle_expansion_ratio_2nd *
-                    (rocket.nozzle_exhaust_pressure_2nd  - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
-                    if (rocket.m_dot > 0.0001) {
-                        rocket.Isp = rocket.thrust / rocket.m_dot / g0;
-                    } else {
-                        rocket.Isp = 0.0;
-                    }
-                    rocket.is_aerodynamically_stable = false;
-                } else {
-                    rocket.is_powered = false;
-                }
-            } else {
-                if(time > rocket.stage_separation_time_1st + rocket.burn_start_time_2nd &&
-                   time < rocket.stage_separation_time_1st + rocket.burn_start_time_2nd + rocket.burn_time_2nd){
-                    rocket.is_powered = true;
-                    rocket.thrust = rocket.thrust_2nd + rocket.throat_area_2nd *
-                                    rocket.nozzle_expansion_ratio_2nd *
-                                    (rocket.nozzle_exhaust_pressure_2nd  - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
-                    rocket.m_dot = rocket.thrust_2nd / rocket.Isp_2nd / g0;
-                    rocket.Isp = rocket.thrust / rocket.m_dot / g0;
-                    rocket.is_aerodynamically_stable = false;
-                } else {
-                    rocket.is_powered = false;
-                }
-            }
-            if (rocket.attitude_file_exist_2nd) {
-                rocket.azimth = deg2rad(interp_matrix(time - rocket.stage_separation_time_1st, rocket.attitude_mat_2nd, 1));
-                rocket.elevation = deg2rad(interp_matrix(time - rocket.stage_separation_time_1st, rocket.attitude_mat_2nd, 2));
-            } else {
-                rocket.azimth = deg2rad(rocket.attitude_azimth_2nd);
-                rocket.elevation = deg2rad(rocket.attitude_elevation_2nd);
-            }
-            rocket.area = rocket.body_area_2nd;
+            Isp_file_exist = rocket.Isp_file_exist_2nd;
+            Isp_mat = rocket.Isp_mat_2nd;
+            thrust_file_exist = rocket.thrust_file_exist_2nd;
+            thrust_mat = rocket.thrust_mat_2nd;
+            thrust = rocket.thrust_2nd;
+            Isp = rocket.Isp_2nd;
+            nozzle_exhaust_area = rocket.throat_area_2nd * rocket.nozzle_expansion_ratio_2nd;
+            nozzle_exhaust_pressure = rocket.nozzle_exhaust_pressure_2nd;
+            burn_start_time = rocket.burn_start_time_2nd;
+            burn_time = rocket.burn_time_2nd;
+            stage_separation_time = rocket.stage_separation_time_1st;
+            attitude_file_exist = rocket.attitude_file_exist_2nd;
+            attitude_mat = rocket.attitude_mat_2nd;
+            attitude_azimth = rocket.attitude_azimth_2nd;
+            attitude_elevation = rocket.attitude_elevation_2nd;
+            body_area = rocket.body_area_2nd;
             break;
         case Rocket::STAGE3:
-            if (rocket.Isp_file_exist_3rd){
-                rocket.Isp_3rd = interp_matrix(time, rocket.Isp_mat_3rd);
-            }
-            if (rocket.thrust_file_exist_3rd){
-                rocket.thrust = interp_matrix(time - rocket.stage_separation_time_2nd, rocket.thrust_mat_3rd);
-                if (rocket.thrust != 0) {
-                    rocket.is_powered = true;
-                    rocket.m_dot = rocket.thrust / rocket.Isp_3rd / g0;
-                    rocket.nozzle_exhaust_pressure_3rd = interp_matrix(time, rocket.thrust_mat_3rd, 2);
-                    rocket.thrust = rocket.thrust + rocket.throat_area_3rd *
-                    rocket.nozzle_expansion_ratio_3rd *
-                    (rocket.nozzle_exhaust_pressure_3rd - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
-                    if (rocket.m_dot > 0.0001) {
-                        rocket.Isp = rocket.thrust / rocket.m_dot / g0;
-                    } else {
-                        rocket.Isp = 0.0;
-                    }
-                    rocket.is_aerodynamically_stable = false;
-                } else {
-                    rocket.is_powered = false;
-                }
-            } else {
-                if(time > rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd &&
-                   time < rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd + rocket.burn_time_3rd){
-                    rocket.is_powered = true;
-                    rocket.thrust = rocket.thrust_3rd + rocket.throat_area_3rd *
-                                    rocket.nozzle_expansion_ratio_3rd *
-                                    (rocket.nozzle_exhaust_pressure_3rd - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
-                    rocket.m_dot = rocket.thrust_3rd / rocket.Isp_3rd / g0;
-                    rocket.Isp = rocket.thrust / rocket.m_dot / g0;
-                    rocket.is_aerodynamically_stable = false;
-                } else {
-                    rocket.is_powered = false;
-                }
-            }
-            if (rocket.attitude_file_exist_3rd) {
-                rocket.azimth = deg2rad(interp_matrix(time - rocket.stage_separation_time_2nd, rocket.attitude_mat_3rd, 1));
-                rocket.elevation = deg2rad(interp_matrix(time - rocket.stage_separation_time_2nd, rocket.attitude_mat_3rd, 2));
-            } else {
-                rocket.azimth = deg2rad(rocket.attitude_azimth_3rd);
-                rocket.elevation = deg2rad(rocket.attitude_elevation_3rd);
-            }
-            rocket.area = rocket.body_area_3rd;
+            Isp_file_exist = rocket.Isp_file_exist_3rd;
+            Isp_mat = rocket.Isp_mat_3rd;
+            thrust_file_exist = rocket.thrust_file_exist_3rd;
+            thrust_mat = rocket.thrust_mat_3rd;
+            thrust = rocket.thrust_3rd;
+            Isp = rocket.Isp_3rd;
+            nozzle_exhaust_area = rocket.throat_area_3rd * rocket.nozzle_expansion_ratio_3rd;
+            nozzle_exhaust_pressure = rocket.nozzle_exhaust_pressure_3rd;
+            burn_start_time = rocket.burn_start_time_3rd;
+            burn_time = rocket.burn_time_3rd;
+            stage_separation_time = rocket.stage_separation_time_2nd;
+            attitude_file_exist = rocket.attitude_file_exist_3rd;
+            attitude_mat = rocket.attitude_mat_3rd;
+            attitude_azimth = rocket.attitude_azimth_3rd;
+            attitude_elevation = rocket.attitude_elevation_3rd;
+            body_area = rocket.body_area_3rd;
             break;
         default:
             break;
     }
-    if (rocket.is_powered == false){
+    
+    //  推力はファイルがある場合はMatrixから補間して読み込み、ない場合は一定値を燃焼時間分だけ
+    if (Isp_file_exist){
+        Isp = interp_matrix(time - stage_separation_time, Isp_mat);
+    }
+    if (thrust_file_exist){
+        rocket.thrust = interp_matrix(time - stage_separation_time, thrust_mat, 1);
+        nozzle_exhaust_pressure = interp_matrix(time - stage_separation_time, thrust_mat, 2);
+        if (rocket.thrust != 0) {
+            rocket.is_powered = true;
+        } else {
+            rocket.is_powered = false;
+        }
+    } else {
+        if(time > stage_separation_time + burn_start_time &&
+           time < stage_separation_time + burn_start_time + burn_time){
+            rocket.is_powered = true;
+        } else {
+            rocket.is_powered = false;
+        }
+    }
+    if (rocket.is_powered){
+        rocket.m_dot = rocket.thrust / Isp / g0;
+        rocket.thrust = rocket.thrust + nozzle_exhaust_area *
+        (nozzle_exhaust_pressure - air.pressure);
+        if (rocket.m_dot > 0.0001) {
+            rocket.Isp = rocket.thrust / rocket.m_dot / g0;
+        } else {
+            rocket.Isp = 0.0;
+        }
+        rocket.is_aerodynamically_stable = false;
+    } else {
         rocket.thrust = 0.0;
         rocket.m_dot = 0.0;
         rocket.Isp = 0.0;
         rocket.is_aerodynamically_stable = true;
     }
+    
+    if (attitude_file_exist) {
+        rocket.azimth = deg2rad(interp_matrix(time, attitude_mat, 1));
+        rocket.elevation = deg2rad(interp_matrix(time, attitude_mat, 2));
+    } else {
+        rocket.azimth = deg2rad(attitude_azimth);
+        rocket.elevation = deg2rad(attitude_elevation);
+    }
+    
+    rocket.area = body_area;
+    
     if (rocket.wind_file_exist) {
         rocket.wind_speed = interp_matrix(altitude, rocket.wind_mat, 1);
         rocket.wind_direction = interp_matrix(altitude, rocket.wind_mat, 2);
@@ -629,46 +600,46 @@ void set_rocket_state_aero(Rocket& rocket, double mach_number){
     //    時間によってState変化とrocketインスタンスの値を変更する
     //    enum State{GROUND = 0, STAGE1 = 1, STAGE2 = 2,
     //               STAGE3 = 3, PAYLOAD = 4, PARACHUTE = 5;}
+    bool CD_file_exist = false;
+    MatrixXd CD_mat;
+    bool CL_file_exist = false;
+    MatrixXd CL_mat;
+
     switch (rocket.state) {
         case Rocket::STAGE1:
-            if (rocket.CD_file_exist_1st) {
-                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_1st);
-            } else {
-                rocket.CD = rocket.CD_1st;
-            }
-            if (rocket.CL_file_exist_1st) {
-                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_1st);
-            } else {
-                rocket.CL = rocket.CL_1st;
-            }
+            CD_file_exist = rocket.CD_file_exist_1st;
+            CD_mat = rocket.CD_mat_1st;
+            CL_file_exist = rocket.CL_file_exist_1st;
+            CL_mat = rocket.CL_mat_1st;
+            rocket.CD = rocket.CD_1st;
+            rocket.CL = rocket.CL_1st;
             break;
         case Rocket::STAGE2:
-            if (rocket.CD_file_exist_2nd) {
-                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_2nd);
-            } else {
-                rocket.CD = rocket.CD_2nd;
-            }
-            if (rocket.CL_file_exist_2nd) {
-                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_2nd);
-            } else {
-                rocket.CL = rocket.CL_2nd;
-            }
+            CD_file_exist = rocket.CD_file_exist_2nd;
+            CD_mat = rocket.CD_mat_2nd;
+            CL_file_exist = rocket.CL_file_exist_2nd;
+            CL_mat = rocket.CL_mat_2nd;
+            rocket.CD = rocket.CD_2nd;
+            rocket.CL = rocket.CL_2nd;
             break;
         case Rocket::STAGE3:
-            if (rocket.CD_file_exist_3rd) {
-                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_3rd);
-            } else {
-                rocket.CD = rocket.CD_3rd;
-            }
-            if (rocket.CL_file_exist_3rd) {
-                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_3rd);
-            } else {
-                rocket.CL = rocket.CL_3rd;
-            }
+            CD_file_exist = rocket.CD_file_exist_3rd;
+            CD_mat = rocket.CD_mat_3rd;
+            CL_file_exist = rocket.CL_file_exist_3rd;
+            CL_mat = rocket.CL_mat_3rd;
+            rocket.CD = rocket.CD_3rd;
+            rocket.CL = rocket.CL_3rd;
             break;
         default:
             break;
     }
+    if (CD_file_exist) {
+        rocket.CD = interp_matrix(mach_number, CD_mat);
+    }
+    if (CL_file_exist) {
+        rocket.CL = interp_matrix(mach_number, CL_mat);
+    }
+
 }
 
 void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamics::state& dx, double t){
@@ -1113,7 +1084,6 @@ Vector3d velECI_init(Vector3d vel_ECEF_NEDframe_, Vector3d posLLH_){
     dcmNED2ECI_ = dcmECI2NED_.transpose();
     return vel_ECI_ECIframe(dcmNED2ECI_, vel_ECEF_NEDframe_, posECI_init_);
 }
-
 
 
 // コンソールにプログレス表示
