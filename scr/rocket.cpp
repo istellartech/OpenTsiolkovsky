@@ -476,6 +476,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     double attitude_elevation = 0;
     double body_area = 0;
     double stage_separation_time = 0;
+    double current_stage_separation_time = 0;
 
     Air air;
     air = air.altitude(altitude);
@@ -494,6 +495,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             burn_start_time = rocket.burn_start_time_1st;
             burn_time = rocket.burn_time_1st;
             stage_separation_time = 0;
+            current_stage_separation_time = rocket.stage_separation_time_1st;
             attitude_file_exist = rocket.attitude_file_exist_1st;
             attitude_mat = rocket.attitude_mat_1st;
             attitude_azimth = rocket.attitude_azimth_1st;
@@ -512,6 +514,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             burn_start_time = rocket.burn_start_time_2nd;
             burn_time = rocket.burn_time_2nd;
             stage_separation_time = rocket.stage_separation_time_1st;
+            current_stage_separation_time = rocket.stage_separation_time_2nd;
             attitude_file_exist = rocket.attitude_file_exist_2nd;
             attitude_mat = rocket.attitude_mat_2nd;
             attitude_azimth = rocket.attitude_azimth_2nd;
@@ -530,6 +533,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             burn_start_time = rocket.burn_start_time_3rd;
             burn_time = rocket.burn_time_3rd;
             stage_separation_time = rocket.stage_separation_time_2nd;
+            current_stage_separation_time = rocket.stage_separation_time_3rd;
             attitude_file_exist = rocket.attitude_file_exist_3rd;
             attitude_mat = rocket.attitude_mat_3rd;
             attitude_azimth = rocket.attitude_azimth_3rd;
@@ -562,6 +566,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     }
     if (rocket.is_powered){
         rocket.m_dot = rocket.thrust / Isp / g0;
+        rocket.nozzle_exhaust_area = nozzle_exhaust_area;
         rocket.thrust = rocket.thrust + nozzle_exhaust_area *
         (nozzle_exhaust_pressure - air.pressure);
         if (rocket.m_dot > 0.0001) {
@@ -593,6 +598,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     } else {
         rocket.wind_speed = rocket.wind_const[0];
         rocket.wind_direction = rocket.wind_const[1];
+    }
+    
+    if (time < current_stage_separation_time){
+        rocket.is_separated = false;
+    } else {
+        rocket.is_separated = true;
     }
 }
 
@@ -850,10 +861,22 @@ void csv_observer::operator()(const state& x, double t){
     posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
     
 //   ==== Calculte loss velocisy ====
-    loss_gravity = gravity_vector[2] * cos(azimth);
+    if (rocket.thrust > 0.1 || rocket.is_separated == false){
+        double vel_ECEF_NEDframe_XY = sqrt(vel_ECEF_NEDframe_[0] * vel_ECEF_NEDframe_[0] +
+                                           vel_ECEF_NEDframe_[1] * vel_ECEF_NEDframe_[1]);
+        double path_angle_rad = atan2(-vel_ECEF_NEDframe_[2], vel_ECEF_NEDframe_XY);
+        loss_gravity = gravity_vector[2] * sin(path_angle_rad);
+    } else {
+        loss_gravity = 0;
+    }
+    if (rocket.thrust > 0.1){
+        loss_thrust = air.pressure * rocket.nozzle_exhaust_area / x[0];
+    } else {
+        loss_thrust = 0;
+    }
     loss_aerodynamics = force_drag / x[0];
-//    loss_
-    
+    loss_total = loss_gravity + loss_aerodynamics + loss_thrust;
+
 ////    地面に落下していたら出力無し
     if ( posLLH_[2] > 0) {
         fout << t << ",";
@@ -875,6 +898,7 @@ void csv_observer::operator()(const state& x, double t){
         << dcmBODY2ECI_(0, 0) << "," << dcmBODY2ECI_(0, 1) << "," << dcmBODY2ECI_(0, 2) << ","
         << dcmBODY2ECI_(1, 0) << "," << dcmBODY2ECI_(1, 1) << "," << dcmBODY2ECI_(1, 2) << ","
         << dcmBODY2ECI_(2, 0) << "," << dcmBODY2ECI_(2, 1) << "," << dcmBODY2ECI_(2, 2) << ","
+        << loss_gravity << "," << loss_aerodynamics << "," << loss_thrust << ","
         << endl;
     }
     

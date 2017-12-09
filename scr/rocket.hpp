@@ -42,6 +42,7 @@ public:
 //    ==== フラグ ====
     bool is_aerodynamically_stable = false;  // 空力的に安定しているモードかどうか, 燃焼後やペイロードを想定
     bool is_powered = false;  // 推力を発生しているかどうか？ trueで推力発生
+    bool is_separated = false;  // 上段分離しているかどうか
 //    ====計算の変数====
     double calc_start_time;
     double calc_end_time;
@@ -175,6 +176,7 @@ public:
     double thrust = 0.0;
     double Isp = 0.1;
     double m_dot = 0.0;
+    double nozzle_exhaust_area = 0.0;
     double CD = 0.0;
     double CL = 0.0;
     double drag = 0.0;
@@ -327,11 +329,15 @@ struct csv_observer{
                  << "acc_ECI_X(m/s2),acc_ECI_Y(m/s2),acc_ECI_Z(m/s2),acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
                  << "Isp(s),Mach number,attitude_azimth(deg),attitude_elevation(deg),"
                  << "attack of angle alpha(deg),attack of angle beta(deg),dynamic pressure(Pa),aero Drag(N),aero Lift(N),"
-                 << "wind speed(m/s),wind direction(deg),downrange(m), "
+                 << "wind speed(m/s),wind direction(deg),downrange(m),"
                  << "IIP_lat(deg),IIP_lon(deg),"
                  << "dcmBODY2ECI_11,dcmBODY2ECI_12,dcmBODY2ECI_13,"
                  << "dcmBODY2ECI_21,dcmBODY2ECI_22,dcmBODY2ECI_23,"
-                 << "dcmBODY2ECI_31,dcmBODY2ECI_32,dcmBODY2ECI_33" << std::endl;
+                 << "dcmBODY2ECI_31,dcmBODY2ECI_32,dcmBODY2ECI_33,"
+                 << "loss_gravity(m/s2),"
+                 << "loss_aerodynamics(m/s2),"
+                 << "loss_thrust(m/s2)"
+                 << std::endl;
         } else {
             fout.open(FileName, std::ios_base::out | std::ios_base::app); // 追加書き込みモード
         }
