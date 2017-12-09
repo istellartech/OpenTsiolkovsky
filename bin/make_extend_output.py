@@ -151,7 +151,7 @@ if __name__ == '__main__':
     if (argc != 1):
     	file_name = argvs[1]
     else:
-    	file_name = u"param.json"
+    	file_name = u"param_sample.json"
 
     # 入力の確認
     print(u"==== INPUT PARAMETER ===")
