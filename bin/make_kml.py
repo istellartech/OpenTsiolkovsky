@@ -14,7 +14,7 @@ import pandas as pd
 if (len(sys.argv) != 1):
 	file_name = sys.argv[1]
 else:
-	file_name = "param.json"
+	file_name = "param_sample.json"
 try:
 	data = json.load(open(file_name))
 	name = data["name"]
@@ -35,7 +35,7 @@ def make_kml(name, div, stage):
 		csv_file = "output/" + name + "_dynamics_2nd.csv"
 	elif (stage == 3):
 		csv_file = "output/" + name + "_dynamics_3rd.csv"
-	df = pd.read_csv(csv_file)
+	df = pd.read_csv(csv_file, index_col=False)
 	time = df["time(s)"]
 	lat = df["lat(deg)"]
 	lon = df["lon(deg)"]

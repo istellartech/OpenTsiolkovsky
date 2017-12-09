@@ -46,7 +46,7 @@ g = 9.80665
 if (len(sys.argv) != 1):
     input_json = sys.argv[1]
 else:
-    input_json = "param.json"
+    input_json = "param_sample.json"
 
 # ==== Read input file ====
 f = open(input_json, 'r')
@@ -69,6 +69,9 @@ for stage_str in ['1st', '2nd', '3rd']:
     # ==== 燃焼終了 or 遠地点までのプロットの場合コメントオンオフ ====
     time_burnout = df1[df1["thrust(N)"] == 0]["time(s)"][1:].min()
     time_apogee = df1[df1["altitude(m)"] == df1["altitude(m)"].max()]["time(s)"]
+    # import pdb; pdb.set_trace()
+    if not isinstance(time_apogee, float):
+        time_apogee = time_apogee.iloc[0]
     # df1 = df1[df1["time(s)"] < float(time_burnout)]
     df1 = df1[df1["time(s)"] < float(time_apogee)]
     # ==== 燃焼終了 or 遠地点までのプロットの場合コメントオンオフ ====

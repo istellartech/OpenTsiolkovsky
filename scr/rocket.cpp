@@ -559,6 +559,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     } else {
         if(time > stage_separation_time + burn_start_time &&
            time < stage_separation_time + burn_start_time + burn_time){
+            rocket.thrust = thrust;
             rocket.is_powered = true;
         } else {
             rocket.is_powered = false;
@@ -569,6 +570,8 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
         rocket.nozzle_exhaust_area = nozzle_exhaust_area;
         rocket.thrust = rocket.thrust + nozzle_exhaust_area *
         (nozzle_exhaust_pressure - air.pressure);
+        // TODO : rocket.thrustのうち、運動量推力と有効推力を同じthrustにしているのがバグの温床、要修正
+        // 入力は運動量推力、出力は有効推力
         if (rocket.m_dot > 0.0001) {
             rocket.Isp = rocket.thrust / rocket.m_dot / g0;
         } else {

@@ -28,7 +28,8 @@ OBJS += $(SRCDIR)/fileio.o
 OBJS += $(SRCDIR)/gravity.o
 OBJS += $(SRCDIR)/Orbit.o
 CC = g++
-CFLAGS = -Wall -O2 -std=gnu++11
+CFLAGS = -O2 -std=gnu++11
+# CFLAGS = -Wall -O2 -std=gnu++11
 LDLIBS = -lpthread
 
 .SUFFIXES: .c .o

@@ -22,3 +22,6 @@ Input file format is following [input file format](https://github.com/istellarte
 
 ## License
 OpenTsiolkovsky is an Open Source project licensed under the MIT License
+
+## Note
+Enter "momentum thrust" in the thrust input field.

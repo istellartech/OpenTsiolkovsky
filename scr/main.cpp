@@ -25,7 +25,7 @@ using namespace std;
 using namespace Eigen;
 using namespace boost::numeric::odeint;
 
-const string current_version = "0.21";
+const string current_version = "0.30";
 
 Vector3d posLLH_init_g;
 Vector3d vel_NED_init_g;
@@ -43,7 +43,7 @@ bool impact_flag = false;
 int main(int argc, const char * argv[]) {
     std::chrono::system_clock::time_point  start, end; // calcuration time measurement
     start = std::chrono::system_clock::now(); // 計測開始時間
-    std::cout << "OpenTsiolkovsky!" + current_version + "\n";
+    std::cout << "Hello, OpenTsiolkovsky! version:" + current_version + "\n";
 //    test_gravity();
 //    test_air();
 //    test_LLH_ECEF();
@@ -90,6 +90,7 @@ int main(int argc, const char * argv[]) {
     flight_simulation("./" + input_file_name,
                       "./output/" + output_filename + "_dynamics_1st.csv",
                       Rocket::STAGE1);
+    cout << "                                           \r" << flush;
     cout << fixed << setprecision(6) << "1st stage impact point [deg]:\t";
     cout << impact_point[0] << "\t"<< impact_point[1] << endl;
     impact_point << 0.0,0.0;
@@ -98,6 +99,7 @@ int main(int argc, const char * argv[]) {
         flight_simulation("./" + input_file_name,
                           "./output/" + output_filename + "_dynamics_2nd.csv",
                           Rocket::STAGE2);
+        cout << "                                           \r" << flush;
         cout << fixed << setprecision(6) << "2nd stage impact point [deg]:\t";
         cout << impact_point[0] << "\t"<< impact_point[1] << endl;
         impact_point << 0.0,0.0;
@@ -107,6 +109,7 @@ int main(int argc, const char * argv[]) {
         flight_simulation("./" + input_file_name,
                           "./output/" + output_filename + "_dynamics_3rd.csv",
                           Rocket::STAGE3);
+        cout << "                                           \r" << flush;
         cout << fixed << setprecision(6) << "3rd stage impact point [deg]:\t";
         cout << impact_point[0] << "\t"<< impact_point[1] << endl;
         impact_point << 0.0,0.0;
@@ -119,7 +122,7 @@ int main(int argc, const char * argv[]) {
     cout << "Simulation Success!" << endl;
     end = std::chrono::system_clock::now();  // 計測終了時間
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
-    std::cout << "Processing time:" << elapsed << "[ms]" << std::endl;
+    std::cout << "Processing time:" << elapsed << "[ms]\n" << std::endl;
 
     return 0;
 }

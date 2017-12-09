@@ -57,7 +57,7 @@ argc = len(argvs)
 if (argc != 1):
     file_name = argvs[1]
 else:
-    file_name = "param.json"
+	file_name = "param_sample.json"
 
 f = open(file_name)
 data = json.load(f)
@@ -301,7 +301,7 @@ for index in range(stage_num):
     plt.xlabel("time (sec)")
     plt.ylabel("acceleration (G)")
     plt.legend(loc="best")
-    
+
 
     pdf.savefig(fig[index][1])
     fig[index][2] = plt.figure()

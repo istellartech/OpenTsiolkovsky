@@ -39,7 +39,7 @@ if __name__ == '__main__':
 	else:
 		print("argment error")
 		print("===test mode===")
-		json_file = "param.json"
+		json_file = "param_sample.json"
 		change_key = "name"
 		change_value = "test"
 
