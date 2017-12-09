@@ -41,6 +41,7 @@ public:
     string output_filename;         // 出力ファイル名
 //    ==== フラグ ====
     bool is_aerodynamically_stable = false;  // 空力的に安定しているモードかどうか, 燃焼後やペイロードを想定
+    bool is_powered = false;  // 推力を発生しているかどうか？ trueで推力発生
 //    ====計算の変数====
     double calc_start_time;
     double calc_end_time;
@@ -305,6 +306,12 @@ struct csv_observer{
     double downrange;
     Vector3d posLLH_IIP_;
 
+//    loss velocity
+    double loss_gravity;
+    double loss_aerodynamics;
+    double loss_thrust;
+    double loss_control;
+    double loss_total;
     
 //    double max_alt = 0.0;
     double mach_number;

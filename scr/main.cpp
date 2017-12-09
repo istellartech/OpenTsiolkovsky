@@ -25,6 +25,8 @@ using namespace std;
 using namespace Eigen;
 using namespace boost::numeric::odeint;
 
+const string current_version = "0.21";
+
 Vector3d posLLH_init_g;
 Vector3d vel_NED_init_g;
 Vector3d posECI_init_g;
@@ -41,7 +43,7 @@ bool impact_flag = false;
 int main(int argc, const char * argv[]) {
     std::chrono::system_clock::time_point  start, end; // calcuration time measurement
     start = std::chrono::system_clock::now(); // 計測開始時間
-    std::cout << "Hello, OpenTsiolkovsky!\n";
+    std::cout << "OpenTsiolkovsky!" + current_version + "\n";
 //    test_gravity();
 //    test_air();
 //    test_LLH_ECEF();

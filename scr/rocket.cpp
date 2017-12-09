@@ -465,6 +465,13 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
     air_ground = air.altitude(rocket.launch_pos_LLH[2]); // paramファイルのファイルのthrustはランチパッドの標高推力であることが前提
     switch (rocket.state) {
         case Rocket::STAGE1:
+//            bool Isp_file_exit = rocket.Isp_file_exist_1st;
+//            MatrixXd Isp_mat = rocket.Isp_mat_1st;
+//            MatrixXd thrust_mat = rocket.thrust_mat_1st;
+//            double Isp = rocket.Isp_1st;
+//            double nozzle_exhaust_area = rocket.throat_area_1st * rocket.nozzle_expansion_ratio_1st;
+//            double nozzle_exhaust_pressure = rocket.nozzle_exhaust_pressure_1st;
+//            double
             //  推力はファイルがある場合はMatrixから補間して読み込み、ない場合は一定値を燃焼時間分だけ
             if (rocket.Isp_file_exist_1st){
                 rocket.Isp_1st = interp_matrix(time, rocket.Isp_mat_1st);
@@ -472,6 +479,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             if (rocket.thrust_file_exist_1st){
                 rocket.thrust = interp_matrix(time, rocket.thrust_mat_1st);
                 if (rocket.thrust != 0) {
+                    rocket.is_powered = true;
                     rocket.m_dot = rocket.thrust / rocket.Isp_1st / g0;
                     rocket.nozzle_exhaust_pressure_1st = interp_matrix(time, rocket.thrust_mat_1st, 2);
                     rocket.thrust = rocket.thrust + rocket.throat_area_1st *
@@ -484,14 +492,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     }
                     rocket.is_aerodynamically_stable = false;
                 } else {
-                    rocket.thrust = 0.0;
-                    rocket.m_dot = 0.0;
-                    rocket.Isp = 0.0;
-                    rocket.is_aerodynamically_stable = true;
+                    rocket.is_powered = false;
                 }
             } else {
                 if(time > rocket.burn_start_time_1st &&
                    time < rocket.burn_time_1st){
+                    rocket.is_powered = true;
                     rocket.thrust = rocket.thrust_1st + rocket.throat_area_1st *
                                     rocket.nozzle_expansion_ratio_1st *
                                     (air_ground.pressure - air.pressure);
@@ -499,25 +505,9 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                     rocket.is_aerodynamically_stable = false;
                 } else {
-                    rocket.thrust = 0.0;
-                    rocket.m_dot = 0.0;
-                    rocket.Isp = 0.0;
-                    rocket.is_aerodynamically_stable = true;
+                    rocket.is_powered = false;
                 }
             }
-//            rocket.Isp = rocket.Isp_1st;
-//            rocket.m_dot = rocket.thrust / rocket.Isp_1st / g0;
-            //            CL,CD値はファイルがある場合は読み込み
-//            if (rocket.CD_file_exist_1st) {
-//                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_1st);
-//            } else {
-//                rocket.CD = rocket.CD_1st;
-//            }
-//            if (rocket.CL_file_exist_1st) {
-//                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_1st);
-//            } else {
-//                rocket.CL = rocket.CL_1st;
-//            }
             if (rocket.attitude_file_exist_1st) {
                 rocket.azimth = deg2rad(interp_matrix(time, rocket.attitude_mat_1st, 1));
                 rocket.elevation = deg2rad(interp_matrix(time, rocket.attitude_mat_1st, 2));
@@ -534,6 +524,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             if (rocket.thrust_file_exist_2nd){
                 rocket.thrust = interp_matrix(time - rocket.stage_separation_time_1st, rocket.thrust_mat_2nd);
                 if (rocket.thrust != 0) {
+                    rocket.is_powered = true;
                     rocket.m_dot = rocket.thrust / rocket.Isp_2nd / g0;
                     rocket.nozzle_exhaust_pressure_2nd = interp_matrix(time, rocket.thrust_mat_2nd, 2);
                     rocket.thrust = rocket.thrust + rocket.throat_area_2nd *
@@ -546,14 +537,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     }
                     rocket.is_aerodynamically_stable = false;
                 } else {
-                    rocket.thrust = 0.0;
-                    rocket.m_dot = 0.0;
-                    rocket.Isp = 0.0;
-                    rocket.is_aerodynamically_stable = true;
+                    rocket.is_powered = false;
                 }
             } else {
                 if(time > rocket.stage_separation_time_1st + rocket.burn_start_time_2nd &&
                    time < rocket.stage_separation_time_1st + rocket.burn_start_time_2nd + rocket.burn_time_2nd){
+                    rocket.is_powered = true;
                     rocket.thrust = rocket.thrust_2nd + rocket.throat_area_2nd *
                                     rocket.nozzle_expansion_ratio_2nd *
                                     (rocket.nozzle_exhaust_pressure_2nd  - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
@@ -561,24 +550,9 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                     rocket.is_aerodynamically_stable = false;
                 } else {
-                    rocket.thrust = 0.0;
-                    rocket.m_dot = 0.0;
-                    rocket.Isp = 0.0;
-                    rocket.is_aerodynamically_stable = true;
+                    rocket.is_powered = false;
                 }
             }
-//            rocket.Isp = rocket.Isp_2nd;
-//            rocket.m_dot = rocket.thrust / rocket.Isp_2nd / g0;
-//            if (rocket.CD_file_exist_2nd) {
-//                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_2nd);
-//            } else {
-//                rocket.CD = rocket.CD_2nd;
-//            }
-//            if (rocket.CL_file_exist_2nd) {
-//                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_2nd);
-//            } else {
-//                rocket.CL = rocket.CL_2nd;
-//            }
             if (rocket.attitude_file_exist_2nd) {
                 rocket.azimth = deg2rad(interp_matrix(time - rocket.stage_separation_time_1st, rocket.attitude_mat_2nd, 1));
                 rocket.elevation = deg2rad(interp_matrix(time - rocket.stage_separation_time_1st, rocket.attitude_mat_2nd, 2));
@@ -595,6 +569,7 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             if (rocket.thrust_file_exist_3rd){
                 rocket.thrust = interp_matrix(time - rocket.stage_separation_time_2nd, rocket.thrust_mat_3rd);
                 if (rocket.thrust != 0) {
+                    rocket.is_powered = true;
                     rocket.m_dot = rocket.thrust / rocket.Isp_3rd / g0;
                     rocket.nozzle_exhaust_pressure_3rd = interp_matrix(time, rocket.thrust_mat_3rd, 2);
                     rocket.thrust = rocket.thrust + rocket.throat_area_3rd *
@@ -607,14 +582,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     }
                     rocket.is_aerodynamically_stable = false;
                 } else {
-                    rocket.thrust = 0.0;
-                    rocket.m_dot = 0.0;
-                    rocket.Isp = 0.0;
-                    rocket.is_aerodynamically_stable = true;
+                    rocket.is_powered = false;
                 }
             } else {
                 if(time > rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd &&
                    time < rocket.stage_separation_time_2nd + rocket.burn_start_time_3rd + rocket.burn_time_3rd){
+                    rocket.is_powered = true;
                     rocket.thrust = rocket.thrust_3rd + rocket.throat_area_3rd *
                                     rocket.nozzle_expansion_ratio_3rd *
                                     (rocket.nozzle_exhaust_pressure_3rd - air.pressure); // TODO: 2段以降は推力取得時の周囲大気圧を入力するようにする
@@ -622,24 +595,9 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
                     rocket.Isp = rocket.thrust / rocket.m_dot / g0;
                     rocket.is_aerodynamically_stable = false;
                 } else {
-                    rocket.thrust = 0.0;
-                    rocket.m_dot = 0.0;
-                    rocket.Isp = 0.0;
-                    rocket.is_aerodynamically_stable = true;
+                    rocket.is_powered = false;
                 }
             }
-//            rocket.Isp = rocket.Isp_3rd;
-//            rocket.m_dot = rocket.thrust / rocket.Isp_3rd / g0;
-//            if (rocket.CD_file_exist_3rd) {
-//                rocket.CD = interp_matrix(mach_number, rocket.CD_mat_3rd);
-//            } else {
-//                rocket.CD = rocket.CD_3rd;
-//            }
-//            if (rocket.CL_file_exist_3rd) {
-//                rocket.CL = interp_matrix(mach_number, rocket.CL_mat_3rd);
-//            } else {
-//                rocket.CL = rocket.CL_3rd;
-//            }
             if (rocket.attitude_file_exist_3rd) {
                 rocket.azimth = deg2rad(interp_matrix(time - rocket.stage_separation_time_2nd, rocket.attitude_mat_3rd, 1));
                 rocket.elevation = deg2rad(interp_matrix(time - rocket.stage_separation_time_2nd, rocket.attitude_mat_3rd, 2));
@@ -651,6 +609,12 @@ void set_rocket_state(Rocket& rocket, double time, double altitude){
             break;
         default:
             break;
+    }
+    if (rocket.is_powered == false){
+        rocket.thrust = 0.0;
+        rocket.m_dot = 0.0;
+        rocket.Isp = 0.0;
+        rocket.is_aerodynamically_stable = true;
     }
     if (rocket.wind_file_exist) {
         rocket.wind_speed = interp_matrix(altitude, rocket.wind_mat, 1);
@@ -679,7 +643,6 @@ void set_rocket_state_aero(Rocket& rocket, double mach_number){
             }
             break;
         case Rocket::STAGE2:
-
             if (rocket.CD_file_exist_2nd) {
                 rocket.CD = interp_matrix(mach_number, rocket.CD_mat_2nd);
             } else {
@@ -915,6 +878,11 @@ void csv_observer::operator()(const state& x, double t){
     downrange = distance_surface(rocket.launch_pos_LLH, posLLH_);
     posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
     
+//   ==== Calculte loss velocisy ====
+    loss_gravity = gravity_vector[2] * cos(azimth);
+    loss_aerodynamics = force_drag / x[0];
+//    loss_
+    
 ////    地面に落下していたら出力無し
     if ( posLLH_[2] > 0) {
         fout << t << ",";
@@ -1060,11 +1028,13 @@ Matrix3d dcmBODY2AIR(Vector2d attack_of_angle_){
 //    return dcm;
 //}
 
-Matrix3d dcmNED2BODY(double azimth, double elevation){
+Matrix3d dcmNED2BODY(double azimth_rad, double elevation_rad){
     Matrix3d dcm;
-    dcm <<  cos(elevation)*cos(azimth), cos(elevation)*sin(azimth), -sin(elevation),
-    -sin(azimth),                cos(azimth),                 0,
-    sin(elevation)*cos(azimth), sin(elevation)*sin(azimth),  cos(elevation);
+    double az = azimth_rad;
+    double el = elevation_rad;
+    dcm <<  cos(el)*cos(az), cos(el)*sin(az), -sin(el),
+    -sin(az),                cos(az),          0,
+    sin(el)*cos(az),         sin(el)*sin(az),  cos(el);
     return dcm;
 }
 
