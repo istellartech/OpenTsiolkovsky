@@ -84,7 +84,7 @@ def posECEF(dcmECI2ECEF, posECI_):
 def posECEF_from_LLH(posLLH_):
     lat = deg2rad(posLLH_[0])
     lon = deg2rad(posLLH_[1])
-    alt = deg2rad(posLLH_[2])
+    alt = posLLH_[2]
     W = sqrt(1.0 - wgs84.e2 * sin(lat) * sin(lat))
     N = wgs84.re_a / W
     pos0 = (N + alt) * cos(lat) * cos(lon)
