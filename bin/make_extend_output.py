@@ -180,7 +180,7 @@ if __name__ == '__main__':
         if (stage_index == 3): stage_index_str = "3rd"
         print("Now processing " + stage_index_str + " stage csv file ...")
         file_name = "output/" + rocket_name + "_dynamics_" + stage_index_str + ".csv"
-        df = pd.read_csv(file_name)
+        df = pd.read_csv(file_name, index_col=False)
         posLLH_antenna = np.array([antenna_lat, antenna_lon, antenna_alt])
         # posLLH_antenna = np.array([df[" lat(deg)"][0], df[" lon(deg)"][0], df[" altitude(m)"][0]])
 
@@ -214,7 +214,7 @@ if __name__ == '__main__':
         df["antenna lon(deg)"] = antenna_lon
         df["antenna azimth(deg)"] = az_a
         df["antenna elevation(deg)"] = el_a
-        df["antenna body difference(deg)"] =  df[" attitude_elevation(deg)"] - df["antenna elevation(deg)"]
+        df["antenna body difference(deg)"] =  df["attitude_elevation(deg)"] - df["antenna elevation(deg)"]
         df["IIP radius(m)"] = radius_IIP_a
 
         # ファイル出力
