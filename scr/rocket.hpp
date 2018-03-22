@@ -235,7 +235,7 @@ public:
     Vector3d vel_ECEF_NEDframe_;
     Vector3d vel_wind_NEDframe_;
     Vector3d vel_AIR_BODYframe_;
-    Vector2d attack_of_angle_;
+    Vector3d attack_of_angle_;
     Matrix3d dcmBODY2AIR_;
     Matrix3d dcmBODY2NED_;
     Matrix3d dcmNED2BODY_;
@@ -291,7 +291,7 @@ struct csv_observer{
     Vector3d vel_ECEF_NEDframe_;
     Vector3d vel_wind_NEDframe_;
     Vector3d vel_AIR_BODYframe_;
-    Vector2d attack_of_angle_;
+    Vector3d attack_of_angle_;
     Matrix3d dcmBODY2AIR_;
     Matrix3d dcmBODY2NED_;
     Matrix3d dcmNED2BODY_;
@@ -328,7 +328,8 @@ struct csv_observer{
                  << "vel_ECI_X(m/s),vel_ECI_Y(m/s),vel_ECI_Z(m/s),vel_NED_X(m/s),vel_NED_Y(m/s),vel_NED_Z(m/s),"
                  << "acc_ECI_X(m/s2),acc_ECI_Y(m/s2),acc_ECI_Z(m/s2),acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
                  << "Isp(s),Mach number,attitude_azimth(deg),attitude_elevation(deg),"
-                 << "attack of angle alpha(deg),attack of angle beta(deg),dynamic pressure(Pa),aero Drag(N),aero Lift(N),"
+                 << "attack of angle alpha(deg),attack of angle beta(deg),all attack of angle gamma(deg),"
+                 << "dynamic pressure(Pa),aero Drag(N),aero Lift(N),"
                  << "wind speed(m/s),wind direction(deg),downrange(m),"
                  << "IIP_lat(deg),IIP_lon(deg),"
                  << "dcmBODY2ECI_11,dcmBODY2ECI_12,dcmBODY2ECI_13,"
@@ -359,8 +360,8 @@ Matrix3d dcmECI2NED(Matrix3d dcmECEF2NED_, Matrix3d dcmECI2ECEF_);
 Vector3d vel_ECEF_NEDframe(Matrix3d dcmECI2NED_, Vector3d vel_ECI_ECIframe_, Vector3d pos_ECI_);
 Vector3d vel_wind_NEDframe(double wind_speed, double wind_direction);
 Vector3d vel_AIR_BODYframe(Matrix3d dcmNED2ECEF_, Vector3d vel_ECEF_NEDframe_, Vector3d vel_wind_NEDframe_);
-Vector2d attack_of_angle(Vector3d vel_AIR_BODYframe_);
-Matrix3d dcmBODY2AIR(Vector2d attack_of_angle_);
+Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_);
+Matrix3d dcmBODY2AIR(Vector3d attack_of_angle_);
 //Matrix3d dcmBODY2NED(double azimth, double elevation);
 Matrix3d dcmNED2BODY(double azimth, double elevation);
 Vector2d azimth_elevaztion(Vector3d vel_BODY_NEDframe);

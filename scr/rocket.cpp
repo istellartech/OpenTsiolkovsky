@@ -702,7 +702,7 @@ void rocket_dynamics::operator()(const rocket_dynamics::state& x, rocket_dynamic
         vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
         attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
     } else { // 姿勢を空力安定モード
-        attack_of_angle_ << 0.0, 0.0;
+        attack_of_angle_ << 0.0, 0.0, 0.0;
         Vector3d vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
         vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
         Vector2d azel = azimth_elevaztion(vel_BODY_NEDframe_);
@@ -826,7 +826,7 @@ void csv_observer::operator()(const state& x, double t){
         vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
         attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
     } else { // 姿勢を空力安定モード
-        attack_of_angle_ << 0.0, 0.0;
+        attack_of_angle_ << 0.0, 0.0, 0.0;
         Vector3d vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
         vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
         Vector2d azel = azimth_elevaztion(vel_BODY_NEDframe_);
@@ -895,6 +895,7 @@ void csv_observer::operator()(const state& x, double t){
         << Isp << "," << mach_number << ","
         << rad2deg(azimth) << "," << rad2deg(elevation) << ","
         << rad2deg(attack_of_angle_[0]) << "," << rad2deg(attack_of_angle_[1]) << ","
+        << rad2deg(attack_of_angle_[2]) << ","
         << dynamic_pressure << "," << force_drag << "," << force_lift << ","
         << wind_speed << "," << wind_direction << ","
         << downrange << "," << posLLH_IIP_[0] << "," << posLLH_IIP_[1] << ","
@@ -991,24 +992,30 @@ Vector3d vel_AIR_BODYframe(Matrix3d dcmNED2BODY_, Vector3d vel_ECEF_NEDframe_, V
 
 
 // rad返し
-Vector2d attack_of_angle(Vector3d vel_AIR_BODYframe_){
+Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_){
     double vel_abs = vel_AIR_BODYframe_.norm();
     double alpha;
     double beta;
+    double gamma;
     if(abs(vel_AIR_BODYframe_[0]) < 0.001 || vel_abs < 0.01){
         alpha = 0;
         beta = 0;
+        gamma = 0;
     }else{
         alpha = atan2(vel_AIR_BODYframe_[2], vel_AIR_BODYframe_[0]);
         beta = asin(vel_AIR_BODYframe_[1] / vel_abs);
+//        beta = atan2(vel_AIR_BODYframe_[1], vel_AIR_BODYframe_[0]);
+        gamma = atan2(sqrt(vel_AIR_BODYframe_[1] * vel_AIR_BODYframe_[1] +
+                      vel_AIR_BODYframe_[1] * vel_AIR_BODYframe_[1]), vel_AIR_BODYframe_[0]);
     }
-    Vector2d aoa;
+    Vector3d aoa;
     aoa[0] = alpha;
     aoa[1] = beta;
+    aoa[2] = gamma;
     return aoa;
 }
 
-Matrix3d dcmBODY2AIR(Vector2d attack_of_angle_){
+Matrix3d dcmBODY2AIR(Vector3d attack_of_angle_){
     Matrix3d dcm;
     double alpha = attack_of_angle_[0];
     double beta  = attack_of_angle_[1];
@@ -1178,7 +1185,7 @@ void testCoordinate(){
     Vector3d vel_ECEF_NEDframe_;
     Vector3d vel_wind_NEDframe_;
     Vector3d vel_AIR_BODYframe_;
-    Vector2d attack_of_angle_;
+    Vector3d attack_of_angle_;
     Matrix3d dcmBODY2AIR_;
     Matrix3d dcmBODY2NED_;
     Matrix3d dcmNED2BODY_;
@@ -1224,7 +1231,8 @@ void testCoordinate(){
     ofs << "vel_ECEF_NEDframe\t" << vel_ECEF_NEDframe_(0) << "\t" << vel_ECEF_NEDframe_(1) << "\t" << vel_ECEF_NEDframe_(2) << endl;
     ofs << "vel_wind_NEDframe\t" << vel_wind_NEDframe_(0) << "\t" << vel_wind_NEDframe_(1) << "\t" << vel_wind_NEDframe_(2) << endl;
     ofs << "vel_AIR_BODYframe\t" << vel_AIR_BODYframe_(0) << "\t" << vel_AIR_BODYframe_(1) << "\t" << vel_AIR_BODYframe_(2) << endl;
-    ofs << "attack_of_angle" << "\t" << attack_of_angle_[0] << "\t" << attack_of_angle_[1] << endl;
+    ofs << "attack_of_angle" << "\t" << attack_of_angle_[0] << "\t" << attack_of_angle_[1] << "\t" <<
+        attack_of_angle_[2] << endl;
     ofs << "dcmBODY2AIR" << endl << dcmBODY2AIR_ << endl;
     ofs << "dcmNED2BODY" << endl << dcmNED2BODY_ << endl;
 //    ofs << "dcmBODY2NED" << endl << dcmBODY2NED_ << endl;

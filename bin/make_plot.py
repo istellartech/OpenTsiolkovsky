@@ -209,14 +209,14 @@ for index in range(stage_num):
      pos_ECI_Z, vel_ECI_X, vel_ECI_Y, vel_ECI_Z, vel_NED_X,
      vel_NED_Y, vel_NED_Z, acc_ECI_X, acc_ECI_Y, acc_ECI_Z,
      acc_BODY_X, acc_BODY_Y, acc_BODY_Z,
-     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta,
+     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma
      dynamic_press, drag, lift,
      wind_speed, wind_direction, downrange) = np.genfromtxt(file_name,
                                                 unpack=True, delimiter=",",
                                                 skip_header = 1,
                                                 usecols = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,
     													   14,15,16,17,18,19,20,21,22,23,24,
-    													   25,26,27,28,29,30,31,32))
+    													   25,26,27,28,29,30,31,32,33))
     g = 9.80665
     acc = np.sqrt(acc_ECI_X ** 2 + acc_ECI_Y ** 2 + acc_ECI_Z ** 2)
     # Calculation of maximum altitude time and cut subsequent data
@@ -225,6 +225,7 @@ for index in range(stage_num):
     dynamic_press = dynamic_press[0:time_index_apogee]
     aoa_alpha = aoa_alpha[0:time_index_apogee]
     aoa_beta = aoa_beta[0:time_index_apogee]
+    all_aoa_gamma = all_aoa_gamma[0:time_index_apogee]
     azimth = azimth[0:time_index_apogee]
     elevation = elevation[0:time_index_apogee]
     mach = mach[0:time_index_apogee]
@@ -320,8 +321,9 @@ for index in range(stage_num):
 
     plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, aoa_alpha, label="alpha")
+    plt.plot(time_cut, all_aoa_gamma, label="all aoa")
     plt.xlabel("time (sec)")
-    plt.ylabel("attack of angle alpha (deg)")
+    plt.ylabel("attack of angle (deg)")
     plt.legend(loc="best")
 
     plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
@@ -347,7 +349,7 @@ for index in range(stage_num):
     del(time, mass, thrust, lat, lon, altitude, pos_ECI_X, pos_ECI_Y,
      pos_ECI_Z, vel_ECI_X, vel_ECI_Y, vel_ECI_Z, vel_NED_X,
      vel_NED_Y, vel_NED_Z, acc_ECI_X, acc_ECI_Y, acc_ECI_Z,
-     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta,
+     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma
      dynamic_press, drag, lift, wind_speed, wind_direction)
 
 pdf.close()

@@ -77,6 +77,9 @@ class FlightHeating:
         self.T_surface[0] = obj.T_surface_init
         self.thickness = np.zeros_like(self.time, dtype=float)
         self.thickness[0] = obj.thickness
+        """
+        現在熱分布無しになっているが、これを少なくても１次元の非定常熱伝達方程式に変えないといけない
+        """
         for i in range(1, len(self.time)):
             dt = self.time[i] - self.time[i-1]
             self.T_surface[i] = self.T_surface[i-1] + dt * (self.q_conv[i] + self.q_rad[i] - sigma * obj.epsilon * self.T_surface[i-1]**4) / (obj.c * obj.rho * obj.thickness)  # [K]

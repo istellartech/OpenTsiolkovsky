@@ -184,6 +184,11 @@ for stage_str in ['1st', '2nd', '3rd']:
     p_AoAb.line(df1["time(s)"], df1["attack of angle beta(deg)"], color=C[8])
     p_AoAb.select_one(HoverTool).tooltips = HOVER_SET_F
 
+    p_AoAg = figure(title=st+"全迎角：γ", x_axis_label="時刻 [sec]", y_axis_label="迎角 [deg]",
+                   x_range=xr1, **PLOT_OPTIONS)
+    p_AoAg.line(df1["time(s)"], df1["all attack of angle gamma(deg)"], color=C[7])
+    p_AoAg.select_one(HoverTool).tooltips = HOVER_SET_F
+
 
     p_drag = figure(title=st+"抗力", x_axis_label="時刻 [sec]", y_axis_label="抗力 [N]",
                    x_range=xr1, **PLOT_OPTIONS)
