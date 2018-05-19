@@ -35,6 +35,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from math import sin, cos, acos, radians
 import json
 import csv
+import os
 
 if 'Windows' == platform.system():
     font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
@@ -43,8 +44,9 @@ if 'Windows' == platform.system():
 #
 if 'Darwin' == platform.system(): # for Mac
     font_path = '/Library/Fonts/Osaka.ttf'
-    font_prop = FontProperties(fname=font_path)
-    mpl.rcParams['font.family'] = font_prop.get_name()
+    if os.path.exists(font_path):
+        font_prop = FontProperties(fname=font_path)
+        mpl.rcParams['font.family'] = font_prop.get_name()
 
 plt.close('all')
 # plt.style.use('ggplot')
@@ -209,7 +211,7 @@ for index in range(stage_num):
      pos_ECI_Z, vel_ECI_X, vel_ECI_Y, vel_ECI_Z, vel_NED_X,
      vel_NED_Y, vel_NED_Z, acc_ECI_X, acc_ECI_Y, acc_ECI_Z,
      acc_BODY_X, acc_BODY_Y, acc_BODY_Z,
-     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma
+     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma,
      dynamic_press, drag, lift,
      wind_speed, wind_direction, downrange) = np.genfromtxt(file_name,
                                                 unpack=True, delimiter=",",
@@ -349,7 +351,7 @@ for index in range(stage_num):
     del(time, mass, thrust, lat, lon, altitude, pos_ECI_X, pos_ECI_Y,
      pos_ECI_Z, vel_ECI_X, vel_ECI_Y, vel_ECI_Z, vel_NED_X,
      vel_NED_Y, vel_NED_Z, acc_ECI_X, acc_ECI_Y, acc_ECI_Z,
-     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma
+     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma,
      dynamic_press, drag, lift, wind_speed, wind_direction)
 
 pdf.close()
