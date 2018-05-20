@@ -54,6 +54,21 @@ mpl.rcParams['axes.grid'] = True
 mpl.rcParams['figure.autolayout'] = True
 mpl.rcParams['pdf.fonttype'] = 42 # change font to TrueType in pdf
 
+def detect_rise_fall_edge(tf):
+    tf = np.array(tf)
+    tf = np.insert(tf, [0, len(tf)], False) # insert False on the first and last
+    zero_one = tf.astype(int)
+    diff = np.diff(zero_one)
+    rising_idx = np.where(diff == 1)[0]
+    falling_idx = np.where(diff == -1)[0] -1
+    return np.column_stack([rising_idx, falling_idx])
+
+def plot_timespan(time, time_idx, facecolor, alpha):
+    for e in time_idx:
+        begin = time[e[0]]
+        end = time[e[1]]
+        plt.axvspan(begin, end, facecolor=facecolor, alpha=alpha)
+
 argvs = sys.argv
 argc = len(argvs)
 if (argc != 1):
@@ -234,30 +249,42 @@ for index in range(stage_num):
     drag = drag[0:time_index_apogee]
     lift = lift[0:time_index_apogee]
 
+    # 燃焼中領域の算出
+    # 最大推力の1%以上を燃焼中とみなす
+    invalid_thrust_N = np.max(thrust) * 0.01
+    powered_idx = detect_rise_fall_edge(thrust > invalid_thrust_N)
+    powered_idx_cut = detect_rise_fall_edge(thrust[0:time_index_apogee] > invalid_thrust_N)
+
+
     fig[index][0] = plt.figure()
     plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
     plt.plot(time, mass)
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("mass (kg)")
     plt.title("stage:%d" % (index+1))
 
     plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
     plt.plot(time, thrust)
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("thrust (N)")
 
     plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
     plt.plot(time, Isp)
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("Isp(specific impulse) (s)")
 
     plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
     plt.plot(time, altitude)
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("altitude (m)")
 
     plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
     plt.plot(time, downrange)
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("downrange (m)")
 
@@ -272,28 +299,33 @@ for index in range(stage_num):
     plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
     plt.plot(time, vel_NED_X, label="North")
     plt.plot(time, vel_NED_Y, label="East")
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("velocity (m/s)")
     plt.legend(loc="best")
 
     plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
     plt.plot(time, -vel_NED_Z, label="Up")
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("velocity (m/s)")
     plt.legend()
 
     plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, dynamic_press/1000)
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("dynamic pressure (kPa)")
 
     plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, mach)
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("Mach number at the altitude (-)")
 
     plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
     plt.plot(time, acc/g)
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("acceleration (G)")
 
@@ -301,6 +333,7 @@ for index in range(stage_num):
     plt.plot(time, acc_BODY_X/g, label="X_body")
     plt.plot(time, acc_BODY_Y/g, label="Y_body")
     plt.plot(time, acc_BODY_Z/g, label="Z_body")
+    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("acceleration (G)")
     plt.legend(loc="best")
@@ -311,12 +344,14 @@ for index in range(stage_num):
 
     plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, azimth, label="azimth")
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("attitude angle (deg)")
     plt.legend()
 
     plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, elevation, label="elevation")
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("attitude angle (deg)")
     plt.legend()
@@ -324,24 +359,28 @@ for index in range(stage_num):
     plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, aoa_alpha, label="alpha")
     plt.plot(time_cut, all_aoa_gamma, label="all aoa")
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("attack of angle (deg)")
     plt.legend(loc="best")
 
     plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, aoa_beta, label="beta")
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.xlabel("time (sec)")
     plt.ylabel("attack of angle beta (deg)")
     plt.legend(loc="best")
 
     plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
     plt.plot(time_cut, drag, label="drag")
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.legend()
     plt.xlabel("time (sec)")
     plt.ylabel("drag force (N)")
 
     plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
     plt.plot(time_cut, lift, label="lift")
+    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
     plt.legend()
     plt.xlabel("time (sec)")
     plt.ylabel("lift force (N)")

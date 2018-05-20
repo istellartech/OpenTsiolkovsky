@@ -175,6 +175,20 @@ def calc_look_angle(vehicle,sta,q_ini,q_sta,q):#{{{
     return [norm_v_look, tau_t, tau_r, EL, AZ]
 #}}}
 
+def detect_rise_fall_edge(tf):
+    tf = np.array(tf)
+    tf = np.insert(tf, [0, len(tf)], False) # insert False on the first and last
+    zero_one = tf.astype(int)
+    diff = np.diff(zero_one)
+    rising_idx = np.where(diff == 1)[0]
+    falling_idx = np.where(diff == -1)[0] -1
+    return np.column_stack([rising_idx, falling_idx])
+
+def plot_timespan(time, time_idx, facecolor, alpha):
+    for e in time_idx:
+        begin = time[e[0]]
+        end = time[e[1]]
+        plt.axvspan(begin, end, facecolor=facecolor, alpha=alpha)
 
 if __name__ == '__main__':
     if (len(sys.argv) != 5):
@@ -290,62 +304,56 @@ if __name__ == '__main__':
         # CSVファイル出力
         df.to_csv("output/" + rocket_name + "_dynamics_" + stage_index_str + "_rfprop.csv", index=False)
 
-        # 燃焼中領域の算出(thrustが0でないところ)
-        powered_idx = np.where(df['thrust(N)'] > 0)[0]
-        powered_time_st = df['time(s)'][powered_idx[0]]
-        powered_time_ed = df['time(s)'][powered_idx[-1]]
+        # 燃焼中領域の算出
+        # 最大推力の1%以上を燃焼中とみなす
+        invalid_thrust_N = np.max(df['thrust(N)']) * 0.01
+        powered_idx = detect_rise_fall_edge(df['thrust(N)'] > invalid_thrust_N)
 
         # 可視範囲
-        valid_elv_idx = np.where(df['elevation(deg)'] > invalid_angle_deg)[0]
-        if len(valid_elv_idx) == 0:
-            valid_elv_time_st = 0
-            valid_elv_time_ed = 0
-        else:
-            valid_elv_time_st = df['time(s)'][valid_elv_idx[0]]
-            valid_elv_time_ed = df['time(s)'][valid_elv_idx[-1]]
+        valid_elv_idx = detect_rise_fall_edge(df['elevation(deg)'] > invalid_angle_deg)
 
         # 作図
         figure = plt.figure()
 
         plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
         plt.plot(df['time(s)'], df['altitude(m)']/1000.0)
-        plt.axvspan(powered_time_st, powered_time_ed, facecolor='r', alpha=0.5)
-        plt.axvspan(valid_elv_time_st, valid_elv_time_ed, facecolor='yellow', alpha=0.1)
+        plot_timespan(df['time(s)'], powered_idx, facecolor='r', alpha=0.3)
+        plot_timespan(df['time(s)'], valid_elv_idx, facecolor='yellow', alpha=0.1)
         plt.xlabel("time (sec)")
         plt.ylabel("altitude (km)")
 
         plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
         plt.plot(df['time(s)'], df['slant range(m)']/1000.0)
-        plt.axvspan(powered_time_st, powered_time_ed, facecolor='r', alpha=0.5)
-        plt.axvspan(valid_elv_time_st, valid_elv_time_ed, facecolor='yellow', alpha=0.1)
+        plot_timespan(df['time(s)'], powered_idx, facecolor='r', alpha=0.3)
+        plot_timespan(df['time(s)'], valid_elv_idx, facecolor='yellow', alpha=0.1)
         plt.xlabel("time (sec)")
         plt.ylabel("slant range(km)")
 
         plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
         plt.plot(df['time(s)'], df['elevation(deg)'])
-        plt.axvspan(powered_time_st, powered_time_ed, facecolor='r', alpha=0.5)
-        plt.axvspan(valid_elv_time_st, valid_elv_time_ed, facecolor='yellow', alpha=0.1)
+        plot_timespan(df['time(s)'], powered_idx, facecolor='r', alpha=0.3)
+        plot_timespan(df['time(s)'], valid_elv_idx, facecolor='yellow', alpha=0.1)
         plt.xlabel("time (sec)")
         plt.ylabel("elevation(deg)")
 
         plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
         plt.plot(df['time(s)'], df['azimuth(deg)'])
-        plt.axvspan(powered_time_st, powered_time_ed, facecolor='r', alpha=0.5)
-        plt.axvspan(valid_elv_time_st, valid_elv_time_ed, facecolor='yellow', alpha=0.1)
+        plot_timespan(df['time(s)'], powered_idx, facecolor='r', alpha=0.3)
+        plot_timespan(df['time(s)'], valid_elv_idx, facecolor='yellow', alpha=0.1)
         plt.xlabel("time (sec)")
         plt.ylabel("azimuth(deg)")
 
         plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
         plt.plot(df['time(s)'], df['tau_t(deg)'])
-        plt.axvspan(powered_time_st, powered_time_ed, facecolor='r', alpha=0.5)
-        plt.axvspan(valid_elv_time_st, valid_elv_time_ed, facecolor='yellow', alpha=0.1)
+        plot_timespan(df['time(s)'], powered_idx, facecolor='r', alpha=0.3)
+        plot_timespan(df['time(s)'], valid_elv_idx, facecolor='yellow', alpha=0.1)
         plt.xlabel("time (sec)")
         plt.ylabel("tau_t(deg)")
 
         plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
         plt.plot(df['time(s)'], df['tau_r(deg)'])
-        plt.axvspan(powered_time_st, powered_time_ed, facecolor='r', alpha=0.5)
-        plt.axvspan(valid_elv_time_st, valid_elv_time_ed, facecolor='yellow', alpha=0.1)
+        plot_timespan(df['time(s)'], powered_idx, facecolor='r', alpha=0.3)
+        plot_timespan(df['time(s)'], valid_elv_idx, facecolor='yellow', alpha=0.1)
         plt.xlabel("time (sec)")
         plt.ylabel("tau_r(deg)")
 
