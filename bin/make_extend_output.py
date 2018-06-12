@@ -17,11 +17,11 @@
 import sys
 import platform
 import numpy as np
-import matplotlib as mpl
+# import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.font_manager
-from matplotlib.font_manager import FontProperties
-from matplotlib.backends.backend_pdf import PdfPages
+# import matplotlib.font_manager
+# from matplotlib.font_manager import FontProperties
+# from matplotlib.backends.backend_pdf import PdfPages
 import pandas as pd
 import json
 from pyproj import Geod
@@ -151,35 +151,34 @@ if __name__ == '__main__':
     if (argc != 1):
     	file_name = argvs[1]
     else:
-    	file_name = u"param_sample.json"
+    	file_name = "param_sample_01.json"
 
     # 入力の確認
-    print(u"==== INPUT PARAMETER ===")
-    print(u"input JSON file : " + file_name)
-    print(u"viewer latitude  (deg) : %.6f" % antenna_lat)
-    print(u"viewer longitude (deg) : %.6f" % antenna_lon)
-    print(u"viewer altitude  (m)   : %.1f" % antenna_alt)
-    print(u"IIP cut-off time (sec) : %.1f" % cutoff_time)
-    print(u"visible range invalid angle (deg) : %.1f" % invalid_angle_deg)
-    print(u"==== PROCESSING ====")
+    print("==== INPUT PARAMETER ===")
+    print("input JSON file : " + file_name)
+    print("viewer latitude  (deg) : %.6f" % antenna_lat)
+    print("viewer longitude (deg) : %.6f" % antenna_lon)
+    print("viewer altitude  (m)   : %.1f" % antenna_alt)
+    print("IIP cut-off time (sec) : %.1f" % cutoff_time)
+    print("visible range invalid angle (deg) : %.1f" % invalid_angle_deg)
+    print("==== PROCESSING ====")
 
     # ファイル読み込み
     f = open(file_name)
     data = json.load(f)
     following_stage_exist = []
-    rocket_name = data["name"]
-    following_stage_exist.append(data["1st stage"]["stage"]["following stage exist"])
-    following_stage_exist.append(data["2nd stage"]["stage"]["following stage exist"])
-    following_stage_exist.append(data["3rd stage"]["stage"]["following stage exist"])
+    rocket_name = data["name(str)"]
+    following_stage_exist.append(data["stage1"]["stage"]["following stage exist(bool)"])
+    if ("stage2" in data):
+        following_stage_exist.append(data["stage2"]["stage"]["following stage exist(bool)"])
+    if ("stage3" in data):
+        following_stage_exist.append(data["stage3"]["stage"]["following stage exist(bool)"])
 
     # データ作り
     stage_index = 1
     for stage_exist in following_stage_exist:
-        if (stage_index == 1): stage_index_str = "1st"
-        if (stage_index == 2): stage_index_str = "2nd"
-        if (stage_index == 3): stage_index_str = "3rd"
-        print("Now processing " + stage_index_str + " stage csv file ...")
-        file_name = "output/" + rocket_name + "_dynamics_" + stage_index_str + ".csv"
+        print("Now processing " + str(stage_index) + " stage csv file ...")
+        file_name = "output/" + rocket_name + "_dynamics_" + str(stage_index) + ".csv"
         df = pd.read_csv(file_name, index_col=False)
         posLLH_antenna = np.array([antenna_lat, antenna_lon, antenna_alt])
         # posLLH_antenna = np.array([df[" lat(deg)"][0], df[" lon(deg)"][0], df[" altitude(m)"][0]])
@@ -218,30 +217,35 @@ if __name__ == '__main__':
         df["IIP radius(m)"] = radius_IIP_a
 
         # ファイル出力
-        df.to_csv("output/" + rocket_name + "_dynamics_" + stage_index_str + "_extend.csv", index=False)
+        df.to_csv("output/" + rocket_name + "_dynamics_" + str(stage_index) + "_extend.csv", index=False)
         stage_index += 1
 
         # PLOT
         plt.figure()
-        plt.plot(df["time(s)"], dis2_a, label=u"distance 2d")
-        plt.plot(df["time(s)"], dis3_a, label=u"distance 3d")
-        plt.title(rocket_name + " " + stage_index_str + u" stage distance")
-        plt.xlabel(u"time (s)")
-        plt.ylabel(u"distance (m)")
+        plt.plot(df["time(s)"], dis2_a, label="distance 2d")
+        plt.plot(df["time(s)"], dis3_a, label="distance 3d")
+        plt.title(rocket_name + " " + str(stage_index) + " stage distance")
+        plt.xlabel("time (s)")
+        plt.ylabel("distance (m)")
         plt.legend(loc="best")
+        plt.grid()
+
         plt.figure()
-        plt.plot(df["time(s)"], az_a, label=u"azimth")
-        plt.plot(df["time(s)"], el_a, label=u"elevation")
-        plt.title(rocket_name + " " + stage_index_str + u" stage antenna angle")
-        plt.xlabel(u"time (s)")
-        plt.ylabel(u"angle (deg)")
+        plt.plot(df["time(s)"], az_a, label="azimth")
+        plt.plot(df["time(s)"], el_a, label="elevation")
+        plt.title(rocket_name + " " + str(stage_index) + " stage antenna angle")
+        plt.xlabel("time (s)")
+        plt.ylabel("angle (deg)")
         plt.legend(loc="best")
+        plt.grid()
+
         plt.figure()
-        plt.plot(df["time(s)"], radius_IIP_a, label=u"IIP radius\ncut-off time = %.1f sec" % (cutoff_time))
-        plt.title(rocket_name + " " + stage_index_str + u" stage IIP radius")
-        plt.xlabel(u"time (s)")
-        plt.ylabel(u"radius (m)")
+        plt.plot(df["time(s)"], radius_IIP_a, label="IIP radius\ncut-off time = %.1f sec" % (cutoff_time))
+        plt.title(rocket_name + " " + str(stage_index) + " stage IIP radius")
+        plt.xlabel("time (s)")
+        plt.ylabel("radius (m)")
         plt.legend(loc="best")
+        plt.grid()
 
         # plt.show()
 

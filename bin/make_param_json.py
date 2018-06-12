@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 import sys
-# reload(sys)
 import platform
-# デフォルトの文字コードを変更する．
-sys.setdefaultencoding('utf-8')
 
 import json
 
 # JSONファイルを読み込んで、変更Wordの数字だけを変えるスクリプト
-def make_param_json(json_file, change_key1="name", change_key2=None,
+def make_param_json(json_file, change_key1="name(str)", change_key2=None,
  					change_key3=None, change_value="test"):
 	f = open(json_file)
 	data = json.load(f)
@@ -39,8 +36,8 @@ if __name__ == '__main__':
 	else:
 		print("argment error")
 		print("===test mode===")
-		json_file = "param_sample.json"
-		change_key = "name"
+		json_file = "param_sample_01.json"
+		change_key = "name(str)"
 		change_value = "test"
 
 	data = make_param_json(json_file, change_key, change_value);

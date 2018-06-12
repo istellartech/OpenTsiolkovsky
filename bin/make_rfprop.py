@@ -224,10 +224,12 @@ if __name__ == '__main__':
     f = open(file_name)
     data = json.load(f)
     following_stage_exist = []
-    rocket_name = data["name"]
+    rocket_name = data["name(str)"]
     following_stage_exist.append(True)
-    following_stage_exist.append(data["2nd stage"]["stage"]["following stage exist"])
-    following_stage_exist.append(data["3rd stage"]["stage"]["following stage exist"])
+    if ("stage2" in data):
+        following_stage_exist.append(data["stage2"]["stage"]["following stage exist(bool)"])
+    if ("stage3" in data):
+        following_stage_exist.append(data["stage3"]["stage"]["following stage exist(bool)"])
 
     # 射点位置 (JSON設定ファイルより)
     launch_llh = data['launch']['position LLH[deg,deg,m]']
@@ -248,7 +250,7 @@ if __name__ == '__main__':
         if (stage_index == 2): stage_index_str = "2nd"
         if (stage_index == 3): stage_index_str = "3rd"
         print("Now processing " + stage_index_str + " stage csv file ...")
-        file_name = "output/" + rocket_name + "_dynamics_" + stage_index_str + ".csv"
+        file_name = "output/" + rocket_name + "_dynamics_" + str(stage_index) + ".csv"
 
         # OpenTsiolkovsky出力のCSVを読み込む
         df = pd.read_csv(file_name, index_col=False)
@@ -302,7 +304,7 @@ if __name__ == '__main__':
             df.at[index,'azimuth(deg)'] = AZ*180./pi
 
         # CSVファイル出力
-        df.to_csv("output/" + rocket_name + "_dynamics_" + stage_index_str + "_rfprop.csv", index=False)
+        df.to_csv("output/" + rocket_name + "_dynamics_" + str(stage_index) + "_rfprop.csv", index=False)
 
         # 燃焼中領域の算出
         # 最大推力の1%以上を燃焼中とみなす

@@ -14,10 +14,10 @@ import pandas as pd
 if (len(sys.argv) != 1):
 	file_name = sys.argv[1]
 else:
-	file_name = "param_sample.json"
+	file_name = "param_sample_01.json"
 try:
 	data = json.load(open(file_name))
-	name = data["name"]
+	name = data["name(str)"]
 except:
 	print("JSON file can not be read...finish")
 	sys.exit()
@@ -30,11 +30,11 @@ def make_kml(name, div, stage):
 		stage (int) : 現在のステージ
 	"""
 	if (stage == 1):
-		csv_file = "output/" + name + "_dynamics_1st.csv"
+		csv_file = "output/" + name + "_dynamics_1.csv"
 	elif (stage == 2):
-		csv_file = "output/" + name + "_dynamics_2nd.csv"
+		csv_file = "output/" + name + "_dynamics_2.csv"
 	elif (stage == 3):
-		csv_file = "output/" + name + "_dynamics_3rd.csv"
+		csv_file = "output/" + name + "_dynamics_3.csv"
 	df = pd.read_csv(csv_file, index_col=False)
 	time = df["time(s)"]
 	lat = df["lat(deg)"]

@@ -46,12 +46,13 @@ g = 9.80665
 if (len(sys.argv) != 1):
     input_json = sys.argv[1]
 else:
-    input_json = "param_sample.json"
+    input_json = "param_sample_01.json"
 
 # ==== Read input file ====
 f = open(input_json, 'r')
 json_dict = json.load(f)
-rocket_name = json_dict['name']
+# rocket_name = json_dict['name']
+rocket_name = json_dict['name(str)']
 
 # ==== Bokeh setup ====
 TOOLS="pan,wheel_zoom,box_zoom,reset,save,hover"
@@ -61,7 +62,7 @@ HOVER_SET_F = [("date (x,y)", "($x{0,0}, $y{0,0.00})")]
 C = d3["Category10"][10]
 
 # ==== Plot each stages ====
-for stage_str in ['1st', '2nd', '3rd']:
+for stage_str in ['1', '2', '3']:
     st = stage_str + ' stage: ' # stage string for title
     file_name = "output/" + rocket_name + "_dynamics_" + stage_str + ".csv"
     if (os.path.exists(file_name) != True):continue
@@ -211,13 +212,13 @@ for stage_str in ['1st', '2nd', '3rd']:
                       [p_az, p_el], [p_AoAa, p_AoAb],
                       [p_drag, p_lift]])
 
-    if stage_str == '1st':
+    if stage_str == '1':
         script1, div1 = components(plots)
         script2, div2 = "", ""
         script3, div3 = "", ""
-    elif stage_str == '2nd':
+    elif stage_str == '2':
         script2, div2 = components(plots)
-    elif stage_str == '3rd':
+    elif stage_str == '3':
         script3, div3 = components(plots)
 
 # ==== Output HTML ====

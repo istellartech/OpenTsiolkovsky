@@ -15,11 +15,11 @@ from pytz import timezone
 if (len(sys.argv) != 1):
 	file_name = sys.argv[1]
 else:
-	file_name = "param_sample.json"
+	file_name = "param_sample_01.json"
 try:
 	data = json.load(open(file_name))
-	name = data["name"]
-	t = data["launch"]["time"]
+	name = data["name(str)"]
+	t = data["launch"]["time(UTC)[y,m,d,h,min,sec]"]
 	d = datetime.datetime(t[0], t[1], t[2],t[3],t[4], t[5], tzinfo=timezone('Asia/Tokyo'))
 except:
 	print("JSON file can not be read...finish")
@@ -51,11 +51,11 @@ def make_nmea(name, div, stage):
 		stage (int) : 現在のステージ
 	"""
 	if (stage == 1):
-		csv_file = "output/" + name + "_dynamics_1st.csv"
+		csv_file = "output/" + name + "_dynamics_1.csv"
 	elif (stage == 2):
-		csv_file = "output/" + name + "_dynamics_2nd.csv"
+		csv_file = "output/" + name + "_dynamics_2.csv"
 	elif (stage == 3):
-		csv_file = "output/" + name + "_dynamics_3rd.csv"
+		csv_file = "output/" + name + "_dynamics_3.csv"
 	df = pd.read_csv(csv_file, index_col=False)
 	time = df["time(s)"]
 	lat = df["lat(deg)"]
@@ -84,11 +84,11 @@ def make_nmea(name, div, stage):
 try:
 	print("INPUT FILE: %s" % (file_name))
 	make_nmea(name, 20, 1)
-	print("create nmea file:1st stage")
+	print("create nmea file:1 stage")
 	make_nmea(name, 50, 2)
-	print("create nmea file:2nd stage")
+	print("create nmea file:2 stage")
 	make_nmea(name, 50, 3)
-	print("create nmea file:3rd stage")
+	print("create nmea file:3 stage")
 	print("Done...")
 except:
 	print("Done...")

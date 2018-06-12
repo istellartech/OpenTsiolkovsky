@@ -11,8 +11,9 @@
 		A36D52A51BF98A30001864D3 /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A36D52A41BF98A30001864D3 /* main.cpp */; };
 		A3CCE1461C03301500BC21D0 /* gravity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1441C03301500BC21D0 /* gravity.cpp */; };
 		A3CCE1491C0348CB00BC21D0 /* air.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1471C0348CB00BC21D0 /* air.cpp */; };
-		A3CCE1561C09676C00BC21D0 /* rocket.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1541C09676C00BC21D0 /* rocket.cpp */; };
+		A3CCE1561C09676C00BC21D0 /* coordinate_transform.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3CCE1541C09676C00BC21D0 /* coordinate_transform.cpp */; };
 		A3E82ACB1CAA0E62007CC708 /* Orbit.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3E82AC91CAA0E62007CC708 /* Orbit.cpp */; };
+		A3F34DAE20BFE4C3004E3A86 /* rocket.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A3F34DAC20BFE4C3004E3A86 /* rocket.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -39,10 +40,12 @@
 		A3CCE1451C03301500BC21D0 /* gravity.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = gravity.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		A3CCE1471C0348CB00BC21D0 /* air.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = air.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		A3CCE1481C0348CB00BC21D0 /* air.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = air.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
-		A3CCE1541C09676C00BC21D0 /* rocket.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = rocket.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
-		A3CCE1551C09676C00BC21D0 /* rocket.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = rocket.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3CCE1541C09676C00BC21D0 /* coordinate_transform.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = coordinate_transform.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3CCE1551C09676C00BC21D0 /* coordinate_transform.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = coordinate_transform.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		A3E82AC91CAA0E62007CC708 /* Orbit.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = Orbit.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		A3E82ACA1CAA0E62007CC708 /* Orbit.hpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.h; lineEnding = 0; path = Orbit.hpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		A3F34DAC20BFE4C3004E3A86 /* rocket.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = rocket.cpp; sourceTree = "<group>"; };
+		A3F34DAD20BFE4C3004E3A86 /* rocket.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = rocket.hpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -78,8 +81,10 @@
 			isa = PBXGroup;
 			children = (
 				A36D52A41BF98A30001864D3 /* main.cpp */,
-				A3CCE1541C09676C00BC21D0 /* rocket.cpp */,
-				A3CCE1551C09676C00BC21D0 /* rocket.hpp */,
+				A3F34DAC20BFE4C3004E3A86 /* rocket.cpp */,
+				A3F34DAD20BFE4C3004E3A86 /* rocket.hpp */,
+				A3CCE1541C09676C00BC21D0 /* coordinate_transform.cpp */,
+				A3CCE1551C09676C00BC21D0 /* coordinate_transform.hpp */,
 				A3CCE1441C03301500BC21D0 /* gravity.cpp */,
 				A3CCE1451C03301500BC21D0 /* gravity.hpp */,
 				A3CCE1471C0348CB00BC21D0 /* air.cpp */,
@@ -171,7 +176,8 @@
 				A31646B71C9137C1000FA98B /* fileio.cpp in Sources */,
 				A3E82ACB1CAA0E62007CC708 /* Orbit.cpp in Sources */,
 				A36D52A51BF98A30001864D3 /* main.cpp in Sources */,
-				A3CCE1561C09676C00BC21D0 /* rocket.cpp in Sources */,
+				A3F34DAE20BFE4C3004E3A86 /* rocket.cpp in Sources */,
+				A3CCE1561C09676C00BC21D0 /* coordinate_transform.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

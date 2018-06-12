@@ -10,12 +10,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "534520039.963332"
+            timestampString = "550414207.5271"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "911"
-            endingLineNumber = "911"
-            landmarkName = "csv_observer::operator()(const state&amp; x, double t)"
+            startingLineNumber = "111"
+            endingLineNumber = "111"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -26,44 +26,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "534520039.96423"
+            timestampString = "550414207.527747"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "1009"
-            endingLineNumber = "1009"
-            landmarkName = "attack_of_angle(Vector3d vel_AIR_BODYframe_)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.964946"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "1003"
-            endingLineNumber = "1003"
-            landmarkName = "attack_of_angle(Vector3d vel_AIR_BODYframe_)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.965686"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "452"
-            endingLineNumber = "452"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
+            startingLineNumber = "105"
+            endingLineNumber = "105"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -80,22 +48,6 @@
             startingLineNumber = "62"
             endingLineNumber = "62"
             landmarkName = "read_csv_vector_3d(string filename, string col_name0, string col_name1, string col_name2)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.966504"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "545"
-            endingLineNumber = "545"
-            landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>
@@ -122,76 +74,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "534520039.967341"
+            timestampString = "550414207.528195"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "1097"
-            endingLineNumber = "1097"
-            landmarkName = "posECI_init(Vector3d posLLH_)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.968206"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "660"
-            endingLineNumber = "660"
-            landmarkName = "rocket_dynamics::operator()(const rocket_dynamics::state&amp; x, rocket_dynamics::state&amp; dx, double t)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.hpp"
-            timestampString = "534520039.96899"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "24"
-            endingLineNumber = "24"
-            landmarkName = "unknown"
-            landmarkType = "0">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.969099"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "442"
-            endingLineNumber = "442"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.969852"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "443"
-            endingLineNumber = "443"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
+            startingLineNumber = "199"
+            endingLineNumber = "199"
+            landmarkName = "Rocket::flight_simulation()"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -233,22 +121,6 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.970529"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "430"
-            endingLineNumber = "430"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
-            landmarkType = "7">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
             filePath = "scr/fileio.cpp"
             timestampString = "497592008.102667"
             startingColumnNumber = "9223372036854775807"
@@ -266,12 +138,12 @@
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "scr/rocket.cpp"
-            timestampString = "534520039.971053"
+            timestampString = "550414207.528636"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "802"
-            endingLineNumber = "802"
-            landmarkName = "csv_observer::operator()(const state&amp; x, double t)"
+            startingLineNumber = "146"
+            endingLineNumber = "146"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -281,13 +153,13 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.971738"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4337519"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "424"
-            endingLineNumber = "424"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
+            startingLineNumber = "39"
+            endingLineNumber = "39"
+            landmarkName = "RocketNew::RocketNew(string input_filename)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -297,13 +169,29 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.972382"
+            filePath = "scr/main.cpp"
+            timestampString = "550414207.5290771"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "455"
-            endingLineNumber = "455"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
+            startingLineNumber = "31"
+            endingLineNumber = "31"
+            landmarkName = "main(int argc, const char * argv[])"
+            landmarkType = "9">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.435146"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "60"
+            endingLineNumber = "60"
+            landmarkName = "RocketNew::RocketNew(string input_filename)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -313,13 +201,205 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.972835"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.436197"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "73"
-            endingLineNumber = "73"
-            landmarkName = "flight_simulation(string input_filename, string output_filename, Rocket::State state)"
+            startingLineNumber = "98"
+            endingLineNumber = "98"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.437547"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "143"
+            endingLineNumber = "143"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.438765"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "234"
+            endingLineNumber = "234"
+            landmarkName = "RocketNew::flight_simulation()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.440503"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "280"
+            endingLineNumber = "280"
+            landmarkName = "RocketStage::operator()(const RocketStage::state&amp; x, RocketStage::state&amp; dx, double t)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4414999"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "467"
+            endingLineNumber = "467"
+            landmarkName = "RocketStage::update_from_time_and_altitude(double time, double altitude)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.442418"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "61"
+            endingLineNumber = "61"
+            landmarkName = "RocketNew::RocketNew(string input_filename)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.44347"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "63"
+            endingLineNumber = "63"
+            landmarkName = "RocketNew::RocketNew(string input_filename)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4443901"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "548"
+            endingLineNumber = "548"
+            landmarkName = "RocketStage::progress(double time_now)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.445308"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "76"
+            endingLineNumber = "76"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.446233"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "281"
+            endingLineNumber = "281"
+            landmarkName = "RocketStage::operator()(const RocketStage::state&amp; x, RocketStage::state&amp; dx, double t)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.447867"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "196"
+            endingLineNumber = "196"
+            landmarkName = "RocketNew::flight_simulation()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4489779"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "493"
+            endingLineNumber = "493"
+            landmarkName = "RocketStage::update_from_time_and_altitude(double time, double altitude)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.hpp"
+            timestampString = "550412448.449873"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "404"
+            endingLineNumber = "404"
+            landmarkName = "rocket_csv_observer(const std::string&amp; FileName, bool isAddition = false)"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>
@@ -329,13 +409,61 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.973247"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.450436"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "80"
-            endingLineNumber = "80"
-            landmarkName = "flight_simulation(string input_filename, string output_filename, Rocket::State state)"
+            startingLineNumber = "563"
+            endingLineNumber = "563"
+            landmarkName = "rocket_csv_observer::operator()(const state&amp; x, double t)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4511859"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "564"
+            endingLineNumber = "564"
+            landmarkName = "rocket_csv_observer::operator()(const state&amp; x, double t)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.451918"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "289"
+            endingLineNumber = "289"
+            landmarkName = "RocketStage::operator()(const RocketStage::state&amp; x, RocketStage::state&amp; dx, double t)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.hpp"
+            timestampString = "550412448.452709"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "401"
+            endingLineNumber = "401"
+            landmarkName = "rocket_csv_observer(const std::string&amp; FileName, bool isAddition = false)"
             landmarkType = "9">
          </BreakpointContent>
       </BreakpointProxy>
@@ -345,14 +473,14 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.973657"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.45315"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "85"
-            endingLineNumber = "85"
-            landmarkName = "flight_simulation(string input_filename, string output_filename, Rocket::State state)"
-            landmarkType = "9">
+            startingLineNumber = "233"
+            endingLineNumber = "233"
+            landmarkName = "RocketNew::flight_simulation()"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -361,14 +489,14 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.974227"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4537261"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "74"
-            endingLineNumber = "74"
-            landmarkName = "flight_simulation(string input_filename, string output_filename, Rocket::State state)"
-            landmarkType = "9">
+            startingLineNumber = "759"
+            endingLineNumber = "759"
+            landmarkName = "rocket_csv_observer::to_csv(vector&lt;vector&lt;double&gt;&gt; vec)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -377,14 +505,14 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.974912"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4543329"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "56"
-            endingLineNumber = "56"
-            landmarkName = "flight_simulation(string input_filename, string output_filename, Rocket::State state)"
-            landmarkType = "9">
+            startingLineNumber = "761"
+            endingLineNumber = "761"
+            landmarkName = "rocket_csv_observer::to_csv(vector&lt;vector&lt;double&gt;&gt; vec)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -393,14 +521,14 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.975598"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.454899"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "1044"
-            endingLineNumber = "1044"
-            landmarkName = "azimth_elevaztion(Vector3d vel_BODY_NEDframe)"
-            landmarkType = "9">
+            startingLineNumber = "762"
+            endingLineNumber = "762"
+            landmarkName = "rocket_csv_observer::to_csv(vector&lt;vector&lt;double&gt;&gt; vec)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -409,13 +537,13 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.97631"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.455644"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "707"
-            endingLineNumber = "707"
-            landmarkName = "rocket_dynamics::operator()(const rocket_dynamics::state&amp; x, rocket_dynamics::state&amp; dx, double t)"
+            startingLineNumber = "760"
+            endingLineNumber = "760"
+            landmarkName = "rocket_csv_observer::to_csv(vector&lt;vector&lt;double&gt;&gt; vec)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -425,29 +553,29 @@
             shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.977031"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.456255"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "1237"
-            endingLineNumber = "1237"
-            landmarkName = "testCoordinate()"
-            landmarkType = "9">
+            startingLineNumber = "356"
+            endingLineNumber = "356"
+            landmarkName = "RocketStage::operator()(const RocketStage::state&amp; x, RocketStage::state&amp; dx, double t)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
-            shouldBeEnabled = "No"
+            shouldBeEnabled = "Yes"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.977758"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.456845"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "272"
-            endingLineNumber = "272"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
+            startingLineNumber = "424"
+            endingLineNumber = "424"
+            landmarkName = "RocketStage::operator()(const RocketStage::state&amp; x, RocketStage::state&amp; dx, double t)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -457,13 +585,13 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.978495"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.457486"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "270"
-            endingLineNumber = "270"
-            landmarkName = "Rocket::Rocket(const std::string&amp; FileName)"
+            startingLineNumber = "96"
+            endingLineNumber = "96"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -473,93 +601,13 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.979256"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.458003"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "547"
-            endingLineNumber = "547"
-            landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.98001"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "486"
-            endingLineNumber = "486"
-            landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.980689"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "525"
-            endingLineNumber = "525"
-            landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.981343"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "554"
-            endingLineNumber = "554"
-            landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.982015"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "651"
-            endingLineNumber = "651"
-            landmarkName = "set_rocket_state_aero(Rocket&amp; rocket, double mach_number)"
-            landmarkType = "9">
-         </BreakpointContent>
-      </BreakpointProxy>
-      <BreakpointProxy
-         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
-         <BreakpointContent
-            shouldBeEnabled = "No"
-            ignoreCount = "0"
-            continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.982669"
-            startingColumnNumber = "9223372036854775807"
-            endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "766"
-            endingLineNumber = "766"
-            landmarkName = "rocket_dynamics::operator()(const rocket_dynamics::state&amp; x, rocket_dynamics::state&amp; dx, double t)"
+            startingLineNumber = "97"
+            endingLineNumber = "97"
+            landmarkName = "RocketStage::RocketStage(picojson::object o_each, picojson::object o)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
@@ -569,14 +617,94 @@
             shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
-            filePath = "scr/rocket.cpp"
-            timestampString = "534520039.983243"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.458534"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "571"
-            endingLineNumber = "571"
-            landmarkName = "set_rocket_state(Rocket&amp; rocket, double time, double altitude)"
-            landmarkType = "9">
+            startingLineNumber = "413"
+            endingLineNumber = "413"
+            landmarkName = "RocketStage::operator()(const RocketStage::state&amp; x, RocketStage::state&amp; dx, double t)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.459013"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "526"
+            endingLineNumber = "526"
+            landmarkName = "RocketStage::update_from_time_and_altitude(double time, double altitude)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.459404"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "210"
+            endingLineNumber = "210"
+            landmarkName = "RocketNew::flight_simulation()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.45977"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "216"
+            endingLineNumber = "216"
+            landmarkName = "RocketNew::flight_simulation()"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.4601229"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "441"
+            endingLineNumber = "441"
+            landmarkName = "RocketStage::operator()(const RocketStage::state&amp; x, RocketStage::state&amp; dx, double t)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "scr/rocket_new.cpp"
+            timestampString = "550412448.460505"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "239"
+            endingLineNumber = "239"
+            landmarkName = "RocketNew::flight_simulation()"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

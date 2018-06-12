@@ -30,23 +30,23 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 # import matplotlib.font_manager
-from matplotlib.font_manager import FontProperties
-from matplotlib.backends.backend_pdf import PdfPages
+# from matplotlib.font_manager import FontProperties
+# from matplotlib.backends.backend_pdf import PdfPages
 from math import sin, cos, acos, radians
 import json
 import csv
 import os
 
-if 'Windows' == platform.system():
-    font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
-    font_prop = FontProperties(fname=font_path)
-    mpl.rcParams['font.family'] = font_prop.get_name()
-#
-if 'Darwin' == platform.system(): # for Mac
-    font_path = '/Library/Fonts/Osaka.ttf'
-    if os.path.exists(font_path):
-        font_prop = FontProperties(fname=font_path)
-        mpl.rcParams['font.family'] = font_prop.get_name()
+# if 'Windows' == platform.system():
+#     font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
+#     font_prop = FontProperties(fname=font_path)
+#     mpl.rcParams['font.family'] = font_prop.get_name()
+# #
+# if 'Darwin' == platform.system(): # for Mac
+#     font_path = '/Library/Fonts/Osaka.ttf'
+#     if os.path.exists(font_path):
+#         font_prop = FontProperties(fname=font_path)
+#         mpl.rcParams['font.family'] = font_prop.get_name()
 
 plt.close('all')
 # plt.style.use('ggplot')
@@ -74,7 +74,7 @@ argc = len(argvs)
 if (argc != 1):
     file_name = argvs[1]
 else:
-	file_name = "param_sample.json"
+	file_name = "param_sample_01.json"
 
 f = open(file_name)
 data = json.load(f)
@@ -91,12 +91,12 @@ attitude_file = []
 elevation_const = []
 azimth_const = []
 following_stage_exist = []
-rocket_name = data["name"]
+rocket_name = data["name(str)"]
 calc_time_end = data["calculate condition"]["end time[s]"]
 
 def load_rocket_json(stage):
     index = len(lift_file_exist) # number of stages
-    stage_name = stage + " stage"
+    stage_name = "stage" + stage
     lift_file_exist.append(data[stage_name]["aero"]["lift coefficient file exist"])
     lift_file.append(data[stage_name]["aero"]["lift coefficient file name"])
     lift_coef.append(data[stage_name]["aero"]["lift coefficient"])
@@ -109,9 +109,9 @@ def load_rocket_json(stage):
     azimth_const.append(data[stage_name]["attitude"]["initial azimth[deg]"])
     following_stage_exist.append(data[stage_name]["stage"]["following stage exist"])
 
-load_rocket_json("1st")
-load_rocket_json("2nd")
-load_rocket_json("3rd")
+load_rocket_json("1")
+load_rocket_json("2")
+load_rocket_json("3")
 wind_file_exist = data["wind"]["file exist"]
 wind_file = data["wind"]["file name"]
 wind_const = 0  # Temporarily
