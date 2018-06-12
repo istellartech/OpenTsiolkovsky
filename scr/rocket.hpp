@@ -28,72 +28,20 @@
 using namespace Eigen;
 using namespace std;
 
-class FlyingObject{
+
+struct RocketStage{
 private:
 public:
     std::ifstream fin;
-    std::ofstream fout;
+
+    using state = std::array<double, 7>;  // variables of ODE
+
     string name;
-//    ==== miscellaneous ===
-    bool flag_1st_stage;
-    bool flag_dumping_products;
-    bool flag_separation;
-    double max_downrange;           // maximum downrange [m]
-    double max_alt;                 // maximum altitude [m]
-    Vector2d impact_point;          // impact position LLH [deg,deg]
-    bool flag_impact = false;
-    
-    using state = std::array<double, 7>;
-
-    string header = "time(s),mass(kg),thrust(N),lat(deg),lon(deg),altitude(m),"
-                    "pos_ECI_X(m),pos_ECI_Y(m),pos_ECI_Z(m),"
-                    "vel_ECI_X(m/s),vel_ECI_Y(m/s),vel_ECI_Z(m/s),"
-                    "vel_NED_X(m/s),vel_NED_Y(m/s),vel_NED_Z(m/s),"
-                    "acc_ECI_X(m/s2),acc_ECI_Y(m/s2),acc_ECI_Z(m/s2),"
-                    "acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
-                    "Isp(s),Mach number,attitude_azimth(deg),attitude_elevation(deg),"
-                    "attack of angle alpha(deg),attack of angle beta(deg),all attack of angle gamma(deg),"
-                    "dynamic pressure(Pa),aero Drag(N),aero Lift(N),"
-                    "wind speed(m/s),wind direction(deg),downrange(m),"
-                    "IIP_lat(deg),IIP_lon(deg),"
-                    "dcmBODY2ECI_11,dcmBODY2ECI_12,dcmBODY2ECI_13,"
-                    "dcmBODY2ECI_21,dcmBODY2ECI_22,dcmBODY2ECI_23,"
-                    "dcmBODY2ECI_31,dcmBODY2ECI_32,dcmBODY2ECI_33,"
-                    "loss_gravity(m/s2),"
-                    "loss_aerodynamics(m/s2),"
-                    "loss_thrust(m/s2),"
-                    "is_powered(1=powered 0=free),"
-                    "is_separated(1=already 0=still)";
-
-    FlyingObject(){};
-    FlyingObject(const std::string& filename);  // constractor
-    
-    FlyingObject(const FlyingObject& obj){  // copy constractor
-//        fin = obj.fin;
-//        fout = obj.fout;
-        name = obj.name;
-        flag_1st_stage = obj.flag_1st_stage;
-        flag_dumping_products = obj.flag_dumping_products;
-        flag_separation = obj.flag_separation;
-        max_downrange = obj.max_downrange;
-        max_alt = obj.max_alt;
-        impact_point = obj.impact_point;
-        flag_impact = obj.flag_impact;
-//        state = obj.state;
-        header = obj.header;
-    }
-//    virtual void operator()(){};
-
-};
-
-struct RocketStage : public FlyingObject{
-private:
-public:
-    bool is_aerodynamically_stable = false;
+    string flight_mode;
+    int num_stage = 0;
+    //    ==== flag ====
     bool is_powered = false;
     bool is_separated = false;
-    int num_stage = 0;
-    string flight_mode;
     //    ==== calculate ====
     double calc_start_time = 0.0;
     double calc_end_time = 0.0;
@@ -206,6 +154,7 @@ public:
     double loss_control = 0.0;
     double loss_total = 0.0;
 
+    //    ==== pos/vel vector and direct cosine matrix
     Vector3d posECI_;
     Vector3d velECI_;
     Vector3d accECI_;
@@ -234,12 +183,9 @@ public:
     Vector3d force_air_vector;
     Vector3d force_thrust_vector;
     Vector3d gravity_vector;
-    double downrange;
     Vector3d posLLH_IIP_;
-    
-    vector<vector<double>> data;
+    double downrange;
 
-    
     picojson::object source_json_object;
 
     virtual void operator()(const state& x, state& dx, double t);
@@ -249,14 +195,12 @@ public:
     RocketStage(picojson::object o_each, picojson::object o);
     RocketStage(const RocketStage& rocket_stage, Vector3d posECI_init, Vector3d velECI_init);
     // ↑this is for dumping product constructor
-//    virtual void operator()();
+
     void update_from_time_and_altitude(double time, double altitude);  // time[s] and altitude[m]
     void update_from_mach_number();
     void progress(double time_now);
 
     void deep_copy(const RocketStage& obj){
-        //        fin = obj.fin;
-        //        fout = obj.fout;
         name = obj.name;
         calc_start_time = obj.calc_start_time;
         calc_end_time = obj.calc_end_time;
@@ -275,17 +219,7 @@ public:
         vel_NED_init = obj.vel_NED_init;
         posECI_init = obj.posECI_init;
         velECI_init = obj.velECI_init;
-        flag_1st_stage = obj.flag_1st_stage;
-        flag_dumping_products = obj.flag_dumping_products;
-        flag_separation = obj.flag_separation;
-        max_downrange = obj.max_downrange;
-        max_alt = obj.max_alt;
-        impact_point = obj.impact_point;
-        flag_impact = obj.flag_impact;
-        //        state = obj.state;
         
-        header = obj.header;
-        is_aerodynamically_stable = obj.is_aerodynamically_stable;
         is_powered = obj.is_powered;
         is_separated = obj.is_separated;
         power_flight_mode = obj.power_flight_mode;
@@ -374,14 +308,9 @@ public:
     RocketStage(const RocketStage& obj){  // copy constractor
         deep_copy(obj);
     }
-    
 };
 
-//void set_rocket_state(RocketStage& rocket, double time, double altitude);
-//void set_rocket_state_aero(RocketStage& rocket, double mach_number);
-
-
-class Rocket : public FlyingObject{
+class Rocket{
 private:
 public:
     std::vector<RocketStage> rs;  // rocket_stages
@@ -392,10 +321,31 @@ public:
 };
 
 
+struct CsvObserver : public RocketStage{
+    std::ofstream fout;
+    string header = "time(s),mass(kg),thrust(N),lat(deg),lon(deg),altitude(m),"
+                    "pos_ECI_X(m),pos_ECI_Y(m),pos_ECI_Z(m),"
+                    "vel_ECI_X(m/s),vel_ECI_Y(m/s),vel_ECI_Z(m/s),"
+                    "vel_NED_X(m/s),vel_NED_Y(m/s),vel_NED_Z(m/s),"
+                    "acc_ECI_X(m/s2),acc_ECI_Y(m/s2),acc_ECI_Z(m/s2),"
+                    "acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
+                    "Isp(s),Mach number,attitude_azimth(deg),attitude_elevation(deg),"
+                    "attack of angle alpha(deg),attack of angle beta(deg),all attack of angle gamma(deg),"
+                    "dynamic pressure(Pa),aero Drag(N),aero Lift(N),"
+                    "wind speed(m/s),wind direction(deg),downrange(m),"
+                    "IIP_lat(deg),IIP_lon(deg),"
+                    "dcmBODY2ECI_11,dcmBODY2ECI_12,dcmBODY2ECI_13,"
+                    "dcmBODY2ECI_21,dcmBODY2ECI_22,dcmBODY2ECI_23,"
+                    "dcmBODY2ECI_31,dcmBODY2ECI_32,dcmBODY2ECI_33,"
+                    "loss_gravity(m/s2),"
+                    "loss_aerodynamics(m/s2),"
+                    "loss_thrust(m/s2),"
+                    "is_powered(1=powered 0=free),"
+                    "is_separated(1=already 0=still)";
 
-struct rocket_csv_observer : public RocketStage{
     using RocketStage::RocketStage; // Inheritance constructor
-    rocket_csv_observer(const std::string& FileName, bool isAddition = false){
+    
+    CsvObserver(const std::string& FileName, bool isAddition = false){
         if (isAddition == false){ // 追加書き込みモードかどうか
             fout.open(FileName, std::ios_base::out);
             fout << header << std::endl;
@@ -405,26 +355,7 @@ struct rocket_csv_observer : public RocketStage{
     };
     
     virtual void operator()(const state& x, double t);
-    void to_csv(vector<vector<double>> vec);
-};
-
-
-struct flying_object_dynamics : public FlyingObject{
-    virtual void operator()(const state& x, state& dx, double t);
-};
-
-
-struct flying_object_csv_observer : public FlyingObject{
-    flying_object_csv_observer(const std::string& FileName, bool isAddition = false){
-        if (isAddition == false){ // 追加書き込みモードかどうか
-            fout.open(FileName, std::ios_base::out);
-            fout << header << std::endl;
-        } else {
-            fout.open(FileName, std::ios_base::out | std::ios_base::app); // 追加書き込みモード
-        }
-    };
-    
-    virtual void operator()(const state& x, double t);
+//    void to_csv(vector<vector<double>> vec);
 };
 
 

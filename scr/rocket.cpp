@@ -215,16 +215,14 @@ void Rocket::flight_simulation(){
             rs[i].velECI_init[0], rs[i].velECI_init[1], rs[i].velECI_init[2],
         };
         string csv_filename = "./output/" + rs[i].name + "_dynamics_" + to_string(rs[i].num_stage) + ".csv";
-        rocket_csv_observer Observer(csv_filename, false);
+        CsvObserver Observer(csv_filename, false);
         Observer.deep_copy(rs[i]);
         for (int j = 0; j < time_array.size() - 1; j++){  // j is number of time_array
             odeint::integrate_const(Stepper, rs[i], State,
                                     time_array[j], time_array[j+1], time_step,
                                     std::ref(Observer));
-            Observer.to_csv(Observer.data);
-            rocket_csv_observer Observer(csv_filename, true);
+            CsvObserver Observer(csv_filename, true);
             Observer.deep_copy(rs[i]);
-//            auto Stepper = make_dense_output( 1.0e-9 , 1.0e-9 , base_stepper_type());
             if (time_array[j+1] == rs[i].dump_separation_time){
                 RocketStage temp_fo(rs[i], posECI_dump_init_g, velECI_dump_init_g);
                 temp_fo.num_stage = rs[i].num_stage;
@@ -249,12 +247,11 @@ void Rocket::flight_simulation(){
             fo[i].velECI_init[0], fo[i].velECI_init[1], fo[i].velECI_init[2],
         };
         string csv_filename = "./output/" + fo[i].name + "_dynamics_" + to_string(fo[i].num_stage) + "_dump" +  ".csv";
-        rocket_csv_observer Observer(csv_filename, false);
+        CsvObserver Observer(csv_filename, false);
         Observer.deep_copy(fo[i]);
         odeint::integrate_const(Stepper, fo[i], State,
                                 fo[i].calc_start_time, fo[i].calc_end_time, fo[i].calc_step_time,
                                 std::ref(Observer));
-//        Observer.to_csv(Observer.data);
         cout << "                                           \r" << flush;
         cout << fixed << setprecision(6) << to_string(fo[i].num_stage) + " stage dumping product impact point [deg]:\t";
         cout << impact_point_g[0] << "\t"<< impact_point_g[1] << endl;
@@ -490,12 +487,10 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
         } else {
             Isp = 0.0;
         }
-        is_aerodynamically_stable = false;
     } else {
         thrust = 0.0;
         m_dot = 0.0;
         Isp = 0.0;
-        is_aerodynamically_stable = true;
     }
     
     if (attitude_file_exist) {
@@ -544,7 +539,7 @@ void RocketStage::progress(double time_now){
 }
 
 
-void rocket_csv_observer::operator()(const state& x, double t){
+void CsvObserver::operator()(const state& x, double t){
     posECI_ << x[1], x[2], x[3];
     velECI_ << x[4], x[5], x[6];
     
@@ -557,10 +552,6 @@ void rocket_csv_observer::operator()(const state& x, double t){
         if ((int)t % 10 == 0 && (int)(t*10) % 10 == 0 ){ // progress
             progress(t);
         }
-//        if ( flag_impact == false ) {
-//            impact_point << posLLH_[0], posLLH_[1];
-//            flag_impact = true;
-//        }
         return;
     }
     
@@ -747,11 +738,3 @@ void rocket_csv_observer::operator()(const state& x, double t){
     }
 }
 
-void rocket_csv_observer::to_csv(vector<vector<double>> vec){
-    for (int i =0; i < vec.size(); i++){
-        for (int j = 0; j < vec.front().size(); j++){
-            fout << vec[i][j] << ",";
-        }
-        fout << "\n";
-    }
-}
