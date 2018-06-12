@@ -357,9 +357,9 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
                 //    thrust term
                 if ( is_consider_neutrality ) {
                     force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
-                    gimbal_angle_pitch = asin(-force_air_vector_BODYframe[1] / thrust
+                    gimbal_angle_pitch = asin(force_air_vector_BODYframe[1] / thrust
                                               * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
-                    gimbal_angle_yaw = asin(-force_air_vector_BODYframe[2] / thrust
+                    gimbal_angle_yaw = asin(force_air_vector_BODYframe[2] / thrust
                                             * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
                     force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
                                            thrust * (-1) * sin(gimbal_angle_yaw),
@@ -646,9 +646,9 @@ void CsvObserver::operator()(const state& x, double t){
                 //    thrust term
                 if ( is_consider_neutrality ) {
                     force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
-                    gimbal_angle_pitch = asin(-force_air_vector_BODYframe[1] / thrust
+                    gimbal_angle_pitch = asin(force_air_vector_BODYframe[1] / thrust
                                               * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
-                    gimbal_angle_yaw = asin(-force_air_vector_BODYframe[2] / thrust
+                    gimbal_angle_yaw = asin(force_air_vector_BODYframe[2] / thrust
                                             * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
                     force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
                     thrust * (-1) * sin(gimbal_angle_yaw),
