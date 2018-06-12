@@ -28,9 +28,9 @@ def make_kml(name, div, stage, is_dump=False):
     time = df["time(s)"]
     lat = df["lat(deg)"]
     lon = df["lon(deg)"]
+    altitude = df["altitude(m)"]
     lat_IIP = df["IIP_lat(deg)"]
     lon_IIP = df["IIP_lon(deg)"]
-    altitude = df["altitude(m)"]
     is_powered = df["is_powered(1=powered 0=free)"]
     is_separated = df["is_separated(1=already 0=still)"]
     kml = simplekml.Kml(open=1)
