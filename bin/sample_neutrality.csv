@@ -1,0 +1,3 @@
+time[s],CG_pos_STA[m],CP_pos_STA[m],Controller_pos_STA[m]
+0.0, 5.0, 5.9, 9.0
+100, 5.0, 5.9, 9.0

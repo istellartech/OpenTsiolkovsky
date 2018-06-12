@@ -21,31 +21,31 @@ def make_kml(name, div, stage, is_dump=False):
     try:
         csv_file = "output/" + name + "_dynamics_" + str(stage) + dump_name + ".csv"
         df = pd.read_csv(csv_file, index_col=False)
+        time = df["time(s)"]
+        lat = df["lat(deg)"]
+        lon = df["lon(deg)"]
+        altitude = df["altitude(m)"]
+        kml = simplekml.Kml(open=1)
+        cood = []
+        for i in range(len(time)//div):
+            index = i * div
+            cood.append((lon.iloc[index], lat.iloc[index], altitude.iloc[index]))
+        cood.append((lon.iloc[-1], lat.iloc[-1], altitude.iloc[-1]))
+        # print(cood)
+        ls = kml.newlinestring(name="name")
+        ls.style.linestyle.width = 8
+        ls.extrude = 1
+        ls.altitudemode = simplekml.AltitudeMode.absolute
+        ls.coords = cood
+        ls.style.linestyle.color = simplekml.Color.white
+        ls.style.linestyle.colormode = simplekml.ColorMode.random
+        ls.lookat.latitude = lat.iloc[0]
+        ls.lookat.longitude = lon.iloc[0]
+        ls.lookat.range = 200000
+        kml.save("output/" + name + "_" + str(stage) + dump_name + ".kml")
     except:
         print("Error: " + str(stage) + " stage kml passed")
         return
-    time = df["time(s)"]
-    lat = df["lat(deg)"]
-    lon = df["lon(deg)"]
-    altitude = df["altitude(m)"]
-    kml = simplekml.Kml(open=1)
-    cood = []
-    for i in range(len(time)//div):
-        index = i * div
-        cood.append((lon.iloc[index], lat.iloc[index], altitude.iloc[index]))
-    cood.append((lon.iloc[-1], lat.iloc[-1], altitude.iloc[-1]))
-    # print(cood)
-    ls = kml.newlinestring(name="name")
-    ls.style.linestyle.width = 8
-    ls.extrude = 1
-    ls.altitudemode = simplekml.AltitudeMode.absolute
-    ls.coords = cood
-    ls.style.linestyle.color = simplekml.Color.white
-    ls.style.linestyle.colormode = simplekml.ColorMode.random
-    ls.lookat.latitude = lat.iloc[0]
-    ls.lookat.longitude = lon.iloc[0]
-    ls.lookat.range = 200000
-    kml.save("output/" + name + "_" + str(stage) + dump_name + ".kml")
 
 if __name__ == '__main__':
     if (len(sys.argv) != 1):

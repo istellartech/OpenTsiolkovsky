@@ -77,7 +77,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     launch_vel_NED[1] = array_vel[1].get<double>();
     launch_vel_NED[2] = array_vel[2].get<double>();
     
-    wind_file_exist = o_wind["wind file exist(bool)"].get<bool>();
+    wind_file_exist = o_wind["wind file exist?(bool)"].get<bool>();
     wind_file_name = o_wind["wind file name(str)"].get<string>();
     picojson::array& array_wind_const = o_wind["const wind[m/s,deg]"].get<picojson::array>();
     wind_const[0] = array_wind_const[0].get<double>();
@@ -95,10 +95,10 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     picojson::object& o_aero     = o_each["aero"].get<picojson::object>();
     picojson::object& o_attitude = o_each["attitude"].get<picojson::object>();
 
-    Isp_file_exist = o_thrust["Isp vac file exist(bool)"].get<bool>();
+    Isp_file_exist = o_thrust["Isp vac file exist?(bool)"].get<bool>();
     Isp_file_name = o_thrust["Isp vac file name(str)"].get<string>();
     Isp_const = o_thrust["const Isp vac[s]"].get<double>();
-    thrust_file_exist = o_thrust["thrust vac file exist(bool)"].get<bool>();
+    thrust_file_exist = o_thrust["thrust vac file exist?(bool)"].get<bool>();
     thrust_file_name = o_thrust["thrust vac file name(str)"].get<string>();
     thrust_const = o_thrust["const thrust vac[N]"].get<double>();
     burn_start_time = o_thrust["burn start time(time of each stage)[s]"].get<double>();
@@ -107,21 +107,21 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     nozzle_expansion_ratio = o_thrust["nozzle expansion ratio[-]"].get<double>();
     nozzle_exhaust_pressure = o_thrust["nozzle exhaust pressure[Pa]"].get<double>();
     body_diameter = o_aero["body diameter[m]"].get<double>();
-    CL_file_exist = o_aero["lift coefficient file exist(bool)"].get<bool>();
+    CL_file_exist = o_aero["lift coefficient file exist?(bool)"].get<bool>();
     CL_file_name = o_aero["lift coefficient file name(str)"].get<string>();
     CL_const = o_aero["const lift coefficient[-]"].get<double>();
-    CD_file_exist = o_aero["drag coefficient file exist(bool)"].get<bool>();
+    CD_file_exist = o_aero["drag coefficient file exist?(bool)"].get<bool>();
     CD_file_name = o_aero["drag coefficient file name(str)"].get<string>();
     CD_const = o_aero["const drag coefficient[-]"].get<double>();
     ballistic_coef = o_aero["ballistic coefficient(ballistic flight mode)[-]"].get<double>();
-    attitude_file_exist = o_attitude["attitude file exist(bool)"].get<bool>();
+    attitude_file_exist = o_attitude["attitude file exist?(bool)"].get<bool>();
     attitude_file_name = o_attitude["attitude file name(str)"].get<string>();
     attitude_elevation_const_deg = o_attitude["const elevation[deg]"].get<double>();
     attitude_azimth_const_deg = o_attitude["const azimth[deg]"].get<double>();
     
     try {
         picojson::object& o_dumping  = o_each["dumping product"].get<picojson::object>();
-        dump_exist = o_dumping["dumping product exist(bool)"].get<bool>();
+        dump_exist = o_dumping["dumping product exist?(bool)"].get<bool>();
         if (dump_exist){ // if not separation following stage, separation time should be large
             dump_separation_time = o_dumping["dumping product separation time[s]"].get<double>();
         }else{
@@ -139,7 +139,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
 
     try{
         picojson::object& o_stage    = o_each["stage"].get<picojson::object>();
-        following_stage_exist = o_stage["following stage exist(bool)"].get<bool>();
+        following_stage_exist = o_stage["following stage exist?(bool)"].get<bool>();
         if (following_stage_exist){ // if not separation following stage, separation time should be large
             later_stage_separation_time = o_stage["separation time[s]"].get<double>();
         }else{
@@ -147,6 +147,14 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
         }
     } catch (...) {
         cout << "stage json_object not found" << endl;
+    }
+    
+    try{
+        picojson::object& o_neutrality = o_each["attitude neutrality"].get<picojson::object>();
+        is_consider_neutrality = o_neutrality["considering neutrality?(bool)"].get<bool>();
+        neutrality_file_name = o_neutrality["CG,CP,Controller position file(str)"].get<string>();
+    } catch (...) {
+        cout << "attitude neutrality json_object not found" << endl;
     }
     
     body_area = body_diameter * body_diameter * pi / 4.0;
@@ -167,9 +175,13 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     if ( CD_file_exist ){
         CD_mat = read_csv_vector_2d("./" + CD_file_name, "mach[-]", "CD[-]");
     }
-    if (attitude_file_exist) {
+    if ( attitude_file_exist) {
         attitude_mat = read_csv_vector_3d("./" + attitude_file_name,
                                           "time[s]", "azimth[deg]", "elevation[deg]");
+    }
+    if ( is_consider_neutrality ) {
+        neutrality_mat = read_csv_vector_4d("./" + neutrality_file_name,
+                                            "time[s]", "CG_pos_STA[m]", "CP_pos_STA[m]", "Controller_pos_STA[m]");
     }
 }
 
@@ -188,6 +200,13 @@ RocketStage::RocketStage(const RocketStage& rocket_stage, Vector3d posECI_init_a
     ballistic_coef = dump_ballistic_coef;
     posECI_init = posECI_init_args;
     velECI_init = velECI_init_args;
+    
+    // for calcurate speed up
+    thrust_file_exist = false;
+    Isp_file_exist = false;
+    CD_file_exist = false;
+    CL_file_exist = false;
+    attitude_file_exist = false;
 }
 
 void Rocket::flight_simulation(){
@@ -312,8 +331,6 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
     air = air.altitude(posLLH_[2]);
-    //    thrust term
-    force_thrust_vector << thrust, 0.0, 0.0;
     //    gravity term : gravity acceleration in the north direction is not considered
     gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
 
@@ -337,6 +354,19 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
                 force_drag = CD * dynamic_pressure * body_area;
                 force_lift = CL * dynamic_pressure * body_area;
                 force_air_vector << -force_drag, 0.0, -force_lift;
+                //    thrust term
+                if ( is_consider_neutrality ) {
+                    force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
+                    gimbal_angle_pitch = asin(-force_air_vector_BODYframe[1] / thrust
+                                              * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
+                    gimbal_angle_yaw = asin(-force_air_vector_BODYframe[2] / thrust
+                                            * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
+                    force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
+                                           thrust * (-1) * sin(gimbal_angle_yaw),
+                                           thrust * (-1) * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);
+                } else {
+                    force_thrust_vector << thrust, 0.0, 0.0;  // body coordinate
+                }
                 //    dv/dt
                 accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
                 + dcmNED2ECI_ * gravity_vector;
@@ -374,6 +404,8 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
                 dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
                 dcmBODY2ECI_ = dcmECI2BODY_.transpose();
                 
+                //    thrust term
+                force_thrust_vector << 0.0, 0.0, 0.0;
                 //    aerodynamics term
                 vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
                 mach_number = vel_AIR_BODYframe_abs / air.airspeed;
@@ -396,6 +428,8 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
                 dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
                 dcmBODY2ECI_ = dcmECI2BODY_.transpose();
                 
+                //    thrust term
+                force_thrust_vector << 0.0, 0.0, 0.0;
                 //    aerodynamics term
                 vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
                 mach_number = vel_AIR_BODYframe_abs / air.airspeed;
@@ -476,7 +510,7 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     if (thrust_file_exist){
         thrust_vac = interp_matrix(time - previous_stage_separation_time, thrust_mat, 1);
         nozzle_exhaust_pressure = interp_matrix(time - previous_stage_separation_time, thrust_mat, 2);
-        if (thrust != 0) {
+        if (thrust_vac != 0) {
             is_powered = true;
         } else {
             is_powered = false;
@@ -520,6 +554,12 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     } else {
         wind_speed = wind_const[0];
         wind_direction = wind_const[1];
+    }
+    
+    if (is_consider_neutrality) {
+        pos_CG = interp_matrix(time, neutrality_mat, 1);
+        pos_CP = interp_matrix(time, neutrality_mat, 2);
+        pos_Controller = interp_matrix(time, neutrality_mat, 3);
     }
     
     if (time >= later_stage_separation_time && is_separated == false){
@@ -580,8 +620,6 @@ void CsvObserver::operator()(const state& x, double t){
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
     air = air.altitude(posLLH_[2]);
-    //    thrust term
-    force_thrust_vector << thrust, 0.0, 0.0;
     //    gravity term : gravity acceleration in the north direction is not considered
     gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
     
@@ -605,10 +643,22 @@ void CsvObserver::operator()(const state& x, double t){
                 force_drag = CD * dynamic_pressure * body_area;
                 force_lift = CL * dynamic_pressure * body_area;
                 force_air_vector << -force_drag, 0.0, -force_lift;
+                //    thrust term
+                if ( is_consider_neutrality ) {
+                    force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
+                    gimbal_angle_pitch = asin(-force_air_vector_BODYframe[1] / thrust
+                                              * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
+                    gimbal_angle_yaw = asin(-force_air_vector_BODYframe[2] / thrust
+                                            * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
+                    force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
+                    thrust * (-1) * sin(gimbal_angle_yaw),
+                    thrust * (-1) * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);
+                } else {
+                    force_thrust_vector << thrust, 0.0, 0.0;  // body coordinate
+                }
                 //    dv/dt
                 accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
                 + dcmNED2ECI_ * gravity_vector;
-                accBODY_ = dcmECI2BODY_ * accECI_;
                 break;
                 
             case _3DoF_with_delay:
@@ -643,6 +693,8 @@ void CsvObserver::operator()(const state& x, double t){
                 dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
                 dcmBODY2ECI_ = dcmECI2BODY_.transpose();
                 
+                //    thrust term
+                force_thrust_vector << 0.0, 0.0, 0.0;
                 //    aerodynamics term
                 vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
                 mach_number = vel_AIR_BODYframe_abs / air.airspeed;
@@ -654,7 +706,6 @@ void CsvObserver::operator()(const state& x, double t){
                 //    dv/dt
                 accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
                 + dcmNED2ECI_ * gravity_vector;
-                accBODY_ = dcmECI2BODY_ * accECI_;
                 break;
                 
             case _3DoF_defined:
@@ -666,6 +717,8 @@ void CsvObserver::operator()(const state& x, double t){
                 dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
                 dcmBODY2ECI_ = dcmECI2BODY_.transpose();
                 
+                //    thrust term
+                force_thrust_vector << 0.0, 0.0, 0.0;
                 //    aerodynamics term
                 vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
                 mach_number = vel_AIR_BODYframe_abs / air.airspeed;
@@ -677,21 +730,19 @@ void CsvObserver::operator()(const state& x, double t){
                 //    dv/dt
                 accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
                 + dcmNED2ECI_ * gravity_vector;
-                accBODY_ = dcmECI2BODY_ * accECI_;
                 break;
                 
             case ballistic_flight:
                 flight_mode = "free_ballistic";
                 //    aerodynamics term
-                vel_AIR_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_; // Validation required
+                vel_AIR_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
                 vel_AIR_NEDframe_abs = vel_AIR_NEDframe_.norm();
                 mach_number = vel_AIR_NEDframe_abs / air.airspeed;
                 dynamic_pressure = 0.5 * air.density * vel_AIR_NEDframe_abs * vel_AIR_NEDframe_abs;
                 force_drag = dynamic_pressure / ballistic_coef;
-                force_air_vector = force_drag * (-1) * (vel_AIR_NEDframe_ / vel_AIR_NEDframe_abs);  // NED frame
+                force_air_vector = force_drag * (-1) * (vel_AIR_NEDframe_ / vel_AIR_NEDframe_abs);  //NED frame
                 //    dv/dt
                 accECI_ = dcmNED2ECI_ * (force_air_vector + gravity_vector);
-                accBODY_ = dcmECI2NED_ * accECI_;
                 break;
                 
             default:
@@ -740,6 +791,10 @@ void CsvObserver::operator()(const state& x, double t){
         << rad2deg(attack_of_angle_[0]) << "," << rad2deg(attack_of_angle_[1]) << ","
         << rad2deg(attack_of_angle_[2]) << ","
         << dynamic_pressure << "," << force_drag << "," << force_lift << ","
+        << force_air_vector_BODYframe[0] << "," << force_air_vector_BODYframe[1] << ","
+        << force_air_vector_BODYframe[2] << "," << force_thrust_vector[0] << ","
+        << force_thrust_vector[1] << "," << force_thrust_vector[2] << ","
+        << rad2deg(gimbal_angle_pitch) << "," << rad2deg(gimbal_angle_yaw) << ","
         << wind_speed << "," << wind_direction << ","
         << downrange << "," << posLLH_IIP_[0] << "," << posLLH_IIP_[1] << ","
         << dcmBODY2ECI_(0, 0) << "," << dcmBODY2ECI_(0, 1) << "," << dcmBODY2ECI_(0, 2) << ","

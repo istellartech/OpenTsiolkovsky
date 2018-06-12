@@ -1,3 +1,3 @@
-time,azimth,elevation
-0,0.0,89.0
-1000,0.0,89.0
+time[s],azimth[deg],elevation[deg]
+0, 113, 80.0
+1000, 113, 80.0

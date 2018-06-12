@@ -68,3 +68,25 @@ MatrixXd read_csv_vector_3d(string filename,
     }
     return value;
 }
+
+MatrixXd read_csv_vector_4d(string filename,
+                            string col_name0, string col_name1,
+                            string col_name2, string col_name3){
+    //    ファイル名と列数を入れるとMatrixXd(n行4列)を返す
+    int col_number = 4;
+    io::CSVReader<4> in(filename);
+    in.read_header(io::ignore_extra_column, col_name0, col_name1, col_name2, col_name3);
+    MatrixXd value = MatrixXd::Zero(1,col_number);
+    double value0, value1, value2, value3;
+    int max_col = 1;
+    int now_col = 0;
+    while(in.read_row(value0, value1, value2, value3)){
+        value.conservativeResize(max_col, col_number);
+        value(now_col, 0) = value0;
+        value(now_col, 1) = value1;
+        value(now_col, 2) = value2;
+        value(now_col, 3) = value3;
+        now_col++; max_col++;
+    }
+    return value;
+}

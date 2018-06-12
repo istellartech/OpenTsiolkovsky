@@ -117,6 +117,10 @@ public:
     double dump_mass = 0.0;
     double dump_ballistic_coef = 0.0;
     Vector3d vel_dump_additional_NEDframe;
+    //    == attitude neutrality ==
+    bool is_consider_neutrality = false;
+    string neutrality_file_name;
+    MatrixXd neutrality_mat;
     //    == stage ==
     bool following_stage_exist = false;
     double previous_stage_separation_time = 0.0;  // [sec]
@@ -148,6 +152,14 @@ public:
     double elevation = pi/2;
     double mach_number = 0.0;
     double kinematic_energy = 0.0;
+    
+    double gimbal_angle_pitch = 0.0;  // [rad]
+    double gimbal_angle_yaw = 0.0;  // [rad]
+    
+    //    ==== neutrality ====
+    double pos_CG;              // centor of gravity position length from nose (STA) [m]
+    double pos_CP;              // centor of pressure position length from nose (STA) [m]
+    double pos_Controller;      // gimbal controller position length from nose (STA) [m]
 
     //    ==== loss velocity ====
     double loss_gravity = 0.0;
@@ -183,6 +195,7 @@ public:
     Matrix3d dcmECI2NED_init_;
 
     Vector3d force_air_vector;
+    Vector3d force_air_vector_BODYframe;
     Vector3d force_thrust_vector;
     Vector3d gravity_vector;
     Vector3d posLLH_IIP_;
@@ -272,6 +285,10 @@ public:
         dump_ballistic_coef = obj.dump_ballistic_coef;
         vel_dump_additional_NEDframe = obj.vel_dump_additional_NEDframe;
         
+        is_consider_neutrality = obj.is_consider_neutrality;
+        neutrality_file_name = obj.neutrality_file_name;
+        neutrality_mat = obj.neutrality_mat;
+
         following_stage_exist = obj.following_stage_exist;
         previous_stage_separation_time = obj.previous_stage_separation_time;
         later_stage_separation_time = obj.later_stage_separation_time;
@@ -300,6 +317,14 @@ public:
         elevation = obj.elevation;
         mach_number = obj.mach_number;
         kinematic_energy = obj.kinematic_energy;
+        
+        gimbal_angle_pitch = obj.gimbal_angle_pitch;
+        gimbal_angle_yaw = obj.gimbal_angle_yaw;
+        
+        pos_CG = obj.pos_CG;
+        pos_CP = obj.pos_CP;
+        pos_Controller = obj.pos_Controller;
+        
         loss_gravity = obj.loss_gravity;
         loss_aerodynamics = obj.loss_aerodynamics;
         loss_thrust = obj.loss_thrust;
@@ -336,6 +361,9 @@ struct CsvObserver : public RocketStage{
                     "Isp(s),Mach number,attitude_azimth(deg),attitude_elevation(deg),"
                     "attack of angle alpha(deg),attack of angle beta(deg),all attack of angle gamma(deg),"
                     "dynamic pressure(Pa),aero Drag(N),aero Lift(N),"
+                    "airforce_Body_X[N],airforce_Body_Y[N],airforce_Body_Z[N],"
+                    "thrust_Body_X[N],thrust_Body_Y[N],thrust_Body_Z[N],"
+                    "gimbal_angle_pitch(deg),gimbal_angle_yaw(deg),"
                     "wind speed(m/s),wind direction(deg),downrange(m),"
                     "IIP_lat(deg),IIP_lon(deg),"
                     "dcmBODY2ECI_11,dcmBODY2ECI_12,dcmBODY2ECI_13,"
