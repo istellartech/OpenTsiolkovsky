@@ -369,6 +369,7 @@ struct CsvObserver : public RocketStage{
                     "dcmBODY2ECI_11,dcmBODY2ECI_12,dcmBODY2ECI_13,"
                     "dcmBODY2ECI_21,dcmBODY2ECI_22,dcmBODY2ECI_23,"
                     "dcmBODY2ECI_31,dcmBODY2ECI_32,dcmBODY2ECI_33,"
+                    "inertial velocity(m/s),"
                     "kinematic_energy_NED(J),"
                     "loss_gravity(m/s2),"
                     "loss_aerodynamics(m/s2),"

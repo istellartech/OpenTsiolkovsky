@@ -37,17 +37,6 @@ import json
 import csv
 import os
 
-# if 'Windows' == platform.system():
-#     font_path = r'C:\WINDOWS\Fonts\MSGothic.ttf'
-#     font_prop = FontProperties(fname=font_path)
-#     mpl.rcParams['font.family'] = font_prop.get_name()
-# #
-# if 'Darwin' == platform.system(): # for Mac
-#     font_path = '/Library/Fonts/Osaka.ttf'
-#     if os.path.exists(font_path):
-#         font_prop = FontProperties(fname=font_path)
-#         mpl.rcParams['font.family'] = font_prop.get_name()
-
 plt.close('all')
 # plt.style.use('ggplot')
 mpl.rcParams['axes.grid'] = True
