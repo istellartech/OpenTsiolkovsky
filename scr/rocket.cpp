@@ -704,6 +704,7 @@ void CsvObserver::operator()(const state& x, double t){
     // === following code is different from RocketStage::operator() ===
     downrange = distance_surface(launch_pos_LLH, posLLH_);
     posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
+    kinematic_energy = 0.5 * x[0] * vel_ECEF_NEDframe_.norm() * vel_ECEF_NEDframe_.norm();
     
     //   ==== Calculte loss velocisy ====
     if (thrust > 0.1 || is_separated == false){
@@ -744,6 +745,7 @@ void CsvObserver::operator()(const state& x, double t){
         << dcmBODY2ECI_(0, 0) << "," << dcmBODY2ECI_(0, 1) << "," << dcmBODY2ECI_(0, 2) << ","
         << dcmBODY2ECI_(1, 0) << "," << dcmBODY2ECI_(1, 1) << "," << dcmBODY2ECI_(1, 2) << ","
         << dcmBODY2ECI_(2, 0) << "," << dcmBODY2ECI_(2, 1) << "," << dcmBODY2ECI_(2, 2) << ","
+        << kinematic_energy << ","
         << loss_gravity << "," << loss_aerodynamics << "," << loss_thrust << ","
         << is_powered << "," << is_separated << ","
         << endl;

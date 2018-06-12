@@ -147,6 +147,7 @@ public:
     double azimth = 0;
     double elevation = pi/2;
     double mach_number = 0.0;
+    double kinematic_energy = 0.0;
 
     //    ==== loss velocity ====
     double loss_gravity = 0.0;
@@ -298,6 +299,7 @@ public:
         azimth = obj.azimth;
         elevation = obj.elevation;
         mach_number = obj.mach_number;
+        kinematic_energy = obj.kinematic_energy;
         loss_gravity = obj.loss_gravity;
         loss_aerodynamics = obj.loss_aerodynamics;
         loss_thrust = obj.loss_thrust;
@@ -339,6 +341,7 @@ struct CsvObserver : public RocketStage{
                     "dcmBODY2ECI_11,dcmBODY2ECI_12,dcmBODY2ECI_13,"
                     "dcmBODY2ECI_21,dcmBODY2ECI_22,dcmBODY2ECI_23,"
                     "dcmBODY2ECI_31,dcmBODY2ECI_32,dcmBODY2ECI_33,"
+                    "kinematic_energy_NED(J),"
                     "loss_gravity(m/s2),"
                     "loss_aerodynamics(m/s2),"
                     "loss_thrust(m/s2),"
