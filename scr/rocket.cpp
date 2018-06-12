@@ -25,6 +25,8 @@ Vector2d impact_point_g; // LLH[deg]
 Vector3d posECI_dump_init_g;
 Vector3d velECI_dump_init_g;
 
+// Constructor from json file.
+// @param (input_filename) OpenTsiolkovsky input json file
 Rocket::Rocket(string input_filename){
     std::ifstream fin(input_filename);
     if( !fin ){
@@ -54,6 +56,9 @@ Rocket::Rocket(string input_filename){
     }
 };
 
+// Constructor from json object.
+// @param (o_each) each stage object (ex. "stage1" or "stage2"...)
+// @param (o) whole rocket object
 RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     source_json_object = o;
     picojson::object& o_calc         = o["calculate condition"].get<picojson::object>();
@@ -124,6 +129,10 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
         }
         dump_mass = o_dumping["dumping product mass[kg]"].get<double>();
         dump_ballistic_coef = o_dumping["dumping product ballistic coefficient[-]"].get<double>();
+        picojson::array& array_dump = o_dumping["additional speed at dumping NED[m/s,m/s,m/s]"].get<picojson::array>();
+        vel_dump_additional_NEDframe[0] = array_dump[0].get<double>();
+        vel_dump_additional_NEDframe[1] = array_dump[1].get<double>();
+        vel_dump_additional_NEDframe[2] = array_dump[2].get<double>();
     } catch (...) {
         cout << "dumping product json_object not found" << endl;
     }
@@ -164,6 +173,9 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     }
 }
 
+// Constructor for making an instance of ballistic flight object that is a dumping product
+// Create a new RocketStage instance from the original RocketStage and
+// the position and speed at the time of dumping.
 RocketStage::RocketStage(const RocketStage& rocket_stage, Vector3d posECI_init_args, Vector3d velECI_init_args){
     deep_copy(rocket_stage);
     calc_start_time = dump_separation_time;
@@ -264,8 +276,9 @@ void Rocket::flight_simulation(){
     cout << "Simulation Success!" << endl;
 }
 
+// for odeint::integrate
+// x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI]
 void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx, double t){
-    //  x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI]
     posECI_ << x[1], x[2], x[3];
     velECI_ << x[4], x[5], x[6];
 
@@ -435,7 +448,7 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     if (flag_dump_g == false && t >= dump_separation_time){
         flag_dump_g = true;
         posECI_dump_init_g = posECI_;
-        velECI_dump_init_g = velECI_;
+        velECI_dump_init_g = velECI_ + dcmNED2ECI_ * vel_dump_additional_NEDframe;
     }
     
     if (max_alt_g < posLLH_[2]){  // update maximum altitude[m]
@@ -526,11 +539,9 @@ void RocketStage::update_from_mach_number(){
     } else {
         CL = CL_const;
     }
-
 }
 
 // display progress on the console.
-#define STR(var) #var   //引数にした変数を変数名を示す文字列リテラルとして返すマクロ関数
 void RocketStage::progress(double time_now){
     double time_total = calc_end_time;
     cout << fixed << setprecision(0);
@@ -538,7 +549,8 @@ void RocketStage::progress(double time_now){
     return;
 }
 
-
+// for odeint::integrate observer
+// x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI]
 void CsvObserver::operator()(const state& x, double t){
     posECI_ << x[1], x[2], x[3];
     velECI_ << x[4], x[5], x[6];

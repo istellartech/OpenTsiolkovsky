@@ -116,6 +116,7 @@ public:
     double dump_separation_time = 0.0;
     double dump_mass = 0.0;
     double dump_ballistic_coef = 0.0;
+    Vector3d vel_dump_additional_NEDframe;
     //    == stage ==
     bool following_stage_exist = false;
     double previous_stage_separation_time = 0.0;  // [sec]
@@ -268,6 +269,7 @@ public:
         dump_separation_time = obj.dump_separation_time;
         dump_mass = obj.dump_mass;
         dump_ballistic_coef = obj.dump_ballistic_coef;
+        vel_dump_additional_NEDframe = obj.vel_dump_additional_NEDframe;
         
         following_stage_exist = obj.following_stage_exist;
         previous_stage_separation_time = obj.previous_stage_separation_time;
