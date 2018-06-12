@@ -18,6 +18,7 @@ Vector3d posECI_init_g;
 Vector3d velECI_init_g;
 bool flag_separation_g = false;
 bool flag_dump_g = false;
+bool flag_impact_g = false;
 double max_downrange_g = 0.0;
 double max_alt_g = 0.0;
 Vector2d impact_point_g; // LLH[deg]
@@ -185,6 +186,7 @@ void Rocket::flight_simulation(){
     for (int i = 0; i < rs.size(); i++){  // i is number of the rocket stages
         flag_separation_g = false;
         flag_dump_g = false;
+        flag_impact_g = false;
         if (i == 0){
             rs[i].posECI_init << posECI_init(rs[0].launch_pos_LLH);
             rs[i].velECI_init << velECI_init(rs[0].launch_vel_NED, rs[0].launch_pos_LLH);
@@ -241,6 +243,7 @@ void Rocket::flight_simulation(){
     
     // ==== DUMPING PRODUCTS flight simulation ====
     for (int i = 0; i < fo.size(); i++) {  // i is number of the dumping products
+        flag_impact_g = false;
         RocketStage::state State = { fo[i].mass_init,
             fo[i].posECI_init[0], fo[i].posECI_init[1], fo[i].posECI_init[2],
             fo[i].velECI_init[0], fo[i].velECI_init[1], fo[i].velECI_init[2],
@@ -279,9 +282,9 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
         if ((int)t % 10 == 0 && (int)(t*10) % 10 == 0 ){ // progress
             progress(t);
         }
-        if ( flag_impact == false ) {
+        if ( flag_impact_g == false ) {
             impact_point_g << posLLH_[0], posLLH_[1];
-            flag_impact = true;
+            flag_impact_g = true;
         }
         return;
     }
@@ -554,10 +557,10 @@ void rocket_csv_observer::operator()(const state& x, double t){
         if ((int)t % 10 == 0 && (int)(t*10) % 10 == 0 ){ // progress
             progress(t);
         }
-        if ( flag_impact == false ) {
-            impact_point << posLLH_[0], posLLH_[1];
-            flag_impact = true;
-        }
+//        if ( flag_impact == false ) {
+//            impact_point << posLLH_[0], posLLH_[1];
+//            flag_impact = true;
+//        }
         return;
     }
     

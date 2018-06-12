@@ -41,7 +41,7 @@ public:
     double max_downrange;           // maximum downrange [m]
     double max_alt;                 // maximum altitude [m]
     Vector2d impact_point;          // impact position LLH [deg,deg]
-    bool flag_impact;
+    bool flag_impact = false;
     
     using state = std::array<double, 7>;
 

@@ -24,10 +24,10 @@ INCLUDES = $(addprefix -I ,$(INCPATHS))
 OBJS = $(SRCDIR)/air.o
 OBJS += $(SRCDIR)/main.o
 OBJS += $(SRCDIR)/rocket.o
-OBJS += $(STCDIR)/coordinate_transform.o
 OBJS += $(SRCDIR)/fileio.o
 OBJS += $(SRCDIR)/gravity.o
 OBJS += $(SRCDIR)/Orbit.o
+OBJS += $(SRCDIR)/coordinate_transform.o
 CC = g++
 CFLAGS = -O2 -std=gnu++11
 # CFLAGS = -Wall -O2 -std=gnu++11
