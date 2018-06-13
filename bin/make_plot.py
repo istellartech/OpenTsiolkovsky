@@ -27,30 +27,21 @@ import sys
 import platform
 
 import numpy as np
+import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-# import matplotlib.font_manager
-# from matplotlib.font_manager import FontProperties
-# from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.backends.backend_pdf import PdfPages
 from math import sin, cos, acos, radians
 import json
 import csv
 import os
 
 plt.close('all')
-# plt.style.use('ggplot')
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['figure.autolayout'] = True
+mpl.rcParams['figure.autolayout'] = False
 mpl.rcParams['pdf.fonttype'] = 42 # change font to TrueType in pdf
 
-def detect_rise_fall_edge(tf):
-    tf = np.array(tf)
-    tf = np.insert(tf, [0, len(tf)], False) # insert False on the first and last
-    zero_one = tf.astype(int)
-    diff = np.diff(zero_one)
-    rising_idx = np.where(diff == 1)[0]
-    falling_idx = np.where(diff == -1)[0] -1
-    return np.column_stack([rising_idx, falling_idx])
+g = 9.80665
 
 def plot_timespan(time, time_idx, facecolor, alpha):
     for e in time_idx:
@@ -58,330 +49,335 @@ def plot_timespan(time, time_idx, facecolor, alpha):
         end = time[e[1]]
         plt.axvspan(begin, end, facecolor=facecolor, alpha=alpha)
 
-argvs = sys.argv
-argc = len(argvs)
-if (argc != 1):
-    file_name = argvs[1]
-else:
-	file_name = "param_sample_01.json"
+class RocketStage_input():
+    def __init__(self, data, num_stage):
+        """
+        Args:
+            data(dic) : json file data( > json.load(open(json_file)))
+        """
+        self.name = data["name(str)"]
+        self.calc = data["calculate condition"]
+        self.wind = data["wind"]
+        self.s = data["stage" + str(num_stage)]
+        self.thrust = self.s["thrust"]
+        self.aero = self.s["aero"]
+        self.attitude = self.s["aero"]
+        self.attitude = self.s["attitude"]
+        self.dump = self.s["dumping product"]
+        self.neutrality = self.s["attitude neutrality"]
+        self.stage = self.s["stage"]
 
-f = open(file_name)
-data = json.load(f)
+        if(self.thrust["Isp vac file exist?(bool)"]):
+            df = pd.read_csv(self.thrust["Isp vac file name(str)"])
+            self.Isp_time = df["time[s]"]
+            self.Isp = df["Isp vac[s]"]
+        else:
+            self.Isp_time = [0, 1]
+            self.Isp = [self.thrust["const Isp vac[s]"]] * 2
 
-# ==== Read JSON file ====
-lift_file_exist = []
-lift_file = []
-lift_coef = []
-drag_file_exist = []
-drag_file = []
-drag_coef = []
-attitude_file_exist = []
-attitude_file = []
-elevation_const = []
-azimth_const = []
-following_stage_exist = []
-rocket_name = data["name(str)"]
-calc_time_end = data["calculate condition"]["end time[s]"]
+        if(self.thrust["thrust vac file exist?(bool)"]):
+            df = pd.read_csv(self.thrust["thrust vac file name(str)"])
+            self.thrust_time = df["time[s]"]
+            self.thrust = df["thrust vac[N]"]
+        else:
+            self.thrust_time = [0, 1]
+            self.thrust = [self.thrust["const thrust vac[N]"]] * 2
 
-def load_rocket_json(stage):
-    index = len(lift_file_exist) # number of stages
-    stage_name = "stage" + stage
-    lift_file_exist.append(data[stage_name]["aero"]["lift coefficient file exist"])
-    lift_file.append(data[stage_name]["aero"]["lift coefficient file name"])
-    lift_coef.append(data[stage_name]["aero"]["lift coefficient"])
-    drag_file_exist.append(data[stage_name]["aero"]["drag coefficient file exist"])
-    drag_file.append(data[stage_name]["aero"]["drag coefficient file name"])
-    drag_coef.append(data[stage_name]["aero"]["drag coefficient"])
-    attitude_file_exist.append(data[stage_name]["attitude"]["file exist"])
-    attitude_file.append(data[stage_name]["attitude"]["file name"])
-    elevation_const.append(data[stage_name]["attitude"]["initial elevation[deg]"])
-    azimth_const.append(data[stage_name]["attitude"]["initial azimth[deg]"])
-    following_stage_exist.append(data[stage_name]["stage"]["following stage exist"])
+        if(self.aero["lift coefficient file exist?(bool)"]):
+            df = pd.read_csv(self.aero["lift coefficient file name(str)"])
+            self.CL_mach = df["mach[-]"]
+            self.CL = df["CL[-]"]
+        else:
+            self.CL_mach = [0, 5]
+            self.CL = [self.aero["const lift coefficient[-]"]] * 2
 
-load_rocket_json("1")
-load_rocket_json("2")
-load_rocket_json("3")
-wind_file_exist = data["wind"]["file exist"]
-wind_file = data["wind"]["file name"]
-wind_const = 0  # Temporarily
+        if(self.aero["drag coefficient file exist?(bool)"]):
+            df = pd.read_csv(self.aero["drag coefficient file name(str)"])
+            self.CD_mach = df["mach[-]"]
+            self.CD = df["CD[-]"]
+        else:
+            self.CD_mach = [0, 5]
+            self.CD = [self.aero["const drag coefficient[-]"]] * 2
 
-# ==== Read each parameter files ====
-stage_num = 1
-if (following_stage_exist[0]):
-    stage_num = 2
-if (following_stage_exist[0] and following_stage_exist[1]):
-    stage_num = 3
-mach_CD   = [0 for i in range(stage_num)]
-CD        = [0 for i in range(stage_num)]
-mach_CL   = [0 for i in range(stage_num)]
-CL        = [0 for i in range(stage_num)]
-time_attitude = [0 for i in range(stage_num)]
-azimth    = [0 for i in range(stage_num)]
-elevation = [0 for i in range(stage_num)]
-for index in range(stage_num):
-    if (drag_file_exist[index]):
-        (mach_CD_temp, CD_temp) = np.genfromtxt(drag_file[index], unpack=True,
-                                  delimiter=",", skip_header = 1, usecols = (0,1))
-        mach_CD[index] = mach_CD_temp
-        CD[index] = CD_temp
+        if(self.attitude["attitude file exist?(bool)"]):
+            df = pd.read_csv(self.attitude["attitude file name(str)"])
+            self.attitude_time = df["time[s]"]
+            self.azimth = df["azimth[deg]"]
+            self.elevation = df["elevation[deg]"]
+        else:
+            self.altitude_time = [0, 1]
+            self.azimth = [self.attitude["const azimth[deg]"]] * 2
+            self.elevation = [self.attitude["const elevation[deg]"]] * 2
+
+        if(self.neutrality["considering neutrality?(bool)"]):
+            df = pd.read_csv(self.neutrality["CG,CP,Controller position file(str)"])
+            self.neutrality_time = df["time[s]"]
+            self.pos_CG = df["CG_pos_STA[m]"]
+            self.pos_CP = df["CP_pos_STA[m]"]
+            self.pos_Control = df["Controller_pos_STA[m]"]
+        else:
+            self.neutrality_time = [0, 1]
+            self.pos_CG = [0, 0]
+            self.pos_CP = [0, 0]
+            self.pos_Control = [0, 0]
+
+        if(self.wind["wind file exist?(bool)"]):
+            df = pd.read_csv(self.attitude["wind file name(str)"])
+            self.wind_altitude = df["altitude[m]"]
+            self.wind_speed = df["wind_speed[m/s]"]
+            self.wind_direction = df["direction[deg]"]
+        else:
+            self.wind_altitude = [0, 1]
+            self.wind_speed = self.wind["const wind[m/s,deg]"][0]
+            self.wind_direction = self.wind["const wind[m/s,deg]"][1]
+
+
+def plot_grid(x, y, pos_x, pos_y, x_label, y_label):
+    grid_size = (3, 2)
+    plt.subplot2grid(grid_size, (pos_x, pos_y), rowspan=1, colspan=1)
+    plt.plot(x, y)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+
+def plot_grid_p(x, y, pos_x, pos_y, x_label, y_label, event_array):
+    grid_size = (3, 2)
+    plt.subplot2grid(grid_size, (pos_x, pos_y), rowspan=1, colspan=1)
+    plt.plot(x, y)
+    for i in event_array:
+        plt.plot(x[i], y[i], "ko", markersize=4)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+
+def make_event_index_array(df, time):
+    is_powered = df["is_powered(1=powered 0=free)"]
+    is_separated = df["is_separated(1=already 0=still)"]
+    is_powered_prev = is_powered[0]
+    is_separated_prev = is_separated[0]
+    event_index_array = []
+    for i in range(len(time)):
+        if (is_powered_prev == 1 and is_powered[i] == 0):
+            event_index_array.append(i)
+        if (is_powered_prev == 0 and is_powered[i] == 1):
+            event_index_array.append(i)
+        if (is_separated_prev == 0 and is_separated[i] == 1):
+            event_index_array.append(i)
+        is_powered_prev = is_powered[i]
+        is_separated_prev = is_separated[i]
+    return event_index_array
+
+
+if __name__ == '__main__':
+    if (len(sys.argv) != 1):
+        file_name = sys.argv[1]
     else:
-        mach_CD[index] = [0, 5]
-        CD[index] = [drag_coef[index], drag_coef[index]]
-    if (lift_file_exist[index]):
-        (mach_CL_temp, CL_temp) = np.genfromtxt(lift_file[index], unpack=True, delimiter=",",
-                                  skip_header = 1, usecols = (0,1))
-        mach_CL[index] = mach_CL_temp
-        CL[index] = CL_temp
-    else:
-        mach_CL[index] = [0, 5]
-        CL[index] = [lift_coef[index], lift_coef[index]]
-    if (attitude_file_exist[index]):
-        (time_attitude_temp, azimth_temp, elevation_temp) = np.genfromtxt(attitude_file[index],
-                                  unpack=True, delimiter=",",skip_header = 1, usecols = (0,1,2))
-        time_attitude[index] = time_attitude_temp
-        azimth[index] = azimth_temp
-        elevation[index] = elevation_temp
-    else:
-        time_attitude[index] = [0,1]
-        azimth[index] = [azimth_const[index], azimth_const[index]]
-        elevation[index] = [elevation_const[index], elevation_const[index]]
+    	file_name = "param_sample_01.json"
 
-if (wind_file_exist):
-    (altitude_wind, wind_speed, wind_direction) = np.genfromtxt(wind_file,
-                                  unpack=True, delimiter=",",skip_header = 1, usecols = (0,1,2))
-else:
-    altitude_wind = [0, 10000]
-    wind_speed = [wind_const, wind_const]
-    wind_direction = [0, 0]
+    f = open(file_name)
+    data = json.load(f)
+    rocket_name = data["name(str)"]
 
-# ==== PLOT "input" JSON file ====
-pdf = PdfPages('output/' + rocket_name + '_input.pdf')
-plt.rc('figure', figsize=(11.69,8.27))
-grid_size = (3, 2)
-print("input data plotting...")
-# plt.ion()
-for index in range(stage_num):
-    fig = plt.figure()
+    # ==== PLOT "input" JSON file ====
+    pdf = PdfPages('output/' + rocket_name + '_input.pdf')
+    plt.rc('figure', figsize=(11.69,8.27))
+    print("input data plot drawing...")
+    for i in range(1, 10):
+        if ("stage" + str(i) in data):
+            r_in = RocketStage_input(data, i)
+
+            print("Now %d stage drawing..." % (i), end="")
+            sys.stdout.write("\r")
+            sys.stdout.flush()
+            fig = plt.figure()
+            plot_grid(r_in.Isp_time, r_in.Isp, 0, 0, "time [s]", "Isp [s]")
+            plot_grid(r_in.thrust_time, r_in.thrust, 0, 1, "time [s]", "thrust [N]")
+            plot_grid(r_in.CL_mach, r_in.CL, 1, 0, "mach [-]", "CL [-]")
+            plot_grid(r_in.CD_mach, r_in.CD, 1, 1, "mach [-]", "CD [-]")
+            plot_grid(r_in.Isp_time, r_in.Isp, 2, 0, "time", "Isp")
+            plot_grid(r_in.Isp_time, r_in.Isp, 2, 1, "time", "Isp")
+            plt.tight_layout(pad=1.8)
+            fig.suptitle(r_in.name + " stage %d input" % (i), fontsize=20)
+            fig.subplots_adjust(top=0.9)
+
+            pdf.savefig()
+
+            if(r_in.neutrality["considering neutrality?(bool)"]):
+                plt.figure()
+                plt.plot(r_in.neutrality_time, r_in.pos_CG, label="CG")
+                plt.plot(r_in.neutrality_time, r_in.pos_CP, label="CP")
+                plt.plot(r_in.neutrality_time, r_in.pos_Control, label="Controller")
+                plt.gca().invert_yaxis()
+                plt.xlabel("time [s]")
+                plt.ylabel("postion STA [m]")
+                plt.title("*CAUTION* Upside-Down\n" + r_in.name + " stage %d input" %(i))
+                plt.legend()
+                pdf.savefig()
+
+    pdf.close()
+
+    # ==== PLOT "output" CSV file ====
+    pdf = PdfPages('output/' + rocket_name + '_output.pdf')
+    plt.rc('figure', figsize=(11.69,8.27))
+    grid_size = (3, 2)
+    print("output data plot drawing...")
+    for i in range(1, 10):
+        if ("stage" + str(i) in data):
+            df = pd.read_csv("output/" + rocket_name + "_dynamics_" + str(i) + ".csv", index_col=False)
+            time = df["time(s)"]
+            time_apogee_index = df.loc[df["altitude(m)"] == max(df["altitude(m)"])].index[0]
+            t_end = time_apogee_index
+            acc = np.sqrt(df["acc_Body_X(m/s)"] ** 2 + df["acc_Body_Y(m/s)"] ** 2 + df["acc_Body_Z(m/s)"] ** 2)
+            e = make_event_index_array(df, time)  # e: event_index(list)
+            e = np.array(e)
+            e = e[e < t_end]
+
+            num_page = 1
+            print("Now %d stage %d page drawing..." % (i, num_page), end="")
+            sys.stdout.write("\r")
+            sys.stdout.flush()
+            plt.figure()
+            plot_grid_p(time[:t_end], df["mass(kg)"][:t_end], 0, 0, "time [s]", "mass [kg]", e)
+            plot_grid_p(time[:t_end], df["thrust(N)"][:t_end], 0, 1, "time [s]", "thrust [N]", e)
+            plot_grid_p(time[:t_end], df["Isp(s)"][:t_end], 1, 0, "time [s]", "Isp [s]", e)
+            plot_grid_p(time[:t_end], df["altitude(m)"][:t_end], 1, 1, "time [s]", "altitude [m]", e)
+            plot_grid_p(time[:t_end], df["downrange(m)"][:t_end], 2, 0, "time [s]", "downrange [m]", e)
+            plot_grid_p(df["downrange(m)"][:t_end], df["altitude(m)"][:t_end], 2, 1, "time [s]", "downrange [m]", e)
+            plt.tight_layout(pad=1.8)
+            plt.suptitle(rocket_name + " stage %d output " % (i) + "(%d)" % (num_page), fontsize=20)
+            plt.subplots_adjust(top=0.9)
+            pdf.savefig()
+
+            num_page += 1
+            print("Now %d stage %d page drawing..." % (i, num_page), end="")
+            sys.stdout.write("\r")
+            sys.stdout.flush()
+            plt.figure()
+            plt.subplot2grid(grid_size, (0, 0), rowspan=1, colspan=1)
+            plt.plot(time[:t_end], df["vel_NED_X(m/s)"][:t_end], label="North")
+            plt.plot(time[:t_end], df["vel_NED_Y(m/s)"][:t_end], label="East")
+            for j in e:
+                plt.plot(time[j], df["vel_NED_X(m/s)"][j], "ko", markersize=4)
+                plt.plot(time[j], df["vel_NED_Y(m/s)"][j], "ko", markersize=4)
+            plt.xlabel("time (sec)");plt.ylabel("velocity (m/s)")
+            plt.legend(loc="best")
+            plot_grid_p(time[:t_end], -df["vel_NED_Z(m/s)"][:t_end], 0, 1, "time [s]", "velocity Up [m/s]", e)
+            plot_grid_p(time[:t_end], df["dynamic pressure(Pa)"][:t_end]/1000, 1, 0, "time [s]", "dynamic pressure [kPa]", e)
+            plot_grid_p(time[:t_end], df["Mach number"][:t_end], 1, 1, "time [s]", "Mach number [-]", e)
+            plot_grid_p(time[:t_end], acc[:t_end]/g, 2, 0, "time [s]", "acceleration [G]", e)
+            plot_grid_p(time[:t_end], df["acc_Body_X(m/s)"][:t_end], 2, 1, "time [s]", "acceleration X [G]", e)
+            plt.tight_layout(pad=1.8)
+            plt.suptitle(rocket_name + " stage %d output " % (i) + "(%d)" % (num_page), fontsize=20)
+            plt.subplots_adjust(top=0.9)
+            pdf.savefig()
+
+            num_page += 1
+            print("Now %d stage %d page drawing..." % (i, num_page), end="")
+            sys.stdout.write("\r")
+            sys.stdout.flush()
+            plt.figure()
+            plot_grid_p(time[:t_end], df["attitude_azimth(deg)"][:t_end], 0, 0, "time [s]", "azimth [deg]", e)
+            plot_grid_p(time[:t_end], df["attitude_elevation(deg)"][:t_end], 0, 1, "time [s]", "elevation [deg]", e)
+            plot_grid_p(time[:t_end], df["all attack of angle gamma(deg)"][:t_end], 1, 0, "time [s]", "AoA all [deg]", e)
+            plot_grid_p(time[:t_end], df["Mach number"][:t_end], 1, 1, "time [s]", "Mach number [-]", e)
+            plot_grid_p(time[:t_end], df["aero Drag(N)"][:t_end], 2, 0, "time [s]", "Drag [N]", e)
+            plot_grid_p(time[:t_end], df["aero Lift(N)"][:t_end], 2, 1, "time [s]", "Lift [N]", e)
+            plt.tight_layout(pad=1.8)
+            plt.suptitle(rocket_name + " stage %d output " % (i) + "(%d)" % (num_page), fontsize=20)
+            plt.subplots_adjust(top=0.9)
+            pdf.savefig()
+
+            num_page += 1
+            print("Now %d stage %d page drawing..." % (i, num_page), end="")
+            sys.stdout.write("\r")
+            sys.stdout.flush()
+            plt.figure()
+            plt.subplot2grid(grid_size, (0, 0), rowspan=1, colspan=1)
+            plt.plot(time[:t_end], df["gimbal_angle_pitch(deg)"][:t_end], label="pitch")
+            plt.plot(time[:t_end], df["gimbal_angle_yaw(deg)"][:t_end], label="yaw")
+            for j in e:
+                plt.plot(time[j], df["gimbal_angle_pitch(deg)"][j], "ko", markersize=4)
+                plt.plot(time[j], df["gimbal_angle_yaw(deg)"][j], "ko", markersize=4)
+            plt.xlabel("time (sec)");plt.ylabel("gimbal angle [deg]")
+            plt.legend(loc="best")
+            plt.subplot2grid(grid_size, (0, 1), rowspan=1, colspan=1)
+            plt.plot(time[:t_end], df["thrust_Body_Y[N]"][:t_end], label="thrust Y")
+            plt.plot(time[:t_end], df["thrust_Body_Z[N]"][:t_end], label="thrust Z")
+            for j in e:
+                plt.plot(time[j], df["thrust_Body_Y[N]"][j], "ko", markersize=4)
+                plt.plot(time[j], df["thrust_Body_Z[N]"][j], "ko", markersize=4)
+            plt.xlabel("time (sec)");plt.ylabel("thrust Body_frame [N]")
+            plt.legend(loc="best")
+            plt.subplot2grid(grid_size, (1, 0), rowspan=1, colspan=1)
+            plt.plot(time[:t_end], df["airforce_Body_Y[N]"][:t_end], label="airforce Y")
+            plt.plot(time[:t_end], df["airforce_Body_Z[N]"][:t_end], label="airforce Z")
+            for j in e:
+                plt.plot(time[j], df["airforce_Body_Y[N]"][j], "ko", markersize=4)
+                plt.plot(time[j], df["airforce_Body_Z[N]"][j], "ko", markersize=4)
+            plt.xlabel("time (sec)");plt.ylabel("airforce Body_frame [N]")
+            plt.legend(loc="best")
+            plot_grid_p(time[:t_end], df["inertial velocity(m/s)"][:t_end], 1, 1, "time [s]", "inertia velocity [m/s]", e)
+            plot_grid_p(time[:t_end], df["wind speed(m/s)"][:t_end], 2, 0, "time [s]", "wind speed [m/s]", e)
+            plot_grid_p(time[:t_end], df["wind direction(deg)"][:t_end], 2, 1, "time [s]", "wind direction [deg]", e)
+            plt.tight_layout(pad=1.8)
+            plt.suptitle(rocket_name + " stage %d output " % (i) + "(%d)" % (num_page), fontsize=20)
+            plt.subplots_adjust(top=0.9)
+            pdf.savefig()
+
+    pdf.close()
+
+
+    # ==== PLOT "output" SUMMERY ====
+    df_sum = pd.DataFrame()
+    e_each = []
+    e_time = []  # イベント時の時刻を取得
+    for i in range(1, 10):
+        if ("stage" + str(i) in data):
+            df = pd.read_csv("output/" + rocket_name + "_dynamics_" + str(i) + ".csv", index_col=False)
+            df_sep = df[df["is_separated(1=already 0=still)"] == 0]
+            df_sum = pd.concat([df_sum, df_sep])
+            e_each = []
+            e_each.extend(make_event_index_array(df_sep, df_sep["time(s)"]))
+            e_each.append(df_sep.index[-1])  # SEP時のtimeもイベントに追加
+            for j in e_each:
+                e_time.append(df_sep["time(s)"].iloc[j])
+
+    print("Now summery plot drawing...")
+    time_sum = df_sum["time(s)"]
+    acc = np.sqrt(df_sum["acc_Body_X(m/s)"] ** 2 + df_sum["acc_Body_Y(m/s)"] ** 2 + df_sum["acc_Body_Z(m/s)"] ** 2)
+    grid_size = (2, 2)
+    plt.figure()
     plt.subplot2grid(grid_size, (0, 0), rowspan=1, colspan=1)
-    plt.plot(mach_CD[index], CD[index])
-    plt.xlabel("mach number (-)")
-    plt.ylabel("CD (-)")
-    plt.title("stage:%d" % (index+1))
+    plt.plot(df_sum["downrange(m)"]/1000, df_sum["altitude(m)"]/1000)
+    plt.xlabel("downrange [km]")
+    plt.ylabel("altitude [km]")
+    for j in e_time:
+        plt.plot(df_sum["downrange(m)"][df_sum["time(s)"]==j]/1000, df_sum["altitude(m)"][df_sum["time(s)"]==j]/1000, "ko", markersize=6)
 
     plt.subplot2grid(grid_size, (0, 1), rowspan=1, colspan=1)
-    plt.plot(mach_CL[index], CL[index])
-    plt.xlabel("mach number (-)")
-    plt.ylabel("CL (-)")
+    plt.plot(time_sum, df_sum["inertial velocity(m/s)"])
+    plt.xlabel("time [s]")
+    plt.ylabel("inertial velocity [m/s]")
+    for j in e_time:
+        plt.plot(time_sum[df_sum["time(s)"]==j], df_sum["inertial velocity(m/s)"][df_sum["time(s)"]==j], "ko", markersize=6)
 
     plt.subplot2grid(grid_size, (1, 0), rowspan=1, colspan=1)
-    plt.plot(time_attitude[index], azimth[index])
-    plt.xlabel("time (s)")
-    plt.ylabel("azimth (deg)")
+    plt.plot(time_sum, acc/g)
+    plt.xlabel("time [s]")
+    plt.ylabel("acceleration [G]")
+    for j in e_time:
+        plt.plot(time_sum[df_sum["time(s)"]==j], acc[df_sum["time(s)"]==j]/g, "ko", markersize=6)
 
     plt.subplot2grid(grid_size, (1, 1), rowspan=1, colspan=1)
-    plt.plot(time_attitude[index], elevation[index])
-    plt.xlabel("time (s)")
-    plt.ylabel("elevation (deg)")
+    plt.plot(time_sum, df_sum["dynamic pressure(Pa)"]/1000)
+    plt.xlabel("time [s]")
+    plt.ylabel("dynamic pressure [kPa]")
+    for j in e_time:
+        plt.plot(time_sum[df_sum["time(s)"]==j], df_sum["dynamic pressure(Pa)"][df_sum["time(s)"]==j]/1000, "ko", markersize=6)
 
-    plt.subplot2grid(grid_size, (2, 0), rowspan=1, colspan=1)
-    plt.plot(altitude_wind, wind_speed)
-    plt.xlabel("altitude (m)")
-    plt.ylabel("wind speed (m/s)")
+    plt.tight_layout(pad=1.8)
+    plt.suptitle(rocket_name + " Summery", fontsize=20)
+    plt.subplots_adjust(top=0.9)
 
-    plt.subplot2grid(grid_size, (2, 1), rowspan=1, colspan=1)
-    plt.plot(altitude_wind, wind_direction)
-    plt.xlabel("altitude (m)")
-    plt.ylabel("wind direction (deg)")
+    plt.savefig('output/' + rocket_name + '_output_summery.png')
 
-    pdf.savefig(fig)
-
-pdf.close()
-
-# ==== PLOT "output" CSV file ====
-pdf = PdfPages('output/' + rocket_name + '_output.pdf')
-plt.rc('figure', figsize=(11.69,8.27))
-grid_size = (6, 4)
-print(u"output data plotting...")
-fig = [[0 for i in range(3)] for j in range(stage_num)]
-for index in range(stage_num):
-    if (index == 0):
-        stage_str = "1st"
-    elif (index == 1):
-        stage_str = "2nd"
-    elif (index == 2):
-        stage_str = "3rd"
-    file_name = "output/" + rocket_name + "_dynamics_" + stage_str + ".csv"
-    (time, mass, thrust, lat, lon, altitude, pos_ECI_X, pos_ECI_Y,
-     pos_ECI_Z, vel_ECI_X, vel_ECI_Y, vel_ECI_Z, vel_NED_X,
-     vel_NED_Y, vel_NED_Z, acc_ECI_X, acc_ECI_Y, acc_ECI_Z,
-     acc_BODY_X, acc_BODY_Y, acc_BODY_Z,
-     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma,
-     dynamic_press, drag, lift,
-     wind_speed, wind_direction, downrange) = np.genfromtxt(file_name,
-                                                unpack=True, delimiter=",",
-                                                skip_header = 1,
-                                                usecols = (0,1,2,3,4,5,6,7,8,9,10,11,12,13,
-    													   14,15,16,17,18,19,20,21,22,23,24,
-    													   25,26,27,28,29,30,31,32,33))
-    g = 9.80665
-    acc = np.sqrt(acc_ECI_X ** 2 + acc_ECI_Y ** 2 + acc_ECI_Z ** 2)
-    # Calculation of maximum altitude time and cut subsequent data
-    time_index_apogee = np.where(altitude == max(altitude))[0][0]
-    time_cut = time[0:time_index_apogee]
-    dynamic_press = dynamic_press[0:time_index_apogee]
-    aoa_alpha = aoa_alpha[0:time_index_apogee]
-    aoa_beta = aoa_beta[0:time_index_apogee]
-    all_aoa_gamma = all_aoa_gamma[0:time_index_apogee]
-    azimth = azimth[0:time_index_apogee]
-    elevation = elevation[0:time_index_apogee]
-    mach = mach[0:time_index_apogee]
-    drag = drag[0:time_index_apogee]
-    lift = lift[0:time_index_apogee]
-
-    # 燃焼中領域の算出
-    # 最大推力の1%以上を燃焼中とみなす
-    invalid_thrust_N = np.max(thrust) * 0.01
-    powered_idx = detect_rise_fall_edge(thrust > invalid_thrust_N)
-    powered_idx_cut = detect_rise_fall_edge(thrust[0:time_index_apogee] > invalid_thrust_N)
-
-
-    fig[index][0] = plt.figure()
-    plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
-    plt.plot(time, mass)
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("mass (kg)")
-    plt.title("stage:%d" % (index+1))
-
-    plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
-    plt.plot(time, thrust)
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("thrust (N)")
-
-    plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
-    plt.plot(time, Isp)
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("Isp(specific impulse) (s)")
-
-    plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
-    plt.plot(time, altitude)
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("altitude (m)")
-
-    plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
-    plt.plot(time, downrange)
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("downrange (m)")
-
-    plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
-    plt.plot(downrange, altitude)
-    plt.xlabel("downrange (m)")
-    plt.ylabel("altitude (m)")
-
-    pdf.savefig(fig[index][0])
-    fig[index][1] = plt.figure()
-
-    plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
-    plt.plot(time, vel_NED_X, label="North")
-    plt.plot(time, vel_NED_Y, label="East")
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("velocity (m/s)")
-    plt.legend(loc="best")
-
-    plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
-    plt.plot(time, -vel_NED_Z, label="Up")
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("velocity (m/s)")
-    plt.legend()
-
-    plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
-    plt.plot(time_cut, dynamic_press/1000)
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("dynamic pressure (kPa)")
-
-    plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
-    plt.plot(time_cut, mach)
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("Mach number at the altitude (-)")
-
-    plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
-    plt.plot(time, acc/g)
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("acceleration (G)")
-
-    plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
-    plt.plot(time, acc_BODY_X/g, label="X_body")
-    plt.plot(time, acc_BODY_Y/g, label="Y_body")
-    plt.plot(time, acc_BODY_Z/g, label="Z_body")
-    plot_timespan(time, powered_idx, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("acceleration (G)")
-    plt.legend(loc="best")
-
-
-    pdf.savefig(fig[index][1])
-    fig[index][2] = plt.figure()
-
-    plt.subplot2grid(grid_size, (0, 0), rowspan=2, colspan=2)
-    plt.plot(time_cut, azimth, label="azimth")
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("attitude angle (deg)")
-    plt.legend()
-
-    plt.subplot2grid(grid_size, (0, 2), rowspan=2, colspan=2)
-    plt.plot(time_cut, elevation, label="elevation")
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("attitude angle (deg)")
-    plt.legend()
-
-    plt.subplot2grid(grid_size, (2, 0), rowspan=2, colspan=2)
-    plt.plot(time_cut, aoa_alpha, label="alpha")
-    plt.plot(time_cut, all_aoa_gamma, label="all aoa")
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("attack of angle (deg)")
-    plt.legend(loc="best")
-
-    plt.subplot2grid(grid_size, (2, 2), rowspan=2, colspan=2)
-    plt.plot(time_cut, aoa_beta, label="beta")
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.xlabel("time (sec)")
-    plt.ylabel("attack of angle beta (deg)")
-    plt.legend(loc="best")
-
-    plt.subplot2grid(grid_size, (4, 0), rowspan=2, colspan=2)
-    plt.plot(time_cut, drag, label="drag")
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.legend()
-    plt.xlabel("time (sec)")
-    plt.ylabel("drag force (N)")
-
-    plt.subplot2grid(grid_size, (4, 2), rowspan=2, colspan=2)
-    plt.plot(time_cut, lift, label="lift")
-    plot_timespan(time_cut, powered_idx_cut, facecolor='r', alpha=0.3)
-    plt.legend()
-    plt.xlabel("time (sec)")
-    plt.ylabel("lift force (N)")
-
-    pdf.savefig(fig[index][2])
-
-    del(time, mass, thrust, lat, lon, altitude, pos_ECI_X, pos_ECI_Y,
-     pos_ECI_Z, vel_ECI_X, vel_ECI_Y, vel_ECI_Z, vel_NED_X,
-     vel_NED_Y, vel_NED_Z, acc_ECI_X, acc_ECI_Y, acc_ECI_Z,
-     Isp, mach, azimth, elevation, aoa_alpha, aoa_beta, all_aoa_gamma,
-     dynamic_press, drag, lift, wind_speed, wind_direction)
-
-pdf.close()
-# plt.show()
-print("Done")
+    plt.show()
+    print("==== make_plot.py DONE ====")

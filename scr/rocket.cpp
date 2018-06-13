@@ -167,7 +167,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     }
     if ( thrust_file_exist ){
         thrust_mat = read_csv_vector_3d("./" + thrust_file_name,
-                                        "time[s]", "thrust[N]", "nozzle_exhaust_pressure[Pa]");
+                                        "time[s]", "thrust vac[N]", "nozzle_exhaust_pressure[Pa]");
     }
     if ( CL_file_exist ){
         CL_mat = read_csv_vector_2d("./" + CL_file_name, "mach[-]", "CL[-]");
@@ -753,6 +753,7 @@ void CsvObserver::operator()(const state& x, double t){
     }
     
     // === following code is different from RocketStage::operator() ===
+    accBODY_ = dcmECI2BODY_ * (accECI_ - dcmNED2ECI_ * gravity_vector);
     downrange = distance_surface(launch_pos_LLH, posLLH_);
     posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
     kinematic_energy = 0.5 * x[0] * vel_ECEF_NEDframe_.norm() * vel_ECEF_NEDframe_.norm();
