@@ -113,7 +113,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     CD_file_exist = o_aero["drag coefficient file exist?(bool)"].get<bool>();
     CD_file_name = o_aero["drag coefficient file name(str)"].get<string>();
     CD_const = o_aero["const drag coefficient[-]"].get<double>();
-    ballistic_coef = o_aero["ballistic coefficient(ballistic flight mode)[-]"].get<double>();
+    ballistic_coef = o_aero["ballistic coefficient(ballistic flight mode)[kg/m2]"].get<double>();
     attitude_file_exist = o_attitude["attitude file exist?(bool)"].get<bool>();
     attitude_file_name = o_attitude["attitude file name(str)"].get<string>();
     attitude_elevation_const_deg = o_attitude["const elevation[deg]"].get<double>();
@@ -128,7 +128,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
             dump_separation_time = 1.0e100; // temporaly large number
         }
         dump_mass = o_dumping["dumping product mass[kg]"].get<double>();
-        dump_ballistic_coef = o_dumping["dumping product ballistic coefficient[-]"].get<double>();
+        dump_ballistic_coef = o_dumping["dumping product ballistic coefficient[kg/m2]"].get<double>();
         picojson::array& array_dump = o_dumping["additional speed at dumping NED[m/s,m/s,m/s]"].get<picojson::array>();
         vel_dump_additional_NEDframe[0] = array_dump[0].get<double>();
         vel_dump_additional_NEDframe[1] = array_dump[1].get<double>();
@@ -565,7 +565,6 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     if (time >= later_stage_separation_time && is_separated == false){
         is_separated = true;
     }
-
 }
 
 void RocketStage::update_from_mach_number(){
