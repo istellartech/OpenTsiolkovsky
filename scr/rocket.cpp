@@ -17,6 +17,7 @@ Vector3d vel_NED_init_g;
 Vector3d posECI_init_g;
 Vector3d velECI_init_g;
 bool flag_separation_g = false;
+bool flag_separation_mass_reduce_g = false;
 bool flag_dump_g = false;
 bool flag_impact_g = false;
 double max_downrange_g = 0.0;
@@ -150,7 +151,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     }
     
     try{
-        picojson::object& o_neutrality = o_each["attitude neutrality"].get<picojson::object>();
+        picojson::object& o_neutrality = o_each["attitude neutrality(3DoF)"].get<picojson::object>();
         is_consider_neutrality = o_neutrality["considering neutrality?(bool)"].get<bool>();
         neutrality_file_name = o_neutrality["CG,CP,Controller position file(str)"].get<string>();
     } catch (...) {
@@ -209,6 +210,7 @@ RocketStage::RocketStage(const RocketStage& rocket_stage, Vector3d posECI_init_a
     attitude_file_exist = false;
 }
 
+
 void Rocket::flight_simulation(){
     // rs : mean RocketNew::rocket_stages, class RocketStage
     using base_stepper_type = odeint::runge_kutta_dopri5<RocketStage::state>;
@@ -216,6 +218,7 @@ void Rocket::flight_simulation(){
     
     for (int i = 0; i < rs.size(); i++){  // i is number of the rocket stages
         flag_separation_g = false;
+        flag_separation_mass_reduce_g = false;
         flag_dump_g = false;
         flag_impact_g = false;
         if (i == 0){
@@ -254,6 +257,10 @@ void Rocket::flight_simulation(){
                                     std::ref(Observer));
             CsvObserver Observer(csv_filename, true);
             Observer.deep_copy(rs[i]);
+            if (time_array[j+1] == rs[i].later_stage_separation_time && !flag_separation_mass_reduce_g){
+                State[0] = State[0] - rs[i+1].mass_init;  // reduce upper stage mass to "ODE x[0]"
+                flag_separation_mass_reduce_g = true;
+            }
             if (time_array[j+1] == rs[i].dump_separation_time){
                 RocketStage temp_fo(rs[i], posECI_dump_init_g, velECI_dump_init_g);
                 temp_fo.num_stage = rs[i].num_stage;
@@ -296,7 +303,8 @@ void Rocket::flight_simulation(){
 }
 
 // for odeint::integrate
-// x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI]
+// x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI,
+//      q0, q1, q2, q3, omega_x, omega_y, omega_z]
 void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx, double t){
     posECI_ << x[1], x[2], x[3];
     velECI_ << x[4], x[5], x[6];
@@ -334,56 +342,20 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     //    gravity term : gravity acceleration in the north direction is not considered
     gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
 
-    Vector2d azel;
     if (is_powered){  // ---- powered flight ----
         switch (power_flight_mode) {
             case _3DoF:
-                flight_mode = "power_3DoF";
-                dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-                vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-                attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
-                dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
-                dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
-                dcmBODY2ECI_ = dcmECI2BODY_.transpose();
-
-                //    aerodynamics term
-                vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
-                mach_number = vel_AIR_BODYframe_abs / air.airspeed;
-                update_from_mach_number();
-                dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
-                force_drag = CD * dynamic_pressure * body_area;
-                force_lift = CL * dynamic_pressure * body_area;
-                force_air_vector << -force_drag, 0.0, -force_lift;
-                //    thrust term
-                if ( is_consider_neutrality ) {
-                    force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
-                    gimbal_angle_pitch = asin(force_air_vector_BODYframe[1] / thrust
-                                              * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
-                    gimbal_angle_yaw = asin(force_air_vector_BODYframe[2] / thrust
-                                            * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
-                    force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
-                                           thrust * (-1) * sin(gimbal_angle_yaw),
-                                           thrust * (-1) * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);
-                } else {
-                    force_thrust_vector << thrust, 0.0, 0.0;  // body coordinate
-                }
-                //    dv/dt
-                accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
-                + dcmNED2ECI_ * gravity_vector;
+                power_flight_3dof(x,t);
                 break;
-                
-            case _3DoF_with_delay:
-                flight_mode = "power_3DoF_delay";
-                break;  // Unimplemented
-                
-            case _6DoF:
-                flight_mode = "power_6DoF";
-                break;  // Unimplemented
-                
-            case _6DoF_aerodynami_stable:
-                flight_mode = "power_6DoF_aero_stable";
-                break;  // Unimplemented
-                
+            case _3DoF_with_delay:  // Unimplemented
+                power_flight_3dof_with_delay(x, t);
+                break;
+            case _6DoF:  // Unimplemented
+                power_flight_6dof(x, t);
+                break;
+            case _6DoF_aerodynamic_stable:  // Unimplemented
+                power_flight_6dof_aerodynamic_stable(x, t);
+                break;
             default:
                 m_dot = 0;
                 accECI_ << 0.0, 0.0, 0.0;
@@ -392,70 +364,14 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     } else {  // ---- free flight ----
         switch (free_flight_mode) {
             case aerodynamic_stable:
-                flight_mode = "free_aero_stable";
-                attack_of_angle_ << 0.0, 0.0, 0.0;
-                vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
-                vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
-                azel = azimth_elevaztion(vel_BODY_NEDframe_);
-                azimth = azel[0];
-                elevation = azel[1];
-                dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-                dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
-                dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
-                dcmBODY2ECI_ = dcmECI2BODY_.transpose();
-                
-                //    thrust term
-                force_thrust_vector << 0.0, 0.0, 0.0;
-                //    aerodynamics term
-                vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
-                mach_number = vel_AIR_BODYframe_abs / air.airspeed;
-                update_from_mach_number();
-                dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
-                force_drag = CD * dynamic_pressure * body_area;
-                force_lift = CL * dynamic_pressure * body_area;
-                force_air_vector << -force_drag, 0.0, -force_lift;
-                //    dv/dt
-                accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
-                + dcmNED2ECI_ * gravity_vector;
+                free_flight_aerodynamic_stable(x, t);
                 break;
-                
             case _3DoF_defined:
-                flight_mode = "free_3dof";
-                dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-                vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-                attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
-                dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
-                dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
-                dcmBODY2ECI_ = dcmECI2BODY_.transpose();
-                
-                //    thrust term
-                force_thrust_vector << 0.0, 0.0, 0.0;
-                //    aerodynamics term
-                vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
-                mach_number = vel_AIR_BODYframe_abs / air.airspeed;
-                update_from_mach_number();
-                dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
-                force_drag = CD * dynamic_pressure * body_area;
-                force_lift = CL * dynamic_pressure * body_area;
-                force_air_vector << -force_drag, 0.0, -force_lift;
-                //    dv/dt
-                accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
-                + dcmNED2ECI_ * gravity_vector;
+                free_flight_3dof_defined(x, t);
                 break;
-
             case ballistic_flight:
-                flight_mode = "free_ballistic";
-                //    aerodynamics term
-                vel_AIR_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
-                vel_AIR_NEDframe_abs = vel_AIR_NEDframe_.norm();
-                mach_number = vel_AIR_NEDframe_abs / air.airspeed;
-                dynamic_pressure = 0.5 * air.density * vel_AIR_NEDframe_abs * vel_AIR_NEDframe_abs;
-                force_drag = dynamic_pressure / ballistic_coef;
-                force_air_vector = force_drag * (-1) * (vel_AIR_NEDframe_ / vel_AIR_NEDframe_abs);  //NED frame
-                //    dv/dt
-                accECI_ = dcmNED2ECI_ * (force_air_vector + gravity_vector);
+                free_flight_ballistic(x, t);
                 break;
-                
             default:
                 m_dot = 0;
                 accECI_ << 0.0, 0.0, 0.0;
@@ -497,6 +413,7 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
         progress(t);
     }
 }
+
 
 void RocketStage::update_from_time_and_altitude(double time, double altitude){
     Air air;
@@ -567,6 +484,7 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     }
 }
 
+
 void RocketStage::update_from_mach_number(){
     if (CD_file_exist) {
         CD = interp_matrix(mach_number, CD_mat);
@@ -580,6 +498,126 @@ void RocketStage::update_from_mach_number(){
     }
 }
 
+
+void RocketStage::power_flight_3dof(const RocketStage::state& x, double t){
+    flight_mode = "power_3DoF";
+    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
+    attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
+    dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
+    dcmBODY2ECI_ = dcmECI2BODY_.transpose();
+    
+    //    aerodynamics term
+    vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
+    mach_number = vel_AIR_BODYframe_abs / air.airspeed;
+    update_from_mach_number();
+    dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
+    force_drag = CD * dynamic_pressure * body_area;
+    force_lift = CL * dynamic_pressure * body_area;
+    force_air_vector << -force_drag, 0.0, -force_lift;
+    //    thrust term
+    if ( is_consider_neutrality ) {
+        force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
+        gimbal_angle_pitch = asin(force_air_vector_BODYframe[1] / thrust
+                                  * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
+        gimbal_angle_yaw = asin(force_air_vector_BODYframe[2] / thrust
+                                * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
+        force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
+        thrust * (-1) * sin(gimbal_angle_yaw),
+        thrust * (-1) * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);
+    } else {
+        force_thrust_vector << thrust, 0.0, 0.0;  // body coordinate
+    }
+    //    dv/dt
+    accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
+    + dcmNED2ECI_ * gravity_vector;
+}
+
+// Unimplemented
+void RocketStage::power_flight_3dof_with_delay(const RocketStage::state& x, double t){
+    flight_mode = "power_3DoF_delay";
+}
+
+// Unimplemented
+void RocketStage::power_flight_6dof(const RocketStage::state& x, double t){
+    flight_mode = "power_6DoF";
+}
+
+// Unimplemented
+void RocketStage::power_flight_6dof_aerodynamic_stable(const RocketStage::state& x, double t){
+    flight_mode = "power_6DoF_aero_stable";
+}
+
+
+void RocketStage::free_flight_aerodynamic_stable(const RocketStage::state& x, double t){
+    flight_mode = "free_aero_stable";
+    attack_of_angle_ << 0.0, 0.0, 0.0;
+    vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
+    vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
+    Vector2d azel;
+    azel = azimth_elevaztion(vel_BODY_NEDframe_);
+    azimth = azel[0];
+    elevation = azel[1];
+    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
+    dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
+    dcmBODY2ECI_ = dcmECI2BODY_.transpose();
+    
+    //    thrust term
+    force_thrust_vector << 0.0, 0.0, 0.0;
+    //    aerodynamics term
+    vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
+    mach_number = vel_AIR_BODYframe_abs / air.airspeed;
+    update_from_mach_number();
+    dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
+    force_drag = CD * dynamic_pressure * body_area;
+    force_lift = CL * dynamic_pressure * body_area;
+    force_air_vector << -force_drag, 0.0, -force_lift;
+    //    dv/dt
+    accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
+    + dcmNED2ECI_ * gravity_vector;
+}
+
+
+void RocketStage::free_flight_3dof_defined(const RocketStage::state& x, double t){
+    flight_mode = "free_3dof";
+    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
+    attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
+    dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
+    dcmBODY2ECI_ = dcmECI2BODY_.transpose();
+    
+    //    thrust term
+    force_thrust_vector << 0.0, 0.0, 0.0;
+    //    aerodynamics term
+    vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
+    mach_number = vel_AIR_BODYframe_abs / air.airspeed;
+    update_from_mach_number();
+    dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
+    force_drag = CD * dynamic_pressure * body_area;
+    force_lift = CL * dynamic_pressure * body_area;
+    force_air_vector << -force_drag, 0.0, -force_lift;
+    //    dv/dt
+    accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
+    + dcmNED2ECI_ * gravity_vector;
+}
+
+
+void RocketStage::free_flight_ballistic(const RocketStage::state& x, double t){
+    flight_mode = "free_ballistic";
+    //    aerodynamics term
+    vel_AIR_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
+    vel_AIR_NEDframe_abs = vel_AIR_NEDframe_.norm();
+    mach_number = vel_AIR_NEDframe_abs / air.airspeed;
+    dynamic_pressure = 0.5 * air.density * vel_AIR_NEDframe_abs * vel_AIR_NEDframe_abs;
+    force_drag = dynamic_pressure / ballistic_coef;
+    force_air_vector = force_drag * (-1) * (vel_AIR_NEDframe_ / vel_AIR_NEDframe_abs);  //NED frame
+    //    dv/dt
+    accECI_ = dcmNED2ECI_ * (force_air_vector + gravity_vector);
+}
+
 // display progress on the console.
 void RocketStage::progress(double time_now){
     double time_total = calc_end_time;
@@ -589,7 +627,8 @@ void RocketStage::progress(double time_now){
 }
 
 // for odeint::integrate observer
-// x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI]
+// x = [mass, x_ECI, y_ECI, z_ECI, vx_ECI, vy_ECI, vz_ECI,
+//      q0, q1, q2, q3, omega_x, omega_y, omega_z]
 void CsvObserver::operator()(const state& x, double t){
     posECI_ << x[1], x[2], x[3];
     velECI_ << x[4], x[5], x[6];
@@ -622,56 +661,20 @@ void CsvObserver::operator()(const state& x, double t){
     //    gravity term : gravity acceleration in the north direction is not considered
     gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
     
-    Vector2d azel;
     if (is_powered){  // ---- powered flight ----
         switch (power_flight_mode) {
             case _3DoF:
-                flight_mode = "power_3DoF";
-                dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-                vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-                attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
-                dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
-                dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
-                dcmBODY2ECI_ = dcmECI2BODY_.transpose();
-                
-                //    aerodynamics term
-                vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
-                mach_number = vel_AIR_BODYframe_abs / air.airspeed;
-                update_from_mach_number();
-                dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
-                force_drag = CD * dynamic_pressure * body_area;
-                force_lift = CL * dynamic_pressure * body_area;
-                force_air_vector << -force_drag, 0.0, -force_lift;
-                //    thrust term
-                if ( is_consider_neutrality ) {
-                    force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
-                    gimbal_angle_pitch = asin(force_air_vector_BODYframe[1] / thrust
-                                              * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
-                    gimbal_angle_yaw = asin(force_air_vector_BODYframe[2] / thrust
-                                            * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
-                    force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
-                    thrust * (-1) * sin(gimbal_angle_yaw),
-                    thrust * (-1) * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);
-                } else {
-                    force_thrust_vector << thrust, 0.0, 0.0;  // body coordinate
-                }
-                //    dv/dt
-                accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
-                + dcmNED2ECI_ * gravity_vector;
+                power_flight_3dof(x,t);
                 break;
-                
-            case _3DoF_with_delay:
-                flight_mode = "power_3DoF_delay";
-                break;  // Unimplemented
-                
-            case _6DoF:
-                flight_mode = "power_6DoF";
-                break;  // Unimplemented
-                
-            case _6DoF_aerodynami_stable:
-                flight_mode = "power_6DoF_aero_stable";
-                break;  // Unimplemented
-                
+            case _3DoF_with_delay:  // Unimplemented
+                power_flight_3dof_with_delay(x, t);
+                break;
+            case _6DoF:  // Unimplemented
+                power_flight_6dof(x, t);
+                break;
+            case _6DoF_aerodynamic_stable:  // Unimplemented
+                power_flight_6dof_aerodynamic_stable(x, t);
+                break;
             default:
                 m_dot = 0;
                 accECI_ << 0.0, 0.0, 0.0;
@@ -680,70 +683,14 @@ void CsvObserver::operator()(const state& x, double t){
     } else {  // ---- free flight ----
         switch (free_flight_mode) {
             case aerodynamic_stable:
-                flight_mode = "free_aero_stable";
-                attack_of_angle_ << 0.0, 0.0, 0.0;
-                vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
-                vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
-                azel = azimth_elevaztion(vel_BODY_NEDframe_);
-                azimth = azel[0];
-                elevation = azel[1];
-                dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-                dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
-                dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
-                dcmBODY2ECI_ = dcmECI2BODY_.transpose();
-                
-                //    thrust term
-                force_thrust_vector << 0.0, 0.0, 0.0;
-                //    aerodynamics term
-                vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
-                mach_number = vel_AIR_BODYframe_abs / air.airspeed;
-                update_from_mach_number();
-                dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
-                force_drag = CD * dynamic_pressure * body_area;
-                force_lift = CL * dynamic_pressure * body_area;
-                force_air_vector << -force_drag, 0.0, -force_lift;
-                //    dv/dt
-                accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
-                + dcmNED2ECI_ * gravity_vector;
+                free_flight_aerodynamic_stable(x, t);
                 break;
-                
             case _3DoF_defined:
-                flight_mode = "free_3dof";
-                dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
-                vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-                attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
-                dcmBODY2AIR_ = dcmBODY2AIR(attack_of_angle_);
-                dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
-                dcmBODY2ECI_ = dcmECI2BODY_.transpose();
-                
-                //    thrust term
-                force_thrust_vector << 0.0, 0.0, 0.0;
-                //    aerodynamics term
-                vel_AIR_BODYframe_abs = vel_AIR_BODYframe_.norm();
-                mach_number = vel_AIR_BODYframe_abs / air.airspeed;
-                update_from_mach_number();
-                dynamic_pressure = 0.5 * air.density * vel_AIR_BODYframe_abs * vel_AIR_BODYframe_abs;
-                force_drag = CD * dynamic_pressure * body_area;
-                force_lift = CL * dynamic_pressure * body_area;
-                force_air_vector << -force_drag, 0.0, -force_lift;
-                //    dv/dt
-                accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + dcmBODY2AIR_.transpose() * force_air_vector))
-                + dcmNED2ECI_ * gravity_vector;
+                free_flight_3dof_defined(x, t);
                 break;
-                
             case ballistic_flight:
-                flight_mode = "free_ballistic";
-                //    aerodynamics term
-                vel_AIR_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
-                vel_AIR_NEDframe_abs = vel_AIR_NEDframe_.norm();
-                mach_number = vel_AIR_NEDframe_abs / air.airspeed;
-                dynamic_pressure = 0.5 * air.density * vel_AIR_NEDframe_abs * vel_AIR_NEDframe_abs;
-                force_drag = dynamic_pressure / ballistic_coef;
-                force_air_vector = force_drag * (-1) * (vel_AIR_NEDframe_ / vel_AIR_NEDframe_abs);  //NED frame
-                //    dv/dt
-                accECI_ = dcmNED2ECI_ * (force_air_vector + gravity_vector);
+                free_flight_ballistic(x, t);
                 break;
-                
             default:
                 m_dot = 0;
                 accECI_ << 0.0, 0.0, 0.0;

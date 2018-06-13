@@ -34,7 +34,7 @@ private:
 public:
     std::ifstream fin;
 
-    using state = std::array<double, 7>;  // variables of ODE
+    using state = std::array<double, 14>;  // variables of ODE
 
     string name;
     string flight_mode;
@@ -47,7 +47,7 @@ public:
     double calc_end_time = 0.0;
     double calc_step_time = 0.01;
     enum EPower_flight_mode {
-        _3DoF = 0, _3DoF_with_delay = 1, _6DoF= 2, _6DoF_aerodynami_stable = 3
+        _3DoF = 0, _3DoF_with_delay = 1, _6DoF= 2, _6DoF_aerodynamic_stable = 3
     };
     enum EFree_flight_mode {
         aerodynamic_stable = 0, _3DoF_defined = 1, ballistic_flight = 2
@@ -211,6 +211,13 @@ public:
     RocketStage(const RocketStage& rocket_stage, Vector3d posECI_init, Vector3d velECI_init);
     // ↑this is for dumping product constructor
 
+    void power_flight_3dof(const RocketStage::state& x, double t);
+    void power_flight_3dof_with_delay(const RocketStage::state& x, double t);
+    void power_flight_6dof(const RocketStage::state& x, double t);
+    void power_flight_6dof_aerodynamic_stable(const RocketStage::state& x, double t);
+    void free_flight_aerodynamic_stable(const RocketStage::state& x, double t);
+    void free_flight_3dof_defined(const RocketStage::state& x, double t);
+    void free_flight_ballistic(const RocketStage::state& x, double t);
     void update_from_time_and_altitude(double time, double altitude);  // time[s] and altitude[m]
     void update_from_mach_number();
     void progress(double time_now);

@@ -64,7 +64,7 @@ class RocketStage_input():
         self.attitude = self.s["aero"]
         self.attitude = self.s["attitude"]
         self.dump = self.s["dumping product"]
-        self.neutrality = self.s["attitude neutrality"]
+        self.neutrality = self.s["attitude neutrality(3DoF)"]
         self.stage = self.s["stage"]
 
         if(self.thrust["Isp vac file exist?(bool)"]):
