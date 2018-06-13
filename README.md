@@ -7,7 +7,7 @@ OpenTsiolkovsky is a free , specific usage rocket flight simulator that allow yo
 
 The main features include:
 
-* Three-degree-of-freedom flight simulation with attitude control system(like TVC)
+* Three-degree-of-freedom, Six-degree-of-freedom flight simulation with attitude control system(like TVC)
 * Command line interface software
 * NOT fully-featured. It's tool kit
 * Now it corresponded three stage rocket without booster
