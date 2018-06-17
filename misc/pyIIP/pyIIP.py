@@ -23,27 +23,18 @@
 # SOFTWARE.
 # ==============================================================================
 
-
 """
-pyIIP.IIP - rocket Instantaneous Impact Point(IIP) calcuration
-
-IIPの緯度経度高度＋NED速度→落下位置の緯度経度、フライト時間の算出
+pyIIP.IIP - rocket or missile Instantaneous Impact Point(IIP) calcuration
 
 cf.
 Jaemyung Ahn and Woong-Rae Roh.  "Noniterative Instantaneous Impact Point Prediction Algorithm for Launch Operations",
 Journal of Guidance, Control, and Dynamics, Vol. 35, No. 2 (2012), pp. 645-648.
 https://doi.org/10.2514/1.56395
-
-memo:
-2018年6月17日現在バグが残っており、IIP位置が不正確。
-地球の扁平に起因するバグと推定される。
 """
 
 import numpy as np
 from numpy import cos, sin, tan, arcsin, arctan2, arccos
 from numpy import sqrt, deg2rad, rad2deg, pi
-import pandas as pd
-import matplotlib.pyplot as plt
 
 class WGS84():
     def __init__(self):
@@ -110,15 +101,13 @@ def dcmECEF2NED(posLLH_):
     lat = deg2rad(posLLH_[0])
     lon = deg2rad(posLLH_[1])
     dcm = np.array([[-sin(lat)*cos(lon), -sin(lat)*sin(lon), cos(lat)],
-                    [sin(lon),           cos(lon),          0],
+                    [-sin(lon),           cos(lon),          0],
                     [-cos(lat)*cos(lon), -cos(lat)*sin(lon), -sin(lat)]])
     return dcm
 
 def dcmECI2NED(dcmECEF2NED_, dcmECI2ECEF_):
     return dcmECEF2NED_.dot(dcmECI2ECEF_)
 
-def n_posECEF2LLH(phi_n_deg):
-    return wgs84.re_a / sqrt(1.0 - wgs84.e2 * sin(deg2rad(phi_n_deg)) * sin(deg2rad(phi_n_deg)))
 
 def posLLH(posECEF_):
     """
@@ -127,6 +116,8 @@ def posLLH(posECEF_):
     Return:
         (np.array 3x1) : position in LLH coordinate [deg, deg, m]
     """
+    def n_posECEF2LLH(phi_n_deg):
+        return wgs84.re_a / sqrt(1.0 - wgs84.e2 * sin(deg2rad(phi_n_deg)) * sin(deg2rad(phi_n_deg)))
     p = sqrt(posECEF_[0] **2 + posECEF_[1] **2)
     theta = arctan2(posECEF_[2] * wgs84.re_a, p * wgs84.re_b) # rad
     lat = rad2deg(arctan2(posECEF_[2] + wgs84.ed2 * wgs84.re_b * pow(sin(theta), 3), p - wgs84.e2 * wgs84.re_a * pow(cos(theta),3)))
@@ -172,6 +163,7 @@ class IIP:
                                    [omega_earth, 0.0,          0.0],
                                    [0.0,         0.0,          0.0]])  # 角速度テンソル
         velECI_init_ = np.dot(dcmECI2NED_.transpose(), velNED_) + omegaECI2ECEF_.dot(posECI_init_)
+        # import pdb; pdb.set_trace()
 
         # 計算に必要なr0, v0の絶対値と単位ベクトル、初期のγ:flight-path angleの計算
         # self.r0 = earth_radius + posLLH_[2]  # 地球半径を高度から出すかECI座標から出すか
@@ -199,7 +191,10 @@ class IIP:
             c12 = c1 ** 2
             c22 = c2 ** 2
             c32 = c3 ** 2
-            phi = arcsin((c1*c3 + sqrt(c12*c32 - (c12+c22)*(c32-c22))) / (c12 + c22))
+            try:
+                phi = arcsin((c1*c3 + sqrt(c12*c32 - (c12+c22)*(c32-c22))) / (c12 + c22))
+            except RuntimeWarning:
+                phi = np.nan
 
             # IIPの位置の単位ベクトルとそこから計算されるECI座標系でのIIP緯度経度 参考：eq.(13)~(15)
             self.ip = cos(gamma0 + phi)/cos(gamma0) * self.ir0 + sin(phi) / cos(gamma0) * self.iv0  # IIP単位ベクトル(ECI)
@@ -221,12 +216,12 @@ class IIP:
         rp2 = wgs84.re_a  # 上区間 地球長半径
         epsilon = 1e-3  # 収束計算の収束誤差
 
-        while True:
+        while True:  # 二分法
             rpM = (rp1 + rp2) / 2
             hantei_rp1 = rp_calc(rp1)  # 正か負かnan
             hantei_rp2 = rp_calc(rp2)  # 正か負かnan
             hantei_rpM = rp_calc(rpM)
-            print("rpM = %.1f, 1:%.5f, 2:%.5f, M:%.5f" % (rpM, hantei_rp1, hantei_rp2, hantei_rpM))
+            # print("rpM = %.1f, 1:%.5f, 2:%.5f, M:%.5f" % (rpM, hantei_rp1, hantei_rp2, hantei_rpM))
             if(hantei_rpM < 0):
                 rp1 = rpM
             else:
@@ -306,40 +301,9 @@ class IIP:
         return ""
 
 if __name__ == '__main__':
+
     posLLH_ = np.array([40, 140, 100])
-    velNED_ = np.array([0, 10, -10])
+    velNED_ = np.array([10, 0, 0])
 
     _IIP = IIP(posLLH_, velNED_)
     print(_IIP)
-
-    # simplekmlモジュールをインストールしていない場合は下記を実行
-    # > pip install simplekml
-    import simplekml
-
-    print(_IIP.posLLH_IIP_deg)
-    kml_points = [["satrt", posLLH_[0], posLLH_[1], posLLH_[2]],
-                  ["IIP", _IIP.posLLH_IIP_deg[0], _IIP.posLLH_IIP_deg[1], 0]]
-    kml = simplekml.Kml()
-    for point in kml_points:
-        p = kml.newpoint(name=point[0], coords=[(point[2], point[1], point[3])])
-        p.altitudemode = simplekml.AltitudeMode.absolute
-        p.lookat.latitude = point[1]
-        p.lookat.longitude = point[2]
-
-    kml.save("test.kml")
-
-    # # file_name = "sample_01_dynamics_1.csv"
-    # file_name = "ZERO_Phase5_dynamics_1.csv"
-    # df = pd.read_csv(file_name, index_col=False)
-    # lat_IIP = []
-    # lon_IIP = []
-    # for index, row in df.iterrows():
-    #     posLLH_ = row["lat(deg)"], row["lon(deg)"], row["altitude(m)"]
-    #     velNED_ = row["vel_NED_X(m/s)"], row["vel_NED_Y(m/s)"], row["vel_NED_Z(m/s)"]
-    #     _IIP = IIP(posLLH_, velNED_)
-    #     lat_IIP.append(_IIP.posLLH_IIP_deg[0])
-    #     lon_IIP.append(_IIP.posLLH_IIP_deg[1])
-    #
-    # df["IIP_lat(deg)"] = lat_IIP
-    # df["IIP_lon(deg)"] = lon_IIP
-    # df.to_csv(file_name[:-4]+"_new.csv", index=False)
