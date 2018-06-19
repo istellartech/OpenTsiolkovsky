@@ -24,7 +24,12 @@
 # ==============================================================================
 
 """
-pyIIP.IIP - rocket or missile Instantaneous Impact Point(IIP) calcuration
+OpenVerne.IIP - rocket or missile Instantaneous Impact Point(IIP) calculation
+
+The instantaneous impact point (IIP) of a rocket, given its position and velocity,
+is defined as its touchdown point(altitude=0[m]) assuming a free-fall flight (without propulsion).
+The IIP is considered as a very important information for safe launch operation
+of a rocket.
 
 cf.
 Jaemyung Ahn and Woong-Rae Roh.  "Noniterative Instantaneous Impact Point Prediction Algorithm for Launch Operations",
@@ -138,7 +143,7 @@ def lat_from_radius(radius):
 
 class IIP:
     def __init__(self, posLLH_, velNED_):
-        """ calcurate IIP from current position(LLH) & current velocity(NED)
+        """ calculate IIP from current position(LLH) & current velocity(NED)
         Args:
             posLLH_ (np.array 3x1) : position at current point(LLH) [deg, deg, m]
             velNED_ (np.array 3x1) : velocity at current point(NED frame) [m/s, m/s, m/s]
@@ -163,16 +168,14 @@ class IIP:
                                    [omega_earth, 0.0,          0.0],
                                    [0.0,         0.0,          0.0]])  # 角速度テンソル
         velECI_init_ = np.dot(dcmECI2NED_.transpose(), velNED_) + omegaECI2ECEF_.dot(posECI_init_)
-        # import pdb; pdb.set_trace()
 
         # 計算に必要なr0, v0の絶対値と単位ベクトル、初期のγ:flight-path angleの計算
-        # self.r0 = earth_radius + posLLH_[2]  # 地球半径を高度から出すかECI座標から出すか
         self.r0 = np.linalg.norm(posECI_init_)
         self.v0 = np.linalg.norm(velECI_init_)
         self.ir0 = posECI_init_ / np.linalg.norm(posECI_init_)  # 位置の単位ベクトル
         self.iv0 = velECI_init_ / np.linalg.norm(velECI_init_)  # 速度の単位ベクトル
         gamma0 = arcsin(np.dot(self.ir0, self.iv0))  # [rad]
-        self.gamma0 = gamma0  # gammaを外から見るためにメンバ変数に
+        self.gamma0 = gamma0  # gammaを外から見るためにインスタンス変数に
 
         lam = self.v0**2 / (mu / self.r0)  # lambda
         self.lam = lam
@@ -199,11 +202,6 @@ class IIP:
             # IIPの位置の単位ベクトルとそこから計算されるECI座標系でのIIP緯度経度 参考：eq.(13)~(15)
             self.ip = cos(gamma0 + phi)/cos(gamma0) * self.ir0 + sin(phi) / cos(gamma0) * self.iv0  # IIP単位ベクトル(ECI)
             self.ip = self.ip / np.linalg.norm(self.ip)
-
-            # 論文の緯度経度の出し方は下記２行だが、実際にはipからECI座標を出した方が正確？
-            # lat_ECI_IIP_rad = arcsin(self.ip[2])
-            # lon_ECI_IIP_rad = arctan2(self.ip[1], self.ip[0])  # ここまでイテレーション
-
             IIP_LLH_deg = posLLH(self.ip * rp_temp)
             lat_ECI_IIP_rad = deg2rad(IIP_LLH_deg[0])
             lon_ECI_IIP_rad = deg2rad(IIP_LLH_deg[1])
@@ -246,9 +244,6 @@ class IIP:
         self.ip = cos(gamma0 + phi)/cos(gamma0) * self.ir0 + sin(phi) / cos(gamma0) * self.iv0  # IIP単位ベクトル(ECI)
         self.ip = self.ip / np.linalg.norm(self.ip)
 
-        # lat_ECI_IIP_rad = arcsin(self.ip[2])
-        # lon_ECI_IIP_rad = arctan2(self.ip[1], self.ip[0])  # ここまでイテレーション
-
         IIP_LLH_deg = posLLH(self.ip * rp)
         lat_ECI_IIP_rad = deg2rad(IIP_LLH_deg[0])
         lon_ECI_IIP_rad = deg2rad(IIP_LLH_deg[1])
@@ -284,7 +279,7 @@ class IIP:
     def __repr__(self):
         print("==== current point ====")
         print("lat = %.6f [deg], lon = %.6f [deg]" % (self.posLLH_[0], self.posLLH_[1]))
-        print("altitude = %.1f" %(self.posLLH_[2]))
+        print("altitude = %.1f [m]" %(self.posLLH_[2]))
         print("velocity(NED) = %.1f [m/s], %.1f [m/s], %.1f [m/s]" % (self.velNED_[0], self.velNED_[1], self.velNED_[2]))
         print("r0(ECI) = %.1f [m]" % (self.r0))
         print("v0(ECI) = %.1f [m/s]" % (self.v0))
@@ -299,6 +294,17 @@ class IIP:
         print("flight angle of a rocket = %.6f [deg]" % (rad2deg(self.phi)))
         print("unit vector of IIP(ECI) = [%.6f, %.6f, %.6f]" % (self.ip[0], self.ip[1], self.ip[2]))
         return ""
+
+    def disp(self):
+        """ Simple display of result """
+        print("==== current point ====")
+        print("lat = %.6f [deg], lon = %.6f [deg]" % (self.posLLH_[0], self.posLLH_[1]))
+        print("altitude = %.1f [m]" %(self.posLLH_[2]))
+        print("velocity(NED) = %.1f [m/s], %.1f [m/s], %.1f [m/s]" % (self.velNED_[0], self.velNED_[1], self.velNED_[2]))
+        print("==== IIP (Instantaneous Impact Point) ====")
+        print("lat = %.6f [deg], lon = %.6f [deg]" % (self.posLLH_IIP_deg[0], self.posLLH_IIP_deg[1]))
+        print("distance of earth surface = %.1f [m]" % (self.distance_ECEF))
+        print("time of flight = %.2f [s]" % (self.tf))
 
 if __name__ == '__main__':
 

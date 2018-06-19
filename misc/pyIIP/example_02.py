@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
+""" This example is for setting the falling point to an arbitrary position on the Earth.
+"""
 
-from pyIIP import IIP
+from OpenVerne import IIP
 import numpy as np
 from scipy.optimize import minimize
+import warnings
+warnings.filterwarnings('ignore')
 
 if __name__ == '__main__':
 
