@@ -103,7 +103,7 @@ Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_){
         beta = asin(vel_AIR_BODYframe_[1] / vel_abs);
 //        beta = atan2(vel_AIR_BODYframe_[1], vel_AIR_BODYframe_[0]);
         gamma = atan2(sqrt(vel_AIR_BODYframe_[1] * vel_AIR_BODYframe_[1] +
-                      vel_AIR_BODYframe_[1] * vel_AIR_BODYframe_[1]), vel_AIR_BODYframe_[0]);
+                      vel_AIR_BODYframe_[2] * vel_AIR_BODYframe_[2]), vel_AIR_BODYframe_[0]);
     }
     Vector3d aoa;
     aoa[0] = alpha;

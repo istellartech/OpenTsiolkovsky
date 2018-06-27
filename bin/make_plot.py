@@ -122,7 +122,7 @@ class RocketStage_input():
             self.pos_Control = [0, 0]
 
         if(self.wind["wind file exist?(bool)"]):
-            df = pd.read_csv(self.attitude["wind file name(str)"])
+            df = pd.read_csv(self.wind["wind file name(str)"])
             self.wind_altitude = df["altitude[m]"]
             self.wind_speed = df["wind_speed[m/s]"]
             self.wind_direction = df["direction[deg]"]
