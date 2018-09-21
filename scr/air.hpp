@@ -36,8 +36,12 @@ public:
     double pressure = 101300;
     double density = 1.2;
     Air altitude(double altitude);
+    Air altitude_with_variation(double altitude, double input_percent);
+    double coef_density_variance(double altitude, double input_percent);
+    
 };
 
+double linear_interp1_from_y(double y, vector<double> x_array, vector<double> y_array);
 void test_air();
 
 #endif /* air_hpp */

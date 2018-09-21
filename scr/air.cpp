@@ -38,7 +38,7 @@ Air Air::altitude(double altitude){
     } else {
         k = 0;
     }
-        
+
     air.temperature = air.T0[k] + air.LR[k] * (altitude - air.HAL[k]);
     air.airspeed = sqrt(air.temperature * air.gamma * air.R);
     if (air.LR[k] != 0){
@@ -49,6 +49,59 @@ Air Air::altitude(double altitude){
     }
     air.density = air.pressure / R / air.temperature;
     return air;
+}
+
+Air Air::altitude_with_variation(double altitude, double input_percent){
+    // Pseudo constructor.
+    // Enter altitude and variation ratio air density with altitude to calculate air density
+    Air air = Air::altitude(altitude);
+    double coef = Air::coef_density_variance(altitude, input_percent);
+    air.density = air.density * (1.0 + coef);
+    return air;
+}
+
+double Air::coef_density_variance(double altitude, double input_percent){
+    // altitude : [m]
+    // percent : [%](-100 ~ 100), enter 0 when nominal air density
+    // @output coefficient of density variance : [-1.0 ~ 1.0]
+    // cf. U.S. standard atmosphere PART2 Atmospheric Model 2.1.4 Density Variations
+    if (input_percent == 0){
+        return 0;
+    }
+    vector<double> minus_x = {-12.8, -7.9, -1.3, -14.3, -15.9, -18.6, -32.1, -38.6, -50.0, -55.3, -65.0, -68.1, -76.7, -42.2};
+    vector<double> minus_y = {1010, 4300, 8030, 10220, 16360, 20300, 26220, 29950, 40250, 50110, 59970, 70270, 80140, 90220};
+    vector<double> plus_x = {21.6, 7.4, 1.5, 5.3, 26.7, 20.2, 14.3, 18.2, 33.6, 47.4, 59.5, 72.2, 58.7, 41.4};
+    vector<double> plus_y = {1230, 4300, 8030, 10000, 16360, 20300, 26220, 29950, 40250, 50110, 59970, 70270, 80360, 90880};
+    double percent_of_density_with_alt;
+    if (input_percent < 0){
+        percent_of_density_with_alt = linear_interp1_from_y(altitude, minus_x, minus_y);
+    } else {
+        percent_of_density_with_alt = linear_interp1_from_y(altitude, plus_x, plus_y);
+    }
+    return percent_of_density_with_alt / 100 * abs(input_percent) / 100;
+}
+
+double linear_interp1_from_y(double y, vector<double> x_array, vector<double> y_array){
+    // linear interpolattion with same number of x_array and y_array from y-axis
+    // not extrapolation, It has the same value as the outermost point.
+    // @params y: y component of the data you want to obtain
+    // @params x_array The x component of the original data
+    // @params y_array The x component of the original data
+    // @return x(double) interpolated value
+    double x = 0.0;
+    double alpha = 0.0;
+    for (int i = 0; i < y_array.size()-1; i++) {
+        if (y >= y_array[i] && y < y_array[i+1]) {
+            alpha = (y - y_array[i]) / (y_array[i+1] - y_array[i]);
+            x = x_array[i] + alpha * (x_array[i+1] - x_array[i]);
+        }
+    }
+    if (y < y_array[0]) {
+        x = x_array[0];
+    }else if (y >= y_array.back()){
+        x = x_array.back();
+    }
+    return x;
 }
 
 void test_air(){
@@ -96,4 +149,3 @@ void test_air(){
 //% Standard ATOMOSPHEREのスクリプトに変更して高度2000kmまで対応にする。
 //% 主に温度上昇と重力加速度とガス状数が変化することに対応すること。
 //% ----
-

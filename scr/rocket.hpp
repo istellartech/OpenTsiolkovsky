@@ -46,6 +46,7 @@ public:
     double calc_start_time = 0.0;
     double calc_end_time = 0.0;
     double calc_step_time = 0.01;
+    double variation_ratio_of_air_density = 0.0;
     enum EPower_flight_mode {
         _3DoF = 0, _3DoF_with_delay = 1, _6DoF= 2, _6DoF_aerodynamic_stable = 3
     };
@@ -227,6 +228,7 @@ public:
         calc_start_time = obj.calc_start_time;
         calc_end_time = obj.calc_end_time;
         calc_step_time = obj.calc_step_time;
+        variation_ratio_of_air_density = obj.variation_ratio_of_air_density;
         mass_init = obj.mass_init;
         ballistic_coef = obj.ballistic_coef;
         wind_file_exist = obj.wind_file_exist;

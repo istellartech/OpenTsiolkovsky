@@ -2,7 +2,8 @@
 	"name(str)": "sample_01",
 	"calculate condition": {
 		"end time[s]": 1000,
-		"time step for output[s]": 0.5
+		"time step for output[s]": 0.5,
+		"variation ratio of air density[%](-100to100, default=0)": 0
 	},
 	"launch": {
 		"position LLH[deg,deg,m]": [42.506050, 143.456518, 15.0],

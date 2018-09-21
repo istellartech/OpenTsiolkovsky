@@ -69,6 +69,11 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     name = o["name(str)"].get<string>();
     calc_end_time = o_calc["end time[s]"].get<double>();
     calc_step_time = o_calc["time step for output[s]"].get<double>();
+    if ( o_calc["variation ratio of air density[%](-100to100, default=0)"].is<picojson::null>()){
+        variation_ratio_of_air_density = 0.0;
+    } else {
+        variation_ratio_of_air_density = o_calc["variation ratio of air density[%](-100to100, default=0)"].get<double>();
+    }
     picojson::array& array_pos = o_launch["position LLH[deg,deg,m]"].get<picojson::array>();
     launch_pos_LLH[0] = array_pos[0].get<double>();
     launch_pos_LLH[1] = array_pos[1].get<double>();
@@ -338,7 +343,8 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     dcmECI2NED_init_ = dcmECI2NED(dcmECEF2NED_init_, dcmECI2ECEF(0.0));
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
-    air = air.altitude(posLLH_[2]);
+//    air = air.altitude(posLLH_[2]);
+    air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
     //    gravity term : gravity acceleration in the north direction is not considered
     gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
 
@@ -417,7 +423,8 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
 
 void RocketStage::update_from_time_and_altitude(double time, double altitude){
     Air air;
-    air = air.altitude(altitude);
+//    air = air.altitude(altitude);
+    air = air.altitude_with_variation(altitude, variation_ratio_of_air_density);
 
     if (Isp_file_exist){
         Isp_vac = interp_matrix(time - previous_stage_separation_time, Isp_mat);  // Isp vac
@@ -657,7 +664,8 @@ void CsvObserver::operator()(const state& x, double t){
     dcmECI2NED_init_ = dcmECI2NED(dcmECEF2NED_init_, dcmECI2ECEF(0.0));
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
-    air = air.altitude(posLLH_[2]);
+    //    air = air.altitude(posLLH_[2]);
+    air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
     //    gravity term : gravity acceleration in the north direction is not considered
     gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
     
