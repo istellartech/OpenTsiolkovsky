@@ -79,10 +79,12 @@ public:
     bool Isp_file_exist = false;
     string Isp_file_name;
     MatrixXd Isp_mat;
+    double Isp_coeff;                   // 比推力係数[-]
     double Isp_const = 0.0;             // [sec]
     bool thrust_file_exist;
     string thrust_file_name;
     MatrixXd thrust_mat;
+    double thrust_coeff;                // 推力係数[-]
     double thrust_const = 0.0;          // [N]
     double burn_start_time;             // [sec]
     double burn_end_time;               // [sec]
@@ -106,12 +108,15 @@ public:
     bool CD_file_exist;
     string CD_file_name;
     MatrixXd CD_mat;
+    double CD_multiplier;               // 抗力係数乗数[-]
     //    == attitude ==
     bool attitude_file_exist;
     string attitude_file_name;
     MatrixXd attitude_mat;
     double attitude_azimth_const_deg;   // [deg]
     double attitude_elevation_const_deg;// [deg]
+    double attitude_azimth_offset;      // 方位角オフセット[deg]
+    double attitude_elevation_offset;   // 仰角オフセット[deg]
     //    == dumping product ==
     bool dump_exist = false;
     double dump_separation_time = 0.0;
@@ -256,10 +261,12 @@ public:
         Isp_file_exist = obj.Isp_file_exist;
         Isp_file_name = obj.Isp_file_name;
         Isp_mat = obj.Isp_mat;
+        Isp_coeff = obj.Isp_coeff;
         Isp_const = obj.Isp_const;
         thrust_file_exist = obj.thrust_file_exist;
         thrust_file_name = obj.thrust_file_name;
         thrust_mat = obj.thrust_mat;
+        thrust_coeff = obj.thrust_coeff;
         thrust_const = obj.thrust_const;
         burn_start_time = obj.burn_start_time;
         burn_end_time = obj.burn_end_time;
@@ -283,12 +290,15 @@ public:
         CD_file_exist = obj.CD_file_exist;
         CD_file_name = obj.CD_file_name;
         CD_mat = obj.CD_mat;
+        CD_multiplier = obj.CD_multiplier;
         
         attitude_file_exist = obj.attitude_file_exist;
         attitude_file_name = obj.attitude_file_name;
         attitude_mat = obj.attitude_mat;
         attitude_azimth_const_deg = obj.attitude_azimth_const_deg;
         attitude_elevation_const_deg = obj.attitude_elevation_const_deg;
+        attitude_azimth_offset = obj.attitude_azimth_offset;
+        attitude_elevation_offset = obj.attitude_elevation_offset;
         
         dump_exist = obj.dump_exist;
         dump_separation_time = obj.dump_separation_time;
