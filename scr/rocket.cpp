@@ -523,13 +523,20 @@ void RocketStage::power_flight_3dof(const RocketStage::state& x, double t){
     force_drag = CD * dynamic_pressure * body_area;
     force_lift = CL * dynamic_pressure * body_area;
     force_air_vector << -force_drag, 0.0, -force_lift;
+    force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
+    sin_of_gimbal_angle_pitch = force_air_vector_BODYframe[1] / thrust
+                              * (pos_CP - pos_CG) / (pos_Controller - pos_CG);
+    sin_of_gimbal_angle_yaw   = force_air_vector_BODYframe[2] / thrust
+                              * (pos_CP - pos_CG) / (pos_Controller - pos_CG);
+
     //    thrust term
-    if ( is_consider_neutrality ) {
-        force_air_vector_BODYframe = dcmBODY2AIR_.transpose() * force_air_vector;
-        gimbal_angle_pitch = asin(force_air_vector_BODYframe[1] / thrust
-                                  * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
-        gimbal_angle_yaw = asin(force_air_vector_BODYframe[2] / thrust
-                                * (pos_CP - pos_CG) / (pos_Controller - pos_CG));
+    if ( is_consider_neutrality 
+            && sin_of_gimbal_angle_pitch <  1 
+            && sin_of_gimbal_angle_pitch > -1 
+            && sin_of_gimbal_angle_yaw   <  1 
+            && sin_of_gimbal_angle_yaw   > -1) {
+        gimbal_angle_pitch = asin(sin_of_gimbal_angle_pitch);
+        gimbal_angle_yaw   = asin(sin_of_gimbal_angle_yaw);
         force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
         thrust * (-1) * sin(gimbal_angle_yaw),
         thrust * (-1) * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);

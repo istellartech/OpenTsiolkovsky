@@ -154,6 +154,8 @@ public:
     double mach_number = 0.0;
     double kinematic_energy = 0.0;
     
+    double sin_of_gimbal_angle_pitch = 0.0;  // [ND]
+    double sin_of_gimbal_angle_yaw = 0.0;  // [ND]
     double gimbal_angle_pitch = 0.0;  // [rad]
     double gimbal_angle_yaw = 0.0;  // [rad]
     
