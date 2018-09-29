@@ -1,63 +1,113 @@
-# -*- coding: utf-8 -*-
-import sys
-# reload(sys)
-import platform
-# # デフォルトの文字コードを変更する．
-# sys.setdefaultencoding('utf-8')
-import make_param_json
-import numpy as np
-from scipy import optimize
-import subprocess
+#!/usr/bin/python
 import json
-import simplekml
+import copy
+from numpy import random
+from numpy.random import normal,rand
+from datetime import datetime
+import os
+import multiprocessing
 
-# パラメータを変えた時に落下地点がどこになるかの関数を作り、回していく
+def error_loader(data,route):
+    result = []
+    for k,v in data.items():
+        if k == "multiply_statistically" or \
+           k == "add_statistically" or \
+           k == "from_error_files" :
+            result.append([[k,v],route])
+            return result
+        tmp_route=copy.deepcopy(route)
+        tmp_route.append(["dict",k])
+        if isinstance(v,dict):
+            child_result = error_loader(v,tmp_route)
+            result.extend(child_result)
+    return result
 
-# 正規分布の則った分散を作り、Tsiolkovskyして出力を貯めて出力する。
-def flight_simulator(json_file = "param_sample_01.json",
-                     change_key1 = "name(str)",
-                     change_key2 = None,
-                     change_key3 = None,
-                     change_value = "test"):
-    data = make_param_json.make_param_json(json_file,
-                                           change_key1 = change_key1,
-                                           change_key2 = change_key2,
-                                           change_key3 = change_key3,
-                                           change_value = change_value);
-    # print(json.dumps(data, sort_keys = True, indent = 4))
-    temp_file = "temp.json"
-    f = open(temp_file, "w")
-    json.dump(data, f, indent=4)
-    f.close()
-    cmd = './OpenTsiolkovsky ' + temp_file
-    p = subprocess.Popen([cmd], shell = True, stdout=subprocess.PIPE)
-    output = p.communicate()[0]
-    outputlist = output.split()
-    # import pdb; pdb.set_trace()
-    impact_point_index =  outputlist.index(b'impact')
-    impact_point_lat_index = impact_point_index + 3
-    impact_point_lon_index = impact_point_index + 4
-    impact_point_lat = float(outputlist[impact_point_lat_index])
-    impact_point_lon = float(outputlist[impact_point_lon_index])
-    return impact_point_lat, impact_point_lon
+def error_applyer(value,route,data):
+    key = route.pop(0)
+    key = key[1]
+    if len(route)==0:
+        if   value[0] == "multiply_statistically":
+            random_number = normal(0,value[1]/3)
+            data[key] *= 1+random_number
+        elif value[0] == "add_statistically":
+            random_number = normal(0,value[1]/3)
+            data[key] += random_number
+        elif value[0] == "from_error_files":
+            random_number = rand()*len(value[1])
+            data[key]=value[1][int(random_number)]
+    else:
+        error_applyer(value,route,data[key])
 
-def create_kml(lat_array, lon_array, file_name = "monte_carlo"):
-    # 緯度経度の列を入力にして、それに対応する点を打つKMLファイルを作る
-    kml = simplekml.Kml(open=1)
-    for i in range(len(lat_array)):
-        pnt = kml.newpoint(coords = [(lon_array[i],lat_array[i])])
-    kml.save("output/" + file_name + ".kml")
+def error_input_maker(errorfile,nominalfile,inpfile,outfile,error_seed):
+    random.seed(error_seed)
 
-if __name__ == '__main__':
-    num = 10
-    lat_a = np.zeros(num)
-    lon_a = np.zeros(num)
-    elevation = np.random.normal(86.0,0.2,num)
-    for i, deg in enumerate(elevation):
-        lat_a[i], lon_a[i] = flight_simulator(json_file = "temp.json",
-                                    change_key1 = "stage1",
-                                    change_key2 = "attitude",
-                                    change_key3 = "const elevation[deg]",
-                                    change_value = deg)
-        print("lat:\t%.6f\tlon:\t%.6f" % (lat_a[i],lon_a[i]))
-    create_kml(lat_a,lon_a)
+    # load gosa
+    fp = open(errorfile)
+    data = json.load(fp)
+    fp.close()
+    data_gosa = error_loader(data,[])
+   
+    # load nominal json 
+    fp = open(nominalfile)
+    fo = open(inpfile,"w")
+    data = json.load(fp)
+    data["name(str)"]=outfile
+
+    # apply gosa
+    if error_seed > 0:
+        for gosa in data_gosa:
+            error_applyer(gosa[0],gosa[1],data)
+ 
+    # save json w/ gosa
+    json.dump(data,fo,indent=4)
+    fo.close()
+    fp.close()
+
+def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionname):
+    inputfile  = "case{0:05d}_{1:s}.json".format(i, suffix)
+    outputfile = "case{0:05d}_{1:s}".format(i, suffix)
+    stdoutfile = "case{0:05d}_{1:s}.stdout.dat".format(i, suffix)
+
+    error_input_maker(gosafile, nominalfile, inputfile, outputfile,i)
+        
+    os.system("./OpenTsiolkovsky "+inputfile+" > "+stdoutfile)
+
+    os.system("aws s3 cp " + inputfile  + " s3://otmc/" + missionname + "/raw/output/")
+    os.system("aws s3 cp " + stdoutfile + " s3://otmc/" + missionname + "/raw/output/")
+    os.system("aws s3 cp output/"+outputfile+"_dynamics_1.csv s3://otmc/" + missionname + "/raw/output/")
+    os.system("rm " + inputfile)
+    os.system("rm " + stdoutfile)
+    os.system("rm output/"+outputfile+"_dynamics_1.csv")
+
+
+if __name__=="__main__":
+    Nproc = multiprocessing.cpu_count() - 3    # number of processor
+
+    missionname = os.getenv("otmc_mission_name")
+    i = int(os.getenv("AWS_BATCH_JOB_ARRAY_INDEX"))
+
+    os.system("aws s3 cp s3://otmc/" + missionname + "/raw/inp . --recursive")
+
+    fp = open("mc.json")
+    data = json.load(fp)
+    fp.close()
+ 
+    Ntask       = data["Ntask"]
+    suffix      = data["suffix"]
+    nominalfile = data["nominalfile"]
+    gosafile    = data["gosafile"]
+    NLoop       = data["NLoop"]
+
+    for loop_index in range(NLoop):
+        array_p = []
+        for j in range(Nproc):
+            id_task = (NLoop * i + loop_index) * Nproc + j
+            if id_task > Ntask:
+                continue
+            p = multiprocessing.Process(target=wrapper_opentsio,args=(id_task, suffix, nominalfile, gosafile, missionname))
+            array_p.append(p)
+            p.start()
+    
+        for p in array_p:
+            p.join()
+
