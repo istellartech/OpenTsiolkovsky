@@ -31,6 +31,83 @@ double interp_matrix(double x, MatrixXd matrix, int col_num){
     return y;
 }
 
+double interp_matrix_2d(double mach, double alpha, MatrixXd matrix){
+    // 2変数関数として線形補間をする。範囲外のデータが入力された場合強制終了。
+    // 先頭行先頭列に変数を並べる
+    // @params mach  取得したいデータ縦方向
+    // @params alpha 取得したいデータ横方向
+    // @params matrix 2x? データ配列
+    // @return y(double) 入力mach, alphaのデータ
+    const int col_number = 15;
+    double y;
+
+    int index_mach, index_alpha;
+    double Dmach = -1;
+    double Dalpha = -1;
+
+    // search index mach and calculate Dmach
+    if(mach < matrix(1, 0) || mach > matrix(matrix.rows()-1, 0)){
+        std::cout << "ERROR : interp_matrix_2d. First argument is out of the boundary of matrix.";
+        exit(1);
+    }
+    for (int i = 2; i < matrix.rows()-1; i++) {
+        if(mach < matrix(i, 0)){
+            index_mach = i - 1;
+
+            double mach_lower, mach_higher;
+            mach_lower  = matrix(i - 1, 0);
+            mach_higher = matrix(    i, 0);
+            Dmach = (mach - mach_lower)/(mach_higher - mach_lower);
+
+            break;
+        }
+    }
+    
+
+    // search index alpha and calculate Dalpha
+    if(alpha < matrix(0, 1) || alpha > matrix(0, col_number -1)){
+        std::cout << "ERROR : interp_matrix_2d. Second argument is out of the boundary of matrix.";
+        exit(1);
+    }
+    for (int i = 2; i < col_number - 1; i++) {
+        if(alpha < matrix(0, i)){
+            index_alpha = i - 1;
+
+            double alpha_lower, alpha_higher;
+            alpha_lower  = matrix(0, i - 1);
+            alpha_higher = matrix(0,     i);
+            Dalpha = (alpha - alpha_lower)/(alpha_higher - alpha_lower);
+
+            break;
+        }
+    }
+
+    // calculate y
+    if(Dmach < 0.5){
+        if(Dalpha < 0.5){
+            y = matrix(index_mach, index_alpha)
+              + ( matrix(index_mach + 1, index_alpha) - matrix(index_mach, index_alpha)) * Dmach
+              + ( matrix(index_mach, index_alpha + 1) - matrix(index_mach, index_alpha)) * Dalpha;
+        }else{
+            y = matrix(index_mach, index_alpha + 1)
+              + ( matrix(index_mach + 1, index_alpha + 1) - matrix(index_mach, index_alpha + 1)) * Dmach
+              + ( matrix(index_mach, index_alpha + 1) - matrix(index_mach, index_alpha)) * (Dalpha - 1);
+        }
+    }else{
+        if(Dalpha < 0.5){
+            y = matrix(index_mach + 1, index_alpha)
+              + ( matrix(index_mach + 1, index_alpha) - matrix(index_mach, index_alpha)) * (Dmach - 1)
+              + ( matrix(index_mach + 1, index_alpha + 1) - matrix(index_mach + 1, index_alpha)) * Dalpha;
+        }else{
+            y = matrix(index_mach + 1, index_alpha + 1)
+              + ( matrix(index_mach + 1, index_alpha + 1) - matrix(index_mach, index_alpha + 1)) * (Dmach - 1)
+              + ( matrix(index_mach + 1, index_alpha + 1) - matrix(index_mach + 1, index_alpha)) * (Dalpha - 1);
+        }
+    }
+
+    return y;
+}
+
 MatrixXd read_csv_vector_2d(string filename, string col_name0, string col_name1){
 //    ファイル名と列名を入れるとMatrixXd(n行2列)を返す
     int col_number = 2;
@@ -88,5 +165,25 @@ MatrixXd read_csv_vector_4d(string filename,
         value(now_col, 3) = value3;
         now_col++; max_col++;
     }
+    return value;
+}
+
+MatrixXd read_csv_vector_15d(string filename){
+//    ファイル名を入れるとMatrixXd(n行15列)を返す
+    const int col_number = 15;
+    io::CSVReader<col_number> in(filename);
+    double buf[col_number];
+    in.set_header("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15");
+    MatrixXd value = MatrixXd::Zero(1,col_number);
+    int now_col = 0;
+    while(in.read_row(buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], 
+                buf[6], buf[7], buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14])){
+        value.conservativeResize(now_col+1, col_number);
+        for(int i = 0; i < col_number; i++){
+            value(now_col, i) = buf[i];
+        }
+        now_col++;
+    }
+
     return value;
 }

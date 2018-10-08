@@ -103,9 +103,23 @@ fp.close()
 os.system("aws s3 cp {1:s} s3://otmc/{0:s}/stat/output/ ".format(otmc_mission_name, outputfile))
 
 kml = simplekml.Kml(open=1)
+
+kml.newpoint(name="Average LandIn Point", coords = [(ave[0], ave[1])])
+
+inc_area = kml.newlinestring(name="LandIn Inclusion Area")
+inc_area.coords = [(p1[0],p1[1]),\
+                     (p2[0],p2[1]),\
+                     (p3[0],p3[1]),\
+                     (p4[0],p4[1]),\
+                     (p1[0],p1[1])]
+inc_area.style.linestyle.color = simplekml.Color.red
+
+linestring = kml.newlinestring(name="LandIn Elliposoid Area")
+arr_coords = []
 for i in range(37):
     angle = np.pi / 180 * i * 10
     p_tmp = 3 * v1 * math.cos(angle) + 3 * v2 * math.sin(angle) + ave
-    pnt = kml.newpoint(coords = [(p_tmp[0], p_tmp[1])])
+    arr_coords.append((p_tmp[0], p_tmp[1]))
+linestring.coords = arr_coords
 kml.save(outputkml)
 os.system("aws s3 cp {1:s} s3://otmc/{0:s}/stat/output/ ".format(otmc_mission_name, outputkml))

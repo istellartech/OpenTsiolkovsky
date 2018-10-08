@@ -30,7 +30,6 @@ Vector3d vel_ECEF_NEDframe(Matrix3d dcmECI2NED_, Vector3d vel_ECI_ECIframe_, Vec
 Vector3d vel_wind_NEDframe(double wind_speed, double wind_direction);
 Vector3d vel_AIR_BODYframe(Matrix3d dcmNED2ECEF_, Vector3d vel_ECEF_NEDframe_, Vector3d vel_wind_NEDframe_);
 Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_);
-Matrix3d dcmBODY2AIR(Vector3d attack_of_angle_);
 //Matrix3d dcmBODY2NED(double azimth, double elevation);
 Matrix3d dcmNED2BODY(double azimth, double elevation);
 Vector2d azimth_elevaztion(Vector3d vel_BODY_NEDframe);

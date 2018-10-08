@@ -100,8 +100,8 @@ Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_){
         gamma = 0;
     }else{
         alpha = atan2(vel_AIR_BODYframe_[2], vel_AIR_BODYframe_[0]);
-        beta = asin(vel_AIR_BODYframe_[1] / vel_abs);
-//        beta = atan2(vel_AIR_BODYframe_[1], vel_AIR_BODYframe_[0]);
+//        beta = asin(vel_AIR_BODYframe_[1] / vel_abs);
+        beta = atan2(vel_AIR_BODYframe_[1], vel_AIR_BODYframe_[0]);
         gamma = atan2(sqrt(vel_AIR_BODYframe_[1] * vel_AIR_BODYframe_[1] +
                       vel_AIR_BODYframe_[2] * vel_AIR_BODYframe_[2]), vel_AIR_BODYframe_[0]);
     }
@@ -110,16 +110,6 @@ Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_){
     aoa[1] = beta;
     aoa[2] = gamma;
     return aoa;
-}
-
-Matrix3d dcmBODY2AIR(Vector3d attack_of_angle_){
-    Matrix3d dcm;
-    double alpha = attack_of_angle_[0];
-    double beta  = attack_of_angle_[1];
-    dcm <<  cos(alpha)*cos(beta), sin(beta),  sin(alpha)*cos(beta),
-           -cos(alpha)*sin(beta), cos(beta), -sin(alpha)*sin(beta),
-           -sin(alpha),           0,          cos(alpha);
-    return dcm;
 }
 
 //Matrix3d dcmBODY2NED(double azimth, double elevation){

@@ -208,7 +208,6 @@ if __name__ == "__main__":
                 Nfetch_tmp = Nfetch -1
                 high_index = - Nfetch_tmp - 1
                 low_index  =   Nfetch_tmp - (number_of_sample - Nsample)
-                print key_sample, Nsample, Nfetch_tmp, high_index, low_index
 
                 fo.write(key_sample)
                 if low_index < 0:

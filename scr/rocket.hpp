@@ -96,19 +96,20 @@ public:
     //    == aerodynamics ==
     double body_diameter = 0.0;         // [m]
     double body_area = 0.0;             // body cross-sectional area [m2]
-    double CL_const = 0.0;              // Lift coefficient [-]
-    bool CL_file_exist;
-    string CL_file_name;
-    MatrixXd CL_mat;
-    double CLa_const = 0.0;             // Lift curve slope [/rad]
-    bool CLa_file_exist;
-    string CLa_file_name;
-    MatrixXd CLa_mat;
-    double CD_const = 0.0;              // Drag coefficinet [-]
-    bool CD_file_exist;
-    string CD_file_name;
-    MatrixXd CD_mat;
-    double CD_multiplier;               // 抗力係数乗数[-]
+    double CN_const = 0.0;              // Lift coefficient [-]
+    bool CN_file_exist;
+    string CN_file_name;
+    double CN_multiplier;               // 垂直力係数乗数[-]
+    MatrixXd CN_mat;
+    //double CLa_const = 0.0;             // Lift curve slope [/rad]
+    //bool CLa_file_exist;
+    //string CLa_file_name;
+    //MatrixXd CLa_mat;
+    double CA_const = 0.0;              // Drag coefficinet [-]
+    bool CA_file_exist;
+    string CA_file_name;
+    MatrixXd CA_mat;
+    double CA_multiplier;               // 抗力係数乗数[-]
     //    == attitude ==
     bool attitude_file_exist;
     string attitude_file_name;
@@ -125,8 +126,10 @@ public:
     Vector3d vel_dump_additional_NEDframe;
     //    == attitude neutrality ==
     bool is_consider_neutrality = false;
-    string neutrality_file_name;
-    MatrixXd neutrality_mat;
+    string CGXt_file_name;
+    string CP_file_name;
+    MatrixXd CGXt_mat;
+    MatrixXd Xcp_mat;
     //    == stage ==
     bool following_stage_exist = false;
     double previous_stage_separation_time = 0.0;  // [sec]
@@ -142,15 +145,17 @@ public:
     double Isp_vac = 0.2;
     double m_dot = 0.0;
     double nozzle_exhaust_area = 0.0;
-    double CD = 0.0;
-    double CL = 0.0;
-    double drag = 0.0;
+    double CA = 0.0;
+    double CN_pitch = 0.0;
+    double CN_yaw = 0.0;
+    double axial = 0.0;
     double air_density = 0.0;
     double vel_AIR_BODYframe_abs = 0.0;
     double vel_AIR_NEDframe_abs = 0.0;
     double dynamic_pressure = 0.0;
-    double force_drag = 0.0;
-    double force_lift = 0.0;
+    double force_axial = 0.0;
+    double force_normal_pitch = 0.0;
+    double force_normal_yaw = 0.0;
     Air air;
     double wind_speed = 0.0;
     double wind_direction = 0.0;
@@ -166,7 +171,8 @@ public:
     
     //    ==== neutrality ====
     double pos_CG;              // centor of gravity position length from nose (STA) [m]
-    double pos_CP;              // centor of pressure position length from nose (STA) [m]
+    double pos_CP_pitch;        // centor of pressure position length from nose (STA) [m]
+    double pos_CP_yaw;          // centor of pressure position length from nose (STA) [m]
     double pos_Controller;      // gimbal controller position length from nose (STA) [m]
 
     //    ==== loss velocity ====
@@ -194,7 +200,6 @@ public:
     Vector3d vel_AIR_NEDframe_;
     Vector3d vel_BODY_NEDframe_;
     Vector3d attack_of_angle_;
-    Matrix3d dcmBODY2AIR_;
     Matrix3d dcmBODY2NED_;
     Matrix3d dcmNED2BODY_;
     Matrix3d dcmECI2BODY_;
@@ -202,8 +207,8 @@ public:
     Matrix3d dcmECEF2NED_init_;
     Matrix3d dcmECI2NED_init_;
 
-    Vector3d force_air_vector;
     Vector3d force_air_vector_BODYframe;
+    Vector3d force_air_vector_NEDframe;
     Vector3d force_thrust_vector;
     Vector3d gravity_vector;
     Vector3d posLLH_IIP_;
@@ -278,19 +283,20 @@ public:
         
         body_diameter = obj.body_diameter;
         body_area = obj.body_area;
-        CL_const = obj.CL_const;
-        CL_file_exist = obj.CL_file_exist;
-        CL_file_name = obj.CL_file_name;
-        CL_mat = obj.CL_mat;
-        CLa_const = obj.CLa_const;
-        CLa_file_exist = obj.CLa_file_exist;
-        CLa_file_name = obj.CLa_file_name;
-        CLa_mat = obj.CLa_mat;
-        CD_const = obj.CD_const;
-        CD_file_exist = obj.CD_file_exist;
-        CD_file_name = obj.CD_file_name;
-        CD_mat = obj.CD_mat;
-        CD_multiplier = obj.CD_multiplier;
+        CN_const = obj.CN_const;
+        CN_file_exist = obj.CN_file_exist;
+        CN_file_name = obj.CN_file_name;
+        CN_mat = obj.CN_mat;
+        CN_multiplier = obj.CN_multiplier;
+        //CLa_const = obj.CLa_const;
+        //CLa_file_exist = obj.CLa_file_exist;
+        //CLa_file_name = obj.CLa_file_name;
+        //CLa_mat = obj.CLa_mat;
+        CA_const = obj.CA_const;
+        CA_file_exist = obj.CA_file_exist;
+        CA_file_name = obj.CA_file_name;
+        CA_mat = obj.CA_mat;
+        CA_multiplier = obj.CA_multiplier;
         
         attitude_file_exist = obj.attitude_file_exist;
         attitude_file_name = obj.attitude_file_name;
@@ -307,8 +313,10 @@ public:
         vel_dump_additional_NEDframe = obj.vel_dump_additional_NEDframe;
         
         is_consider_neutrality = obj.is_consider_neutrality;
-        neutrality_file_name = obj.neutrality_file_name;
-        neutrality_mat = obj.neutrality_mat;
+        CGXt_file_name = obj.CGXt_file_name;
+        CGXt_mat       = obj.CGXt_mat;
+        CP_file_name   = obj.CP_file_name;
+        Xcp_mat        = obj.Xcp_mat;
 
         following_stage_exist = obj.following_stage_exist;
         previous_stage_separation_time = obj.previous_stage_separation_time;
@@ -322,15 +330,17 @@ public:
         Isp_vac = obj.Isp_vac;
         m_dot = obj.m_dot;
         nozzle_exhaust_area = obj.nozzle_exhaust_area;
-        CD = obj.CD;
-        CL = obj.CL;
-        drag = obj.drag;
+        CA = obj.CA;
+        CN_pitch = obj.CN_pitch;
+        CN_yaw = obj.CN_yaw;
+        axial = obj.axial;
         air_density = obj.air_density;
         vel_AIR_BODYframe_abs = obj.vel_AIR_BODYframe_abs;
         vel_AIR_NEDframe_abs = obj.vel_AIR_NEDframe_abs;
         dynamic_pressure = obj.dynamic_pressure;
-        force_drag = obj.force_drag;
-        force_lift = obj.force_lift;
+        force_axial = obj.force_axial;
+        force_normal_pitch = obj.force_normal_pitch;
+        force_normal_yaw = obj.force_normal_yaw;
         air = obj.air;
         wind_speed = obj.wind_speed;
         wind_direction = obj.wind_direction;
@@ -343,7 +353,8 @@ public:
         gimbal_angle_yaw = obj.gimbal_angle_yaw;
         
         pos_CG = obj.pos_CG;
-        pos_CP = obj.pos_CP;
+        pos_CP_pitch = obj.pos_CP_pitch;
+        pos_CP_yaw = obj.pos_CP_yaw;
         pos_Controller = obj.pos_Controller;
         
         loss_gravity = obj.loss_gravity;
@@ -381,7 +392,7 @@ struct CsvObserver : public RocketStage{
                     "acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
                     "Isp(s),Mach number,attitude_azimth(deg),attitude_elevation(deg),"
                     "attack of angle alpha(deg),attack of angle beta(deg),all attack of angle gamma(deg),"
-                    "dynamic pressure(Pa),aero Drag(N),aero Lift(N),"
+                    "dynamic pressure(Pa),"
                     "airforce_Body_X[N],airforce_Body_Y[N],airforce_Body_Z[N],"
                     "thrust_Body_X[N],thrust_Body_Y[N],thrust_Body_Z[N],"
                     "gimbal_angle_pitch(deg),gimbal_angle_yaw(deg),"
