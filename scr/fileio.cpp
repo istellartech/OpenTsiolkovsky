@@ -50,7 +50,7 @@ double interp_matrix_2d(double mach, double alpha, MatrixXd matrix){
         std::cout << "ERROR : interp_matrix_2d. First argument is out of the boundary of matrix.";
         exit(1);
     }
-    for (int i = 2; i < matrix.rows()-1; i++) {
+    for (int i = 2; i < matrix.rows(); i++) {
         if(mach < matrix(i, 0)){
             index_mach = i - 1;
 
@@ -69,7 +69,7 @@ double interp_matrix_2d(double mach, double alpha, MatrixXd matrix){
         std::cout << "ERROR : interp_matrix_2d. Second argument is out of the boundary of matrix.";
         exit(1);
     }
-    for (int i = 2; i < col_number - 1; i++) {
+    for (int i = 2; i < col_number; i++) {
         if(alpha < matrix(0, i)){
             index_alpha = i - 1;
 
