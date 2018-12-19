@@ -10,6 +10,7 @@
 #define air_hpp
 
 #include <stdio.h>
+#include <vector>
 #include "../lib/Eigen/Core"
 
 using namespace std;
