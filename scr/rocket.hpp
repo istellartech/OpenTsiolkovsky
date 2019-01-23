@@ -89,6 +89,7 @@ public:
     double burn_start_time;             // [sec]
     double burn_end_time;               // [sec]
     double burn_time;                   // [sec]
+    double forced_cutoff_time;          // [sec]
     double throat_diameter;             // [m]
     double throat_area;                 // [m2]
     double nozzle_expansion_ratio;      // [-]
@@ -276,6 +277,7 @@ public:
         burn_start_time = obj.burn_start_time;
         burn_end_time = obj.burn_end_time;
         burn_time = obj.burn_time;
+        forced_cutoff_time = obj.forced_cutoff_time;
         throat_diameter = obj.throat_diameter;
         throat_area = obj.throat_area;
         nozzle_expansion_ratio = obj.nozzle_expansion_ratio;

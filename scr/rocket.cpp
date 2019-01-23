@@ -120,6 +120,11 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     thrust_const = o_thrust["const thrust vac[N]"].get<double>();
     burn_start_time = o_thrust["burn start time(time of each stage)[s]"].get<double>();
     burn_end_time = o_thrust["burn end time(time of each stage)[s]"].get<double>();
+    if (! o_thrust["forced cutoff time(time of each stage)[s]"].is<picojson::null>() ){
+        forced_cutoff_time = o_thrust["forced cutoff time(time of each stage)[s]"].get<double>();
+    }else{
+        forced_cutoff_time = 1.0e100;  // temporary large number
+    }
     throat_diameter = o_thrust["throat diameter[m]"].get<double>();
     nozzle_expansion_ratio = o_thrust["nozzle expansion ratio[-]"].get<double>();
     nozzle_exhaust_pressure = o_thrust["nozzle exhaust pressure[Pa]"].get<double>();
@@ -162,7 +167,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
         if (dump_exist){ // if not separation following stage, separation time should be large
             dump_separation_time = o_dumping["dumping product separation time[s]"].get<double>();
         }else{
-            dump_separation_time = 1.0e100; // temporaly large number
+            dump_separation_time = 1.0e100; // temporary large number
         }
         dump_mass = o_dumping["dumping product mass[kg]"].get<double>();
         dump_ballistic_coef = o_dumping["dumping product ballistic coefficient[kg/m2]"].get<double>();
@@ -237,6 +242,7 @@ RocketStage::RocketStage(const RocketStage& rocket_stage, Vector3d posECI_init_a
     thrust_const = 0.0;
     burn_start_time = 0.0;
     burn_end_time = 0.0;
+    forced_cutoff_time = 1.0e100; // temporary large number
     ballistic_coef = dump_ballistic_coef;
     posECI_init = posECI_init_args;
     velECI_init = velECI_init_args;
@@ -470,14 +476,16 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     if (thrust_file_exist){
         thrust_vac = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 1);
         nozzle_exhaust_pressure = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 2);
-        if (thrust_vac != 0) {
+        if (thrust_vac != 0 &&
+            time < previous_stage_separation_time + forced_cutoff_time) {
             is_powered = true;
         } else {
             is_powered = false;
         }
     } else {
         if(time >= previous_stage_separation_time + burn_start_time &&
-           time < previous_stage_separation_time + burn_start_time + burn_time / thrust_coeff){
+           time < previous_stage_separation_time + burn_start_time + burn_time / thrust_coeff &&
+           time < previous_stage_separation_time + forced_cutoff_time){
             thrust_vac = thrust_const;
             is_powered = true;
         } else {

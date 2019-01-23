@@ -41,7 +41,7 @@ int main(int argc, const char * argv[]) {
         input_file_name = argv[1];
     } else {
         cout << "argument error";
-        return 0;
+        return 1;
     }
 
     Rocket rocket(input_file_name);
