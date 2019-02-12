@@ -234,7 +234,7 @@ Vector3d posLLH_IIP(double t, Vector3d posECI_, Vector3d vel_ECEF_NEDframe_){
     Vector3d dist_IIP_from_now_NED;
     Vector3d posECI_IIP_;
     Vector3d posECEF_IIP_;
-    dist_IIP_from_now_NED << vel_north_ * tau, vel_east_ * tau, -h;
+    dist_IIP_from_now_NED << vel_north_ * tau, vel_east_ * tau, h;
     posECI_IIP_ = posECI_ + dcmNED2ECI_ * dist_IIP_from_now_NED;
     posECEF_IIP_ = posECEF(dcmECI2ECEF(t), posECI_IIP_);
     return posLLH(posECEF_IIP_);
