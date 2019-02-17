@@ -4,7 +4,7 @@ import copy
 from numpy import random
 from numpy.random import normal,rand
 from datetime import datetime
-import os
+import os, sys
 import multiprocessing
 
 def error_loader(data,route):
@@ -63,7 +63,7 @@ def error_input_maker(errorfile,nominalfile,inpfile,outfile,error_seed):
     fo.close()
     fp.close()
 
-def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionname):
+def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionpath):
     inputfile  = "case{0:05d}_{1:s}.json".format(i, suffix)
     outputfile = "case{0:05d}_{1:s}".format(i, suffix)
     stdoutfile = "case{0:05d}_{1:s}.stdout.dat".format(i, suffix)
@@ -72,42 +72,65 @@ def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionname):
         
     os.system("./OpenTsiolkovsky "+inputfile+" > "+stdoutfile)
 
-    os.system("aws s3 cp " + inputfile  + " s3://otmc/" + missionname + "/raw/output/")
-    os.system("aws s3 cp " + stdoutfile + " s3://otmc/" + missionname + "/raw/output/")
-    os.system("aws s3 cp output/"+outputfile+"_dynamics_1.csv s3://otmc/" + missionname + "/raw/output/")
+    is_aws = missionpath.startswith("s3://")
+    if is_aws :
+        os.system("aws s3 cp " + inputfile  + " " + missionpath + "/raw/output/")
+        os.system("aws s3 cp " + stdoutfile + " " + missionpath + "/raw/output/")
+        os.system("aws s3 cp output/"+outputfile+"_dynamics_?.csv " + missionpath + "/raw/output/")
+    else :
+        os.system("cp " + inputfile  + " " + missionpath + "/raw/output/")
+        os.system("cp " + stdoutfile + " " + missionpath + "/raw/output/")
+        os.system("cp output/"+outputfile+"_dynamics_?.csv " + missionpath + "/raw/output/")
+
     os.system("rm " + inputfile)
     os.system("rm " + stdoutfile)
-    os.system("rm output/"+outputfile+"_dynamics_1.csv")
+    os.system("rm output/"+outputfile+"_dynamics_?.csv")
 
 
 if __name__=="__main__":
     Nproc = multiprocessing.cpu_count() - 3    # number of processor
 
-    missionname = os.getenv("otmc_mission_name")
-    i = int(os.getenv("AWS_BATCH_JOB_ARRAY_INDEX"))
+    if len(sys.argv) >= 2 :
+        missionpath = sys.argv[1]
+    else :
+        missionname = os.getenv("otmc_mission_name")
+        missionpath = "s3://otmc/" + missionname
 
-    os.system("aws s3 cp s3://otmc/" + missionname + "/raw/inp . --recursive")
+    is_aws = missionpath.startswith("s3://")
+    if is_aws :
+        os.system("aws s3 cp " + missionpath + "/raw/inp . --recursive")
+    else :
+        os.system("cp " + missionpath + "/raw/inp . --recursive")
 
-    fp = open("mc.json")
-    data = json.load(fp)
-    fp.close()
+    with open("mc.json") as fp :
+        data = json.load(fp)
  
     Ntask       = data["Ntask"]
     suffix      = data["suffix"]
     nominalfile = data["nominalfile"]
     gosafile    = data["gosafile"]
-    NLoop       = data["NLoop"]
 
-    for loop_index in range(NLoop):
-        array_p = []
-        for j in range(Nproc):
-            id_task = (NLoop * i + loop_index) * Nproc + j
-            if id_task > Ntask:
-                continue
-            p = multiprocessing.Process(target=wrapper_opentsio,args=(id_task, suffix, nominalfile, gosafile, missionname))
-            array_p.append(p)
-            p.start()
-    
-        for p in array_p:
-            p.join()
+    if "NLoop" in data.keys(): 
+        NLoop       = data["NLoop"]
+        i = int(os.getenv("AWS_BATCH_JOB_ARRAY_INDEX"))
 
+        for loop_index in range(NLoop):
+            array_p = []
+            for j in range(Nproc):
+                id_task = (NLoop * i + loop_index) * Nproc + j
+                if id_task > Ntask:
+                    continue
+                p = multiprocessing.Process(target=wrapper_opentsio,args=(id_task, suffix, nominalfile, gosafile, missionpath))
+                array_p.append(p)
+                p.start()
+        
+            for p in array_p:
+                p.join()
+    else :
+        pool = multiprocessing.Pool(Nproc)
+
+        for id_task in range(Ntask+1):
+            pool.apply_async(wrapper_opentsio, (id_task, suffix, nominalfile, gosafile, missionpath))
+
+        pool.close()
+        pool.join()
