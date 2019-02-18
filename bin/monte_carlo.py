@@ -76,7 +76,7 @@ def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionpath):
     if is_aws :
         os.system("aws s3 cp " + inputfile  + " " + missionpath + "/raw/output/")
         os.system("aws s3 cp " + stdoutfile + " " + missionpath + "/raw/output/")
-        os.system("aws s3 cp output/"+outputfile+"_dynamics_?.csv " + missionpath + "/raw/output/")
+        os.system('aws s3 cp output/ ' + missionpath + '/raw/output/ --exclude "*" --include "'+outputfile+'_dynamics_?.csv"')
     else :
         os.system("cp " + inputfile  + " " + missionpath + "/raw/output/")
         os.system("cp " + stdoutfile + " " + missionpath + "/raw/output/")
@@ -100,7 +100,7 @@ if __name__=="__main__":
     if is_aws :
         os.system("aws s3 cp " + missionpath + "/raw/inp . --recursive")
     else :
-        os.system("cp " + missionpath + "/raw/inp . --recursive")
+        os.system("cp -r " + missionpath + "/raw/inp/* .")
 
     with open("mc.json") as fp :
         data = json.load(fp)

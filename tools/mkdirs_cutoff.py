@@ -29,15 +29,17 @@ if __name__=="__main__":
         t_dir = "{0}/{1:06.2f}".format(cutoff_dir, t)
         print(t_dir)
 
-        if not is_aws :
+        if is_aws :
+            os.system("{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
+        else :
             os.system("mkdir -p {}/raw/inp".format(t_dir))
             os.system("mkdir -p {}/raw/output".format(t_dir))
-        os.system("{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
+            os.system("{0}cp -r {1}/raw/inp {2}/raw/inp".format(prefix, base_dir, t_dir))
 
         if is_aws :
-          os.system("{0}cp {1}/raw/inp {2} --recursive --exclude '*' --include '*.json'".format(prefix, t_dir, temp_dir))
+            os.system("{0}cp {1}/raw/inp {2} --recursive --exclude '*' --include '*.json'".format(prefix, t_dir, temp_dir))
         else :
-          os.system("{0}cp {1}/raw/inp/*.json {2}".format(prefix, t_dir, temp_dir))
+            os.system("{0}cp {1}/raw/inp/*.json {2}".format(prefix, t_dir, temp_dir))
 
         with open("{0}/mc.json".format(temp_dir)) as fp :
             mc = json.load(fp)
