@@ -27,11 +27,12 @@ if __name__=="__main__":
 
     for t in np.arange(t_span, t_max+t_span, t_span) :
         t_dir = "{0}/{1:.2f}".format(cutoff_dir, t)
+        print(t_dir)
 
         if not is_aws :
             os.system("mkdir -p {}/raw/inp".format(t_dir))
             os.system("mkdir -p {}/raw/output".format(t_dir))
-        os.system("{0}cp {1}/raw/inp {2}/raw/inp -r".format(prefix, base_dir, t_dir))
+        os.system("{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
 
         os.system("{0}cp {1}/raw/inp/*.json {2}".format(prefix, t_dir, temp_dir))
         with open("{0}/mc.json".format(temp_dir)) as fp :
