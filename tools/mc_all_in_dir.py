@@ -36,9 +36,12 @@ if __name__=="__main__":
         try :
             ret = os.system("{0}ls {1}/raw/inp/mc.json".format(prefix, ch_fullpath))
             if ret == 0: # mc.json is exist
+                print("do:", ch_fullpath)
                 os.system("python ./monte_carlo.py {0}".format(ch_fullpath))
+            else :
+                print("pass:", ch_fullpath)
         except :
-            pass
+            print("error:", ch_fullpath)
 
     os.chdir(curr_dir)
 
