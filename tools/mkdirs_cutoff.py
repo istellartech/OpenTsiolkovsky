@@ -26,7 +26,7 @@ if __name__=="__main__":
     os.system("mkdir {}".format(temp_dir))
 
     for t in np.arange(t_span, t_max+t_span, t_span) :
-        t_dir = "{0}/{1:.2f}".format(cutoff_dir, t)
+        t_dir = "{0}/{1:06.2f}".format(cutoff_dir, t)
         print(t_dir)
 
         if not is_aws :
@@ -42,7 +42,7 @@ if __name__=="__main__":
         with open("{0}/mc.json".format(temp_dir)) as fp :
             mc = json.load(fp)
 
-        mc["suffix"] = mc["suffix"] + "_{:.2f}".format(t)
+        mc["suffix"] = mc["suffix"] + "_{:06.2f}".format(t)
         with open("{0}/mc.json".format(temp_dir), "w") as fp :
             json.dump(mc, fp, indent=4)
 
