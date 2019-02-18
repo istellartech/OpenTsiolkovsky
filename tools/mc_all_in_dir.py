@@ -15,7 +15,6 @@ if __name__=="__main__":
     if(len(sys.argv) > 2) :
         n_array = int(sys.argv[2])
         i_array = int(os.getenv("AWS_BATCH_JOB_ARRAY_INDEX"))
-        print("id/jobs:", i_array + "/" + n_array)
     else :
         n_array = 1
         i_array = 0
