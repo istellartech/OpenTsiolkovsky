@@ -23,23 +23,23 @@ if __name__=="__main__":
         prefix = ""
 
     temp_dir = "./my_temp_dir_999"
-    os.system("mkdir {}".format(temp_dir))
+    os.system(r"mkdir {}".format(temp_dir))
 
     for t in np.arange(t_span, t_max+t_span, t_span) :
         t_dir = "{0}/{1:06.2f}".format(cutoff_dir, t)
         print(t_dir)
 
         if is_aws :
-            os.system("{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
+            os.system(r"{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
         else :
-            os.system("mkdir -p {}/raw/inp".format(t_dir))
-            os.system("mkdir -p {}/raw/output".format(t_dir))
-            os.system("{0}cp -r {1}/raw/inp {2}/raw/inp".format(prefix, base_dir, t_dir))
+            os.system(r"mkdir -p {}/raw/inp".format(t_dir))
+            os.system(r"mkdir -p {}/raw/output".format(t_dir))
+            os.system(r"{0}cp -r {1}/raw/inp {2}/raw/inp".format(prefix, base_dir, t_dir))
 
         if is_aws :
-            os.system("{0}cp {1}/raw/inp {2} --recursive --exclude '*' --include '*.json'".format(prefix, t_dir, temp_dir))
+            os.system(r"{0}cp {1}/raw/inp {2} --recursive --exclude '*' --include '*.json'".format(prefix, t_dir, temp_dir))
         else :
-            os.system("{0}cp {1}/raw/inp/*.json {2}".format(prefix, t_dir, temp_dir))
+            os.system(r"{0}cp {1}/raw/inp/*.json {2}".format(prefix, t_dir, temp_dir))
 
         with open("{0}/mc.json".format(temp_dir)) as fp :
             mc = json.load(fp)
@@ -57,9 +57,9 @@ if __name__=="__main__":
             json.dump(nom, fp, indent=4)
 
         if is_aws :
-          os.system("{0}mv {1} {2}/raw/inp --recursive".format(prefix, temp_dir, t_dir))
+          os.system(r"{0}mv {1} {2}/raw/inp --recursive".format(prefix, temp_dir, t_dir))
         else :
-          os.system("{0}mv {1}/* {2}/raw/inp".format(prefix, temp_dir, t_dir))
+          os.system(r"{0}mv {1}/* {2}/raw/inp".format(prefix, temp_dir, t_dir))
 
-    os.system("rm -rf {}".format(temp_dir))
+    os.system(r"rm -rf {}".format(temp_dir))
 
