@@ -31,9 +31,9 @@ if __name__=="__main__":
     os.chdir(path_tsio)
 
     if is_aws :
-      child_dirs = sp.check_output(r"{0}ls {1}/ | sed -r 's/ *PRE (.*)\/$/\1/g'".format(prefix, parent_dir), shell=True).decode("utf-8").strip().split("\n")
+      child_dirs = sp.check_output(r"{0}ls {1}/ | grep / | sed -r 's/ *PRE (.*)\/$/\1/g'".format(prefix, parent_dir), shell=True).decode("utf-8").strip().split("\n")
     else :
-      child_dirs = sp.check_output(r"{0}ls -F {1} | grep / | sed -r 's/\///g'".format(prefix, parent_dir), shell=True).decode("utf-8").strip().split("\n")
+      child_dirs = sp.check_output(r"{0}ls -F {1} | grep / | sed -r 's/\/$//g'".format(prefix, parent_dir), shell=True).decode("utf-8").strip().split("\n")
 
     for j in range(i_array, len(child_dirs), n_array):
         ch_fullpath = "{0}/{1}".format(parent_dir, child_dirs[j])
