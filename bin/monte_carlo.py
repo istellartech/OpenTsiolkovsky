@@ -76,15 +76,15 @@ def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionpath):
     if is_aws :
         os.system("aws s3 cp " + inputfile  + " " + missionpath + "/raw/output/")
         os.system("aws s3 cp " + stdoutfile + " " + missionpath + "/raw/output/")
-        os.system('aws s3 cp output/ ' + missionpath + '/raw/output/ --exclude "*" --include "'+outputfile+'_dynamics_?.csv"')
+        os.system('aws s3 cp ./output/ ' + missionpath + '/raw/output/ --exclude "*" --include "'+outputfile+'_dynamics_?.csv" --recursive')
     else :
         os.system("cp " + inputfile  + " " + missionpath + "/raw/output/")
         os.system("cp " + stdoutfile + " " + missionpath + "/raw/output/")
-        os.system("cp output/"+outputfile+"_dynamics_?.csv " + missionpath + "/raw/output/")
+        os.system("cp ./output/"+outputfile+"_dynamics_?.csv " + missionpath + "/raw/output/")
 
     os.system("rm " + inputfile)
     os.system("rm " + stdoutfile)
-    os.system("rm output/"+outputfile+"_dynamics_?.csv")
+    os.system("rm ./output/"+outputfile+"_dynamics_?.csv")
 
 
 if __name__=="__main__":
