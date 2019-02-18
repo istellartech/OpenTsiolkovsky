@@ -48,7 +48,7 @@ if __name__=="__main__":
         with open("{0}/{1}".format(temp_dir, nomfile), "w") as fp:
             json.dump(nom, fp, indent=4)
 
-        os.system("{0}mv {1}/*.json {2}/raw/inp".format(prefix, temp_dir, t_dir)
+        os.system("{0}mv {1}/*.json {2}/raw/inp".format(prefix, temp_dir, t_dir))
 
     os.system("rm -rf {}".format(temp_dir))
 
