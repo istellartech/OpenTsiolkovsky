@@ -29,7 +29,7 @@ if __name__=="__main__":
     os.chdir(path_tsio)
 
     # child_dirs = sp.check_output("{0}ls -F {1} | grep / | sed 's/\///g'".format(prefix, parent_dir), shell=True).decode("utf-8").strip().split("\n")
-    child_dirs = sp.check_output("{0}ls {1} | grep / | sed 's/\///g'".format(prefix, parent_dir), shell=True).decode("utf-8").strip().split("\n")
+    child_dirs = sp.check_output("{0}ls {1} | sed 's/\///g'".format(prefix, parent_dir), shell=True).decode("utf-8").strip().split("\n")
 
     for j in range(i_array, len(child_dirs), n_array):
         ch_fullpath = "{0}/{1}".format(parent_dir, child_dirs[j])
