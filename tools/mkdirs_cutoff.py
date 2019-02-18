@@ -22,7 +22,7 @@ if __name__=="__main__":
         prefix = ""
 
     temp_dir = "./my_temp_dir_999"
-    os.system("mkdir {}".format(temp_dir)
+    os.system("mkdir {}".format(temp_dir))
 
     for t in np.arange(t_span, t_max+t_span, t_span) :
         t_dir = "{0}/{1:.2f}".format(cutoff_dir, t)
