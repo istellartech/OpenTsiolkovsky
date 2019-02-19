@@ -75,7 +75,7 @@ if __name__=="__main__":
         beta_new = beta_nom * mass_nom_at(t_coff_new) / mass_nom_at(t_coff_nom)
 
         nom["stage1"]["thrust"]["forced cutoff time(time of each stage)[s]"] = t_coff_new
-        nom["stage1"]["aero"]["ballistic coefficient(ballistic flight mode)[kg/m2]"] beta_new
+        nom["stage1"]["aero"]["ballistic coefficient(ballistic flight mode)[kg/m2]"] = beta_new
         with open("{0}/{1}".format(temp_dir, nomfile), "w") as fp:
             json.dump(nom, fp, indent=4)
 
