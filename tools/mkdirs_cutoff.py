@@ -48,10 +48,14 @@ if __name__=="__main__":
 
         if is_aws :
             os.system(r"{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
+            os.system(r"{0}cp {1}/stat/inp {2}/stat/inp --recursive".format(prefix, base_dir, t_dir))
         else :
             os.system(r"mkdir -p {}/raw/inp".format(t_dir))
             os.system(r"mkdir -p {}/raw/output".format(t_dir))
             os.system(r"{0}cp -r {1}/raw/inp {2}/raw/inp".format(prefix, base_dir, t_dir))
+            os.system(r"mkdir -p {}/stat/inp".format(t_dir))
+            os.system(r"mkdir -p {}/stat/output".format(t_dir))
+            os.system(r"{0}cp -r {1}/stat/inp {2}/stat/inp".format(prefix, base_dir, t_dir))
 
         if is_aws :
             os.system(r"{0}cp {1}/raw/inp {2} --recursive --exclude '*' --include '*.json'".format(prefix, t_dir, temp_dir))
