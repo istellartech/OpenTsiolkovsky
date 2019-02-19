@@ -28,16 +28,16 @@ if __name__=="__main__":
     if not os.path.exists(temp_dir) : os.system(r"mkdir {}".format(temp_dir))
 
     if is_aws :
-        os.system(r"{0}cp {1}/raw/inp {2} --recursive".format(prefix, t_dir, temp_dir))
+        os.system(r"{0}cp {1}/raw/inp {2} --recursive".format(prefix, base_dir, temp_dir))
     else :
-        os.system(r"{0}cp {1}/raw/inp/* {2}".format(prefix, t_dir, temp_dir))
+        os.system(r"{0}cp {1}/raw/inp/* {2}".format(prefix, base_dir, temp_dir))
     
     with open("{0}/mc.json".format(temp_dir)) as fp :
         mc = json.load(fp)
     nomfile = mc["nominalfile"]
     with open("{0}/{1}".format(temp_dir, nomfile)) as fp:
         nom = json.load(fp)
-    df = pd.read_csv("{0}/output/{1}_dynamics_1.csv".format(temp_dir, nom["name(str)"]))
+    df = pd.read_csv("{0}/output/{1}_dynamics_1.csv".format(temp_dir, nom["name(str)"]), index_col=False)
     time_nom = df["time(s)"].values
     mass_nom = df["mass(kg)"].values
     mass_nom_at = interpolate.interp1d(time_nom, mass_nom)
