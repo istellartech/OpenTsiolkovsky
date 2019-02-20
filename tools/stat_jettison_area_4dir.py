@@ -9,7 +9,7 @@ import simplekml
 inputfile  = "output/datapoint_landing_time.csv" # default file name
 outputfile = inputfile.replace(".csv", ".dat")
 outputkml = inputfile.replace(".csv", ".kml")
-output4dir = inputfile.replace(".csv", "_4dir.csv")
+output4dir_fmt = inputfile.replace(".csv", "_4dir_{}deg.csv")
 
 argv = sys.argv
 if len(argv) > 1:
@@ -18,7 +18,7 @@ else:
     print("Usage:  {0} MISSION_NAME [FLIGHT_DIRECTION]".format(argv[0]))
     exit()
 
-os.system("aws s3 cp s3://otmc/{0:s}/stat/{1:s} .".format(otmc_mission_name,inputfile))
+os.system("aws s3 cp s3://otmc/{0:s}/stat/{1:s} ./output".format(otmc_mission_name,inputfile))
 
 # initialize
 N  = 0
@@ -97,9 +97,9 @@ p2 = -3 * v1 + 3 * v2 + ave
 p3 = -3 * v1 - 3 * v2 + ave
 p4 =  3 * v1 - 3 * v2 + ave
 
-# Max points in the flight coordinate
+# 3-sigma points tangent to the rectangle of the flight direction
 if len(argv) > 2 :
-    drc_flight = argv[2]
+    drc_flight = float(argv[2]) * math.pi / 180.0
     drc_flight_elli_coords = - (drc_flight - math.pi * 0.5) - Theta + np.array([0., 0.5, 1., 1.5]) * math.pi
     flight_vecs = np.array([np.cos(drc_flight_elli_coords), np.sin(drc_flight_elli_coords)])
     ms = tan(drc_flight_elli_coords + pi * 0.5)
@@ -111,12 +111,12 @@ if len(argv) > 2 :
                                [ np.sin(Theta), np.cos(Theta)]])
     V_errs = np.matmul(coord_conv_mat, Dxs)
     v_errs = V_errs * np.array([[1./ratio_x, 1.]]).T
-    p_errs = 3 * v_errs + np.array([ave]).T
+    p_tangents = 3 * v_errs.T + ave
 
 # output
 fp = open(outputfile,"w")
 fp.write("IST JETTISON AREA MAKER\n\n")
-fp.write("INPUTFIE: {0:}\n".format(inputfile))
+fp.write("INPUTFILE: {0:}\n".format(inputfile))
 fp.write("AVERAGE POINT (lon, lat)[deg]:\n")
 fp.write("\t{0:}, {1:}\n".format(ave[0],ave[1]))
 fp.write("JETTISON AREA (lon, lat)[deg]:\n")
@@ -133,6 +133,24 @@ for i in range(37):
 fp.close()
 os.system("aws s3 cp {1:s} s3://otmc/{0:s}/stat/output/ ".format(otmc_mission_name, outputfile))
 
+# output _4dir.csv
+if len(argv) > 2:
+    output4dir = output4dir_fmt.format(argv[2])
+    with open(output4dir, "w") as fp:
+        fp.write(",")
+        fp.write(",".join(["lon(deg)", "lat(deg)"]))
+        fp.write("\n")
+        fp.write("average,")
+        fp.write(",".join(map(str, ave)))
+        fp.write("\n")
+        names = ["forward", "left", "backward", "right"]
+        for p, n in zip(p_tangents, names):
+            fp.write(n + ",")
+            fp.write(",".join(map(str, p)))
+            fp.write("\n")
+    os.sytem("aws s3 cp {1} s3://otmc/{0}/stat/output/".format(otmc_mission_name, output4dir))
+
+# output kml
 kml = simplekml.Kml(open=1)
 
 kml.newpoint(name="Average LandIn Point", coords = [(ave[0], ave[1])])
@@ -152,21 +170,13 @@ for i in range(37):
     p_tmp = 3 * v1 * math.cos(angle) + 3 * v2 * math.sin(angle) + ave
     arr_coords.append((p_tmp[0], p_tmp[1]))
 linestring.coords = arr_coords
-kml.save(outputkml)
 
-# output *_4dir.csv
 if len(argv) > 2:
-    with open(output4dir, "w") as fp:
-        fp.write(",")
-        fp.write(",".join(["lon(deg)", "lat(deg)"]))
-        fp.write("\n")
-        fp.write("average,")
-        fp.write(",".join(map(str, ave)))
-        fp.write("\n")
-        names = ["forward", "left", "backward", "right"]
-        for i, n in enumerate(names):
-            fp.write(n + ",")
-            fp.write(",".join(map(str, p_errs[:, i])))
-            fp.write("\n")
+    fol = kml.newfolder(name="Points Tangent to Rectangle {}[deg]".format(argv[2]))
+    names = ["Forward", "Left", "Backward", "Right"]
+    for p, n in zip(p_tangents, names) :
+        fol.newpoint(name=n, coords=p)
+
+kml.save(outputkml)
 
 os.system("aws s3 cp {1:s} s3://otmc/{0:s}/stat/output/ ".format(otmc_mission_name, outputkml))
