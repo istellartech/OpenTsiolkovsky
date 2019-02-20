@@ -148,7 +148,7 @@ if len(argv) > 2:
             fp.write(n + ",")
             fp.write(",".join(map(str, p)))
             fp.write("\n")
-    os.sytem("aws s3 cp {1} s3://otmc/{0}/stat/output/".format(otmc_mission_name, output4dir))
+    os.system("aws s3 cp {1} s3://otmc/{0}/stat/output/".format(otmc_mission_name, output4dir))
 
 # output kml
 kml = simplekml.Kml(open=1)
