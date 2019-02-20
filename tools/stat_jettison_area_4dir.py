@@ -15,7 +15,7 @@ argv = sys.argv
 if len(argv) > 1:
     otmc_mission_name = argv[1]
 else:
-    print "Usage:  {0} MISSION_NAME [FLIGHT_DIRECTION]".format(argv[0])
+    print("Usage:  {0} MISSION_NAME [FLIGHT_DIRECTION]".format(argv[0]))
     exit()
 
 os.system("aws s3 cp s3://otmc/{0:s}/stat/{1:s} .".format(otmc_mission_name,inputfile))
