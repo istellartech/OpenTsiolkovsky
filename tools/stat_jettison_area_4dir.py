@@ -102,7 +102,7 @@ if len(argv) > 2 :
     drc_flight = float(argv[2]) * math.pi / 180.0
     drc_flight_elli_coords = - (drc_flight - math.pi * 0.5) - Theta + np.array([0., 0.5, 1., 1.5]) * math.pi
     flight_vecs = np.array([np.cos(drc_flight_elli_coords), np.sin(drc_flight_elli_coords)])
-    ms = np.tan(drc_flight_elli_coords + pi * 0.5)
+    ms = np.tan(drc_flight_elli_coords + math.pi * 0.5)
     Dxs = np.array([ ms * Alpha**2 / np.sqrt(Beta**2 + (Alpha * ms)**2), \
                         - Beta **2 / np.sqrt(Beta**2 + (Alpha * ms)**2) ])
     signs = np.sign((Dxs * flight_vecs).sum(axis=0))
