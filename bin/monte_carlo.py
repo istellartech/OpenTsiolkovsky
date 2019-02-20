@@ -6,6 +6,7 @@ from numpy.random import normal,rand
 from datetime import datetime
 import os, sys
 import multiprocessing
+import subprocess as sp
 
 def error_loader(data,route):
     result = []
@@ -69,8 +70,14 @@ def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionpath):
     stdoutfile = "case{0:05d}_{1:s}.stdout.dat".format(i, suffix)
 
     error_input_maker(gosafile, nominalfile, inputfile, outputfile,i)
-        
-    os.system("./OpenTsiolkovsky "+inputfile+" > "+stdoutfile)
+
+    for i in range(5): # retry 5 times
+        proc = sp.Popen("./OpenTsiolkovsky "+inputfile+" > "+stdoutfile, shell=True)
+        try :
+            rc = proc.wait(timeout=60) # timeout: 60[s]
+            if rc == 0 : break    # success
+        except sp.TimeoutExpired :
+            proc.kill()
 
     is_aws = missionpath.startswith("s3://")
     if is_aws :
