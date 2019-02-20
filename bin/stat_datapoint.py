@@ -24,7 +24,10 @@ def read_data_points(arg):
         #os.system("cp data/"+filename+" .") ######## FOR DEBUG########################
         
         # format csv file to proper form
-        fp = open(filename)
+        try :
+          fp = open(filename)
+        except :
+          continue
         ft = open("tmp_{}.csv".format(id_proc),"w")
         for line in fp:
             ft.write(line.replace(",\n","\n"))
