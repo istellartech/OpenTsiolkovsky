@@ -13,12 +13,20 @@ output4dir_fmt = inputfile.replace(".csv", "_4dir_{}deg.csv")
 
 argv = sys.argv
 if len(argv) > 1:
-    otmc_mission_name = argv[1]
+    target_dir = argv[1]
+    is_aws = target_dir.startswith("s3://")
 else:
-    print("Usage:  {0} MISSION_NAME [FLIGHT_DIRECTION]".format(argv[0]))
+    print("Usage:  {0} TARGET_DIRECTORY [FLIGHT_DIRECTION]".format(argv[0]))
     exit()
 
-os.system("aws s3 cp s3://otmc/{0:s}/stat/{1:s} ./output".format(otmc_mission_name,inputfile))
+if len(argv) > 2:
+    str_drc_flight = argv[2]
+    output4dir = output4dir_fmt.format(str_drc_flight)
+
+if is_aws :
+    os.system("aws s3 cp {0:s}/stat/{1:s} ./output".format(target_dir,inputfile))
+else :
+    os.system("cp {0:s}/stat/{1:s} ./output".format(target_dir,inputfile))
 
 # initialize
 N  = 0
@@ -99,7 +107,7 @@ p4 =  3 * v1 - 3 * v2 + ave
 
 # 3-sigma points tangent to the rectangle of the flight direction
 if len(argv) > 2 :
-    drc_flight = float(argv[2]) * math.pi / 180.0
+    drc_flight = float(str_drc_flight) * math.pi / 180.0
     drc_flight_elli_coords = - (drc_flight - math.pi * 0.5) - Theta + np.array([0., 0.5, 1., 1.5]) * math.pi
     flight_vecs = np.array([np.cos(drc_flight_elli_coords), np.sin(drc_flight_elli_coords)])
     ms = np.tan(drc_flight_elli_coords + math.pi * 0.5)
@@ -131,11 +139,13 @@ for i in range(37):
     p_tmp = 3 * v1 * math.cos(angle) + 3 * v2 * math.sin(angle) + ave
     fp.write("\t{0:}, {1:}\n".format(p_tmp[0],p_tmp[1]))
 fp.close()
-os.system("aws s3 cp {1:s} s3://otmc/{0:s}/stat/output/ ".format(otmc_mission_name, outputfile))
+if is_aws :
+    os.system("aws s3 cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
+else :
+    os.system("cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
 
 # output _4dir.csv
 if len(argv) > 2:
-    output4dir = output4dir_fmt.format(argv[2])
     with open(output4dir, "w") as fp:
         fp.write(",")
         fp.write(",".join(["lon(deg)", "lat(deg)"]))
@@ -143,12 +153,15 @@ if len(argv) > 2:
         fp.write("average,")
         fp.write(",".join(map(str, ave)))
         fp.write("\n")
-        names = ["forward", "left", "backward", "right"]
+        names = ["head", "left", "tail", "right"]
         for p, n in zip(p_tangents, names):
             fp.write(n + ",")
             fp.write(",".join(map(str, p)))
             fp.write("\n")
-    os.system("aws s3 cp {1} s3://otmc/{0}/stat/output/".format(otmc_mission_name, output4dir))
+    if is_aws :
+        os.system("aws s3 cp {1} {0}/stat/output/".format(target_dir, output4dir))
+    else :
+        os.system("cp {1} {0}/stat/output/".format(target_dir, output4dir))
 
 # output kml
 kml = simplekml.Kml(open=1)
@@ -172,11 +185,14 @@ for i in range(37):
 linestring.coords = arr_coords
 
 if len(argv) > 2:
-    fol = kml.newfolder(name="Points Tangent to Rectangle {}[deg]".format(argv[2]))
-    names = ["Forward", "Left", "Backward", "Right"]
+    fol = kml.newfolder(name="Points Tangent to Rectangle {}[deg]".format(str_drc_flight))
+    names = ["Head", "Left", "Tail", "Right"]
     for p, n in zip(p_tangents, names) :
         fol.newpoint(name=n, coords=[p])
 
 kml.save(outputkml)
 
-os.system("aws s3 cp {1:s} s3://otmc/{0:s}/stat/output/ ".format(otmc_mission_name, outputkml))
+if is_aws :
+    os.system("aws s3 cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
+else :
+    os.system("cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
