@@ -175,7 +175,7 @@ if len(argv) > 2:
     fol = kml.newfolder(name="Points Tangent to Rectangle {}[deg]".format(argv[2]))
     names = ["Forward", "Left", "Backward", "Right"]
     for p, n in zip(p_tangents, names) :
-        fol.newpoint(name=n, coords=p)
+        fol.newpoint(name=n, coords=[p])
 
 kml.save(outputkml)
 
