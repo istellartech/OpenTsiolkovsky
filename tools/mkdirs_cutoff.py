@@ -2,13 +2,14 @@
 # coding: utf-8
 from __future__ import print_function, division, unicode_literals, absolute_import
 import json
-import os, sys
+import os
+import sys
 import numpy as np
 import pandas as pd
 from scipy import interpolate
 
-if __name__=="__main__":
-    if(len(sys.argv) < 4) :
+if __name__ == "__main__":
+    if(len(sys.argv) < 4):
         print("usage: python", sys.argv[0], "TARGET_DIR", "T_MAX", "T_SPAN")
         exit(1)
     target_dir = sys.argv[1]
@@ -21,18 +22,19 @@ if __name__=="__main__":
     is_aws = target_dir.startswith("s3://")
     if is_aws:
         prefix = "aws s3 "
-    else :
+    else:
         prefix = ""
 
     temp_dir = "./my_temp_dir_999"
-    if not os.path.exists(temp_dir) : os.system(r"mkdir {}".format(temp_dir))
+    if not os.path.exists(temp_dir):
+        os.system(r"mkdir {}".format(temp_dir))
 
-    if is_aws :
+    if is_aws:
         os.system(r"{0}cp {1}/raw/inp {2} --recursive".format(prefix, base_dir, temp_dir))
-    else :
+    else:
         os.system(r"{0}cp {1}/raw/inp/* {2}".format(prefix, base_dir, temp_dir))
-    
-    with open("{0}/mc.json".format(temp_dir)) as fp :
+
+    with open("{0}/mc.json".format(temp_dir)) as fp:
         mc = json.load(fp)
     nomfile = mc["nominalfile"]
     with open("{0}/{1}".format(temp_dir, nomfile)) as fp:
@@ -42,14 +44,14 @@ if __name__=="__main__":
     mass_nom = df["mass(kg)"].values
     mass_nom_at = interpolate.interp1d(time_nom, mass_nom)
 
-    for t in np.arange(t_span, t_max+t_span, t_span) :
+    for t in np.arange(t_span, t_max + t_span, t_span):
         t_dir = "{0}/{1:06.2f}".format(cutoff_dir, t)
         print(t_dir)
 
-        if is_aws :
+        if is_aws:
             os.system(r"{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
             os.system(r"{0}cp {1}/stat/inp {2}/stat/inp --recursive".format(prefix, base_dir, t_dir))
-        else :
+        else:
             os.system(r"mkdir -p {}/raw/inp".format(t_dir))
             os.system(r"mkdir -p {}/raw/output".format(t_dir))
             os.system(r"{0}cp -r {1}/raw/inp {2}/raw/inp".format(prefix, base_dir, t_dir))
@@ -57,22 +59,22 @@ if __name__=="__main__":
             os.system(r"mkdir -p {}/stat/output".format(t_dir))
             os.system(r"{0}cp -r {1}/stat/inp {2}/stat/inp".format(prefix, base_dir, t_dir))
 
-        if is_aws :
+        if is_aws:
             os.system(r"{0}cp {1}/raw/inp {2} --recursive --exclude '*' --include '*.json'".format(prefix, t_dir, temp_dir))
-        else :
+        else:
             os.system(r"{0}cp {1}/raw/inp/*.json {2}".format(prefix, t_dir, temp_dir))
 
-        with open("{0}/mc.json".format(temp_dir)) as fp :
+        with open("{0}/mc.json".format(temp_dir)) as fp:
             mc = json.load(fp)
 
         mc["suffix"] = mc["suffix"] + "_{:06.2f}".format(t)
-        with open("{0}/mc.json".format(temp_dir), "w") as fp :
+        with open("{0}/mc.json".format(temp_dir), "w") as fp:
             json.dump(mc, fp, indent=4)
 
         nomfile = mc["nominalfile"]
         with open("{0}/{1}".format(temp_dir, nomfile)) as fp:
             nom = json.load(fp)
-        
+
         t_coff_nom = nom["stage1"]["thrust"]["forced cutoff time(time of each stage)[s]"]
         beta_nom = nom["stage1"]["aero"]["ballistic coefficient(ballistic flight mode)[kg/m2]"]
         t_coff_new = t
@@ -83,10 +85,9 @@ if __name__=="__main__":
         with open("{0}/{1}".format(temp_dir, nomfile), "w") as fp:
             json.dump(nom, fp, indent=4)
 
-        if is_aws :
-          os.system(r"{0}mv {1} {2}/raw/inp --recursive".format(prefix, temp_dir, t_dir))
-        else :
-          os.system(r"{0}mv {1}/* {2}/raw/inp".format(prefix, temp_dir, t_dir))
+        if is_aws:
+            os.system(r"{0}mv {1} {2}/raw/inp --recursive".format(prefix, temp_dir, t_dir))
+        else:
+            os.system(r"{0}mv {1}/* {2}/raw/inp".format(prefix, temp_dir, t_dir))
 
     os.system(r"rm -rf {}".format(temp_dir))
-
