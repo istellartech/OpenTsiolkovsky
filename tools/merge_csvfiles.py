@@ -31,8 +31,10 @@ if __name__ == "__main__":
         if basename in merged_dataframes.keys():
             merged_dataframes[basename] = pd.concat([merged_dataframes[basename], df])
         else:
-            cols_ordered = [col_name] + [c for c in df.columns if c != col_name]
-            merged_dataframes[basename] = df[cols_ordered]
+            merged_dataframes[basename] = df
 
     for basename, df_merged in merged_dataframes.items():
-        df_merged.to_csv("{0}/{1}_merged.csv".format(target_directory, basename))
+        cols_ordered = [col_name] + [c for c in df_merged.columns if c != col_name]
+        df_merged = df_merged[cols_ordered]
+        df_merged = df_merged.sort_values(col_name)
+        df_merged.to_csv("{0}/{1}_merged.csv".format(target_directory, basename), index=False)
