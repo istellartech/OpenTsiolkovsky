@@ -6,7 +6,7 @@ import sys
 import os
 import simplekml
 
-inputfile  = "output/datapoint_landing_time.csv" # default file name
+inputfile  = "output/datapoint_landing_time.csv"  # default file name
 outputfile = inputfile.replace(".csv", ".dat")
 outputkml = inputfile.replace(".csv", ".kml")
 output4dir_fmt = inputfile.replace(".csv", "_4dir_{}deg.csv")
@@ -23,10 +23,13 @@ if len(argv) > 2:
     str_drc_flight = argv[2]
     output4dir = output4dir_fmt.format(str_drc_flight)
 
-if is_aws :
-    os.system("aws s3 cp {0:s}/stat/{1:s} ./output".format(target_dir,inputfile))
-else :
-    os.system("cp {0:s}/stat/{1:s} ./output".format(target_dir,inputfile))
+output_dir_is_exist = os.path.isdir("./output/")
+if not output_dir_is_exist:
+    os.mkdir("./output")
+if is_aws:
+    os.system("aws s3 cp {0:s}/stat/{1:s} ./output/".format(target_dir, inputfile))
+else:
+    os.system("cp {0:s}/stat/{1:s} ./output/".format(target_dir, inputfile))
 
 # initialize
 N  = 0
@@ -45,7 +48,7 @@ xy = 0
 index_lat = None
 index_lon = None
 fp = open(inputfile)
-for line_number,line in enumerate(fp):
+for line_number, line in enumerate(fp):
     if line_number == 0:
         arr = line.split(",")
         for i, v in enumerate(arr):
@@ -53,9 +56,9 @@ for line_number,line in enumerate(fp):
                 index_lat = i
             elif "lon(deg)" == v.strip():
                 index_lon = i
-        if index_lat == None or index_lon == None:
-                print("ERROR: THERE IS NO LAT-LON DATA!!")
-                exit(1)
+        if index_lat is None or index_lon is None:
+            print("ERROR: THERE IS NO LAT-LON DATA!!")
+            exit(1)
         continue
 
     arr = line.split(",")
@@ -74,10 +77,10 @@ fp.close()
 x_ave = x / N
 y_ave = y / N
 ave = np.array([x_ave, y_ave])
-sigma_x2 = x2/N - x_ave**2
-sigma_y2 = y2/N - y_ave**2
-sigma_xy = xy/N - x_ave * y_ave
-sign = (sigma_x2-sigma_y2)/abs(sigma_x2-sigma_y2)
+sigma_x2 = x2 / N - x_ave**2
+sigma_y2 = y2 / N - y_ave**2
+sigma_xy = xy / N - x_ave * y_ave
+sign = (sigma_x2 - sigma_y2) / abs(sigma_x2 - sigma_y2)
 
 # Consider meter/degree ratio
 ratio_x = math.cos(y_ave / 180. * math.pi)
@@ -98,8 +101,8 @@ Beta  = math.sqrt(max(Beta2, 0.))
 Theta = 0.5 * math.atan(2 * sigma_XY / (sigma_X2 - sigma_Y2))
 V1 = np.array([  Alpha * math.cos(Theta), Alpha * math.sin(Theta)])
 V2 = np.array([- Beta  * math.sin(Theta), Beta  * math.cos(Theta)])
-v1 = V1 * np.array([1./ratio_x, 1.])
-v2 = V2 * np.array([1./ratio_x, 1.])
+v1 = V1 * np.array([1. / ratio_x, 1.])
+v2 = V2 * np.array([1. / ratio_x, 1.])
 
 # boundary points
 p1 =  3 * v1 + 3 * v2 + ave
@@ -108,74 +111,70 @@ p3 = -3 * v1 - 3 * v2 + ave
 p4 =  3 * v1 - 3 * v2 + ave
 
 # 3-sigma points tangent to the rectangle of the flight direction
-if len(argv) > 2 :
+if len(argv) > 2:
     drc_flight = float(str_drc_flight) * math.pi / 180.0
     drc_flight_elli_coords = - (drc_flight - math.pi * 0.5) - Theta + np.array([0., 0.5, 1., 1.5]) * math.pi
     flight_vecs = np.array([np.cos(drc_flight_elli_coords), np.sin(drc_flight_elli_coords)])
     ms = np.tan(drc_flight_elli_coords + math.pi * 0.5)
-    Dxs = np.array([ ms * Alpha**2 / np.sqrt(Beta**2 + (Alpha * ms)**2), \
-                        - Beta **2 / np.sqrt(Beta**2 + (Alpha * ms)**2) ])
+    Dxs = np.array([ms * Alpha**2 / np.sqrt(Beta**2 + (Alpha * ms)**2),
+                    - Beta**2 / np.sqrt(Beta**2 + (Alpha * ms)**2)])
     signs = np.sign((Dxs * flight_vecs).sum(axis=0))
     Dxs *= signs
-    coord_conv_mat = np.array([[ np.cos(Theta), -np.sin(Theta)], \
-                               [ np.sin(Theta), np.cos(Theta)]])
+    coord_conv_mat = np.array([[np.cos(Theta), -np.sin(Theta)],
+                               [np.sin(Theta), np.cos(Theta)]])
     V_errs = np.matmul(coord_conv_mat, Dxs)
-    v_errs = V_errs * np.array([[1./ratio_x, 1.]]).T
+    v_errs = V_errs * np.array([[1. / ratio_x, 1.]]).T
     p_tangents = 3 * v_errs.T + ave
 
 # output
-fp = open(outputfile,"w")
+fp = open(outputfile, "w")
 fp.write("IST JETTISON AREA MAKER\n\n")
 fp.write("INPUTFILE: {0:}\n".format(inputfile))
 fp.write("AVERAGE POINT (lon, lat)[deg]:\n")
-fp.write("\t{0:}, {1:}\n".format(ave[0],ave[1]))
+fp.write("\t{0:}, {1:}\n".format(ave[0], ave[1]))
 fp.write("JETTISON AREA (lon, lat)[deg]:\n")
-fp.write("\t{0:}, {1:}\n".format(p1[0],p1[1]))
-fp.write("\t{0:}, {1:}\n".format(p2[0],p2[1]))
-fp.write("\t{0:}, {1:}\n".format(p3[0],p3[1]))
-fp.write("\t{0:}, {1:}\n".format(p4[0],p4[1]))
-fp.write("\t{0:}, {1:}\n".format(p1[0],p1[1]))
+fp.write("\t{0:}, {1:}\n".format(p1[0], p1[1]))
+fp.write("\t{0:}, {1:}\n".format(p2[0], p2[1]))
+fp.write("\t{0:}, {1:}\n".format(p3[0], p3[1]))
+fp.write("\t{0:}, {1:}\n".format(p4[0], p4[1]))
+fp.write("\t{0:}, {1:}\n".format(p1[0], p1[1]))
 fp.write("JETTISON ELLIPSE (3 SIGMA) (lon, lat)[deg]:\n")
 for i in range(37):
     angle = np.pi / 180 * i * 10
     p_tmp = 3 * v1 * math.cos(angle) + 3 * v2 * math.sin(angle) + ave
-    fp.write("\t{0:}, {1:}\n".format(p_tmp[0],p_tmp[1]))
+    fp.write("\t{0:}, {1:}\n".format(p_tmp[0], p_tmp[1]))
 fp.close()
-if is_aws :
-    os.system("aws s3 cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
-else :
-    os.system("cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
+if is_aws:
+    os.system("aws s3 mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
+else:
+    os.system("mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
 
 # output _4dir.csv
 if len(argv) > 2:
     with open(output4dir, "w") as fp:
-        fp.write(",")
-        fp.write(",".join(["lon(deg)", "lat(deg)"]))
+        suffixes = ["ave", "h", "l", "t", "r"]
+        str_fmts = ["lon_{}(deg)", "lat_{}(deg)"]
+        fp.write(",".join([st.format(suf) for suf in suffixes for st in str_fmts]))
         fp.write("\n")
-        fp.write("average,")
-        fp.write(",".join(map(str, ave)))
+        p_outputs = np.vstack([[ave], p_tangents]).flatten()
+        fp.write(",".join(map(str, p_outputs)))
         fp.write("\n")
-        names = ["head", "left", "tail", "right"]
-        for p, n in zip(p_tangents, names):
-            fp.write(n + ",")
-            fp.write(",".join(map(str, p)))
-            fp.write("\n")
-    if is_aws :
-        os.system("aws s3 cp {1} {0}/stat/output/".format(target_dir, output4dir))
-    else :
-        os.system("cp {1} {0}/stat/output/".format(target_dir, output4dir))
+    if is_aws:
+        os.system("aws s3 mv {1} {0}/stat/output/".format(target_dir, output4dir))
+    else:
+        os.system("mv {1} {0}/stat/output/".format(target_dir, output4dir))
 
 # output kml
 kml = simplekml.Kml(open=1)
 
-kml.newpoint(name="Average LandIn Point", coords = [(ave[0], ave[1])])
+kml.newpoint(name="Average LandIn Point", coords=[(ave[0], ave[1])])
 
 inc_area = kml.newlinestring(name="LandIn Inclusion Area")
-inc_area.coords = [(p1[0],p1[1]),\
-                     (p2[0],p2[1]),\
-                     (p3[0],p3[1]),\
-                     (p4[0],p4[1]),\
-                     (p1[0],p1[1])]
+inc_area.coords = [(p1[0], p1[1]),
+                   (p2[0], p2[1]),
+                   (p3[0], p3[1]),
+                   (p4[0], p4[1]),
+                   (p1[0], p1[1])]
 inc_area.style.linestyle.color = simplekml.Color.red
 
 linestring = kml.newlinestring(name="LandIn Elliposoid Area")
@@ -189,12 +188,20 @@ linestring.coords = arr_coords
 if len(argv) > 2:
     fol = kml.newfolder(name="Points Tangent to Rectangle {}[deg]".format(str_drc_flight))
     names = ["Head", "Left", "Tail", "Right"]
-    for p, n in zip(p_tangents, names) :
+    for p, n in zip(p_tangents, names):
         fol.newpoint(name=n, coords=[p])
 
 kml.save(outputkml)
 
-if is_aws :
-    os.system("aws s3 cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
-else :
-    os.system("cp {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
+if is_aws:
+    os.system("aws s3 mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
+else:
+    os.system("mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
+
+if is_aws:
+    os.system("aws s3 rm ./{}".format(inputfile))
+else:
+    os.system("rm  ./{}".format(inputfile))
+
+if not output_dir_is_exist:
+    os.rmdir("./output")
