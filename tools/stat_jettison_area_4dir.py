@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# coding: utf-8
 from __future__ import print_function, division
 import math
 import numpy as np
@@ -18,7 +19,7 @@ if len(argv) > 1:
     is_aws = target_dir.startswith("s3://")
 else:
     print("Usage:  {0} TARGET_DIRECTORY [FLIGHT_DIRECTION]".format(argv[0]))
-    exit()
+    exit(1)
 
 if len(argv) > 2:
     str_drc_flight = argv[2]
