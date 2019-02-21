@@ -55,7 +55,7 @@ xy = 0
 ##################################
 index_lat = None
 index_lon = None
-fp = open(inputfile)
+fp = open("./output/{0}/{1}".format(temp_dir, inputfile))
 for line_number, line in enumerate(fp):
     if line_number == 0:
         arr = line.split(",")
