@@ -5,8 +5,9 @@ import numpy as np
 import sys
 import os
 import simplekml
+import re
 
-inputfile  = "output/datapoint_landing_time.csv"  # default file name
+inputfile  = "datapoint_landing_time.csv"  # default file name
 outputfile = inputfile.replace(".csv", ".dat")
 outputkml = inputfile.replace(".csv", ".kml")
 output4dir_fmt = inputfile.replace(".csv", "_4dir_{}deg.csv")
@@ -26,10 +27,16 @@ if len(argv) > 2:
 output_dir_is_exist = os.path.isdir("./output/")
 if not output_dir_is_exist:
     os.mkdir("./output")
+
+temp_dir = re.sub('[^a-zA-Z_0-9\.]', '', target_dir)
+while os.path.isdir("./output/{0}".format(temp_dir)):
+    temp_dir = temp_dir + '0'
+os.mkdir("./output/{0}".format(temp_dir))
+
 if is_aws:
-    os.system("aws s3 cp {0:s}/stat/{1:s} ./output/".format(target_dir, inputfile))
+    os.system("aws s3 cp {0:s}/stat/output/{1:s} ./output/{2}/".format(target_dir, inputfile, temp_dir))
 else:
-    os.system("cp {0:s}/stat/{1:s} ./output/".format(target_dir, inputfile))
+    os.system("cp {0:s}/stat/output/{1:s} ./output/{2}/".format(target_dir, inputfile, temp_dir))
 
 # initialize
 N  = 0
@@ -127,7 +134,7 @@ if len(argv) > 2:
     p_tangents = 3 * v_errs.T + ave
 
 # output
-fp = open(outputfile, "w")
+fp = open("./output/{0}/{1}".format(temp_dir, outputfile), "w")
 fp.write("IST JETTISON AREA MAKER\n\n")
 fp.write("INPUTFILE: {0:}\n".format(inputfile))
 fp.write("AVERAGE POINT (lon, lat)[deg]:\n")
@@ -144,14 +151,10 @@ for i in range(37):
     p_tmp = 3 * v1 * math.cos(angle) + 3 * v2 * math.sin(angle) + ave
     fp.write("\t{0:}, {1:}\n".format(p_tmp[0], p_tmp[1]))
 fp.close()
-if is_aws:
-    os.system("aws s3 mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
-else:
-    os.system("mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputfile))
 
 # output _4dir.csv
 if len(argv) > 2:
-    with open(output4dir, "w") as fp:
+    with open("./output/{0}/{1}".format(temp_dir, output4dir), "w") as fp:
         suffixes = ["ave", "h", "l", "t", "r"]
         str_fmts = ["lon_{}(deg)", "lat_{}(deg)"]
         fp.write(",".join([st.format(suf) for suf in suffixes for st in str_fmts]))
@@ -159,10 +162,6 @@ if len(argv) > 2:
         p_outputs = np.vstack([[ave], p_tangents]).flatten()
         fp.write(",".join(map(str, p_outputs)))
         fp.write("\n")
-    if is_aws:
-        os.system("aws s3 mv {1} {0}/stat/output/".format(target_dir, output4dir))
-    else:
-        os.system("mv {1} {0}/stat/output/".format(target_dir, output4dir))
 
 # output kml
 kml = simplekml.Kml(open=1)
@@ -191,17 +190,16 @@ if len(argv) > 2:
     for p, n in zip(p_tangents, names):
         fol.newpoint(name=n, coords=[p])
 
-kml.save(outputkml)
+kml.save("./output/{0}/{1}".format(temp_dir, outputkml))
+
+os.system("rm ./output/{1}/{0}".format(inputfile, temp_dir))
 
 if is_aws:
-    os.system("aws s3 mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
+    os.system("aws s3 mv ./output/{1}/ {0:s}/stat/output/ --recursive".format(target_dir, temp_dir))
 else:
-    os.system("mv {1:s} {0:s}/stat/output/ ".format(target_dir, outputkml))
+    os.system("mv -r ./output/{1}/* {0:s}/stat/output/ ".format(target_dir, temp_dir))
 
-if is_aws:
-    os.system("aws s3 rm ./{}".format(inputfile))
-else:
-    os.system("rm  ./{}".format(inputfile))
+os.system("rm -rf ./output/{}".format(temp_dir))
 
 if not output_dir_is_exist:
     os.rmdir("./output")
