@@ -106,3 +106,6 @@ __pycache__/
 
 # user add
 /bin/img/*.ai
+
+# Mac
+.DS_Store
