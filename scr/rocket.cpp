@@ -93,6 +93,18 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     if (wind_file_exist) {
         wind_mat = read_csv_vector_3d("./" + wind_file_name,
                                       "altitude[m]", "wind_speed[m/s]", "direction[deg]");
+        wind_mat_uv = MatrixXd::Zero(wind_mat.rows(), 3);
+        for(int r = 0; r < wind_mat.rows(); r++){
+            wind_mat_uv(r, 0) = wind_mat(r, 0);     // altitude
+            double wind_speed = wind_mat(r, 1);
+            double wind_direction = wind_mat(r, 2);
+
+            double wind_u = - wind_speed * sin(deg2rad(wind_direction));
+            double wind_v = - wind_speed * cos(deg2rad(wind_direction));
+
+            wind_mat_uv(r, 1) = wind_u;
+            wind_mat_uv(r, 2) = wind_v;
+        }
     }
 
     power_flight_mode = EPower_flight_mode(o_each["power flight mode(int)"].get<double>());
@@ -521,8 +533,10 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     }
     
     if (wind_file_exist) {
-        wind_speed = interp_matrix(altitude, wind_mat, 1);
-        wind_direction = interp_matrix(altitude, wind_mat, 2);
+        double wind_u = interp_matrix(altitude, wind_mat_uv, 1);
+        double wind_v = interp_matrix(altitude, wind_mat_uv, 2);
+        wind_speed = sqrt(wind_u * wind_u + wind_v * wind_v);
+        wind_direction = rad2deg(atan2(wind_u, wind_v)) + 180.;
     } else {
         wind_speed = wind_const[0];
         wind_direction = wind_const[1];

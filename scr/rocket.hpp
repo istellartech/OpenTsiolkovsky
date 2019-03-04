@@ -63,6 +63,7 @@ public:
     string wind_file_name;
     Vector3d wind_const;
     MatrixXd wind_mat;              // [altitude[m], wind speed[m/s], wind direction[deg]]
+    MatrixXd wind_mat_uv;           // [altitude[m], wind u[m/s], wind v[m/s]]
     //    ==== initial position & velocity ====
     Vector3d launch_pos_LLH;        // initial position at launch (LLH coordinate) [deg,deg,m]
     Vector3d launch_pos_ECEF;       // initial position at launch (ECEF coordinate) [m]
@@ -248,6 +249,7 @@ public:
         wind_file_name = obj.wind_file_name;
         wind_const = obj.wind_const;
         wind_mat = obj.wind_mat;
+        wind_mat_uv = obj.wind_mat_uv;
         launch_pos_LLH = obj.launch_pos_LLH;
         launch_pos_ECEF = obj.launch_pos_ECEF;
         launch_vel_NED = obj.launch_vel_NED;
