@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import pandas as pd
 from scipy import interpolate
+import copy
 
 if __name__ == "__main__":
     if(len(sys.argv) < 4):
@@ -20,74 +21,64 @@ if __name__ == "__main__":
     cutoff_dir = "{}/cutoff".format(target_dir)
 
     is_aws = target_dir.startswith("s3://")
-    if is_aws:
-        prefix = "aws s3 "
-    else:
-        prefix = ""
 
     temp_dir = "./my_temp_dir_999"
     if not os.path.exists(temp_dir):
         os.system(r"mkdir {}".format(temp_dir))
 
     if is_aws:
-        os.system(r"{0}cp {1}/raw/inp {2} --recursive".format(prefix, base_dir, temp_dir))
+        os.system(r"aws s3 cp {}/raw/inp {} --recursive --exclude '*' --include '*.json'".format(base_dir, temp_dir))
+        os.system(r"aws s3 cp {}/raw/inp/output {}/output --recursive --exclude '*' --include '*_dynamics_1.csv'".format(base_dir, temp_dir))
     else:
-        os.system(r"{0}cp {1}/raw/inp/* {2}".format(prefix, base_dir, temp_dir))
+        os.system(r"cp {}/raw/inp/*.json {}".format(base_dir, temp_dir))
+        os.system(r"cp {}/raw/inp/output/*_dynamics_1.csv {}/output".format(base_dir, temp_dir))
 
-    with open("{0}/mc.json".format(temp_dir)) as fp:
+    with open("{}/mc.json".format(temp_dir)) as fp:
         mc = json.load(fp)
     nomfile = mc["nominalfile"]
-    with open("{0}/{1}".format(temp_dir, nomfile)) as fp:
+    with open("{}/{}".format(temp_dir, nomfile)) as fp:
         nom = json.load(fp)
-    df = pd.read_csv("{0}/output/{1}_dynamics_1.csv".format(temp_dir, nom["name(str)"]), index_col=False)
+    name = nom["name(str)"]
+    df = pd.read_csv("{}/output/{}_dynamics_1.csv".format(temp_dir, name), index_col=False)
     time_nom = df["time(s)"].values
     mass_nom = df["mass(kg)"].values
     mass_nom_at = interpolate.interp1d(time_nom, mass_nom)
 
     for t in np.arange(t_span, t_max + t_span, t_span):
-        t_dir = "{0}/{1:06.2f}".format(cutoff_dir, t)
+        t_dir = "{}/{:06.2f}".format(cutoff_dir, t)
         print(t_dir)
 
         if is_aws:
-            os.system(r"{0}cp {1}/raw/inp {2}/raw/inp --recursive".format(prefix, base_dir, t_dir))
-            os.system(r"{0}cp {1}/stat/inp {2}/stat/inp --recursive".format(prefix, base_dir, t_dir))
+            os.system(r"aws s3 cp {}/raw/inp {}/raw/inp --recursive".format(base_dir, t_dir))
+            os.system(r"aws s3 cp {}/stat/inp {}/stat/inp --recursive".format(base_dir, t_dir))
         else:
             os.system(r"mkdir -p {}/raw/inp".format(t_dir))
             os.system(r"mkdir -p {}/raw/output".format(t_dir))
-            os.system(r"{0}cp -r {1}/raw/inp {2}/raw/inp".format(prefix, base_dir, t_dir))
+            os.system(r"cp -r {}/raw/inp {}/raw/inp".format(base_dir, t_dir))
             os.system(r"mkdir -p {}/stat/inp".format(t_dir))
             os.system(r"mkdir -p {}/stat/output".format(t_dir))
-            os.system(r"{0}cp -r {1}/stat/inp {2}/stat/inp".format(prefix, base_dir, t_dir))
+            os.system(r"cp -r {}/stat/inp {}/stat/inp".format(base_dir, t_dir))
 
-        if is_aws:
-            os.system(r"{0}cp {1}/raw/inp {2} --recursive --exclude '*' --include '*.json'".format(prefix, t_dir, temp_dir))
-        else:
-            os.system(r"{0}cp {1}/raw/inp/*.json {2}".format(prefix, t_dir, temp_dir))
+        mc_t = copy.deepcopy(mc)
+        nom_t = copy.deepcopy(nom)
 
-        with open("{0}/mc.json".format(temp_dir)) as fp:
-            mc = json.load(fp)
+        mc_t["suffix"] = mc_t["suffix"] + "_{:06.2f}".format(t)
+        with open("{}/mc.json".format(temp_dir), "w") as fp:
+            json.dump(mc_t, fp, indent=4)
 
-        mc["suffix"] = mc["suffix"] + "_{:06.2f}".format(t)
-        with open("{0}/mc.json".format(temp_dir), "w") as fp:
-            json.dump(mc, fp, indent=4)
-
-        nomfile = mc["nominalfile"]
-        with open("{0}/{1}".format(temp_dir, nomfile)) as fp:
-            nom = json.load(fp)
-
-        t_coff_nom = nom["stage1"]["thrust"]["forced cutoff time(time of each stage)[s]"]
-        beta_nom = nom["stage1"]["aero"]["ballistic coefficient(ballistic flight mode)[kg/m2]"]
+        t_coff_nom = nom_t["stage1"]["thrust"]["forced cutoff time(time of each stage)[s]"]
+        beta_nom = nom_t["stage1"]["aero"]["ballistic coefficient(ballistic flight mode)[kg/m2]"]
         t_coff_new = t
         beta_new = beta_nom * mass_nom_at(t_coff_new) / mass_nom_at(t_coff_nom)
 
-        nom["stage1"]["thrust"]["forced cutoff time(time of each stage)[s]"] = t_coff_new
-        nom["stage1"]["aero"]["ballistic coefficient(ballistic flight mode)[kg/m2]"] = beta_new
-        with open("{0}/{1}".format(temp_dir, nomfile), "w") as fp:
-            json.dump(nom, fp, indent=4)
+        nom_t["stage1"]["thrust"]["forced cutoff time(time of each stage)[s]"] = t_coff_new
+        nom_t["stage1"]["aero"]["ballistic coefficient(ballistic flight mode)[kg/m2]"] = beta_new
+        with open("{}/{}".format(temp_dir, nomfile), "w") as fp:
+            json.dump(nom_t, fp, indent=4)
 
         if is_aws:
-            os.system(r"{0}mv {1} {2}/raw/inp --recursive".format(prefix, temp_dir, t_dir))
+            os.system(r"aws s3 mv {} {}/raw/inp --recursive --exclude '*' --include '*.json'".format(temp_dir, t_dir))
         else:
-            os.system(r"{0}mv {1}/* {2}/raw/inp".format(prefix, temp_dir, t_dir))
+            os.system(r"mv {}/*.json {}/raw/inp".format(temp_dir, t_dir))
 
     os.system(r"rm -rf {}".format(temp_dir))
