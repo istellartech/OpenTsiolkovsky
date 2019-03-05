@@ -1,6 +1,5 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # coding: utf-8
-from __future__ import print_function, division, unicode_literals, absolute_import
 import os
 import sys
 import subprocess as sp

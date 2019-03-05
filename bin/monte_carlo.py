@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # coding: utf-8
 import json
 import copy
@@ -108,7 +108,7 @@ def wrapper_opentsio(i, suffix, nominalfile, gosafile, missionpath):
 
 
 if __name__ == "__main__":
-    Nproc = multiprocessing.cpu_count() - 3    # number of processor
+    Nproc = max(multiprocessing.cpu_count() - 3, 1)    # number of processor
 
     if len(sys.argv) >= 2:
         missionpath = sys.argv[1]
