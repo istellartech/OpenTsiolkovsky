@@ -42,7 +42,7 @@ if __name__ == "__main__":
             ret = os.system(r"{0}ls {1}/raw/inp/mc.json".format(prefix, ch_fullpath))
             if ret == 0:  # mc.json is exist
                 print("do:", ch_fullpath)
-                os.system(r"python ./monte_carlo.py {0}".format(ch_fullpath))
+                os.system(r"python3 ./monte_carlo.py {0}".format(ch_fullpath))
             else:
                 print("pass:", ch_fullpath)
         except:
