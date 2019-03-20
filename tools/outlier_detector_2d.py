@@ -26,7 +26,8 @@ class OutlierDetector2D:
         for i in range(self.n_split):    # in each region
             Nrange_i = range(int(np.ceil(dN * i)), int(np.ceil(dN * (i + 1))))
             sigma2_i = np.mean(R2[Nrange_i]) * 0.5    # cal. estimated sigma**2
-            R2[Nrange_i] /= sigma2_i     # normalize radius
+            if sigma2_i > 0:
+                R2[Nrange_i] /= sigma2_i     # normalize radius
         Index_theta2rlarge = np.argsort(-R2)
         Index_rlarge2theta = np.argsort(Index_theta2rlarge)
         Is_contami_theta_order = (Index_rlarge2theta + 1 <= N * self.contamination)
