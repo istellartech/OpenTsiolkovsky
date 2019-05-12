@@ -18,7 +18,7 @@ import sys
 import platform
 import numpy as np
 # import matplotlib as mpl
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 # import matplotlib.font_manager
 # from matplotlib.font_manager import FontProperties
 # from matplotlib.backends.backend_pdf import PdfPages
@@ -28,7 +28,7 @@ from pyproj import Geod
 from collections import namedtuple
 from numpy import sin, cos, sqrt, arctan2, arcsin, pi
 
-plt.ion()
+#plt.ion()
 
 # 定数の設定
 g = Geod(ellps='WGS84')
@@ -169,11 +169,11 @@ if __name__ == '__main__':
     data = json.load(f)
     following_stage_exist = []
     rocket_name = data["name(str)"]
-    following_stage_exist.append(data["stage1"]["stage"]["following stage exist(bool)"])
+    following_stage_exist.append(data["stage1"]["stage"]["following stage exist?(bool)"])
     if ("stage2" in data):
-        following_stage_exist.append(data["stage2"]["stage"]["following stage exist(bool)"])
+        following_stage_exist.append(data["stage2"]["stage"]["following stage exist?(bool)"])
     if ("stage3" in data):
-        following_stage_exist.append(data["stage3"]["stage"]["following stage exist(bool)"])
+        following_stage_exist.append(data["stage3"]["stage"]["following stage exist?(bool)"])
 
     # データ作り
     stage_index = 1
@@ -221,32 +221,32 @@ if __name__ == '__main__':
         df.to_csv("output/" + rocket_name + "_dynamics_" + str(stage_index) + "_extend.csv", index=False)
         stage_index += 1
 
-        # PLOT
-        plt.figure()
-        plt.plot(df["time(s)"], dis2_a, label="distance 2d")
-        plt.plot(df["time(s)"], dis3_a, label="distance 3d")
-        plt.title(rocket_name + " " + str(stage_index) + " stage distance")
-        plt.xlabel("time (s)")
-        plt.ylabel("distance (m)")
-        plt.legend(loc="best")
-        plt.grid()
+        ## PLOT
+        #plt.figure()
+        #plt.plot(df["time(s)"], dis2_a, label="distance 2d")
+        #plt.plot(df["time(s)"], dis3_a, label="distance 3d")
+        #plt.title(rocket_name + " " + str(stage_index) + " stage distance")
+        #plt.xlabel("time (s)")
+        #plt.ylabel("distance (m)")
+        #plt.legend(loc="best")
+        #plt.grid()
 
-        plt.figure()
-        plt.plot(df["time(s)"], az_a, label="azimth")
-        plt.plot(df["time(s)"], el_a, label="elevation")
-        plt.title(rocket_name + " " + str(stage_index) + " stage antenna angle")
-        plt.xlabel("time (s)")
-        plt.ylabel("angle (deg)")
-        plt.legend(loc="best")
-        plt.grid()
+        #plt.figure()
+        #plt.plot(df["time(s)"], az_a, label="azimth")
+        #plt.plot(df["time(s)"], el_a, label="elevation")
+        #plt.title(rocket_name + " " + str(stage_index) + " stage antenna angle")
+        #plt.xlabel("time (s)")
+        #plt.ylabel("angle (deg)")
+        #plt.legend(loc="best")
+        #plt.grid()
 
-        plt.figure()
-        plt.plot(df["time(s)"], radius_IIP_a, label="IIP radius\ncut-off time = %.1f sec" % (cutoff_time))
-        plt.title(rocket_name + " " + str(stage_index) + " stage IIP radius")
-        plt.xlabel("time (s)")
-        plt.ylabel("radius (m)")
-        plt.legend(loc="best")
-        plt.grid()
+        #plt.figure()
+        #plt.plot(df["time(s)"], radius_IIP_a, label="IIP radius\ncut-off time = %.1f sec" % (cutoff_time))
+        #plt.title(rocket_name + " " + str(stage_index) + " stage IIP radius")
+        #plt.xlabel("time (s)")
+        #plt.ylabel("radius (m)")
+        #plt.legend(loc="best")
+        #plt.grid()
 
         # plt.show()
 
