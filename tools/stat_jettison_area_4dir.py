@@ -197,9 +197,9 @@ os.system("rm ./output/{1}/{0}".format(inputfile, temp_dir))
 if is_aws:
     os.system("aws s3 mv ./output/{1}/ {0:s}/stat/output/ --recursive".format(target_dir, temp_dir))
 else:
-    os.system("mv -r ./output/{1}/* {0:s}/stat/output/ ".format(target_dir, temp_dir))
+    os.system("mv ./output/{1}/* {0:s}/stat/output/ ".format(target_dir, temp_dir))
 
-os.system("rm -rf ./output/{}".format(temp_dir))
+os.system("rm -r ./output/{}".format(temp_dir))
 
 if not output_dir_is_exist:
     os.rmdir("./output")

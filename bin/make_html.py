@@ -49,8 +49,8 @@ else:
     input_json = "param_sample_01.json"
 
 # ==== Read input file ====
-f = open(input_json, 'r')
-json_dict = json.load(f)
+with open(input_json, 'r') as f:
+    json_dict = json.load(f)
 # rocket_name = json_dict['name']
 rocket_name = json_dict['name(str)']
 
@@ -65,7 +65,7 @@ C = d3["Category10"][10]
 for stage_str in ['1', '2', '3']:
     st = stage_str + ' stage: ' # stage string for title
     file_name = "output/" + rocket_name + "_dynamics_" + stage_str + ".csv"
-    if (not os.path.exists(file_name)): continue
+    if not os.path.exists(file_name): continue
     df1 = pd.read_csv(file_name, index_col=False)
     # ==== 燃焼終了 or 遠地点までのプロットの場合コメントオンオフ ====
     time_burnout = df1[df1["thrust(N)"] == 0]["time(s)"][1:].min()
@@ -184,16 +184,13 @@ for stage_str in ['1', '2', '3']:
     else:
         p_ro = None
 
-    p_AoAa = figure(title=st+"迎角：α", x_axis_label="時刻 [sec]", y_axis_label="迎角 [deg]",
-            x_range=xr1, **PLOT_OPTIONS)
-    p_AoAa.line(df1["time(s)"], df1["attack of angle alpha(deg)"], color=C[7])
-    p_AoAa.select_one(HoverTool).tooltips = HOVER_SET_F
 
+    p_AoA = figure(title=st+"迎角", x_axis_label="時刻 [sec]", y_axis_label="迎角 [deg]",
+                   x_range=xr1, **PLOT_OPTIONS)
+    p_AoA.line(df1["time(s)"], df1["attack of angle alpha(deg)"], legend="alpha", color=C[7])
+    p_AoA.line(df1["time(s)"], df1["attack of angle beta(deg)"], legend="beta", color=C[8])
+    p_AoA.select_one(HoverTool).tooltips = HOVER_SET_F
 
-    p_AoAb = figure(title=st+"迎角：β", x_axis_label="時刻 [sec]", y_axis_label="迎角 [deg]",
-            x_range=xr1, **PLOT_OPTIONS)
-    p_AoAb.line(df1["time(s)"], df1["attack of angle beta(deg)"], color=C[8])
-    p_AoAb.select_one(HoverTool).tooltips = HOVER_SET_F
 
     p_AoAg = figure(title=st+"全迎角：γ", x_axis_label="時刻 [sec]", y_axis_label="迎角 [deg]",
             x_range=xr1, **PLOT_OPTIONS)
@@ -201,27 +198,46 @@ for stage_str in ['1', '2', '3']:
     p_AoAg.select_one(HoverTool).tooltips = HOVER_SET_F
 
 
-    p_drag = figure(title=st+"抗力", x_axis_label="時刻 [sec]", y_axis_label="抗力 [N]",
-            x_range=xr1, **PLOT_OPTIONS)
-    p_drag.line(df1["time(s)"], df1["aero Drag(N)"], color=C[9])
-    p_drag.select_one(HoverTool).tooltips = HOVER_SET
+#     p_drag = figure(title=st+"抗力", x_axis_label="時刻 [sec]", y_axis_label="抗力 [N]",
+#                    x_range=xr1, **PLOT_OPTIONS)
+#     p_drag.line(df1["time(s)"], df1["aero Drag(N)"], color=C[9])
+#     p_drag.select_one(HoverTool).tooltips = HOVER_SET
+# 
+# 
+#     p_lift = figure(title=st+"揚力", x_axis_label="時刻 [sec]", y_axis_label="揚力 [N]",
+#                    x_range=xr1, **PLOT_OPTIONS)
+#     p_lift.line(df1["time(s)"], df1["aero Lift(N)"], color=C[0])
+#     p_lift.select_one(HoverTool).tooltips = HOVER_SET
 
 
-    p_lift = figure(title=st+"揚力", x_axis_label="時刻 [sec]", y_axis_label="揚力 [N]",
-            x_range=xr1, **PLOT_OPTIONS)
-    p_lift.line(df1["time(s)"], df1["aero Lift(N)"], color=C[0])
-    p_lift.select_one(HoverTool).tooltips = HOVER_SET
+    p_airforce3 = figure(title=st+"機体の各軸にかかる空気力", x_axis_label="時刻 [sec]", y_axis_label="空気力 [N]",
+                    x_range=xr1, **PLOT_OPTIONS)
+    p_airforce3.line(df1["time(s)"], df1["airforce_Body_X[N]"], legend="X", color=C[2])
+    p_airforce3.line(df1["time(s)"], df1["airforce_Body_Y[N]"], legend="Y", color=C[3])
+    p_airforce3.line(df1["time(s)"], df1["airforce_Body_Z[N]"], legend="Z", color=C[4])
+    p_airforce3.select_one(HoverTool).tooltips = HOVER_SET_F
 
+
+    p_gimbal = figure(title=st+"ジンバル角", x_axis_label="時刻 [sec]", y_axis_label="ジンバル角 [deg]",
+                   x_range=xr1, **PLOT_OPTIONS)
+    p_gimbal.line(df1["time(s)"], df1["gimbal_angle_pitch(deg)"], legend="pitch", color=C[0])
+    p_gimbal.line(df1["time(s)"], df1["gimbal_angle_yaw(deg)"], legend="yaw", color=C[1])
+    p_gimbal.select_one(HoverTool).tooltips = HOVER_SET_F
 
     # plots can be a single Bokeh model, a list/tuple, or even a dictionary
     # plots = {'mass': p_mass, 'thrust': p_thrust, 'Blue': p2, 'Green': p3}
 
-    plots = gridplot([[p_mass, p_thrust], [p_alt, p_Isp],
-        [p_downrange, p_profile], [p_velh, p_velv],
-        [p_q, p_mach], [p_acc, p_acc3],
+    plots = gridplot([
+        [p_mass, p_thrust],
+        [p_alt, p_Isp],
+        [p_downrange, p_profile],
+        [p_velh, p_velv],
+        [p_q, p_mach],
+        [p_acc, p_acc3],
         [p_az, p_el] if p_ro is None else [p_az, p_el, p_ro],
-        [p_AoAa, p_AoAb],
-        [p_drag, p_lift]])
+        [p_AoA, p_AoAg],
+        [p_gimbal, p_airforce3],
+        ])
 
     if stage_str == '1':
         script1, div1 = components(plots)
