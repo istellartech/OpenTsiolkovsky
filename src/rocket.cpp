@@ -139,7 +139,7 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     }
     throat_diameter = o_thrust["throat diameter[m]"].get<double>();
     nozzle_expansion_ratio = o_thrust["nozzle expansion ratio[-]"].get<double>();
-    nozzle_exhaust_pressure = o_thrust["nozzle exhaust pressure[Pa]"].get<double>();
+    // nozzle_exhaust_pressure = o_thrust["nozzle exhaust pressure[Pa]"].get<double>();
     body_diameter = o_aero["body diameter[m]"].get<double>();
     CN_file_exist = o_aero["normal coefficient file exist?(bool)"].get<bool>();
     CN_file_name = o_aero["normal coefficient file name(str)"].get<string>();
@@ -238,8 +238,10 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
         Isp_mat = read_csv_vector_2d("./" + Isp_file_name, "time[s]", "Isp vac[s]");
     }
     if ( thrust_file_exist ){
-        thrust_mat = read_csv_vector_3d("./" + thrust_file_name,
-                                        "time[s]", "thrust vac[N]", "nozzle_exhaust_pressure[Pa]");
+        // thrust_mat = read_csv_vector_3d("./" + thrust_file_name,
+        //                                 "time[s]", "thrust vac[N]", "nozzle_exhaust_pressure[Pa]");
+        thrust_mat = read_csv_vector_2d("./" + thrust_file_name,
+                                        "time[s]", "thrust vac[N]");
     }
     if ( CN_file_exist ){
         //CN_mat = read_csv_vector_2d("./" + CN_file_name, "mach[-]", "CN[-]");
@@ -514,7 +516,7 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     }
     if (thrust_file_exist){
         thrust_vac = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 1);
-        nozzle_exhaust_pressure = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 2);
+        // nozzle_exhaust_pressure = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 2);
         if (thrust_vac != 0 &&
             time < previous_stage_separation_time + forced_cutoff_time) {
             is_powered = true;
@@ -534,11 +536,10 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     if (is_powered){ // ---- powered flight ----
         Isp_vac                 *= Isp_coeff;
         thrust_vac              *= Isp_coeff * thrust_coeff;
-        nozzle_exhaust_pressure *= Isp_coeff * thrust_coeff;
+        // nozzle_exhaust_pressure *= Isp_coeff * thrust_coeff;
 
-//        thrust_vac = thrust_momentum + nozzle_exhaust_area * nozzle_exhaust_pressure;
         m_dot = thrust_vac / Isp_vac / g0;
-        thrust_momentum = thrust_vac - nozzle_exhaust_area * nozzle_exhaust_pressure;
+        // thrust_momentum = thrust_vac - nozzle_exhaust_area * nozzle_exhaust_pressure;
         thrust = thrust_vac - nozzle_exhaust_area * air.pressure;
         if (m_dot > 0.0001) {
             Isp = thrust / m_dot / g0;

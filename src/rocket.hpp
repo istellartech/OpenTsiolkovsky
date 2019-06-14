@@ -94,7 +94,7 @@ public:
     double throat_diameter;             // [m]
     double throat_area;                 // [m2]
     double nozzle_expansion_ratio;      // [-]
-    double nozzle_exhaust_pressure;     // [Pa]
+    // double nozzle_exhaust_pressure;     // [Pa]
     //    == aerodynamics ==
     double body_diameter = 0.0;         // [m]
     double body_area = 0.0;             // body cross-sectional area [m2]
@@ -286,7 +286,7 @@ public:
         throat_diameter = obj.throat_diameter;
         throat_area = obj.throat_area;
         nozzle_expansion_ratio = obj.nozzle_expansion_ratio;
-        nozzle_exhaust_pressure = obj.nozzle_exhaust_pressure;
+        // nozzle_exhaust_pressure = obj.nozzle_exhaust_pressure;
         
         body_diameter = obj.body_diameter;
         body_area = obj.body_area;
