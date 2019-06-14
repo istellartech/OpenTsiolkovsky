@@ -271,7 +271,10 @@ if __name__ == '__main__':
             pos_ECEF_z.append(ecef[2])
 
         attitude_el_rad = np.pi / 2 - df["attitude_elevation(deg)"] * np.pi / 180
-        attitude_az_rad = df["attitude_azimth(deg)"] * np.pi / 180
+        if 'attitude_azimuth(deg)' in df:
+            attitude_az_rad = df["attitude_azimuth(deg)"] * np.pi / 180
+        else:
+            attitude_az_rad = df["attitude_azimth(deg)"] * np.pi / 180
         vx = cos(attitude_az_rad)
         vy = sin(-attitude_az_rad)
         vz = 0

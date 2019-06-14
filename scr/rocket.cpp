@@ -161,16 +161,33 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     attitude_file_exist = o_attitude["attitude file exist?(bool)"].get<bool>();
     attitude_file_name = o_attitude["attitude file name(str)"].get<string>();
     attitude_elevation_const_deg = o_attitude["const elevation[deg]"].get<double>();
-    attitude_azimth_const_deg = o_attitude["const azimth[deg]"].get<double>();
+    if(!o_attitude["const azimuth[deg]"].is<picojson::null>()){
+        attitude_azimuth_const_deg = o_attitude["const azimuth[deg]"].get<double>();
+    }else{
+        attitude_azimuth_const_deg = o_attitude["const azimth[deg]"].get<double>();
+    }
+    if(!o_attitude["const roll[deg]"].is<picojson::null>()){
+        attitude_roll_const_deg = o_attitude["const roll[deg]"].get<double>();
+    } else {
+        attitude_roll_const_deg = 0.0;
+    }
+
     if (! o_attitude["elevation offset[deg]"].is<picojson::null>() ){
         attitude_elevation_offset = o_attitude["elevation offset[deg]"].get<double>();
     }else{
         attitude_elevation_offset = 0.0;
     }
-    if (! o_attitude["azimth offset[deg]"].is<picojson::null>() ){
-        attitude_azimth_offset = o_attitude["azimth offset[deg]"].get<double>();
+    if (! o_attitude["azimuth offset[deg]"].is<picojson::null>() ){
+        attitude_azimuth_offset = o_attitude["azimuth offset[deg]"].get<double>();
+    }else if (! o_attitude["azimth offset[deg]"].is<picojson::null>() ){
+        attitude_azimuth_offset = o_attitude["azimth offset[deg]"].get<double>();
     }else{
-        attitude_azimth_offset = 0.0;
+        attitude_azimuth_offset = 0.0;
+    }
+    if (! o_attitude["roll offset[deg]"].is<picojson::null>() ){
+        attitude_roll_offset = o_attitude["roll offset[deg]"].get<double>();
+    }else{
+        attitude_roll_offset = 0.0;
     }
     
     try {
@@ -232,8 +249,18 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
         CA_mat = read_csv_vector_2d("./" + CA_file_name, "mach[-]", "CA[-]");
     }
     if ( attitude_file_exist) {
-        attitude_mat = read_csv_vector_3d("./" + attitude_file_name,
-                                          "time[s]", "azimth[deg]", "elevation[deg]");
+        try {
+            attitude_mat = read_csv_vector_4d("./" + attitude_file_name,
+                                              "time[s]", "azimuth[deg]", "elevation[deg]", "roll[deg]");
+        } catch (std::exception e) {
+            try {
+                attitude_mat = read_csv_vector_3d("./" + attitude_file_name,
+                                                  "time[s]", "azimuth[deg]", "elevation[deg]");
+            } catch (std::exception e) {
+                attitude_mat = read_csv_vector_3d("./" + attitude_file_name,
+                                                  "time[s]", "azimth[deg]", "elevation[deg]");
+            }
+        }
     }
     if ( is_consider_neutrality ) {
         CGXt_mat = read_csv_vector_3d("./" + CGXt_file_name,
@@ -271,7 +298,7 @@ RocketStage::RocketStage(const RocketStage& rocket_stage, Vector3d posECI_init_a
 void Rocket::flight_simulation(){
     // rs : mean RocketNew::rocket_stages, class RocketStage
     using base_stepper_type = odeint::runge_kutta_dopri5<RocketStage::state>;
-    auto Stepper = make_dense_output( 1.0e-9 , 1.0e-9 , base_stepper_type());
+    auto Stepper = make_dense_output(1.0e-9, 1.0e-9, 1.0, base_stepper_type());
     
     for (int i = 0; i < rs.size(); i++){  // i is number of the rocket stages
         flag_separation_g = false;
@@ -525,11 +552,17 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     }
     
     if (attitude_file_exist) {
-        azimth = deg2rad(interp_matrix(time, attitude_mat, 1) + attitude_azimth_offset);
+        azimuth = deg2rad(interp_matrix(time, attitude_mat, 1) + attitude_azimuth_offset);
         elevation = deg2rad(interp_matrix(time, attitude_mat, 2) + attitude_elevation_offset);
+        if (attitude_mat.cols() == 4) {
+            roll = deg2rad(interp_matrix(time, attitude_mat, 3) + attitude_roll_offset);
+        } else {
+            roll = deg2rad(attitude_roll_const_deg + attitude_roll_offset);
+        }
     } else {
-        azimth = deg2rad(attitude_azimth_const_deg + attitude_azimth_offset);
+        azimuth = deg2rad(attitude_azimuth_const_deg + attitude_azimuth_offset);
         elevation = deg2rad(attitude_elevation_const_deg + attitude_elevation_offset);
+        roll = deg2rad(attitude_roll_const_deg + attitude_roll_offset);
     }
     
     if (wind_file_exist) {
@@ -608,7 +641,7 @@ void RocketStage::update_from_mach_number(){
 
 void RocketStage::power_flight_3dof(const RocketStage::state& x, double t){
     flight_mode = "power_3DoF";
-    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    dcmNED2BODY_ = dcmNED2BODY(azimuth, elevation, roll);
     vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
     attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
     dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
@@ -669,10 +702,11 @@ void RocketStage::free_flight_aerodynamic_stable(const RocketStage::state& x, do
     vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
     vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
     Vector2d azel;
-    azel = azimth_elevaztion(vel_BODY_NEDframe_);
-    azimth = azel[0];
+    azel = azimuth_elevation(vel_BODY_NEDframe_);
+    azimuth = azel[0];
     elevation = azel[1];
-    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    // roll = roll;
+    dcmNED2BODY_ = dcmNED2BODY(azimuth, elevation, roll);
     dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
     dcmBODY2ECI_ = dcmECI2BODY_.transpose();
     
@@ -694,7 +728,7 @@ void RocketStage::free_flight_aerodynamic_stable(const RocketStage::state& x, do
 
 void RocketStage::free_flight_3dof_defined(const RocketStage::state& x, double t){
     flight_mode = "free_3dof";
-    dcmNED2BODY_ = dcmNED2BODY(azimth, elevation);
+    dcmNED2BODY_ = dcmNED2BODY(azimuth, elevation, roll);
     vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
     attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
     dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
@@ -849,7 +883,7 @@ void CsvObserver::operator()(const state& x, double t){
         << accECI_[0] << "," << accECI_[1] << "," << accECI_[2] << ","
         << accBODY_[0] << "," << accBODY_[1] << "," << accBODY_[2] << ","
         << Isp << "," << mach_number << ","
-        << rad2deg(azimth) << "," << rad2deg(elevation) << ","
+        << rad2deg(azimuth) << "," << rad2deg(elevation) << "," << rad2deg(roll) << ","
         << rad2deg(attack_of_angle_[0]) << "," << rad2deg(attack_of_angle_[1]) << ","
         << rad2deg(attack_of_angle_[2]) << ","
         << dynamic_pressure << "," 

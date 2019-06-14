@@ -211,7 +211,7 @@ if __name__ == '__main__':
         df["distance 3d(m)"] = dis3_a
         df["antenna lat(deg)"] = antenna_lat
         df["antenna lon(deg)"] = antenna_lon
-        df["antenna azimth(deg)"] = az_a
+        df["antenna azimuth(deg)"] = az_a
         df["antenna elevation(deg)"] = el_a
         df["antenna body difference(deg)"] =  df["attitude_elevation(deg)"] - df["antenna elevation(deg)"]
         df["IIP radius(m)"] = radius_IIP_a
@@ -231,7 +231,7 @@ if __name__ == '__main__':
         plt.grid()
 
         plt.figure()
-        plt.plot(df["time(s)"], az_a, label="azimth")
+        plt.plot(df["time(s)"], az_a, label="azimuth")
         plt.plot(df["time(s)"], el_a, label="elevation")
         plt.title(rocket_name + " " + str(stage_index) + " stage antenna angle")
         plt.xlabel("time (s)")
