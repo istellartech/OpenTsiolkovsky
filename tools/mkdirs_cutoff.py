@@ -21,9 +21,10 @@ if __name__ == "__main__":
 
     is_aws = target_dir.startswith("s3://")
 
-    temp_dir = "./my_temp_dir_999"
-    if not os.path.exists(temp_dir):
-        os.system(r"mkdir {}".format(temp_dir))
+    temp_dir = "./_temp_"
+    while os.path.exists(temp_dir):
+        temp_dir += "_"
+    os.system(r"mkdir {}".format(temp_dir))
 
     if is_aws:
         os.system(r"aws s3 cp {}/raw/inp {} --recursive --exclude '*' --include '*.json'".format(base_dir, temp_dir))

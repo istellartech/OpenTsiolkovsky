@@ -102,11 +102,17 @@ class RocketStage_input():
         if(self.attitude["attitude file exist?(bool)"]):
             df = pd.read_csv(self.attitude["attitude file name(str)"])
             self.attitude_time = df["time[s]"]
-            self.azimth = df["azimth[deg]"]
+            if 'azimuth[deg]' in df:
+                self.azimuth = df["azimuth[deg]"]
+            else:
+                self.azimuth = df["azimth[deg]"]
             self.elevation = df["elevation[deg]"]
         else:
             self.altitude_time = [0, 1]
-            self.azimth = [self.attitude["const azimth[deg]"]] * 2
+            if 'const azimuth[deg]' in self.attitude:
+                self.azimuth = [self.attitude["const azimuth[deg]"]] * 2
+            else:
+                self.azimuth = [self.attitude["const azimth[deg]"]] * 2
             self.elevation = [self.attitude["const elevation[deg]"]] * 2
 
         if(self.neutrality["considering neutrality?(bool)"]):
@@ -274,7 +280,10 @@ if __name__ == '__main__':
             sys.stdout.write("\r")
             sys.stdout.flush()
             plt.figure()
-            plot_grid_p(time[:t_end], df["attitude_azimth(deg)"][:t_end], 0, 0, "time [s]", "azimth [deg]", e)
+            if 'attitude_azimuth(deg)' in df:
+                plot_grid_p(time[:t_end], df["attitude_azimuth(deg)"][:t_end], 0, 0, "time [s]", "azimuth [deg]", e)
+            else:
+                plot_grid_p(time[:t_end], df["attitude_azimth(deg)"][:t_end], 0, 0, "time [s]", "azimuth [deg]", e)
             plot_grid_p(time[:t_end], df["attitude_elevation(deg)"][:t_end], 0, 1, "time [s]", "elevation [deg]", e)
             plot_grid_p(time[:t_end], df["all attack of angle gamma(deg)"][:t_end], 1, 0, "time [s]", "AoA all [deg]", e)
             plot_grid_p(time[:t_end], df["Mach number"][:t_end], 1, 1, "time [s]", "Mach number [-]", e)

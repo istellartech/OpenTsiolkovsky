@@ -112,32 +112,38 @@ Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_){
     return aoa;
 }
 
-//Matrix3d dcmBODY2NED(double azimth, double elevation){
-//    Matrix3d dcm;
-//    dcm <<  cos(elevation)*cos(azimth), cos(elevation)*sin(azimth), -sin(elevation),
-//           -sin(azimth),                cos(azimth),                 0,
-//            sin(elevation)*cos(azimth), sin(elevation)*sin(azimth),  cos(elevation);
-//    return dcm;
-//}
-
-Matrix3d dcmNED2BODY(double azimth_rad, double elevation_rad){
+Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad){
     Matrix3d dcm;
-    double az = azimth_rad;
+    double az = azimuth_rad;
     double el = elevation_rad;
+    /*
     dcm <<  cos(el)*cos(az), cos(el)*sin(az), -sin(el),
     -sin(az),                cos(az),          0,
     sin(el)*cos(az),         sin(el)*sin(az),  cos(el);
+    */
+    dcm = dcmNED2BODY(az, el, 0.0);
     return dcm;
 }
 
-Vector2d azimth_elevaztion(Vector3d vel_BODY_NEDframe){
+Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad, double roll_rad){
+    Matrix3d dcm;
+    double az = azimuth_rad;
+    double el = elevation_rad;
+    double ro = roll_rad;
+    dcm <<  cos(el)*cos(az), cos(el)*sin(az), -sin(el),
+    -cos(ro)*sin(az)+sin(ro)*sin(el)*cos(az), cos(ro)*cos(az)+sin(ro)*sin(el)*sin(az), sin(ro)*cos(el),
+    sin(ro)*sin(az)+cos(ro)*sin(el)*cos(az),  -sin(ro)*cos(az)+cos(ro)*sin(el)*sin(az),  cos(ro)*cos(el);
+    return dcm;
+}
+
+Vector2d azimuth_elevation(Vector3d vel_BODY_NEDframe){
     double north  = vel_BODY_NEDframe[0];
     double east = vel_BODY_NEDframe[1];
     double down = vel_BODY_NEDframe[2];
-    double azimth = pi/2.0 - atan2(north, east);
+    double azimuth = pi/2.0 - atan2(north, east);
     double elevation = atan2(-down, sqrt(north * north + east * east));
     Vector2d azel;
-    azel[0] = azimth;
+    azel[0] = azimuth;
     azel[1] = elevation;
     return azel;
 }

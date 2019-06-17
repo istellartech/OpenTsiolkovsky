@@ -46,9 +46,9 @@
             "attitude file exist?(bool)": true,
             "attitude file name(str)": "sample/attitude.csv",
             "const elevation[deg]": 83.0,
-            "const azimth[deg]": 113,
+            "const azimuth[deg]": 113,
             "elevation offset[deg]": 0.0,
-            "azimth offset[deg]": 0.0
+            "azimuth offset[deg]": 0.0
         },
         "dumping product": {
             "dumping product exist?(bool)" : false,

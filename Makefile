@@ -1,4 +1,4 @@
-INCPATHS = ./ ./scr
+INCPATHS = ./ ./src
 
 # Detect OS Environment
 UNAME_S := $(shell uname -s)
@@ -19,7 +19,7 @@ ifneq ($(filter MSYS%, $(UNAME_S)),)
 endif
 
 PROGRAM = OpenTsiolkovsky
-SRCDIR = ./scr
+SRCDIR = ./src
 INCLUDES = $(addprefix -I ,$(INCPATHS))
 OBJS = $(SRCDIR)/air.o
 OBJS += $(SRCDIR)/main.o

@@ -94,7 +94,7 @@ public:
     double throat_diameter;             // [m]
     double throat_area;                 // [m2]
     double nozzle_expansion_ratio;      // [-]
-    double nozzle_exhaust_pressure;     // [Pa]
+    // double nozzle_exhaust_pressure;     // [Pa]
     //    == aerodynamics ==
     double body_diameter = 0.0;         // [m]
     double body_area = 0.0;             // body cross-sectional area [m2]
@@ -116,10 +116,12 @@ public:
     bool attitude_file_exist;
     string attitude_file_name;
     MatrixXd attitude_mat;
-    double attitude_azimth_const_deg;   // [deg]
+    double attitude_azimuth_const_deg;   // [deg]
     double attitude_elevation_const_deg;// [deg]
-    double attitude_azimth_offset;      // 方位角オフセット[deg]
+    double attitude_roll_const_deg; // [deg]
+    double attitude_azimuth_offset;      // 方位角オフセット[deg]
     double attitude_elevation_offset;   // 仰角オフセット[deg]
+    double attitude_roll_offset;        // roll angle offset[deg]
     //    == dumping product ==
     bool dump_exist = false;
     double dump_separation_time = 0.0;
@@ -161,8 +163,9 @@ public:
     Air air;
     double wind_speed = 0.0;
     double wind_direction = 0.0;
-    double azimth = 0;
+    double azimuth = 0.0;
     double elevation = pi/2;
+    double roll = 0.0;
     double mach_number = 0.0;
     double kinematic_energy = 0.0;
     
@@ -283,7 +286,7 @@ public:
         throat_diameter = obj.throat_diameter;
         throat_area = obj.throat_area;
         nozzle_expansion_ratio = obj.nozzle_expansion_ratio;
-        nozzle_exhaust_pressure = obj.nozzle_exhaust_pressure;
+        // nozzle_exhaust_pressure = obj.nozzle_exhaust_pressure;
         
         body_diameter = obj.body_diameter;
         body_area = obj.body_area;
@@ -305,10 +308,12 @@ public:
         attitude_file_exist = obj.attitude_file_exist;
         attitude_file_name = obj.attitude_file_name;
         attitude_mat = obj.attitude_mat;
-        attitude_azimth_const_deg = obj.attitude_azimth_const_deg;
+        attitude_azimuth_const_deg = obj.attitude_azimuth_const_deg;
         attitude_elevation_const_deg = obj.attitude_elevation_const_deg;
-        attitude_azimth_offset = obj.attitude_azimth_offset;
+        attitude_roll_const_deg = obj.attitude_roll_const_deg;
+        attitude_azimuth_offset = obj.attitude_azimuth_offset;
         attitude_elevation_offset = obj.attitude_elevation_offset;
+        attitude_roll_offset = obj.attitude_roll_offset;
         
         dump_exist = obj.dump_exist;
         dump_separation_time = obj.dump_separation_time;
@@ -348,8 +353,9 @@ public:
         air = obj.air;
         wind_speed = obj.wind_speed;
         wind_direction = obj.wind_direction;
-        azimth = obj.azimth;
+        azimuth = obj.azimuth;
         elevation = obj.elevation;
+        roll = obj.roll;
         mach_number = obj.mach_number;
         kinematic_energy = obj.kinematic_energy;
         
@@ -394,7 +400,7 @@ struct CsvObserver : public RocketStage{
                     "vel_NED_X(m/s),vel_NED_Y(m/s),vel_NED_Z(m/s),"
                     "acc_ECI_X(m/s2),acc_ECI_Y(m/s2),acc_ECI_Z(m/s2),"
                     "acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
-                    "Isp(s),Mach number,attitude_azimth(deg),attitude_elevation(deg),"
+                    "Isp(s),Mach number,attitude_azimuth(deg),attitude_elevation(deg),attitude_roll(deg),"
                     "attack of angle alpha(deg),attack of angle beta(deg),all attack of angle gamma(deg),"
                     "dynamic pressure(Pa),"
                     "airforce_Body_X[N],airforce_Body_Y[N],airforce_Body_Z[N],"

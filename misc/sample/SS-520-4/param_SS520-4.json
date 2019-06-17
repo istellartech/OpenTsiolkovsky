@@ -37,7 +37,7 @@
 			"file exist": true,
 			"file name": "SS520-4-1_attitude.csv",
 			"initial elevation[deg]": 75.0,
-			"initial azimth[deg]": 120
+			"initial azimuth[deg]": 120
 		},
 		"stage": {
 			"following stage exist": true,
@@ -70,7 +70,7 @@
 			"file exist": false,
 			"file name": "attitude.csv",
 			"initial elevation[deg]": 0.0,
-			"initial azimth[deg]": 99
+			"initial azimuth[deg]": 99
 		},
 		"stage": {
 			"following stage exist": true,
@@ -103,7 +103,7 @@
 			"file exist": false,
 			"file name": "attitude.csv",
 			"initial elevation[deg]": 0.0,
-			"initial azimth[deg]": 99
+			"initial azimuth[deg]": 99
 		},
 		"stage": {
 			"following stage exist": false,

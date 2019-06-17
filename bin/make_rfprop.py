@@ -345,7 +345,7 @@ if __name__ == '__main__':
             df_rf["distance 3d(m)"] = dis3_a
             df_rf["antenna lat(deg)"] = antenna_lat
             df_rf["antenna lon(deg)"] = antenna_lon
-            df_rf["antenna azimth(deg)"] = az_a
+            df_rf["antenna azimuth(deg)"] = az_a
             df_rf["antenna elevation(deg)"] = el_a
             df_rf["vehicle tau_t(deg)"] = att_tau_t_array
             df_rf["vehicle tau_r(deg)"] = att_tau_r_array
@@ -357,7 +357,7 @@ if __name__ == '__main__':
 
             # PLOT
             plt.figure()
-            plt.plot(df["time(s)"], az_a, label="azimth")
+            plt.plot(df["time(s)"], az_a, label="azimuth")
             plt.plot(df["time(s)"], el_a, label="elevation")
             plt.plot(df["time(s)"], att_tau_t_array, label="vehicle tau_t(deg)")
             plt.plot(df["time(s)"], att_tau_r_array, label="vehicle tau_r(deg)")

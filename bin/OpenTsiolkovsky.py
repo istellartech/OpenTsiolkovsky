@@ -204,7 +204,7 @@ class Application(tk.Frame):
         self.button_wind_file.grid(row=8, column=4, sticky='e')
         self.button_wind_plot = tk.Button(self.tab_0, text='plot', command=self.wind_plot, width=w3b-3)
         self.button_wind_plot.grid(row=8, column=5, sticky='w')
-        self.label_wind0 = tk.Label(self.tab_0, text='azimth [deg]', width=w4)
+        self.label_wind0 = tk.Label(self.tab_0, text='azimuth [deg]', width=w4)
         self.label_wind0.grid(row=9, column=2)
         self.label_wind1 = tk.Label(self.tab_0, text='wind speed [m/s]', width=w4*2, anchor='w')
         self.label_wind1.grid(row=9, column=3, columnspan=2, sticky='w')
@@ -373,9 +373,9 @@ class Application(tk.Frame):
             command=lambda:self.browse_csv_file(self.label_attitude_file1), width=w3b)
         self.button_attitude_file1.grid(row=12, column=5, sticky='w')
         self.button_attitude_plot1 = tk.Button(self.tab_1, text='plot', width=w3b-3,
-            command=lambda:self.plot_time(self.label_attitude_file1, ["azimth", "elevation"], "[deg]", "attitude csv data"))
+            command=lambda:self.plot_time(self.label_attitude_file1, ["azimuth", "elevation"], "[deg]", "attitude csv data"))
         self.button_attitude_plot1.grid(row=12, column=5, sticky='e')
-        self.label_attitude01 = tk.Label(self.tab_1, text='azimth [deg]', width=w3)
+        self.label_attitude01 = tk.Label(self.tab_1, text='azimuth [deg]', width=w3)
         self.label_attitude01.grid(row=13, column=3)
         self.label_attitude11 = tk.Label(self.tab_1, text='elevation [deg]', width=w3)
         self.label_attitude11.grid(row=13, column=4)
@@ -556,9 +556,9 @@ class Application(tk.Frame):
             command=lambda:self.browse_csv_file(self.label_attitude_file2), width=w3b)
         self.button_attitude_file2.grid(row=12, column=5, sticky='w')
         self.button_attitude_plot2 = tk.Button(self.tab_2, text='plot', width=w3b-3,
-            command=lambda:self.plot_time(self.label_attitude_file2, ["azimth", "elevation"], "[deg]", "attitude csv data"))
+            command=lambda:self.plot_time(self.label_attitude_file2, ["azimuth", "elevation"], "[deg]", "attitude csv data"))
         self.button_attitude_plot2.grid(row=12, column=5, sticky='e')
-        self.label_attitude02 = tk.Label(self.tab_2, text='azimth [deg]', width=w3)
+        self.label_attitude02 = tk.Label(self.tab_2, text='azimuth [deg]', width=w3)
         self.label_attitude02.grid(row=13, column=3)
         self.label_attitude12 = tk.Label(self.tab_2, text='elevation [deg]', width=w3)
         self.label_attitude12.grid(row=13, column=4)
@@ -739,9 +739,9 @@ class Application(tk.Frame):
             command=lambda:self.browse_csv_file(self.label_attitude_file3), width=w3b)
         self.button_attitude_file3.grid(row=12, column=5, sticky='w')
         self.button_attitude_plot3 = tk.Button(self.tab_3, text='plot', width=w3b-3,
-            command=lambda:self.plot_time(self.label_attitude_file3, ["azimth", "elevation"], "[deg]", "attitude csv data"))
+            command=lambda:self.plot_time(self.label_attitude_file3, ["azimuth", "elevation"], "[deg]", "attitude csv data"))
         self.button_attitude_plot3.grid(row=12, column=5, sticky='e')
-        self.label_attitude03 = tk.Label(self.tab_3, text='azimth [deg]', width=w3)
+        self.label_attitude03 = tk.Label(self.tab_3, text='azimuth [deg]', width=w3)
         self.label_attitude03.grid(row=13, column=3)
         self.label_attitude13 = tk.Label(self.tab_3, text='elevation [deg]', width=w3)
         self.label_attitude13.grid(row=13, column=4)
@@ -949,7 +949,7 @@ class Application(tk.Frame):
         self.attitude_v1.set(1) if(p["1st stage"]["attitude"]["file exist"]) else self.attitude_v1.set(2)
         self.label_attitude_file1["text"] = p["1st stage"]["attitude"]["file name"]
         self.entry_attitude01.delete(0, tk.END)
-        self.entry_attitude01.insert(0, p["1st stage"]["attitude"]["initial azimth[deg]"])
+        self.entry_attitude01.insert(0, p["1st stage"]["attitude"]["initial azimuth[deg]"])
         self.entry_attitude11.delete(0, tk.END)
         self.entry_attitude11.insert(0, p["1st stage"]["attitude"]["initial elevation[deg]"])
 
@@ -993,7 +993,7 @@ class Application(tk.Frame):
         self.attitude_v2.set(1) if(p["2nd stage"]["attitude"]["file exist"]) else self.attitude_v2.set(2)
         self.label_attitude_file2["text"] = p["2nd stage"]["attitude"]["file name"]
         self.entry_attitude02.delete(0, tk.END)
-        self.entry_attitude02.insert(0, p["2nd stage"]["attitude"]["initial azimth[deg]"])
+        self.entry_attitude02.insert(0, p["2nd stage"]["attitude"]["initial azimuth[deg]"])
         self.entry_attitude12.delete(0, tk.END)
         self.entry_attitude12.insert(0, p["2nd stage"]["attitude"]["initial elevation[deg]"])
 
@@ -1037,7 +1037,7 @@ class Application(tk.Frame):
         self.attitude_v3.set(1) if(p["3rd stage"]["attitude"]["file exist"]) else self.attitude_v3.set(2)
         self.label_attitude_file3["text"] = p["3rd stage"]["attitude"]["file name"]
         self.entry_attitude03.delete(0, tk.END)
-        self.entry_attitude03.insert(0, p["3rd stage"]["attitude"]["initial azimth[deg]"])
+        self.entry_attitude03.insert(0, p["3rd stage"]["attitude"]["initial azimuth[deg]"])
         self.entry_attitude13.delete(0, tk.END)
         self.entry_attitude13.insert(0, p["3rd stage"]["attitude"]["initial elevation[deg]"])
 
@@ -1303,7 +1303,7 @@ class Application(tk.Frame):
                     "file exist": False,
                     "file name": "attitude.csv",
                     "initial elevation[deg]": 90.0,
-                    "initial azimth[deg]": 0
+                    "initial azimuth[deg]": 0
                 },
                 "stage": {
                     "following stage exist": True,
@@ -1338,7 +1338,7 @@ class Application(tk.Frame):
                     "file exist": False,
                     "file name": "attitude.csv",
                     "initial elevation[deg]": 90.0,
-                    "initial azimth[deg]": 0
+                    "initial azimuth[deg]": 0
                 },
                 "stage": {
                     "following stage exist": True,
@@ -1373,7 +1373,7 @@ class Application(tk.Frame):
                     "file exist": False,
                     "file name": "attitude.csv",
                     "initial elevation[deg]": 90.0,
-                    "initial azimth[deg]": 0
+                    "initial azimuth[deg]": 0
                 },
                 "stage": {
                     "following stage exist": False, "separation time[s]": 200
@@ -1434,7 +1434,7 @@ class Application(tk.Frame):
         p["1st stage"]["aero"]["drag coefficient"] = float(self.entry_drag1.get())
         p["1st stage"]["attitude"]["file exist"] = True if(self.attitude_v1.get()==1) else False
         p["1st stage"]["attitude"]["file name"] = self.label_attitude_file1["text"]
-        p["1st stage"]["attitude"]["initial azimth[deg]"] = float(self.entry_attitude01.get())
+        p["1st stage"]["attitude"]["initial azimuth[deg]"] = float(self.entry_attitude01.get())
         p["1st stage"]["attitude"]["initial elevation[deg]"] = float(self.entry_attitude11.get())
         p["1st stage"]["stage"]["following stage exist"] = True if(self.checkvar_stage1.get()==1) else False
         p["1st stage"]["stage"]["separation time[s]"] = float(self.entry_stage11.get())
@@ -1460,7 +1460,7 @@ class Application(tk.Frame):
         p["2nd stage"]["aero"]["drag coefficient"] = float(self.entry_drag2.get())
         p["2nd stage"]["attitude"]["file exist"] = True if(self.attitude_v2.get()==1) else False
         p["2nd stage"]["attitude"]["file name"] = self.label_attitude_file2["text"]
-        p["2nd stage"]["attitude"]["initial azimth[deg]"] = float(self.entry_attitude02.get())
+        p["2nd stage"]["attitude"]["initial azimuth[deg]"] = float(self.entry_attitude02.get())
         p["2nd stage"]["attitude"]["initial elevation[deg]"] = float(self.entry_attitude12.get())
         p["2nd stage"]["stage"]["following stage exist"] = True if(self.checkvar_stage2.get()==1) else False
         p["2nd stage"]["stage"]["separation time[s]"] = float(self.entry_stage12.get())
@@ -1486,7 +1486,7 @@ class Application(tk.Frame):
         p["3rd stage"]["aero"]["drag coefficient"] = float(self.entry_drag3.get())
         p["3rd stage"]["attitude"]["file exist"] = True if(self.attitude_v3.get()==1) else False
         p["3rd stage"]["attitude"]["file name"] = self.label_attitude_file3["text"]
-        p["3rd stage"]["attitude"]["initial azimth[deg]"] = float(self.entry_attitude03.get())
+        p["3rd stage"]["attitude"]["initial azimuth[deg]"] = float(self.entry_attitude03.get())
         p["3rd stage"]["attitude"]["initial elevation[deg]"] = float(self.entry_attitude13.get())
         p["3rd stage"]["stage"]["following stage exist"] = True if(self.checkvar_stage3.get()==1) else False
         p["3rd stage"]["stage"]["separation time[s]"] = float(self.entry_stage13.get())
