@@ -14,7 +14,7 @@
 #include "../lib/Eigen/Core"
 #include "../lib/Eigen/Geometry"
 
-const double pi = 3.1415926535897932384262;
+const double pi = 3.14159265358979323846;
 
 using namespace Eigen;
 using namespace std;
@@ -33,6 +33,7 @@ Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_);
 Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad);
 Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad, double roll_rad);
 Vector2d azimuth_elevation(Vector3d vel_BODY_NEDframe);
+Vector3d azimuth_elevation_roll(Matrix3d dcmNED2BODY_);
 Matrix3d dcmECI2BODY(Matrix3d dcmNED2BODY_, Matrix3d dcmECI2NED_);
 Vector3d posECEF(Vector3d posLLH_);
 Vector3d posECI(Matrix3d posECEF_, double second);
