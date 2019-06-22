@@ -119,9 +119,13 @@ public:
     double attitude_azimuth_const_deg;   // [deg]
     double attitude_elevation_const_deg;// [deg]
     double attitude_roll_const_deg; // [deg]
+    /*
     double attitude_azimuth_offset;      // 方位角オフセット[deg]
     double attitude_elevation_offset;   // 仰角オフセット[deg]
     double attitude_roll_offset;        // roll angle offset[deg]
+    */
+    Quaterniond quat_offset_NAVI2BODY;          // initial offset of Navigation system to Body system (quaternion)
+    Vector3d gyro_bias;               // gyro sensor bias [rad/s]
     //    == dumping product ==
     bool dump_exist = false;
     double dump_separation_time = 0.0;
@@ -166,6 +170,9 @@ public:
     double azimuth = 0.0;
     double elevation = pi/2;
     double roll = 0.0;
+    double azimuth_target = 0.0;
+    double elevation_target = pi/2;
+    double roll_target = 0.0;
     double mach_number = 0.0;
     double kinematic_energy = 0.0;
     
@@ -240,6 +247,8 @@ public:
     void update_from_mach_number();
     void progress(double time_now);
 
+    Quaterniond quatNAVI2BODY(double t);
+
     void deep_copy(const RocketStage& obj){
         name = obj.name;
         calc_start_time = obj.calc_start_time;
@@ -311,9 +320,13 @@ public:
         attitude_azimuth_const_deg = obj.attitude_azimuth_const_deg;
         attitude_elevation_const_deg = obj.attitude_elevation_const_deg;
         attitude_roll_const_deg = obj.attitude_roll_const_deg;
+        /*
         attitude_azimuth_offset = obj.attitude_azimuth_offset;
         attitude_elevation_offset = obj.attitude_elevation_offset;
         attitude_roll_offset = obj.attitude_roll_offset;
+        */
+        quat_offset_NAVI2BODY = obj.quat_offset_NAVI2BODY;
+        gyro_bias = obj.gyro_bias;
         
         dump_exist = obj.dump_exist;
         dump_separation_time = obj.dump_separation_time;
@@ -356,6 +369,9 @@ public:
         azimuth = obj.azimuth;
         elevation = obj.elevation;
         roll = obj.roll;
+        azimuth_target = obj.azimuth_target;
+        elevation_target = obj.elevation_target;
+        roll_target = obj.roll_target;
         mach_number = obj.mach_number;
         kinematic_energy = obj.kinematic_energy;
         

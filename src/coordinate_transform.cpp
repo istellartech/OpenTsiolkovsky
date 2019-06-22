@@ -130,9 +130,16 @@ Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad, double roll_rad){
     double az = azimuth_rad;
     double el = elevation_rad;
     double ro = roll_rad;
+
+    /*
     dcm <<  cos(el)*cos(az), cos(el)*sin(az), -sin(el),
     -cos(ro)*sin(az)+sin(ro)*sin(el)*cos(az), cos(ro)*cos(az)+sin(ro)*sin(el)*sin(az), sin(ro)*cos(el),
     sin(ro)*sin(az)+cos(ro)*sin(el)*cos(az),  -sin(ro)*cos(az)+cos(ro)*sin(el)*sin(az),  cos(ro)*cos(el);
+    */
+
+    auto angleaxis_inv = AngleAxisd(az, Vector3d::UnitZ()) * AngleAxisd(el, Vector3d::UnitY()) * AngleAxisd(ro, Vector3d::UnitX());
+    dcm = angleaxis_inv.inverse().toRotationMatrix();
+
     return dcm;
 }
 
@@ -148,6 +155,28 @@ Vector2d azimuth_elevation(Vector3d vel_BODY_NEDframe){
     return azel;
 }
 
+Vector3d azimuth_elevation_roll(Matrix3d dcmNED2BODY_){
+    Vector3d azelro = dcmNED2BODY_.transpose().eulerAngles(2, 1, 0);
+    double az_rad = azelro[0];
+    double el_rad = azelro[1];
+    double ro_rad = azelro[2];
+
+    if (el_rad > deg2rad(90.0)) {
+        ro_rad += deg2rad(180.0);
+        az_rad += deg2rad(180.0);
+        el_rad = deg2rad(180.0) - el_rad;
+    } else if (el_rad < deg2rad(-90.0)) {
+        ro_rad += deg2rad(180.0);
+        az_rad += deg2rad(180.0);
+        el_rad = deg2rad(-180.0) - el_rad;
+    }
+
+    if (ro_rad > deg2rad(180.0)){
+        ro_rad -= deg2rad(360.0);
+    }
+
+    return  Vector3d(az_rad, el_rad, ro_rad);
+}
 
 Matrix3d dcmECI2BODY(Matrix3d dcmNED2BODY_, Matrix3d dcmECI2NED_){
     return dcmNED2BODY_ * dcmECI2NED_;
