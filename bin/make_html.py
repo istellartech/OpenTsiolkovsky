@@ -74,7 +74,7 @@ for stage_str in ['1', '2', '3']:
     if not isinstance(time_apogee, float):
         time_apogee = time_apogee.iloc[0]
     # df1 = df1[df1["time(s)"] < float(time_burnout)]
-    df1 = df1[df1["time(s)"] < float(time_apogee)]
+    # df1 = df1[df1["time(s)"] < float(time_apogee)]
     # ==== 燃焼終了 or 遠地点までのプロットの場合コメントオンオフ ====
 
     xr1 = Range1d(start=0, end=df1["time(s)"].max())
@@ -197,6 +197,11 @@ for stage_str in ['1', '2', '3']:
     p_AoAg.line(df1["time(s)"], df1["all attack of angle gamma(deg)"], color=C[7])
     p_AoAg.select_one(HoverTool).tooltips = HOVER_SET_F
 
+    p_Qa = figure(title=st+"Qγ", x_axis_label="時刻 [sec]", y_axis_label="Qγ [kPa.rad]",
+            x_range=xr1, **PLOT_OPTIONS)
+    p_Qa.line(df1["time(s)"], df1["dynamic pressure(Pa)"].values * 1e-3 * df1["all attack of angle gamma(deg)"].values * np.deg2rad(1.), color=C[7])
+    p_Qa.select_one(HoverTool).tooltips = HOVER_SET_F
+
 
 #     p_drag = figure(title=st+"抗力", x_axis_label="時刻 [sec]", y_axis_label="抗力 [N]",
 #                    x_range=xr1, **PLOT_OPTIONS)
@@ -235,7 +240,7 @@ for stage_str in ['1', '2', '3']:
         [p_q, p_mach],
         [p_acc, p_acc3],
         [p_az, p_el] if p_ro is None else [p_az, p_el, p_ro],
-        [p_AoA, p_AoAg],
+        [p_AoA, p_AoAg, p_Qa],
         [p_gimbal, p_airforce3],
         ])
 

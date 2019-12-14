@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # coding: utf-8
+from __future__ import print_function
 import json
 import os
 import sys
@@ -7,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy import interpolate
 import copy
+from collections import OrderedDict
 
 if __name__ == "__main__":
     if(len(sys.argv) < 4):
@@ -31,13 +33,14 @@ if __name__ == "__main__":
         os.system(r"aws s3 cp {}/raw/inp/output {}/output --recursive --exclude '*' --include '*_dynamics_1.csv'".format(base_dir, temp_dir))
     else:
         os.system(r"cp {}/raw/inp/*.json {}".format(base_dir, temp_dir))
-        os.system(r"cp {}/raw/inp/output/*_dynamics_1.csv {}/output".format(base_dir, temp_dir))
+        os.system(r"mkdir {}/output/".format(temp_dir))
+        os.system(r"cp {}/raw/inp/output/*_dynamics_1.csv {}/output/".format(base_dir, temp_dir))
 
     with open("{}/mc.json".format(temp_dir)) as fp:
-        mc = json.load(fp)
+        mc = json.load(fp, object_pairs_hook=OrderedDict)
     nomfile = mc["nominalfile"]
     with open("{}/{}".format(temp_dir, nomfile)) as fp:
-        nom = json.load(fp)
+        nom = json.load(fp, object_pairs_hook=OrderedDict)
     name = nom["name(str)"]
     df = pd.read_csv("{}/output/{}_dynamics_1.csv".format(temp_dir, name), index_col=False)
     time_nom = df["time(s)"].values
@@ -52,10 +55,10 @@ if __name__ == "__main__":
             os.system(r"aws s3 cp {}/raw/inp {}/raw/inp --recursive".format(base_dir, t_dir))
             os.system(r"aws s3 cp {}/stat/inp {}/stat/inp --recursive".format(base_dir, t_dir))
         else:
-            os.system(r"mkdir -p {}/raw/inp".format(t_dir))
+            # os.system(r"mkdir -p {}/raw/inp".format(t_dir))
             os.system(r"mkdir -p {}/raw/output".format(t_dir))
             os.system(r"cp -r {}/raw/inp {}/raw/inp".format(base_dir, t_dir))
-            os.system(r"mkdir -p {}/stat/inp".format(t_dir))
+            # os.system(r"mkdir -p {}/stat/inp".format(t_dir))
             os.system(r"mkdir -p {}/stat/output".format(t_dir))
             os.system(r"cp -r {}/stat/inp {}/stat/inp".format(base_dir, t_dir))
 

@@ -22,9 +22,9 @@ class OutlierDetector2D:
         R2 = np.sum(XY**2, axis=1)       # cal. radius**2
         R2 = R2[Index_original2theta]       # sorting by Theta
         N = len(R2)
-        dN = N / self.n_split
+        dN = float(N) / float(self.n_split)
         for i in range(self.n_split):    # in each region
-            Nrange_i = range(int(np.ceil(dN * i)), int(np.ceil(dN * (i + 1))))
+            Nrange_i = range(int(np.ceil(dN * i)), min(int(np.ceil(dN * (i + 1))), N))
             sigma2_i = np.mean(R2[Nrange_i]) * 0.5    # cal. estimated sigma**2
             if sigma2_i > 0:
                 R2[Nrange_i] /= sigma2_i     # normalize radius
