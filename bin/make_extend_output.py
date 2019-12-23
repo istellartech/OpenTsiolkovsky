@@ -142,7 +142,7 @@ if __name__ == '__main__':
     antenna_lat =  42.5039248 # 地上局位置　緯度 (deg)
     antenna_lon = 143.44954216 # 地上局位置　経度 (deg)
     antenna_alt = 25.0 # 地上局　高度 (m)
-    cutoff_time = 1.0 # IIP分散算出のためのエンジンカットオフ時間
+    cutoff_time = 2.0 # IIP分散算出のためのエンジンカットオフ時間
     invalid_angle_deg = 3.0 # 可視範囲計算のための可視仰角の下限値 (deg)
     # ==== USER INPUT ====
 
@@ -169,11 +169,11 @@ if __name__ == '__main__':
     data = json.load(f)
     following_stage_exist = []
     rocket_name = data["name(str)"]
-    following_stage_exist.append(data["stage1"]["stage"]["following stage exist(bool)"])
+    following_stage_exist.append(data["stage1"]["stage"]["following stage exist?(bool)"])
     if ("stage2" in data):
-        following_stage_exist.append(data["stage2"]["stage"]["following stage exist(bool)"])
+        following_stage_exist.append(data["stage2"]["stage"]["following stage exist?(bool)"])
     if ("stage3" in data):
-        following_stage_exist.append(data["stage3"]["stage"]["following stage exist(bool)"])
+        following_stage_exist.append(data["stage3"]["stage"]["following stage exist?(bool)"])
 
     # データ作り
     stage_index = 1
