@@ -8,6 +8,7 @@ import os
 import sys
 import multiprocessing
 import subprocess
+from collections import OrderedDict
 
 
 def error_loader(data, route):
@@ -55,14 +56,14 @@ def error_input_maker(errorfile, nominalfile, inpfile, outfile, error_seed):
 
     # load gosa
     fp = open(errorfile)
-    data = json.load(fp)
+    data = json.load(fp, object_pairs_hook=OrderedDict)
     fp.close()
     data_gosa = error_loader(data, [])
 
     # load nominal json
     fp = open(nominalfile)
     fo = open(inpfile, "w")
-    data = json.load(fp)
+    data = json.load(fp, object_pairs_hook=OrderedDict)
     data["name(str)"] = outfile
 
     # apply gosa
@@ -123,7 +124,7 @@ if __name__ == "__main__":
         os.system("cp -r " + missionpath + "/raw/inp/* .")
 
     with open("mc.json") as fp:
-        data = json.load(fp)
+        data = json.load(fp, object_pairs_hook=OrderedDict)
 
     Ntask       = data["Ntask"]
     suffix      = data["suffix"]
