@@ -44,7 +44,7 @@ def error_applyer(value, route, data):
         elif value[0] == "from_error_directory":
             path = value[1]
             files = os.listdir(path)
-            files_file = [f for f in files if os.path.isfile(os.path.join(path, f))]
+            files_file = sorted([f for f in files if os.path.isfile(os.path.join(path, f))])
             random_number = rand() * len(files_file)
             data[key] = os.path.join(path, files_file[int(random_number)])
     else:
