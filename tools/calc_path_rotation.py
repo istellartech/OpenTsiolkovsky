@@ -13,8 +13,8 @@ from collections import OrderedDict
 ### Configurations ###
 time_emst_max = 2.0     # max emergency stop time [s]
 gimbal_angle_max = 8.0  # max gimbal angle [deg]
-# time_step = 1.0         # timestep to output IIP circle
-dt_stop = 0.05          # calculation timestep of thrust turn
+# time_step = 1.0         # timestep of output [s]
+dt_stop = 0.05          # calculation timestep of emergency stop time [s]
 # path to OpenTsiolkovsky
 path_opentsio = os.getenv('PATH_OPENTSIO', "/usr/local/OpenTsiolkovsky/bin")
 ######################
@@ -93,7 +93,7 @@ filename_result = os.path.join("./output", "{}_dynamics_1.csv".format(tmp_json["
 df_result = pd.read_csv(filename_result, index_col=False)
 df_pwd = df_result[df_result["is_powered(1=powered 0=free)"] == 1]
 
-# IIP calculation with thrust turn
+# IIP calculation with additional velocity
 array_out = []
 for index, se_pwd in df_pwd.iterrows():  # each break time
     t_break, mass, thrust = se_pwd[["time(s)", "mass(kg)", "thrust(N)"]].values
@@ -141,7 +141,7 @@ for d in directions:
     n0 = d["name"][0]
     cols.extend(["t_stop_{}(s)".format(n0), "dlat_{}(deg)".format(n0), "dlon_{}(deg)".format(n0)])
 df_out = pd.DataFrame(array_out, columns=cols)
-df_out.to_csv("output/{}_thrust_turn_IIP.csv".format(nominal_json["name(str)"]), index=False)
+df_out.to_csv("output/{}_path_rotation.csv".format(nominal_json["name(str)"]), index=False)
 
 os.remove(filename_tmp)
 os.rmdir(tmp_dir)
