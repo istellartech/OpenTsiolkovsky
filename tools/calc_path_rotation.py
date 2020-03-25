@@ -10,7 +10,7 @@ import argparse
 from collections import OrderedDict
 
 
-### Configulations ###
+### Configurations ###
 time_emst_max = 2.0     # max emergency stop time [s]
 gimbal_angle_max = 8.0  # max gimbal angle [deg]
 # time_step = 1.0         # timestep to output IIP circle
