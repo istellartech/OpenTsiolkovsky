@@ -150,17 +150,17 @@ def lonlat2xyratio(lat):  # [lon[deg], lat[deg]] to [x[m], y[m]] ratio
 
 
 # points in hull must not be overlapping (so hull[0] != hull[-1]), and ordered in anti-clockwise
-def extend_lonlat_hull(lonlat_hull, distance, dlondlat=[0, 0]):  # [deg, deg], [m], [deg, deg]
+def extend_lonlat_hull(lonlat_hull, distance, dlondlat=[0, 0], max_deg=30):  # [deg, deg], [m], [deg, deg]
     lonlat_ave = np.mean(lonlat_hull, axis=0)
     lola2xy = lonlat2xyratio(lonlat_ave[1])
     dxdy = dlondlat * lola2xy
     xy_hull = lonlat_hull * lola2xy
-    xy_hull_new = extend_xy_hull(xy_hull, distance, dxdy)
+    xy_hull_new = extend_xy_hull(xy_hull, distance, dxdy, max_deg)
     lonlat_hull_new = xy_hull_new / lola2xy
     return lonlat_hull_new
 
 
-def extend_xy_hull(xy_hull, distance, dxdy=[0, 0]):
+def extend_xy_hull(xy_hull, distance, dxdy=[0, 0], max_deg=30):
     xy0 = xy_hull
     xy1 = np.roll(xy_hull, -1, axis=0)
     dxy = xy1 - xy0
@@ -174,7 +174,7 @@ def extend_xy_hull(xy_hull, distance, dxdy=[0, 0]):
     theta = np.arccos(costheta)
     xy_corners = []
     for theta_, ddxy_, xy1_ in zip(theta, ddxy, xy1):
-        N_ = (theta_ // (pi * 0.5 / 3))  # max 30deg
+        N_ = (theta_ // deg2rad(max_deg))
         n_ = np.arange(0, N_, 1)
         theta_n = theta_ * (n_ + 1) / (N_ + 1)
         An_T = np.array([[cos(theta_n), -sin(theta_n)], [sin(theta_n), cos(theta_n)]]).transpose(2, 1, 0)
