@@ -160,7 +160,7 @@ def extend_lonlat_hull(lonlat_hull, distance, dlondlat=[0, 0]):  # [deg, deg], [
     return lonlat_hull_new
 
 
-def extend_xy_hull(xy_hull, distance, dxdy=[0, 0]):
+def extend_xy_hull(xy_hull, distance, dxdy=[0, 0], max_deg=30):
     xy0 = xy_hull
     xy1 = np.roll(xy_hull, -1, axis=0)
     dxy = xy1 - xy0
@@ -174,7 +174,7 @@ def extend_xy_hull(xy_hull, distance, dxdy=[0, 0]):
     theta = np.arccos(costheta)
     xy_corners = []
     for theta_, ddxy_, xy1_ in zip(theta, ddxy, xy1):
-        N_ = (theta_ // (pi * 0.5 / 3))  # max 30deg
+        N_ = (theta_ // deg2rad(max_deg))
         n_ = np.arange(0, N_, 1)
         theta_n = theta_ * (n_ + 1) / (N_ + 1)
         An_T = np.array([[cos(theta_n), -sin(theta_n)], [sin(theta_n), cos(theta_n)]]).transpose(2, 1, 0)
