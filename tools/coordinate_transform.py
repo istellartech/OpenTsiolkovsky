@@ -150,12 +150,12 @@ def lonlat2xyratio(lat):  # [lon[deg], lat[deg]] to [x[m], y[m]] ratio
 
 
 # points in hull must not be overlapping (so hull[0] != hull[-1]), and ordered in anti-clockwise
-def extend_lonlat_hull(lonlat_hull, distance, dlondlat=[0, 0]):  # [deg, deg], [m], [deg, deg]
+def extend_lonlat_hull(lonlat_hull, distance, dlondlat=[0, 0], max_deg=30):  # [deg, deg], [m], [deg, deg]
     lonlat_ave = np.mean(lonlat_hull, axis=0)
     lola2xy = lonlat2xyratio(lonlat_ave[1])
     dxdy = dlondlat * lola2xy
     xy_hull = lonlat_hull * lola2xy
-    xy_hull_new = extend_xy_hull(xy_hull, distance, dxdy)
+    xy_hull_new = extend_xy_hull(xy_hull, distance, dxdy, max_deg)
     lonlat_hull_new = xy_hull_new / lola2xy
     return lonlat_hull_new
 
