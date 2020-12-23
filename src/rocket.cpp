@@ -257,6 +257,16 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
         is_consider_neutrality = o_neutrality["considering neutrality?(bool)"].get<bool>();
         CGXt_file_name = o_neutrality["CG, Controller position file(str)"].get<string>();
         CP_file_name   = o_neutrality["CP file(str)"].get<string>();
+        if (! o_neutrality["Xcg offset[m]"].is<picojson::null>() ){
+            Xcg_offset = o_neutrality["Xcg offset[m]"].get<double>();
+        } else {
+            Xcg_offset = 0.0;
+        }
+        if (! o_neutrality["Xcp offset[m]"].is<picojson::null>() ){
+            Xcp_offset = o_neutrality["Xcp offset[m]"].get<double>();
+        } else {
+            Xcp_offset = 0.0;
+        }
     } catch (...) {
         cout << "attitude neutrality json_object not found" << endl;
     }
@@ -611,6 +621,8 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
     if (is_consider_neutrality) {
         pos_CG         = interp_matrix(time, CGXt_mat, 1);
         pos_Controller = interp_matrix(time, CGXt_mat, 2);
+
+        pos_CG += Xcg_offset;
     }
 
     if (time >= later_stage_separation_time && is_separated == false){
@@ -645,6 +657,7 @@ void RocketStage::update_from_mach_number(){
         CN_pitch = angle_sign * interp_matrix_2d(mach_number, angle_abs, CN_mat);
         if ( is_consider_neutrality ) {
             pos_CP_pitch = interp_matrix_2d(mach_number, angle_abs, Xcp_mat);
+            pos_CP_pitch += Xcp_offset;
         }
 
         // yaw
@@ -658,6 +671,7 @@ void RocketStage::update_from_mach_number(){
         CN_yaw = angle_sign * interp_matrix_2d(mach_number, angle_abs, CN_mat);
         if ( is_consider_neutrality ) {
             pos_CP_yaw = interp_matrix_2d(mach_number, angle_abs, Xcp_mat);
+            pos_CP_yaw += Xcp_offset;
         }
     } else {
         CN_pitch = CN_const;

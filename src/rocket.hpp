@@ -136,6 +136,8 @@ public:
     bool is_consider_neutrality = false;
     string CGXt_file_name;
     string CP_file_name;
+    double Xcg_offset;
+    double Xcp_offset;
     MatrixXd CGXt_mat;
     MatrixXd Xcp_mat;
     //    == stage ==
@@ -337,8 +339,10 @@ public:
         is_consider_neutrality = obj.is_consider_neutrality;
         CGXt_file_name = obj.CGXt_file_name;
         CGXt_mat       = obj.CGXt_mat;
+        Xcg_offset     = obj.Xcg_offset;
         CP_file_name   = obj.CP_file_name;
         Xcp_mat        = obj.Xcp_mat;
+        Xcp_offset     = obj.Xcp_offset;
 
         following_stage_exist = obj.following_stage_exist;
         previous_stage_separation_time = obj.previous_stage_separation_time;
