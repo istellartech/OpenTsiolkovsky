@@ -631,8 +631,8 @@ void RocketStage::update_from_mach_number(){
     CA *= CA_multiplier;
 
     if (CN_file_exist) {
-        alpha = rad2deg(attack_of_angle_[0]);
-        beta  = rad2deg(attack_of_angle_[1]);
+        alpha = rad2deg(angle_of_attack_[0]);
+        beta  = rad2deg(angle_of_attack_[1]);
 
         // pitch
         angle_abs = abs(alpha);
@@ -675,7 +675,7 @@ Quaterniond RocketStage::quatNAVI2BODY(double t){
     Quaterniond quatNAVI2BODY_, quat_drift_NAVI2BODY_;
 
     double gyro_bias_abs = this->gyro_bias.norm();
-    if (gyro_bias_abs > 1e-12) {
+    if (gyro_bias_abs != 0.0) {
         Vector3d gyro_bias_direction = this->gyro_bias / gyro_bias_abs;
         quat_drift_NAVI2BODY_ = Quaterniond(AngleAxisd(gyro_bias_abs * t, gyro_bias_direction));
     } else {
@@ -697,7 +697,7 @@ void RocketStage::power_flight_3dof(const RocketStage::state& x, double t){
     azimuth = ((deg2rad(90.0) - elevation_target < 1e-9) && (deg2rad(90.0) - elevation < 1e-9))? azimuth_target : azelro[0];
     roll = ((deg2rad(90.0) - elevation_target < 1e-9) && (deg2rad(90.0) - elevation < 1e-9))? roll_target : azelro[2];
     vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-    attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    angle_of_attack_ = angle_of_attack(vel_AIR_BODYframe_);
     dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
     dcmBODY2ECI_ = dcmECI2BODY_.transpose();
 
@@ -752,7 +752,7 @@ void RocketStage::power_flight_6dof_aerodynamic_stable(const RocketStage::state&
 
 void RocketStage::free_flight_aerodynamic_stable(const RocketStage::state& x, double t){
     flight_mode = "free_aero_stable";
-    attack_of_angle_ << 0.0, 0.0, 0.0;
+    angle_of_attack_ << 0.0, 0.0, 0.0;
     vel_BODY_NEDframe_ = vel_ECEF_NEDframe_ - vel_wind_NEDframe_;
     vel_AIR_BODYframe_ << vel_BODY_NEDframe_.norm(), 0.0, 0.0;
     Vector2d azel;
@@ -791,7 +791,7 @@ void RocketStage::free_flight_3dof_defined(const RocketStage::state& x, double t
     azimuth = ((deg2rad(90.0) - elevation_target < 1e-9) && (deg2rad(90.0) - elevation < 1e-9))? azimuth_target : azelro[0];
     roll = ((deg2rad(90.0) - elevation_target < 1e-9) && (deg2rad(90.0) - elevation < 1e-9))? roll_target : azelro[2];
     vel_AIR_BODYframe_ = vel_AIR_BODYframe(dcmNED2BODY_, vel_ECEF_NEDframe_, vel_wind_NEDframe_);
-    attack_of_angle_ = attack_of_angle(vel_AIR_BODYframe_);
+    angle_of_attack_ = angle_of_attack(vel_AIR_BODYframe_);
     dcmECI2BODY_ = dcmECI2BODY(dcmNED2BODY_, dcmECI2NED_);
     dcmBODY2ECI_ = dcmECI2BODY_.transpose();
 
@@ -945,8 +945,8 @@ void CsvObserver::operator()(const state& x, double t){
             << accBODY_[0] << "," << accBODY_[1] << "," << accBODY_[2] << ","
             << Isp << "," << mach_number << ","
             << rad2deg(azimuth) << "," << rad2deg(elevation) << "," << rad2deg(roll) << ","
-            << rad2deg(attack_of_angle_[0]) << "," << rad2deg(attack_of_angle_[1]) << ","
-            << rad2deg(attack_of_angle_[2]) << ","
+            << rad2deg(angle_of_attack_[0]) << "," << rad2deg(angle_of_attack_[1]) << ","
+            << rad2deg(angle_of_attack_[2]) << ","
             << dynamic_pressure << ","
             << force_air_vector_BODYframe[0] << "," << force_air_vector_BODYframe[1] << ","
             << force_air_vector_BODYframe[2] << "," << force_thrust_vector[0] << ","

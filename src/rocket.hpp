@@ -211,7 +211,7 @@ public:
     Vector3d vel_AIR_BODYframe_;
     Vector3d vel_AIR_NEDframe_;
     Vector3d vel_BODY_NEDframe_;
-    Vector3d attack_of_angle_;
+    Vector3d angle_of_attack_;
     Matrix3d dcmBODY2NED_;
     Matrix3d dcmNED2BODY_;
     Matrix3d dcmECI2BODY_;
@@ -417,9 +417,9 @@ struct CsvObserver : public RocketStage{
                     "acc_ECI_X(m/s2),acc_ECI_Y(m/s2),acc_ECI_Z(m/s2),"
                     "acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
                     "Isp(s),Mach number,attitude_azimuth(deg),attitude_elevation(deg),attitude_roll(deg),"
-                    "attack of angle alpha(deg),attack of angle beta(deg),all attack of angle gamma(deg),"
+                    "angle of attack alpha(deg),angle of attack beta(deg),all angle of attack gamma(deg),"
                     "dynamic pressure(Pa),"
-                    "airforce_Body_X[N],airforce_Body_Y[N],airforce_Body_Z[N],"
+                    "aeroforce_Body_X[N],aeroforce_Body_Y[N],aeroforce_Body_Z[N],"
                     "thrust_Body_X[N],thrust_Body_Y[N],thrust_Body_Z[N],"
                     "gimbal_angle_pitch(deg),gimbal_angle_yaw(deg),"
                     "wind speed(m/s),wind direction(deg),downrange(m),"
