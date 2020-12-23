@@ -89,7 +89,7 @@ Vector3d vel_AIR_BODYframe(Matrix3d dcmNED2BODY_, Vector3d vel_ECEF_NEDframe_, V
 
 
 // rad返し
-Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_){
+Vector3d angle_of_attack(Vector3d vel_AIR_BODYframe_){
     double vel_abs = vel_AIR_BODYframe_.norm();
     double alpha;
     double beta;

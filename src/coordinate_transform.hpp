@@ -29,7 +29,7 @@ Matrix3d dcmECI2NED(Matrix3d dcmECEF2NED_, Matrix3d dcmECI2ECEF_);
 Vector3d vel_ECEF_NEDframe(Matrix3d dcmECI2NED_, Vector3d vel_ECI_ECIframe_, Vector3d pos_ECI_);
 Vector3d vel_wind_NEDframe(double wind_speed, double wind_direction);
 Vector3d vel_AIR_BODYframe(Matrix3d dcmNED2ECEF_, Vector3d vel_ECEF_NEDframe_, Vector3d vel_wind_NEDframe_);
-Vector3d attack_of_angle(Vector3d vel_AIR_BODYframe_);
+Vector3d angle_of_attack(Vector3d vel_AIR_BODYframe_);
 Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad);
 Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad, double roll_rad);
 Vector2d azimuth_elevation(Vector3d vel_BODY_NEDframe);
