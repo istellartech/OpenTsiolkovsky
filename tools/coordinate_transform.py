@@ -133,7 +133,7 @@ def posECEFfromECI(posECI_, second):
     return np.matmul(dcmECI2ECEF(second), posECI_)
 
 
-def velECEFfromECI(velECI_, posECI_, second):
+def velECEFfromECI(posECI_, velECI_, second):
     omega = OMEGA
     omegaECI2ECEF_ = np.array([[0.,   -omega, 0.],
                                [omega, 0.,    0.],
@@ -143,7 +143,7 @@ def velECEFfromECI(velECI_, posECI_, second):
     return np.matmul(dcmECI2ECEF_, velECI_ - np.matmul(omegaECI2ECEF_, posECI_))
 
 
-def velECIfromECEF(velECEF_, posECEF_, second):
+def velECIfromECEF(posECEF_, velECEF_, second):
     omega = OMEGA
     omegaECI2ECEF_ = np.array([[0.,   -omega, 0.],
                                [omega, 0.,    0.],
@@ -153,12 +153,12 @@ def velECIfromECEF(velECEF_, posECEF_, second):
     return np.matmul(dcmECEF2ECI_, velECEF_ + np.matmul(omegaECI2ECEF_, posECEF_))
 
 
-def velECEFfromNED(velNED_, posLLH_):
+def velECEFfromNED(posLLH_, velNED_):
     dcmNED2ECEF_ = dcmNED2ECEFfromLLH(posLLH_)
     return np.matmul(dcmNED2ECEF_, velNED_)
 
 
-def velNEDfromECEF(velECEF_, posECEF_):
+def velNEDfromECEF(posECEF_, velECEF_):
     posLLH_ = posLLHfromECEF(posECEF_)
     dcmECEF2NED_ = dcmECEF2NEDfromLLH(posLLH_)
     return np.matmul(dcmECEF2NED_, velECEF_)
@@ -176,7 +176,7 @@ def posECIfromLLH(posLLH_, second):
     return posECI_
 
 
-# def velNEDfromECI(velECI_, posECI_, dcmECI2NED_):
+# def velNEDfromECI(posECI_, velECI_, dcmECI2NED_):
 #     omega = OMEGA
 #     omegaECI2ECEF_ = np.array([[0.,   -omega, 0.],
 #                                [omega, 0.,    0.],
@@ -185,17 +185,17 @@ def posECIfromLLH(posLLH_, second):
 #     return np.matmul(dcmECI2NED_, (velECI_ - np.matmul(omegaECI2ECEF_, posECI_)))
 
 
-def velNEDfromECI(velECI_, posECI_, second):
+def velNEDfromECI(posECI_, velECI_, second):
     posECEF_ = posECEFfromECI(posECI_, second)
-    velECEF_ = velECEFfromECI(velECI_, posECI_, second)
-    velNED_ = velNEDfromECEF(velECEF_, posECEF_)
+    velECEF_ = velECEFfromECI(posECI_, velECI_, second)
+    velNED_ = velNEDfromECEF(posECEF_, velECEF_)
     return velNED_
 
 
-def velECIfromNED(velNED_, posLLH_, second):
+def velECIfromNED(posLLH_, velNED_, second):
     posECEF_ = posECEFfromLLH(posLLH_)
-    velECEF_ = velECEFfromNED(velNED_, posLLH_)
-    velECI_ = velECIfromECEF(velECEF_, posECEF_, second)
+    velECEF_ = velECEFfromNED(posLLH_, velNED_)
+    velECI_ = velECIfromECEF(posECEF_, velECEF_, second)
     return velECI_
 
 
