@@ -13,10 +13,14 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include "../lib/Eigen/Core"
+#include "../lib/Eigen/Geometry"
 
 using namespace std;
+using namespace Eigen;
 
 double gravity(double altitude, double latitude);
+Vector3d gravityECI(Vector3d posECI_);
 void test_gravity();
 
 #endif /* gravity_hpp */

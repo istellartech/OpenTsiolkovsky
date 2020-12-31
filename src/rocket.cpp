@@ -471,7 +471,7 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     //    air = air.altitude(posLLH_[2]);
     air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
     //    gravity term : gravity acceleration in the north direction is not considered
-    gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
+    gravityECI_ = gravityECI(posECI_);
 
     if (is_powered){  // ---- powered flight ----
         switch (power_flight_mode) {
@@ -745,7 +745,7 @@ void RocketStage::power_flight_3dof(const RocketStage::state& x, double t){
     }
     //    dv/dt
     accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + force_air_vector_BODYframe))
-            + dcmNED2ECI_ * gravity_vector;
+            + gravityECI_;
 }
 
 // Unimplemented
@@ -790,7 +790,7 @@ void RocketStage::free_flight_aerodynamic_stable(const RocketStage::state& x, do
     force_air_vector_BODYframe << -force_axial, 0.0, 0.0;
     //    dv/dt
     accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + force_air_vector_BODYframe))
-            + dcmNED2ECI_ * gravity_vector;
+            + gravityECI_;
 }
 
 
@@ -822,7 +822,7 @@ void RocketStage::free_flight_3dof_defined(const RocketStage::state& x, double t
     force_air_vector_BODYframe << - force_axial, - force_normal_yaw, - force_normal_pitch;
     //    dv/dt
     accECI_ = 1/x[0] * (dcmBODY2ECI_ * (force_thrust_vector + force_air_vector_BODYframe))
-            + dcmNED2ECI_ * gravity_vector;
+            + gravityECI_;
 }
 
 
@@ -838,7 +838,7 @@ void RocketStage::free_flight_ballistic(const RocketStage::state& x, double t){
     force_normal_pitch = force_normal_yaw = 0.0; // for csv output
     force_air_vector_BODYframe << -force_axial, 0.0, 0.0; // for csv output
     //    dv/dt
-    accECI_ = dcmNED2ECI_ * (force_air_vector_NEDframe + gravity_vector);
+    accECI_ = dcmNED2ECI_ * force_air_vector_NEDframe + gravityECI_;
 }
 
 // display progress on the console.
@@ -883,7 +883,7 @@ void CsvObserver::operator()(const state& x, double t){
     //    air = air.altitude(posLLH_[2]);
     air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
     //    gravity term : gravity acceleration in the north direction is not considered
-    gravity_vector << 0.0, 0.0, - gravity(posLLH_[2], posLLH_[0]);
+    gravityECI_ = gravityECI(posECI_);
 
     if (is_powered){  // ---- powered flight ----
         switch (power_flight_mode) {
@@ -923,10 +923,11 @@ void CsvObserver::operator()(const state& x, double t){
     }
 
     // === following code is different from RocketStage::operator() ===
-    accBODY_ = dcmECI2BODY_ * (accECI_ - dcmNED2ECI_ * gravity_vector);
+    accBODY_ = dcmECI2BODY_ * (accECI_ -  gravityECI_);
     downrange = distance_surface(launch_pos_LLH, posLLH_);
     posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
     kinematic_energy = 0.5 * x[0] * vel_ECEF_NEDframe_.norm() * vel_ECEF_NEDframe_.norm();
+    gravity_vector = dcmECI2NED_ * gravityECI_;
 
     //   ==== Calculte loss velocisy ====
     if (thrust > 0.1 || is_separated == false){

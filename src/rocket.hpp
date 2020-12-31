@@ -225,6 +225,7 @@ public:
     Vector3d force_air_vector_NEDframe;
     Vector3d force_thrust_vector;
     Vector3d gravity_vector;
+    Vector3d gravityECI_;
     Vector3d posLLH_IIP_;
     double downrange;
 
