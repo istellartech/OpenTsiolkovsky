@@ -25,7 +25,7 @@ using namespace std;
 using namespace Eigen;
 using namespace boost::numeric::odeint;
 
-const string current_version = "0.50";
+const string current_version = "0.51";
 
 int main(int argc, const char * argv[]) {
     std::chrono::system_clock::time_point  start, end; // calcuration time measurement
