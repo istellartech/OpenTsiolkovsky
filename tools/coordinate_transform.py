@@ -95,7 +95,7 @@ def dcmNED2ECEFfromLLH(posLLH_):
 def dcmECI2ECEF(second):
     """
     Args:
-        second (double) : time from refarence time[s]
+        second (double) : time from reference time[s]
     Return:
         dcm (np.array 3x3) : DCM from ECI to ECEF
     """
@@ -111,7 +111,7 @@ def dcmECI2ECEF(second):
 def dcmECEF2ECI(second):
     """
     Args:
-        second (double) : time from refarence time[s]
+        second (double) : time from reference time[s]
     Return:
         dcm (np.array 3x3) : DCM from ECEF to ECI
     """
@@ -122,7 +122,7 @@ def posECIfromECEF(posECEF_, second):
     """
     Args:
         posECEF_ (np.array 3x1) : position in ECEF coordinate [m, m, m]
-        second (double) : time from refarence time [s]
+        second (double) : time from reference time [s]
     Return:
         (np.array 3x1) : position in ECI coordinate [m, m, m]
     """

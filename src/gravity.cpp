@@ -8,7 +8,7 @@
 
 #include "gravity.hpp"
 
-double gravity(double altitude, double latitude){
+/* double gravity(double altitude, double latitude){
 //    altitude m
 //    latitude rad
     double mu = 3.986004e14;
@@ -24,7 +24,7 @@ double gravity(double altitude, double latitude){
     gc = - mu / r / r * (1 - 1.5 * J2 *(Re/r) * (Re/r) * (3*sin(latitude) * sin(latitude) - 1));
     gnorth = mu / r /r * J2 * (Re/r) * (Re/r) * sin(2*latitude);
     return gc;
-}
+} */
 
 
 Vector3d gravityECI(Vector3d posECI_){
@@ -74,7 +74,7 @@ Vector3d gravityECI(Vector3d posECI_){
 }
 
 
-void test_gravity(){
+/* void test_gravity(){
     double latitude;
     latitude = 0;
     double g = 0.0;
@@ -92,6 +92,4 @@ void test_gravity(){
         ofs << alt_km << "\t" << g << endl;
 //        cout << g << endl;
     }
-}
-
-
+} */
