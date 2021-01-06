@@ -225,6 +225,7 @@ public:
     Vector3d force_air_vector_NEDframe;
     Vector3d force_thrust_vector;
     Vector3d gravity_vector;
+    Vector3d gravityECI_;
     Vector3d posLLH_IIP_;
     double downrange;
 
@@ -419,7 +420,7 @@ struct CsvObserver : public RocketStage{
                     "vel_ECI_X(m/s),vel_ECI_Y(m/s),vel_ECI_Z(m/s),"
                     "vel_NED_X(m/s),vel_NED_Y(m/s),vel_NED_Z(m/s),"
                     "acc_ECI_X(m/s2),acc_ECI_Y(m/s2),acc_ECI_Z(m/s2),"
-                    "acc_Body_X(m/s),acc_Body_Y(m/s),acc_Body_Z(m/s),"
+                    "acc_Body_X(m/s2),acc_Body_Y(m/s2),acc_Body_Z(m/s2),"
                     "Isp(s),Mach number,attitude_azimuth(deg),attitude_elevation(deg),attitude_roll(deg),"
                     "angle of attack alpha(deg),angle of attack beta(deg),all angle of attack gamma(deg),"
                     "dynamic pressure(Pa),"

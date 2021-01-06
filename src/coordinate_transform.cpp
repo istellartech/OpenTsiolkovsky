@@ -11,7 +11,7 @@
 using namespace std;
 
 Matrix3d dcmECI2ECEF(double second){
-    double omega = 7.2921159e-5; // 地球の自転角速度[rad/s]
+    double omega = 7.292115e-5; // 地球の自転角速度[rad/s]
     double theta = omega * second;
     Matrix3d dcm;
     dcm << cos(theta), sin(theta), 0.0,
@@ -61,7 +61,7 @@ Matrix3d dcmECI2NED(Matrix3d dcmECEF2NED_, Matrix3d dcmECI2ECEF_){
 }
 
 Vector3d vel_ECEF_NEDframe(Matrix3d dcmECI2NED_, Vector3d vel_ECI_ECIframe_, Vector3d pos_ECI_){
-    double omega = 7.2921159e-5; // 地球の自転角速度[rad]
+    double omega = 7.292115e-5; // 地球の自転角速度[rad]
     Matrix3d omegaECI2ECEF_;    // 角速度テンソル angular velocity tensorß
     omegaECI2ECEF_ << 0.0,   -omega, 0.0,
                       omega, 0.0,    0.0,
@@ -208,7 +208,7 @@ Vector3d posECI(Vector3d posECEF_, double second){
 }
 
 Vector3d vel_ECI_ECIframe(Matrix3d dcmNED2ECI_, Vector3d vel_ECEF_NEDframe_, Vector3d posECI_){
-    double omega = 7.2921159e-5; // 地球の自転角速度[rad]
+    double omega = 7.292115e-5; // 地球の自転角速度[rad]
     Matrix3d omegaECI2ECEF_;    // 角速度テンソル angular velocity tensorß
     omegaECI2ECEF_ << 0.0,   -omega, 0.0,
                       omega, 0.0,    0.0,
