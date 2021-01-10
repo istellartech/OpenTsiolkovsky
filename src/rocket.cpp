@@ -362,7 +362,7 @@ void Rocket::flight_simulation(){
         std::vector<double> time_array;
         time_array = {rs[i].calc_start_time,
                       rs[i].dump_separation_time,
-                      rs[i].previous_stage_separation_time + rs[i].burn_start_time + rs[i].burn_end_time,
+//                      rs[i].previous_stage_separation_time + rs[i].burn_start_time + rs[i].burn_end_time,
                       rs[i].later_stage_separation_time,
                       rs[i].calc_end_time
         };
