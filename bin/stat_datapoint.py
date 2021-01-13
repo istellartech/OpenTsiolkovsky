@@ -43,6 +43,16 @@ def read_data_points(arg):
                 for v in sample_points[k]:
                     fo_buff[i] += "," + str(df.iloc[-1][v])
                 fo_buff[i] += "\n"
+            elif k == "MAX":
+                fo_buff[i] += str(caseNo)
+                for v in sample_points[k]:
+                    fo_buff[i] += "," + str(df[v].max())
+                fo_buff[i] += "\n"
+            elif k == "MECO":
+                fo_buff[i] += str(caseNo)
+                for v in sample_points[k]:
+                    fo_buff[i] += "," + str(df.pipe(lambda df: df[df["thrust(N)"] == 0.]).iloc[0][v])
+                fo_buff[i] += "\n"
             else:
                 fo_buff[i] += str(caseNo)
                 for v in sample_points[k]:
