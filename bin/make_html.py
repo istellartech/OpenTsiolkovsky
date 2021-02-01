@@ -123,15 +123,15 @@ for stage_str in ['1', '2', '3']:
     p_velh = figure(title=st+"水平面速度", x_axis_label="時刻 [sec]", y_axis_label="速度 [m/s]",
             x_range=xr1, **PLOT_OPTIONS)
     vel_horizontal = np.sqrt(df1["vel_NED_X(m/s)"] ** 2 + df1["vel_NED_Y(m/s)"] ** 2)
-    p_velh.line(df1["time(s)"], df1["vel_NED_X(m/s)"], legend="North", color=C[6])
-    p_velh.line(df1["time(s)"], df1["vel_NED_Y(m/s)"], legend="East", color=C[7])
-    p_velh.line(df1["time(s)"], vel_horizontal, legend="Horizon", color=C[8])
+    p_velh.line(df1["time(s)"], df1["vel_NED_X(m/s)"], legend_label="North", color=C[6])
+    p_velh.line(df1["time(s)"], df1["vel_NED_Y(m/s)"], legend_label="East", color=C[7])
+    p_velh.line(df1["time(s)"], vel_horizontal, legend_label="Horizon", color=C[8])
     p_velh.select_one(HoverTool).tooltips = HOVER_SET
 
 
     p_velv = figure(title=st+"垂直速度", x_axis_label="時刻 [sec]", y_axis_label="速度 [m/s]",
             x_range=xr1, **PLOT_OPTIONS)
-    p_velv.line(df1["time(s)"], -df1["vel_NED_Z(m/s)"], legend="Up", color=C[8])
+    p_velv.line(df1["time(s)"], -df1["vel_NED_Z(m/s)"], legend_label="Up", color=C[8])
     p_velv.select_one(HoverTool).tooltips = HOVER_SET
 
 
@@ -149,16 +149,16 @@ for stage_str in ['1', '2', '3']:
 
     p_acc = figure(title=st+"加速度", x_axis_label="時刻 [sec]", y_axis_label="加速度 [G]",
             x_range=xr1, **PLOT_OPTIONS)
-    acc = np.sqrt(df1["acc_Body_X(m/s)"] **2 + df1["acc_Body_X(m/s)"] ** 2 + df1["acc_Body_X(m/s)"] ** 2)
+    acc = np.sqrt(df1["acc_Body_X(m/s2)"] **2 + df1["acc_Body_X(m/s2)"] ** 2 + df1["acc_Body_X(m/s2)"] ** 2)
     p_acc.line(df1["time(s)"], acc / g, color=C[1])
     p_acc.select_one(HoverTool).tooltips = HOVER_SET_F
 
 
     p_acc3 = figure(title=st+"機体の各軸にかかる加速度", x_axis_label="時刻 [sec]", y_axis_label="加速度 [G]",
             x_range=xr1, **PLOT_OPTIONS)
-    p_acc3.line(df1["time(s)"], df1["acc_Body_X(m/s)"] / g, legend="X", color=C[2])
-    p_acc3.line(df1["time(s)"], df1["acc_Body_Y(m/s)"] / g, legend="Y", color=C[3])
-    p_acc3.line(df1["time(s)"], df1["acc_Body_Z(m/s)"] / g, legend="Z", color=C[4])
+    p_acc3.line(df1["time(s)"], df1["acc_Body_X(m/s2)"] / g, legend_label="X", color=C[2])
+    p_acc3.line(df1["time(s)"], df1["acc_Body_Y(m/s2)"] / g, legend_label="Y", color=C[3])
+    p_acc3.line(df1["time(s)"], df1["acc_Body_Z(m/s2)"] / g, legend_label="Z", color=C[4])
     p_acc3.select_one(HoverTool).tooltips = HOVER_SET_F
 
 
@@ -187,19 +187,19 @@ for stage_str in ['1', '2', '3']:
 
     p_AoA = figure(title=st+"迎角", x_axis_label="時刻 [sec]", y_axis_label="迎角 [deg]",
                    x_range=xr1, **PLOT_OPTIONS)
-    p_AoA.line(df1["time(s)"], df1["attack of angle alpha(deg)"], legend="alpha", color=C[7])
-    p_AoA.line(df1["time(s)"], df1["attack of angle beta(deg)"], legend="beta", color=C[8])
+    p_AoA.line(df1["time(s)"], df1["angle of attack alpha(deg)"], legend_label="alpha", color=C[7])
+    p_AoA.line(df1["time(s)"], df1["angle of attack beta(deg)"], legend_label="beta", color=C[8])
     p_AoA.select_one(HoverTool).tooltips = HOVER_SET_F
 
 
     p_AoAg = figure(title=st+"全迎角：γ", x_axis_label="時刻 [sec]", y_axis_label="迎角 [deg]",
             x_range=xr1, **PLOT_OPTIONS)
-    p_AoAg.line(df1["time(s)"], df1["all attack of angle gamma(deg)"], color=C[7])
+    p_AoAg.line(df1["time(s)"], df1["all angle of attack gamma(deg)"], color=C[7])
     p_AoAg.select_one(HoverTool).tooltips = HOVER_SET_F
 
     p_Qa = figure(title=st+"Qγ", x_axis_label="時刻 [sec]", y_axis_label="Qγ [kPa.rad]",
             x_range=xr1, **PLOT_OPTIONS)
-    p_Qa.line(df1["time(s)"], df1["dynamic pressure(Pa)"].values * 1e-3 * df1["all attack of angle gamma(deg)"].values * np.deg2rad(1.), color=C[7])
+    p_Qa.line(df1["time(s)"], df1["dynamic pressure(Pa)"].values * 1e-3 * df1["all angle of attack gamma(deg)"].values * np.deg2rad(1.), color=C[7])
     p_Qa.select_one(HoverTool).tooltips = HOVER_SET_F
 
 
@@ -215,18 +215,18 @@ for stage_str in ['1', '2', '3']:
 #     p_lift.select_one(HoverTool).tooltips = HOVER_SET
 
 
-    p_airforce3 = figure(title=st+"機体の各軸にかかる空気力", x_axis_label="時刻 [sec]", y_axis_label="空気力 [N]",
+    p_aeroforce3 = figure(title=st+"機体の各軸にかかる空気力", x_axis_label="時刻 [sec]", y_axis_label="空気力 [N]",
                     x_range=xr1, **PLOT_OPTIONS)
-    p_airforce3.line(df1["time(s)"], df1["airforce_Body_X[N]"], legend="X", color=C[2])
-    p_airforce3.line(df1["time(s)"], df1["airforce_Body_Y[N]"], legend="Y", color=C[3])
-    p_airforce3.line(df1["time(s)"], df1["airforce_Body_Z[N]"], legend="Z", color=C[4])
-    p_airforce3.select_one(HoverTool).tooltips = HOVER_SET_F
+    p_aeroforce3.line(df1["time(s)"], df1["aeroforce_Body_X[N]"], legend_label="X", color=C[2])
+    p_aeroforce3.line(df1["time(s)"], df1["aeroforce_Body_Y[N]"], legend_label="Y", color=C[3])
+    p_aeroforce3.line(df1["time(s)"], df1["aeroforce_Body_Z[N]"], legend_label="Z", color=C[4])
+    p_aeroforce3.select_one(HoverTool).tooltips = HOVER_SET_F
 
 
     p_gimbal = figure(title=st+"ジンバル角", x_axis_label="時刻 [sec]", y_axis_label="ジンバル角 [deg]",
                    x_range=xr1, **PLOT_OPTIONS)
-    p_gimbal.line(df1["time(s)"], df1["gimbal_angle_pitch(deg)"], legend="pitch", color=C[0])
-    p_gimbal.line(df1["time(s)"], df1["gimbal_angle_yaw(deg)"], legend="yaw", color=C[1])
+    p_gimbal.line(df1["time(s)"], df1["gimbal_angle_pitch(deg)"], legend_label="pitch", color=C[0])
+    p_gimbal.line(df1["time(s)"], df1["gimbal_angle_yaw(deg)"], legend_label="yaw", color=C[1])
     p_gimbal.select_one(HoverTool).tooltips = HOVER_SET_F
 
     # plots can be a single Bokeh model, a list/tuple, or even a dictionary
@@ -241,7 +241,7 @@ for stage_str in ['1', '2', '3']:
         [p_acc, p_acc3],
         [p_az, p_el] if p_ro is None else [p_az, p_el, p_ro],
         [p_AoA, p_AoAg, p_Qa],
-        [p_gimbal, p_airforce3],
+        [p_gimbal, p_aeroforce3],
         ])
 
     if stage_str == '1':
