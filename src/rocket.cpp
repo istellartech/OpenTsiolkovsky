@@ -207,9 +207,9 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     if (! o_attitude["roll offset[deg]"].is<picojson::null>() ){
         navi_roll_offset = o_attitude["roll offset[deg]"].get<double>();
     }
-    quat_offset_NAVI2BODY = AngleAxisd(deg2rad(navi_yaw_offset), Vector3d::UnitZ()) *
+    quat_offset_NAVI2BODY = Quaterniond(AngleAxisd(deg2rad(navi_yaw_offset), Vector3d::UnitZ()) *
         AngleAxisd(deg2rad(navi_pitch_offset), Vector3d::UnitY()) *
-        AngleAxisd(deg2rad(navi_roll_offset), Vector3d::UnitX());
+        AngleAxisd(deg2rad(navi_roll_offset), Vector3d::UnitX()));
     double gyro_bias_x = 0.0, gyro_bias_y = 0.0, gyro_bias_z = 0.0;     // [rad/s]
     if (! o_attitude["gyro bias x[deg/h]"].is<picojson::null>() ){
         gyro_bias_x = deg2rad(o_attitude["gyro bias x[deg/h]"].get<double>()) / 3600.0;
