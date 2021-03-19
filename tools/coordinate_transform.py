@@ -205,13 +205,22 @@ def posLLH_IIP(posLLH_, velNED_):
     vel_east_ = velNED_[1]
     vel_up_ = - velNED_[2]
     h = posLLH_[2]
-    tau = 1.0 / g0 * (vel_up_ + sqrt(vel_up_**2 + 2 * h * g0))
+    if h > 0.0:
+        tau = 1.0 / g0 * (vel_up_ + sqrt(vel_up_**2 + 2 * h * g0))
+    else:
+        tau = 0.0
     dist_IIP_from_now_NED = np.array([vel_north_ * tau, vel_east_ * tau, h])
     posECEF_ = posECEFfromLLH(posLLH_)
     dcmECEF2NED_ = dcmECEF2NEDfromLLH(posLLH_)
     dcmNED2ECEF_ = dcmECEF2NED_.T
     posECEF_IIP_ = posECEF_ + np.matmul(dcmNED2ECEF_, dist_IIP_from_now_NED)
     return posLLHfromECEF(posECEF_IIP_)
+
+
+def posLLH_IIP_fromECEF(posECEF_, velECEF_):
+    posLLH_ = posLLHfromECEF(posECEF_)
+    velNED_ = velNEDfromECEF(posECEF_, velECEF_)
+    return posLLH_IIP(posLLH_, velNED_)
 
 
 ### utility functions ###
