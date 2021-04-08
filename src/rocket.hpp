@@ -136,8 +136,9 @@ public:
     bool is_consider_neutrality = false;
     string CGXt_file_name;
     string CP_file_name;
-    double Xcg_offset;
-    double Xcp_offset;
+    double Xcg_offset, Ycg_offset, Zcg_offset;
+    double Xcp_offset, Ycp_offset, Zcp_offset;
+    double Xt_offset, Yt_offset, Zt_offset;
     MatrixXd CGXt_mat;
     MatrixXd Xcp_mat;
     //    == stage ==
@@ -178,8 +179,8 @@ public:
     double mach_number = 0.0;
     double kinematic_energy = 0.0;
     
-    double sin_of_gimbal_angle_pitch = 0.0;  // [ND]
-    double sin_of_gimbal_angle_yaw = 0.0;  // [ND]
+//     double sin_of_gimbal_angle_pitch = 0.0;  // [ND]
+//     double sin_of_gimbal_angle_yaw = 0.0;  // [ND]
     double gimbal_angle_pitch = 0.0;  // [rad]
     double gimbal_angle_yaw = 0.0;  // [rad]
     
@@ -341,9 +342,16 @@ public:
         CGXt_file_name = obj.CGXt_file_name;
         CGXt_mat       = obj.CGXt_mat;
         Xcg_offset     = obj.Xcg_offset;
+        Ycg_offset     = obj.Ycg_offset;
+        Zcg_offset     = obj.Zcg_offset;
         CP_file_name   = obj.CP_file_name;
         Xcp_mat        = obj.Xcp_mat;
         Xcp_offset     = obj.Xcp_offset;
+        Ycp_offset     = obj.Ycp_offset;
+        Zcp_offset     = obj.Zcp_offset;
+        Xt_offset     = obj.Xt_offset;
+        Yt_offset     = obj.Yt_offset;
+        Zt_offset     = obj.Zt_offset;
 
         following_stage_exist = obj.following_stage_exist;
         previous_stage_separation_time = obj.previous_stage_separation_time;

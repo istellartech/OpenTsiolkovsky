@@ -131,14 +131,14 @@ Matrix3d dcmNED2BODY(double azimuth_rad, double elevation_rad, double roll_rad){
     double el = elevation_rad;
     double ro = roll_rad;
 
-    /*
     dcm <<  cos(el)*cos(az), cos(el)*sin(az), -sin(el),
     -cos(ro)*sin(az)+sin(ro)*sin(el)*cos(az), cos(ro)*cos(az)+sin(ro)*sin(el)*sin(az), sin(ro)*cos(el),
     sin(ro)*sin(az)+cos(ro)*sin(el)*cos(az),  -sin(ro)*cos(az)+cos(ro)*sin(el)*sin(az),  cos(ro)*cos(el);
-    */
 
+    /*
     auto angleaxis_inv = AngleAxisd(az, Vector3d::UnitZ()) * AngleAxisd(el, Vector3d::UnitY()) * AngleAxisd(ro, Vector3d::UnitX());
     dcm = angleaxis_inv.inverse().toRotationMatrix();
+    */
 
     return dcm;
 }
