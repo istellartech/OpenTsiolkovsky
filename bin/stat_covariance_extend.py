@@ -53,9 +53,10 @@ def read_data_points(arg):
 
             for key_sample in key_samples:
                 if not key_sample in fo_buff[key_sample_point]:
-                    fo_buff[key_sample_point][key_sample] \
-                        = {"high":{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]},\
-                           "low" :{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]}}
+                    fo_buff[key_sample_point][key_sample] = {"high":OrderedDict(), "low":OrderedDict()}
+                    for key_variable_name in sample_points[key_sample_point]:
+                        fo_buff[key_sample_point][key_sample]["high"][key_variable_name] = []
+                        fo_buff[key_sample_point][key_sample]["low"][key_variable_name] = []
                     fo_counter[key_sample_point][key_sample] = 0
                 fo_counter[key_sample_point][key_sample] += 1
                        
