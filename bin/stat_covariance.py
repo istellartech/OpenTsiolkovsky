@@ -54,8 +54,8 @@ def read_data_points(arg):
             for key_sample in key_samples:
                 if not key_sample in fo_buff[key_sample_point]:
                     fo_buff[key_sample_point][key_sample] \
-                        = {"high":{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]},\
-                           "low" :{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]}}
+                        = {"high":OrderedDict({ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]}),\
+                           "low" :OrderedDict({ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]})}
                     fo_counter[key_sample_point][key_sample] = 0
                 fo_counter[key_sample_point][key_sample] += 1
                        
@@ -157,8 +157,8 @@ if __name__ == "__main__":
                 if not key_sample in fo_counter[key_sample_point]:
                     fo_counter[key_sample_point][key_sample] = 0
                     fo_buff[key_sample_point][key_sample] \
-                        = {"high":{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]},\
-                           "low" :{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]}}
+                        = {"high":OrderedDict({ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]}),\
+                           "low" :OrderedDict({ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]})}
 
                 fo_counter[key_sample_point][key_sample] += fo_counter_sub[key_sample_point][key_sample]
 
