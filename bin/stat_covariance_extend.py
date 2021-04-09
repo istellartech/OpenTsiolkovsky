@@ -6,12 +6,13 @@ import json
 import sys
 import multiprocessing as mp
 import math
+from collections import OrderedDict
 
 def read_data_points(arg):
     [id_proc, Nproc, input_directory, input_file_template, number_of_sample, Nfetch, sample_points] = arg
 
-    fo_buff    = {k:{} for k in sample_points.keys()}
-    fo_counter = {k:{} for k in sample_points.keys()}
+    fo_buff    = {k:OrderedDict() for k in sample_points.keys()}
+    fo_counter = {k:OrderedDict() for k in sample_points.keys()}
     
     shou  = int(number_of_sample/Nproc)
     amari = number_of_sample - shou * Nproc
@@ -36,7 +37,7 @@ def read_data_points(arg):
         # fetch data
         df = pd.read_csv("tmp_{}.csv".format(id_proc))
         for key_sample_point in sample_points.keys():
-            indicies    = {}
+            indicies    = OrderedDict()
             key_samples = []
             if key_sample_point == "all":
                 for time in df["time(s)"]:
@@ -52,9 +53,10 @@ def read_data_points(arg):
 
             for key_sample in key_samples:
                 if not key_sample in fo_buff[key_sample_point]:
-                    fo_buff[key_sample_point][key_sample] \
-                        = {"high":{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]},\
-                           "low" :{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]}}
+                    fo_buff[key_sample_point][key_sample] = {"high":OrderedDict(), "low":OrderedDict()}
+                    for key_variable_name in sample_points[key_sample_point]:
+                        fo_buff[key_sample_point][key_sample]["high"][key_variable_name] = []
+                        fo_buff[key_sample_point][key_sample]["low"][key_variable_name] = []
                     fo_counter[key_sample_point][key_sample] = 0
                 fo_counter[key_sample_point][key_sample] += 1
                        
@@ -146,8 +148,8 @@ if __name__ == "__main__":
 #    callback = [read_data_points((id_proc, Nproc, input_directory, input_file_template, number_of_sample, Nfetch, sample_points))]
 
     # join them
-    fo_buff    = {k:{} for k in sample_points.keys()}
-    fo_counter = {k:{} for k in sample_points.keys()}
+    fo_buff    = {k:OrderedDict() for k in sample_points.keys()}
+    fo_counter = {k:OrderedDict() for k in sample_points.keys()}
     for id_proc in range(Nproc):
         fo_buff_sub    = callback[id_proc][0]
         fo_counter_sub = callback[id_proc][1]
@@ -155,9 +157,10 @@ if __name__ == "__main__":
             for key_sample in fo_buff_sub[key_sample_point].keys():
                 if not key_sample in fo_counter[key_sample_point]:
                     fo_counter[key_sample_point][key_sample] = 0
-                    fo_buff[key_sample_point][key_sample] \
-                        = {"high":{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]},\
-                           "low" :{ key_variable_name : [] for key_variable_name in sample_points[key_sample_point]}}
+                    fo_buff[key_sample_point][key_sample] = {"high":OrderedDict(), "low":OrderedDict()}
+                    for key_variable_name in sample_points[key_sample_point]:
+                        fo_buff[key_sample_point][key_sample]["high"][key_variable_name] = []
+                        fo_buff[key_sample_point][key_sample]["low"][key_variable_name] = []
 
                 fo_counter[key_sample_point][key_sample] += fo_counter_sub[key_sample_point][key_sample]
 
