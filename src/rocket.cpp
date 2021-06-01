@@ -597,13 +597,15 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
         thrust_vac = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 1);
         // nozzle_exhaust_pressure = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 2);
         if (thrust_vac != 0 &&
+            time >= previous_stage_separation_time + burn_start_time &&
+            time < previous_stage_separation_time + burn_start_time + burn_time / thrust_coeff &&
             time < previous_stage_separation_time + forced_cutoff_time) {
             is_powered = true;
         } else {
             is_powered = false;
         }
     } else {
-        if(time >= previous_stage_separation_time + burn_start_time &&
+        if (time >= previous_stage_separation_time + burn_start_time &&
             time < previous_stage_separation_time + burn_start_time + burn_time / thrust_coeff &&
             time < previous_stage_separation_time + forced_cutoff_time){
             thrust_vac = thrust_const;
