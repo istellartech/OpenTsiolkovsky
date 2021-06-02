@@ -60,6 +60,15 @@ Air Air::altitude_with_variation(double altitude, double input_percent){
     return air;
 }
 
+Air Air::altitude_with_variation_table(double altitude, MatrixXd variation_table){
+    // Pseudo constructor.
+    // Enter altitude and variation ratio air density table to calculate air density
+    Air air = Air::altitude(altitude);
+    double coef = Air::coef_density_variance_table(altitude, variation_table);
+    air.density = air.density * (1.0 + coef);
+    return air;
+}
+
 double Air::coef_density_variance(double altitude, double input_percent){
     // altitude : [m]
     // percent : [%](-100 ~ 100), enter 0 when nominal air density
@@ -81,6 +90,25 @@ double Air::coef_density_variance(double altitude, double input_percent){
         percent_of_density_with_alt = linear_interp1_from_y(altitude, plus_x, plus_y);
     }
     return percent_of_density_with_alt / 100 * abs(input_percent) / 100;
+}
+
+double Air::coef_density_variance_table(double altitude, MatrixXd variation_table){
+    // variation table : [altitude[m], air density variation[percent]
+    vector<double> altitude_ref;
+    vector<double> variation_ref;
+    int len = variation_table.rows();
+
+    altitude_ref.resize(len);
+    variation_ref.resize(len);
+
+    for(int i=0; i<len; i++){
+        altitude_ref[i] = variation_table(i, 0);
+        variation_ref[i] = variation_table(i, 1);
+    }
+    
+    double percent_of_density_with_alt = linear_interp1_from_y(altitude, variation_ref, altitude_ref);
+
+    return percent_of_density_with_alt / 100;
 }
 
 double linear_interp1_from_y(double y, vector<double> x_array, vector<double> y_array){

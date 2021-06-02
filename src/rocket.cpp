@@ -84,6 +84,14 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     launch_vel_NED[1] = array_vel[1].get<double>();
     launch_vel_NED[2] = array_vel[2].get<double>();
     
+    air_density_file_exist = o_calc["air density variation file exist?(bool)"].get<bool>();
+    air_density_file_name = o_calc["air density variation file name(str)"].get<string>();
+    
+    if (air_density_file_exist) {
+        air_density_mat = read_csv_vector_2d("./" + air_density_file_name, "altitude[m]", "air density variation[percent]");
+    }
+
+
     wind_file_exist = o_wind["wind file exist?(bool)"].get<bool>();
     wind_file_name = o_wind["wind file name(str)"].get<string>();
     picojson::array& array_wind_const = o_wind["const wind[m/s,deg]"].get<picojson::array>();
@@ -469,7 +477,12 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
     //    air = air.altitude(posLLH_[2]);
-    air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    if (air_density_file_exist){
+        air = air.altitude_with_variation_table(posLLH_[2], air_density_mat);
+    } else{
+        air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    }
+
     //    gravity term : gravity acceleration in the north direction is not considered
     gravityECI_ = gravityECI(posECI_);
 
@@ -549,7 +562,11 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
 void RocketStage::update_from_time_and_altitude(double time, double altitude){
     Air air;
     //    air = air.altitude(altitude);
-    air = air.altitude_with_variation(altitude, variation_ratio_of_air_density);
+    if (air_density_file_exist){
+        air = air.altitude_with_variation_table(posLLH_[2], air_density_mat);
+    } else{
+        air = air.altitude_with_variation(altitude, variation_ratio_of_air_density);
+    }
 
     if (Isp_file_exist){
         Isp_vac = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, Isp_mat);  // Isp vac
@@ -881,7 +898,11 @@ void CsvObserver::operator()(const state& x, double t){
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
     //    air = air.altitude(posLLH_[2]);
-    air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    if (air_density_file_exist){
+        air = air.altitude_with_variation_table(posLLH_[2], air_density_mat);
+    } else{
+        air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    }
     //    gravity term : gravity acceleration in the north direction is not considered
     gravityECI_ = gravityECI(posECI_);
 

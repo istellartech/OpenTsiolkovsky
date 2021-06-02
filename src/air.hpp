@@ -38,8 +38,9 @@ public:
     double density = 1.2;
     Air altitude(double altitude);
     Air altitude_with_variation(double altitude, double input_percent);
+    Air altitude_with_variation_table(double altitude, MatrixXd variation_table);
     double coef_density_variance(double altitude, double input_percent);
-    
+    double coef_density_variance_table(double altitude, MatrixXd variation_table);
 };
 
 double linear_interp1_from_y(double y, vector<double> x_array, vector<double> y_array);
