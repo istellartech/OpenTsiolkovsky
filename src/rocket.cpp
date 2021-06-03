@@ -232,9 +232,9 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     if (! o_attitude["roll offset[deg]"].is<picojson::null>() ){
         navi_roll_offset = o_attitude["roll offset[deg]"].get<double>();
     }
-    quat_offset_NAVI2BODY = AngleAxisd(deg2rad(navi_yaw_offset), Vector3d::UnitZ()) *
+    quat_offset_NAVI2BODY = Quaterniond(AngleAxisd(deg2rad(navi_yaw_offset), Vector3d::UnitZ()) *
         AngleAxisd(deg2rad(navi_pitch_offset), Vector3d::UnitY()) *
-        AngleAxisd(deg2rad(navi_roll_offset), Vector3d::UnitX());
+        AngleAxisd(deg2rad(navi_roll_offset), Vector3d::UnitX()));
     double gyro_bias_x = 0.0, gyro_bias_y = 0.0, gyro_bias_z = 0.0;     // [rad/s]
     if (! o_attitude["gyro bias x[deg/h]"].is<picojson::null>() ){
         gyro_bias_x = deg2rad(o_attitude["gyro bias x[deg/h]"].get<double>()) / 3600.0;
@@ -287,10 +287,45 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
         } else {
             Xcg_offset = 0.0;
         }
+        if (! o_neutrality["Ycg offset[m]"].is<picojson::null>() ){
+            Ycg_offset = o_neutrality["Ycg offset[m]"].get<double>();
+        } else {
+            Ycg_offset = 0.0;
+        }
+        if (! o_neutrality["Zcg offset[m]"].is<picojson::null>() ){
+            Zcg_offset = o_neutrality["Zcg offset[m]"].get<double>();
+        } else {
+            Zcg_offset = 0.0;
+        }
         if (! o_neutrality["Xcp offset[m]"].is<picojson::null>() ){
             Xcp_offset = o_neutrality["Xcp offset[m]"].get<double>();
         } else {
             Xcp_offset = 0.0;
+        }
+        if (! o_neutrality["Ycp offset[m]"].is<picojson::null>() ){
+            Ycp_offset = o_neutrality["Ycp offset[m]"].get<double>();
+        } else {
+            Ycp_offset = 0.0;
+        }
+        if (! o_neutrality["Zcp offset[m]"].is<picojson::null>() ){
+            Zcp_offset = o_neutrality["Zcp offset[m]"].get<double>();
+        } else {
+            Zcp_offset = 0.0;
+        }
+        if (! o_neutrality["Xt offset[m]"].is<picojson::null>() ){
+            Xt_offset = o_neutrality["Xt offset[m]"].get<double>();
+        } else {
+            Xt_offset = 0.0;
+        }
+        if (! o_neutrality["Yt offset[m]"].is<picojson::null>() ){
+            Yt_offset = o_neutrality["Yt offset[m]"].get<double>();
+        } else {
+            Yt_offset = 0.0;
+        }
+        if (! o_neutrality["Zt offset[m]"].is<picojson::null>() ){
+            Zt_offset = o_neutrality["Zt offset[m]"].get<double>();
+        } else {
+            Zt_offset = 0.0;
         }
     } catch (...) {
         cout << "attitude neutrality json_object not found" << endl;
@@ -471,9 +506,11 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     //    It does not calculate after the rocket falls to the ground
     if ( posLLH_[2] < 0) {
         dx = {0, 0, 0, 0, 0, 0, 0};
+        /*
         if ((int)t % 10 == 0 && (int)(t*10) % 10 == 0 ){ // progress
             progress(t);
         }
+        */
         if ( flag_impact_g == false ) {
             impact_point_g << posLLH_[0], posLLH_[1];
             flag_impact_g = true;
@@ -499,7 +536,6 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     } else{
         air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
     }
-
     //    gravity term : gravity acceleration in the north direction is not considered
     gravityECI_ = gravityECI(posECI_);
 
@@ -570,9 +606,11 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
         max_downrange_g = downrange;
     }
 
+    /*
     if ((int)t % 10 == 0 && (int)(t*10) % 10 == 0 ){ // progress
         progress(t);
     }
+    */
 }
 
 
@@ -594,13 +632,15 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
         thrust_vac = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 1);
         // nozzle_exhaust_pressure = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, thrust_mat, 2);
         if (thrust_vac != 0 &&
+            time >= previous_stage_separation_time + burn_start_time &&
+            time < previous_stage_separation_time + burn_start_time + burn_time / thrust_coeff &&
             time < previous_stage_separation_time + forced_cutoff_time) {
             is_powered = true;
         } else {
             is_powered = false;
         }
     } else {
-        if(time >= previous_stage_separation_time + burn_start_time &&
+        if (time >= previous_stage_separation_time + burn_start_time &&
             time < previous_stage_separation_time + burn_start_time + burn_time / thrust_coeff &&
             time < previous_stage_separation_time + forced_cutoff_time){
             thrust_vac = thrust_const;
@@ -656,7 +696,8 @@ void RocketStage::update_from_time_and_altitude(double time, double altitude){
         pos_CG         = interp_matrix(time, CGXt_mat, 1);
         pos_Controller = interp_matrix(time, CGXt_mat, 2);
 
-        pos_CG += Xcg_offset;
+        pos_CG -= Xcg_offset;               // +X direction = -STA direction
+        pos_Controller -= Xt_offset;        // +X direction = -STA direction
     }
 
     if (time >= later_stage_separation_time && is_separated == false){
@@ -691,7 +732,7 @@ void RocketStage::update_from_mach_number(){
         CN_pitch = angle_sign * interp_matrix_2d(mach_number, angle_abs, CN_mat);
         if ( is_consider_neutrality ) {
             pos_CP_pitch = interp_matrix_2d(mach_number, angle_abs, Xcp_mat);
-            pos_CP_pitch += Xcp_offset;
+            pos_CP_pitch -= Xcp_offset;     // +X direction = -STA direction
         }
 
         // yaw
@@ -705,7 +746,7 @@ void RocketStage::update_from_mach_number(){
         CN_yaw = angle_sign * interp_matrix_2d(mach_number, angle_abs, CN_mat);
         if ( is_consider_neutrality ) {
             pos_CP_yaw = interp_matrix_2d(mach_number, angle_abs, Xcp_mat);
-            pos_CP_yaw += Xcp_offset;
+            pos_CP_yaw -= Xcp_offset;       // +X direction = -STA direction
         }
     } else {
         CN_pitch = CN_const;
@@ -758,23 +799,38 @@ void RocketStage::power_flight_3dof(const RocketStage::state& x, double t){
     force_normal_yaw   = CN_yaw   * dynamic_pressure * body_area;
     force_normal_pitch = CN_pitch * dynamic_pressure * body_area;
     force_air_vector_BODYframe << - force_axial, - force_normal_yaw, - force_normal_pitch;
-    sin_of_gimbal_angle_yaw   = force_air_vector_BODYframe[1] / thrust
-                              * (pos_CP_yaw - pos_CG) / (pos_Controller - pos_CG);
-    sin_of_gimbal_angle_pitch = force_air_vector_BODYframe[2] / thrust
-                              * (pos_CP_pitch - pos_CG) / (pos_Controller - pos_CG);
 
     //    thrust term
+    double dXt = pos_Controller - pos_CG;
+    double dYt = Ycg_offset - Yt_offset;
+    double dZt = Zcg_offset - Zt_offset;
+    double dXp_yaw = pos_CG - pos_CP_yaw;
+    double dXp_pitch = pos_CG - pos_CP_pitch;
+    double dYp = Ycp_offset - Ycg_offset;
+    double dZp = Zcp_offset - Zcg_offset;
+    double term_yaw   = (- force_air_vector_BODYframe[1] * dXp_yaw + force_air_vector_BODYframe[0] * dYp)
+                       / thrust / sqrt(dXt * dXt + dYt * dYt);
+    double term_pitch = (- force_air_vector_BODYframe[2] * dXp_pitch + force_air_vector_BODYframe[0] * dZp)
+                       / thrust / sqrt(dXt * dXt + dZt * dZt);
+    double gimbal_angle_yaw_0;
     if ( is_consider_neutrality 
-            && sin_of_gimbal_angle_pitch <  1 
-            && sin_of_gimbal_angle_pitch > -1 
-            && sin_of_gimbal_angle_yaw   <  1 
-            && sin_of_gimbal_angle_yaw   > -1) {
-        gimbal_angle_pitch = asin(sin_of_gimbal_angle_pitch);
-        gimbal_angle_yaw   = asin(sin_of_gimbal_angle_yaw);
-        force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
-                             - thrust * sin(gimbal_angle_yaw),
-                             - thrust * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);
+            && term_yaw < 1 && term_yaw > -1
+            && term_pitch < 1 && term_pitch > -1 ) {
+        gimbal_angle_yaw_0 = asin(term_yaw) - atan2(dYt, dXt);
+        gimbal_angle_pitch = asin(term_pitch) - atan2(dYt, dXt);
+        if ( gimbal_angle_yaw_0 < pi/2 && gimbal_angle_yaw_0 > -pi/2
+                && gimbal_angle_pitch < pi/2 && gimbal_angle_pitch > -pi/2 ) {
+            // Consider the compound angle
+            gimbal_angle_yaw = atan(tan(gimbal_angle_yaw_0) * cos(gimbal_angle_pitch));
+            force_thrust_vector << thrust * cos(gimbal_angle_yaw) * cos(gimbal_angle_pitch),
+                                 - thrust * sin(gimbal_angle_yaw),
+                                 - thrust * cos(gimbal_angle_yaw) * sin(gimbal_angle_pitch);  // body coordinate
+        } else {
+            gimbal_angle_yaw = gimbal_angle_pitch = 0.0;
+            force_thrust_vector << thrust, 0.0, 0.0;  // body coordinate
+        }
     } else {
+        gimbal_angle_yaw = gimbal_angle_pitch = 0.0;
         force_thrust_vector << thrust, 0.0, 0.0;  // body coordinate
     }
     //    dv/dt
@@ -894,6 +950,7 @@ void CsvObserver::operator()(const state& x, double t){
     posECEF_ = posECEF(dcmECI2ECEF_, posECI_);
     posLLH_ = posLLH(posECEF_);
 
+    /*
     //    It does not calculate after the rocket falls to the ground
     if ( posLLH_[2] < 0) {
         if ((int)t % 10 == 0 && (int)(t*10) % 10 == 0 ){ // progress
@@ -901,6 +958,7 @@ void CsvObserver::operator()(const state& x, double t){
         }
         return;
     }
+    */
 
     //    update rocket variables
     update_from_time_and_altitude(t, posLLH_[2]);
@@ -1016,5 +1074,9 @@ void CsvObserver::operator()(const state& x, double t){
             << endl;
     }
     flag_duplicate = false;
+
+    if ((int)t % 10 == 0 && (int)(t*10) % 10 == 0 ){ // progress
+       progress(t);
+    }
 }
 

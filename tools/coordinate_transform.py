@@ -1,6 +1,6 @@
 # coding: utf-8
 import numpy as np
-from numpy import pi, sqrt, sin, cos, deg2rad, rad2deg
+from numpy import pi, sqrt, sin, cos, deg2rad, rad2deg, arctan2
 
 ##### Constants ###############################################
 G0 = 9.80665
@@ -55,13 +55,13 @@ def posLLHfromECEF(posECEF_):
     e2 = 2.0 * f - f * f            # Square of eccentricity e
     b = a * (1.0 - f)               # Polar radius [m]
     ed2 = e2 / (1.0 - e2)           # Square of second eccentricity e'
-    p = np.sqrt(posECEF_[0]**2 + posECEF_[1]**2)    # Distance from the rotation axis of the Earth [m]
-    theta = np.arctan2(posECEF_[2] * a, p * b)      # [rad]
+    p = sqrt(posECEF_[0]**2 + posECEF_[1]**2)    # Distance from the rotation axis of the Earth [m]
+    theta = arctan2(posECEF_[2] * a, p * b)      # [rad]
 
     posLLH = np.empty(3)
-    posLLH[0] = rad2deg(np.arctan2((posECEF_[2] + ed2 * b * sin(theta)**3), p - e2 * a * cos(theta)**3))
-    posLLH[1] = rad2deg(np.arctan2(posECEF_[1], posECEF_[0]))
-    posLLH[2] = p / np.cos(deg2rad(posLLH[0])) - a / sqrt(1.0 - e2 * sin(deg2rad(posLLH[0]))**2)
+    posLLH[0] = rad2deg(arctan2((posECEF_[2] + ed2 * b * sin(theta)**3), p - e2 * a * cos(theta)**3))
+    posLLH[1] = rad2deg(arctan2(posECEF_[1], posECEF_[0]))
+    posLLH[2] = p / cos(deg2rad(posLLH[0])) - a / sqrt(1.0 - e2 * sin(deg2rad(posLLH[0]))**2)
 
     return posLLH  # deg, deg, m
 
@@ -77,7 +77,7 @@ def dcmECEF2NEDfromLLH(posLLH_):  # deg, deg, m
     lon = deg2rad(posLLH_[1])
 
     dcm = np.array([[-sin(lat) * cos(lon), -sin(lat)*sin(lon),  cos(lat)],
-                    [-sin(lon),            np.cos(lon),         0.      ],
+                    [-sin(lon),             cos(lon),           0.      ],
                     [-cos(lat) * cos(lon), -cos(lat)*sin(lon), -sin(lat)]])
     return dcm
 
@@ -116,6 +116,40 @@ def dcmECEF2ECI(second):
         dcm (np.array 3x3) : DCM from ECEF to ECI
     """
     return dcmECI2ECEF(second).T
+
+
+def dcmNED2BODY(azimuth_deg, elevation_deg, roll_deg):
+    """
+    Args:
+        azimuth_deg (double) : azimuth of attitude [deg]
+        elevation_deg (double) : elevation of attitude [deg]
+        roll_deg (double) : roll of attitude [deg]
+    Return:
+        dcm (np.array 3x3) : DCM from NED to Body
+    """
+    az = deg2rad(azimuth_deg)
+    el = deg2rad(elevation_deg)
+    ro = deg2rad(roll_deg)
+
+    dcm = np.array([
+        [cos(el)*cos(az), cos(el)*sin(az), -sin(el)],
+        [-cos(ro)*sin(az)+sin(ro)*sin(el)*cos(az), cos(ro)*cos(az)+sin(ro)*sin(el)*sin(az), sin(ro)*cos(el)],
+        [sin(ro)*sin(az)+cos(ro)*sin(el)*cos(az),  -sin(ro)*cos(az)+cos(ro)*sin(el)*sin(az),  cos(ro)*cos(el)]
+        ])
+    return dcm
+
+
+def dcmBODY2NED(azimuth_deg, elevation_deg, roll_deg):
+    """
+    Args:
+        azimuth_deg (double) : azimuth of attitude [deg]
+        elevation_deg (double) : elevation of attitude [deg]
+        roll_deg (double) : roll of attitude [deg]
+    Return:
+        dcm (np.array 3x3) : DCM from Body to NED
+    """
+    dcm_inv = dcmNED2BODY(azimuth_deg, elevation_deg, roll_deg)
+    return dcm_inv.T
 
 
 def posECIfromECEF(posECEF_, second):
