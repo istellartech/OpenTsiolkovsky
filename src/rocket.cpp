@@ -84,13 +84,17 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     launch_vel_NED[1] = array_vel[1].get<double>();
     launch_vel_NED[2] = array_vel[2].get<double>();
     
+    air_density_file_exist = o_calc["air density variation file exist?(bool)"].get<bool>();
+
+    if (air_density_file_exist) {
+        air_density_file_name = o_calc["air density variation file name(str)"].get<string>();
+        air_density_mat = read_csv_vector_2d("./" + air_density_file_name, "altitude[m]", "air density variation[percent]");
+    }
+
     wind_file_exist = o_wind["wind file exist?(bool)"].get<bool>();
-    wind_file_name = o_wind["wind file name(str)"].get<string>();
-    picojson::array& array_wind_const = o_wind["const wind[m/s,deg]"].get<picojson::array>();
-    wind_const[0] = array_wind_const[0].get<double>();
-    wind_const[1] = array_wind_const[1].get<double>();
     
     if (wind_file_exist) {
+        wind_file_name = o_wind["wind file name(str)"].get<string>();
         wind_mat = read_csv_vector_3d("./" + wind_file_name,
                                       "altitude[m]", "wind_speed[m/s]", "direction[deg]");
         wind_mat_uv = MatrixXd::Zero(wind_mat.rows(), 3);
@@ -105,6 +109,10 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
             wind_mat_uv(r, 1) = wind_u;
             wind_mat_uv(r, 2) = wind_v;
         }
+    } else {
+        picojson::array& array_wind_const = o_wind["const wind[m/s,deg]"].get<picojson::array>();
+        wind_const[0] = array_wind_const[0].get<double>();
+        wind_const[1] = array_wind_const[1].get<double>();
     }
 
     power_flight_mode = EPower_flight_mode(o_each["power flight mode(int)"].get<double>());
@@ -115,21 +123,30 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     picojson::object& o_attitude = o_each["attitude"].get<picojson::object>();
 
     Isp_file_exist = o_thrust["Isp vac file exist?(bool)"].get<bool>();
-    Isp_file_name = o_thrust["Isp vac file name(str)"].get<string>();
+    if(Isp_file_exist) {
+        Isp_file_name = o_thrust["Isp vac file name(str)"].get<string>();
+    }else{
+        Isp_const = o_thrust["const Isp vac[s]"].get<double>();
+    }
+
     if (! o_thrust["Isp coefficient[-]"].is<picojson::null>() ){
         Isp_coeff = o_thrust["Isp coefficient[-]"].get<double>();
     }else{
         Isp_coeff = 1.0;
     }
-    Isp_const = o_thrust["const Isp vac[s]"].get<double>();
+
     thrust_file_exist = o_thrust["thrust vac file exist?(bool)"].get<bool>();
-    thrust_file_name = o_thrust["thrust vac file name(str)"].get<string>();
+    if(thrust_file_exist){
+        thrust_file_name = o_thrust["thrust vac file name(str)"].get<string>();
+    }else{
+        thrust_const = o_thrust["const thrust vac[N]"].get<double>();
+    }
+
     if (! o_thrust["thrust coefficient[-]"].is<picojson::null>() ){
         thrust_coeff = o_thrust["thrust coefficient[-]"].get<double>();
     }else{
         thrust_coeff = 1.0;
     }
-    thrust_const = o_thrust["const thrust vac[N]"].get<double>();
     burn_start_time = o_thrust["burn start time(time of each stage)[s]"].get<double>();
     burn_end_time = o_thrust["burn end time(time of each stage)[s]"].get<double>();
     if (! o_thrust["forced cutoff time(time of each stage)[s]"].is<picojson::null>() ){
@@ -142,24 +159,32 @@ RocketStage::RocketStage(picojson::object o_each, picojson::object o){
     // nozzle_exhaust_pressure = o_thrust["nozzle exhaust pressure[Pa]"].get<double>();
     body_diameter = o_aero["body diameter[m]"].get<double>();
     CN_file_exist = o_aero["normal coefficient file exist?(bool)"].get<bool>();
-    CN_file_name = o_aero["normal coefficient file name(str)"].get<string>();
+    if(CN_file_exist){
+        CN_file_name = o_aero["normal coefficient file name(str)"].get<string>();
+    }else{
+        CN_const = o_aero["const normal coefficient[-]"].get<double>();
+    }
     if (! o_aero["normal multiplier[-]"].is<picojson::null>() ){
         CN_multiplier = o_aero["normal multiplier[-]"].get<double>();
     }else{
         CN_multiplier = 1.0;
     }
-    CN_const = o_aero["const normal coefficient[-]"].get<double>();
     CA_file_exist = o_aero["axial coefficient file exist?(bool)"].get<bool>();
-    CA_file_name = o_aero["axial coefficient file name(str)"].get<string>();
+    if(CA_file_exist){
+        CA_file_name = o_aero["axial coefficient file name(str)"].get<string>();
+    }else{
+        CA_const = o_aero["const axial coefficient[-]"].get<double>();
+    }
     if (! o_aero["axial multiplier[-]"].is<picojson::null>() ){
         CA_multiplier = o_aero["axial multiplier[-]"].get<double>();
     }else{
         CA_multiplier = 1.0;
     }
-    CA_const = o_aero["const axial coefficient[-]"].get<double>();
     ballistic_coef = o_aero["ballistic coefficient(ballistic flight mode)[kg/m2]"].get<double>();
     attitude_file_exist = o_attitude["attitude file exist?(bool)"].get<bool>();
-    attitude_file_name = o_attitude["attitude file name(str)"].get<string>();
+    if(attitude_file_exist){
+        attitude_file_name = o_attitude["attitude file name(str)"].get<string>();
+    }
     if(!o_attitude["const elevation[deg]"].is<picojson::null>()){
         attitude_elevation_const_deg = o_attitude["const elevation[deg]"].get<double>();
     } else {
@@ -505,7 +530,13 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
     dcmECI2NED_init_ = dcmECI2NED(dcmECEF2NED_init_, dcmECI2ECEF(0.0));
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
-    air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    //    air = air.altitude(posLLH_[2]);
+    if (air_density_file_exist){
+        air = air.altitude_with_variation_table(posLLH_[2], air_density_mat);
+    } else{
+        air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    }
+    //    gravity term : gravity acceleration in the north direction is not considered
     gravityECI_ = gravityECI(posECI_);
 
     if (is_powered){  // ---- powered flight ----
@@ -586,7 +617,11 @@ void RocketStage::operator()(const RocketStage::state& x, RocketStage::state& dx
 void RocketStage::update_from_time_and_altitude(double time, double altitude){
     Air air;
     //    air = air.altitude(altitude);
-    air = air.altitude_with_variation(altitude, variation_ratio_of_air_density);
+    if (air_density_file_exist){
+        air = air.altitude_with_variation_table(posLLH_[2], air_density_mat);
+    } else{
+        air = air.altitude_with_variation(altitude, variation_ratio_of_air_density);
+    }
 
     if (Isp_file_exist){
         Isp_vac = interp_matrix((time - previous_stage_separation_time) * thrust_coeff, Isp_mat);  // Isp vac
@@ -937,7 +972,13 @@ void CsvObserver::operator()(const state& x, double t){
     dcmECI2NED_init_ = dcmECI2NED(dcmECEF2NED_init_, dcmECI2ECEF(0.0));
     vel_ECEF_NEDframe_ = vel_ECEF_NEDframe(dcmECI2NED_, velECI_, posECI_);
     vel_wind_NEDframe_ = vel_wind_NEDframe(wind_speed, wind_direction);
-    air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    //    air = air.altitude(posLLH_[2]);
+    if (air_density_file_exist){
+        air = air.altitude_with_variation_table(posLLH_[2], air_density_mat);
+    } else{
+        air = air.altitude_with_variation(posLLH_[2], variation_ratio_of_air_density);
+    }
+    //    gravity term : gravity acceleration in the north direction is not considered
     gravityECI_ = gravityECI(posECI_);
 
     if (is_powered){  // ---- powered flight ----

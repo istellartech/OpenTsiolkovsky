@@ -30,7 +30,7 @@ OBJS += $(SRCDIR)/Orbit.o
 OBJS += $(SRCDIR)/coordinate_transform.o
 CC = g++
 CFLAGS = -O2 -std=gnu++11
-# CFLAGS = -Wall -O2 -std=gnu++11
+# CFLAGS = -g -Wall -O0 -std=gnu++11
 LDLIBS = -lpthread
 
 .SUFFIXES: .c .o

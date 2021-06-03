@@ -58,6 +58,10 @@ public:
     //    ==== flying body ====
     double mass_init;
     double ballistic_coef = 0.0;
+    //    ==== air density variation ====
+    bool air_density_file_exist;
+    string air_density_file_name;
+    MatrixXd air_density_mat;       // [altitude[m], air density variation[percent]]
     //    ==== wind ====
     bool wind_file_exist;
     string wind_file_name;
@@ -261,6 +265,9 @@ public:
         variation_ratio_of_air_density = obj.variation_ratio_of_air_density;
         mass_init = obj.mass_init;
         ballistic_coef = obj.ballistic_coef;
+        air_density_file_exist = obj.air_density_file_exist;
+        air_density_file_name = obj.air_density_file_name;
+        air_density_mat = obj.air_density_mat;
         wind_file_exist = obj.wind_file_exist;
         wind_file_name = obj.wind_file_name;
         wind_const = obj.wind_const;
