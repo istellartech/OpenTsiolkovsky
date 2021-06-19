@@ -138,11 +138,11 @@ def radius_visible(altitude, invalid_angle_deg = 3):
 
 if __name__ == '__main__':
     # ==== USER INPUT ====
-    # 源泉: MOMO 地上局アンテナゲイン 461MHz
+    # 源泉: MOMO 地上局アンテナゲイン UHF
     antenna_lat =  42.5039248 # 地上局位置　緯度 (deg)
     antenna_lon = 143.44954216 # 地上局位置　経度 (deg)
     antenna_alt = 25.0 # 地上局　高度 (m)
-    cutoff_time = 1.0 # IIP分散算出のためのエンジンカットオフ時間
+    cutoff_time = 2.0 # IIP分散算出のためのエンジンカットオフ時間
     invalid_angle_deg = 3.0 # 可視範囲計算のための可視仰角の下限値 (deg)
     # ==== USER INPUT ====
 

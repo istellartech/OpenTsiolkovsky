@@ -67,7 +67,7 @@ if __name__ == "__main__":
     filename_inertia = nominal_json["stage1"]["6DoF"]["moment of inertia file name(str)"]
     filename_cgxt = nominal_json["stage1"]["attitude neutrality(3DoF)"]["CG, Controller position file(str)"]
     df_inertia = pd.read_csv(filename_inertia, index_col=False)
-    inertia_yy_at = scipy.interpolate.interp1d(df_inertia["time"], df_inertia["inertia all at CG [kgm^2]"])
+    inertia_yy_at = scipy.interpolate.interp1d(df_inertia["time [s]"], df_inertia["inertia all at CG [kgm^2]"])
     df_cgxt = pd.read_csv(filename_cgxt, index_col=False)
     length_cg2cont = df_cgxt["Controller_pos_STA[m]"].values - df_cgxt["CG_pos_STA[m]"].values
     length_cg2cont_at = scipy.interpolate.interp1d(df_cgxt["time[s]"], length_cg2cont)
