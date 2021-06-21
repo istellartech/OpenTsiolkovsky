@@ -3,6 +3,8 @@
     "calculate condition": {
         "end time[s]": 1000,
         "time step for output[s]": 1,
+        "air density variation file exist?(bool)": false,
+        "air density variation file name(str)": "sample/air_density.csv",
         "variation ratio of air density[%](-100to100, default=0)": 0.0
     },
     "launch": {
@@ -47,8 +49,12 @@
             "attitude file name(str)": "sample/attitude.csv",
             "const elevation[deg]": 83.0,
             "const azimuth[deg]": 113,
-            "elevation offset[deg]": 0.0,
-            "azimuth offset[deg]": 0.0
+            "pitch offset[deg]": 0.0,
+            "yaw offset[deg]": 0.0,
+            "roll offset[deg]": 0.0,
+            "gyro bias x[deg/h]": 0.0,
+            "gyro bias y[deg/h]": 0.0,
+            "gyro bias z[deg/h]": 0.0
         },
         "dumping product": {
             "dumping product exist?(bool)" : false,
