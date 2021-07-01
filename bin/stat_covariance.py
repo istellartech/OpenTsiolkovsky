@@ -1,31 +1,42 @@
-#!/usr/bin/python
-import numpy as np
+#!/usr/bin/python3
 import pandas as pd
+import numpy as np
 import os
 import json
 import sys
 import multiprocessing as mp
 import math
 from collections import OrderedDict
+import time as pytime
 
 def read_data_points(arg):
     [id_proc, Nproc, input_directory, input_file_template, number_of_sample, Nfetch, sample_points] = arg
 
-    fo_buff    = {k:OrderedDict() for k in sample_points.keys()}
-    fo_counter = {k:OrderedDict() for k in sample_points.keys()}
-    
+    time0 = pytime.time()
+
     shou  = int(number_of_sample/Nproc)
     amari = number_of_sample - shou * Nproc
     start_index = shou *  id_proc      + min(amari, id_proc)
     end_index   = shou * (id_proc + 1) + min(amari, id_proc + 1)
 
+    key_variable_names_all = []
+    for sample_point in sample_points:
+        key_variable_names_all.extend(sample_points[sample_point])        
+    key_variable_names_all = sorted(set(key_variable_names_all),key=key_variable_names_all.index)
+
+    dfs = OrderedDict({k:pd.DataFrame() for k in key_variable_names_all})
+
     for i in range(start_index, end_index):
         caseNo = i+1
         filename = input_file_template.format(caseNo)
+
+        time0 = pytime.time()
+
         os.system("aws s3 cp "+input_directory+filename+" . > /dev/null")
-        if id_proc == 0: print("{0:}/{1:}".format(caseNo, end_index))
+        if id_proc == 0: 
+            print("{0:}/{1:}".format(caseNo, end_index))
         #os.system("cp data/"+filename+" .") ######## FOR DEBUG##################
-        
+
         # format csv file to proper form
         fp = open(filename)
         ft = open("tmp_{}.csv".format(id_proc),"w")
@@ -33,67 +44,80 @@ def read_data_points(arg):
             ft.write(line.replace(",\n","\n"))
         fp.close()
         ft.close()
-        
+
+        #if id_proc == 0: 
+        #    print("DOWNLOADED  ID#{:2d} CASE#{:5d} : {:f}seconds".format(id_proc,caseNo,pytime.time() - time0)) #for benchmark
+
         # fetch data
-        df = pd.read_csv("tmp_{}.csv".format(id_proc))
-        for key_sample_point in sample_points.keys():
-            indicies    = OrderedDict()
-            key_samples = []
-            if key_sample_point == "all":
-                for time in df["time(s)"]:
-                    key_formatted = str(time)
-                    indicies[key_formatted] = time
-                    key_samples.append(key_formatted)
+        time0 = pytime.time()
+        df = pd.read_csv("tmp_{}.csv".format(id_proc),usecols=["time(s)"].extend(key_variable_names_all))
+
+        for key_variable_name in key_variable_names_all:
+
+            if dfs[key_variable_name].empty:
+                dfs[key_variable_name] = df.loc[:,["time(s)",key_variable_name]]
             else:
-                if key_sample_point == "landing_time":
-                    indicies[key_sample_point] = -1
-                else:
-                    indicies[key_sample_point] = int(key_sample_point)
-                key_samples = [key_sample_point]
+                dfs[key_variable_name] = pd.merge(dfs[key_variable_name], df.loc[:,["time(s)",key_variable_name]], on="time(s)", how="outer")
 
-            for key_sample in key_samples:
-                if not key_sample in fo_buff[key_sample_point]:
-                    fo_buff[key_sample_point][key_sample] = {"high":OrderedDict(), "low":OrderedDict()}
-                    for key_variable_name in sample_points[key_sample_point]:
-                        fo_buff[key_sample_point][key_sample]["high"][key_variable_name] = []
-                        fo_buff[key_sample_point][key_sample]["low"][key_variable_name] = []
-                    fo_counter[key_sample_point][key_sample] = 0
-                fo_counter[key_sample_point][key_sample] += 1
-                       
-                index = indicies[key_sample]
-                for key_variable_name in sample_points[key_sample_point]:
-                    if len(fo_buff[key_sample_point][key_sample]["high"][key_variable_name]) > Nfetch:
-                        fo_buff[key_sample_point][key_sample]["high"][key_variable_name][0] = df.pipe(lambda df: df[df["time(s)"] == index]).iloc[0][key_variable_name]
-                    else:
-                        fo_buff[key_sample_point][key_sample]["high"][key_variable_name].append(df.pipe(lambda df: df[df["time(s)"] == index]).iloc[0][key_variable_name])
-                    fo_buff[key_sample_point][key_sample]["high"][key_variable_name].sort()
-
-                    if len(fo_buff[key_sample_point][key_sample]["low"][key_variable_name]) > Nfetch:
-                        fo_buff[key_sample_point][key_sample]["low"][key_variable_name][Nfetch] = df.pipe(lambda df: df[df["time(s)"] == index]).iloc[0][key_variable_name]
-                    else:
-                        fo_buff[key_sample_point][key_sample]["low"][key_variable_name].append(df.pipe(lambda df: df[df["time(s)"] == index]).iloc[0][key_variable_name])
-                    fo_buff[key_sample_point][key_sample]["low"][key_variable_name].sort()
-    
         # remove temporary csv
         os.system("rm "+filename)
         os.system("rm tmp_{}.csv".format(id_proc))
 
-    return [fo_buff, fo_counter]
+    return dfs
+
+def fetch_stat(src, fetch_mode, number_of_sample, Nfetch, probability):
+    src2 = sorted(src.dropna())
+    Nsample = len(src2)
+    ret = [0,0]
+    if fetch_mode == "constant":
+        if Nsample < Nfetch:
+            ret[0] = np.nan
+            ret[1] = np.nan
+        else:
+            Nfetch_tmp = Nfetch -1
+            high_index = - Nfetch_tmp - 1
+            low_index  =   Nfetch_tmp
+            ret[0] = src2[high_index]
+            ret[1] = src2[low_index]
+    elif fetch_mode == "constant high":
+        if Nsample < Nfetch:
+            ret[0] = np.nan
+            ret[1] = np.nan
+        else:
+            Nfetch_tmp = Nfetch -1
+            high_index = - Nfetch_tmp - 1
+            low_index  =   Nfetch_tmp - (number_of_sample - Nsample)
+            ret[0] = src2[high_index]
+            if low_index < 0:
+                ret[1] = np.nan
+            else:
+                ret[1] = src2[low_index]
+    else: #variable
+        Nfetch_tmp = math.ceil(Nsample * probability)
+        Nfetch_tmp = int((Nsample - Nfetch_tmp)/2.0)
+        high_index = - Nfetch_tmp - 1
+        low_index  =   Nfetch_tmp
+        ret[0] = src2[high_index]
+        ret[1] = src2[low_index]       
+        
+    return ret
 
 if __name__ == "__main__":
     #Nproc = 2
+    start_time = pytime.time()
     Nproc = mp.cpu_count()-1
     
     stat_input = "covariance.json"
     
     print("IST COVARIANCE MAKER")
     print("libraries load done.")
-    
+
+
     argv = sys.argv
     if len(argv) > 1:
         otmc_mission_name = argv[1]
     else:
-        print "PLEASE INPUT mission_name as the command line argument."
+        print( "PLEASE INPUT mission_name as the command line argument.")
         exit()
 
     os.system("aws s3 cp s3://otmc/{0:s}/raw/inp/mc.json .".format(otmc_mission_name))
@@ -127,7 +151,7 @@ if __name__ == "__main__":
     if      fetch_mode != "constant" \
         and fetch_mode != "constant high" \
         and fetch_mode != "variable":
-        print "ERROR: fetch mode must be 'constant', 'constant high' or 'variable'"
+        print ("ERROR: fetch mode must be 'constant', 'constant high' or 'variable'")
         exit(1)
     Nfetch = math.ceil(number_of_sample * probability)
     Nfetch = int((number_of_sample - Nfetch)/2.0) + 1
@@ -139,6 +163,7 @@ if __name__ == "__main__":
     pool.terminate()
     pool.close()
 
+
 #    # debug
 #    read_data_points(args[0])
 #    exit()
@@ -147,94 +172,58 @@ if __name__ == "__main__":
 #    id_proc = 0
 #    callback = [read_data_points((id_proc, Nproc, input_directory, input_file_template, number_of_sample, Nfetch, sample_points))]
 
-    # join them
-    fo_buff    = {k:OrderedDict() for k in sample_points.keys()}
-    fo_counter = {k:OrderedDict() for k in sample_points.keys()}
-    for id_proc in range(Nproc):
-        fo_buff_sub    = callback[id_proc][0]
-        fo_counter_sub = callback[id_proc][1]
-        for key_sample_point in sample_points.keys():
-            for key_sample in fo_buff_sub[key_sample_point].keys():
-                if not key_sample in fo_counter[key_sample_point]:
-                    fo_counter[key_sample_point][key_sample] = 0
-                    fo_buff[key_sample_point][key_sample] = {"high":OrderedDict(), "low":OrderedDict()}
-                    for key_variable_name in sample_points[key_sample_point]:
-                        fo_buff[key_sample_point][key_sample]["high"][key_variable_name] = []
-                        fo_buff[key_sample_point][key_sample]["low"][key_variable_name] = []
-
-                fo_counter[key_sample_point][key_sample] += fo_counter_sub[key_sample_point][key_sample]
+    print('loading complete. time: {:f} second'.format(pytime.time()-start_time))
 
 
-                for key_variable_name in fo_buff_sub[key_sample_point][key_sample]["low"].keys():
-                    fo_buff[key_sample_point][key_sample]["high"][key_variable_name].extend(\
-                            fo_buff_sub[key_sample_point][key_sample]["high"][key_variable_name])
-                    fo_buff[key_sample_point][key_sample]["low" ][key_variable_name].extend(\
-                            fo_buff_sub[key_sample_point][key_sample]["low" ][key_variable_name])
-
-                    fo_buff[key_sample_point][key_sample]["high"][key_variable_name].sort()
-                    fo_buff[key_sample_point][key_sample]["low" ][key_variable_name].sort()
-
-    ########### WRITE OUT covariance_*.csv ########################################################
     for key_sample_point in sample_points.keys():
-        fo = open("output/covariance_" + key_sample_point + ".csv","w")
 
-        # title
-        fo.write("sample point")
-        for key_variable_name in sample_points[key_sample_point]:
-            fo.write("," + key_variable_name + "_high")
-            fo.write("," + key_variable_name + "_low")
-        fo.write("\n")
+        df_out = pd.DataFrame()
+       
+        # join them
+        key_variable_names = sample_points[key_sample_point]
+        dfs = OrderedDict({k:pd.DataFrame() for k in key_variable_names})
 
-        # main content 
-        key_samples = fo_buff[key_sample_point].keys()
-        if len(key_samples) > 1:
-            key_samples = sorted(key_samples, key=lambda x: float(x))
-            
-        for key_sample in key_samples:
-            if fetch_mode == "constant":
-                Nsample = fo_counter[key_sample_point][key_sample]
-                if Nsample < Nfetch:
-                    continue
-                Nfetch_tmp = Nfetch -1
-                high_index = - Nfetch_tmp - 1
-                low_index  =   Nfetch_tmp
+        for id_proc in range(Nproc):
 
-                fo.write(key_sample)
-                for key_variable_name in fo_buff[key_sample_point][key_sample]["low"].keys():
-                    fo.write("," + str(fo_buff[key_sample_point][key_sample]["high"][key_variable_name][high_index]))
-                    fo.write("," + str(fo_buff[key_sample_point][key_sample]["low" ][key_variable_name][low_index]))
-                fo.write("\n")
-            elif fetch_mode == "constant high":
-                Nsample = fo_counter[key_sample_point][key_sample]
-                if Nsample < Nfetch:
-                    continue
-                Nfetch_tmp = Nfetch -1
-                high_index = - Nfetch_tmp - 1
-                low_index  =   Nfetch_tmp - (number_of_sample - Nsample)
+            time0 = pytime.time()
 
-                fo.write(key_sample)
-                if low_index < 0:
-                    for key_variable_name in fo_buff[key_sample_point][key_sample]["low"].keys():
-                        fo.write("," + str(fo_buff[key_sample_point][key_sample]["high"][key_variable_name][high_index]))
-                        fo.write("," + str(NA_substitute))
+            for key_variable_name in dfs.keys():
+
+                df_proc = callback[id_proc][key_variable_name]
+
+                if dfs[key_variable_name].empty:
+                    dfs[key_variable_name] = df_proc
                 else:
-                    for key_variable_name in fo_buff[key_sample_point][key_sample]["low"].keys():
-                        fo.write("," + str(fo_buff[key_sample_point][key_sample]["high"][key_variable_name][high_index]))
-                        fo.write("," + str(fo_buff[key_sample_point][key_sample]["low" ][key_variable_name][low_index]))
-                fo.write("\n")
-            else: # variable
-                Nsample = fo_counter[key_sample_point][key_sample]
-                Nfetch_tmp = math.ceil(Nsample * probability)
-                Nfetch_tmp = int((Nsample - Nfetch_tmp)/2.0)
-                high_index = - Nfetch_tmp - 1
-                low_index  =   Nfetch_tmp
+                    dfs[key_variable_name] = pd.merge(dfs[key_variable_name], df_proc, on="time(s)", how="outer")
 
-                fo.write(key_sample)
-                for key_variable_name in fo_buff[key_sample_point][key_sample]["low"].keys():
-                    fo.write("," + str(fo_buff[key_sample_point][key_sample]["high"][key_variable_name][high_index]))
-                    fo.write("," + str(fo_buff[key_sample_point][key_sample]["low" ][key_variable_name][low_index]))
-                fo.write("\n")
+            #print("MERGE: {}, {:f} seconds".format(id_proc,pytime.time()-time0)) #for benchmark            
 
-        fo.close()
+        for key_variable_name in key_variable_names:
+            
+            time0 = pytime.time()
+            
+            if key_sample_point == "all":
+                df_src = dfs[key_variable_name].set_index("time(s)").T
+                df_stat = df_src.apply(lambda x:fetch_stat(x, fetch_mode, number_of_sample, Nfetch, probability)).T
+            elif key_sample_point == "landing_time":
+                df_src = dfs[key_variable_name].fillna(method='ffill').set_index("time(s)").T.iloc[-1,:]
+                df_stat = pd.DataFrame(fetch_stat(df_src, fetch_mode, number_of_sample, Nfetch, probability)).T
+            else:
+                df_src = dfs[key_variable_name].set_index("time(s)").T.loc[int(key_sample_point),:]
+                df_stat = pd.DataFrame(fetch_stat(df_src, fetch_mode, number_of_sample, Nfetch, probability)).T
+
+            df_stat.columns = [key_variable_name+"_high", key_variable_name+"_low"]
+            
+
+            if df_out.empty:
+                df_out = df_stat
+            else:
+                df_out = df_out.join(df_stat,how="outer")
+            
+            #print("STAT: {}, {:f} seconds".format(key_variable_name,pytime.time()-time0)) #for benchmark
+            
+        df_out.to_csv("./output/covariance_{}.csv".format(key_sample_point))
 
     os.system("aws s3 cp output s3://otmc/{0:s}/stat/output/ --exclude '*' --include 'covariance_*.csv' --recursive".format(otmc_mission_name))
+
+    print('calculation complete. time: {:f} second'.format(pytime.time()-start_time))
