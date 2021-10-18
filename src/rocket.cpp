@@ -817,7 +817,7 @@ void RocketStage::power_flight_3dof(const RocketStage::state& x, double t){
             && term_yaw < 1 && term_yaw > -1
             && term_pitch < 1 && term_pitch > -1 ) {
         gimbal_angle_yaw_0 = asin(term_yaw) - atan2(dYt, dXt);
-        gimbal_angle_pitch = asin(term_pitch) - atan2(dYt, dXt);
+        gimbal_angle_pitch = asin(term_pitch) - atan2(dZt, dXt);
         if ( gimbal_angle_yaw_0 < pi/2 && gimbal_angle_yaw_0 > -pi/2
                 && gimbal_angle_pitch < pi/2 && gimbal_angle_pitch > -pi/2 ) {
             // Consider the compound angle
