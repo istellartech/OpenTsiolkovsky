@@ -1021,7 +1021,9 @@ void CsvObserver::operator()(const state& x, double t){
     // === following code is different from RocketStage::operator() ===
     accBODY_ = dcmECI2BODY_ * (accECI_ -  gravityECI_);
     downrange = distance_surface(launch_pos_LLH, posLLH_);
-    posLLH_IIP_ = posLLH_IIP(t, posECI_, vel_ECEF_NEDframe_);
+    Vector3d posECEF_ = dcmECI2ECEF_ * posECI_;
+    Vector3d vel_ECEF_ECEFframe_ = dcmNED2ECEF_ * vel_ECEF_NEDframe_;
+    posLLH_IIP_ = posLLH_IIP(posECEF_, vel_ECEF_ECEFframe_);
     kinematic_energy = 0.5 * x[0] * vel_ECEF_NEDframe_.norm() * vel_ECEF_NEDframe_.norm();
     gravity_vector = dcmECI2NED_ * gravityECI_;
 

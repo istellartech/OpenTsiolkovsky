@@ -256,22 +256,106 @@ double distance_surface(Vector3d pos0_LLH_, Vector3d pos1_LLH_){
 }
 
 // その時刻でのIIP（瞬間落下地点）をLLHで出力
-Vector3d posLLH_IIP(double t, Vector3d posECI_, Vector3d vel_ECEF_NEDframe_){
-    double g0 = 9.80665;
-    Matrix3d dcmECI2ECEF_ = dcmECI2ECEF(t);
-    Vector3d posLLH_ = posLLH(posECEF(dcmECI2ECEF_, posECI_));
-    Matrix3d dcmNED2ECI_ = dcmECI2NED(dcmECEF2NED(posLLH_), dcmECI2ECEF_).transpose();
-    double vel_north_ = vel_ECEF_NEDframe_(0);
-    double vel_east_ = vel_ECEF_NEDframe_(1);
-    double vel_up_ = - vel_ECEF_NEDframe_(2);
-    double h = posLLH_(2);
-    double tau = 1.0 / g0 * (vel_up_ + sqrt(vel_up_ * vel_up_ + 2 * h * g0));
-    Vector3d dist_IIP_from_now_NED;
-    Vector3d posECI_IIP_;
-    Vector3d posECEF_IIP_;
-    dist_IIP_from_now_NED << vel_north_ * tau, vel_east_ * tau, h;
-    posECI_IIP_ = posECI_ + dcmNED2ECI_ * dist_IIP_from_now_NED;
-    posECEF_IIP_ = posECEF(dcmECI2ECEF(t), posECI_IIP_);
-    return posLLH(posECEF_IIP_);
+Vector3d posLLH_IIP(Vector3d posECEF_, Vector3d vel_ECEF_ECEFframe_){
+
+    int n_iter = 5;
+    double Ra = 6378137.0;
+    double f = 1.0 / 298.257223563;
+    double Rb = Ra * (1.0 - f);
+    double e2 = (Ra * Ra - Rb *Rb) / Ra / Ra;
+    double mu = 3.986004418e14;
+    double omega = 7.2921151467e-5;
+    Vector3d omegaVec_;
+    omegaVec_ << 0.0, 0.0, omega;
+
+    // (v)-(A): The distance frome the center of the Earth ellipsoid to the launch point (the initial approximation of r_k1, k=1)
+    double r_k1 = Rb;
+   
+    // (v)-(B): The radial distance from the geocenter to the launch vehicle position
+    Vector3d posECI_init_ = posECEF_;
+    double r0 = posECI_init_.norm();
+    if (r0 < r_k1) // then tha launch vehicle position is below the Earth's surface and an impact point cannot be computed
+        return Vector3d::Zero();      // no solution
+    
+    // (v)-(C): The inertial velocity compoents
+    Vector3d velECI_init_ = vel_ECEF_ECEFframe_ + omegaVec_.cross(posECEF_);
+    // (v)-(D): The magnitude of the inertial velocity vector
+    double v0 = velECI_init_.norm();
+    
+    // (v)-(E): The eccentricity of the trajectory ellipse multiplied by the cosine of the eccentric anomaly at epoch
+    double eps_cos = (r0 * v0 * v0 / mu) - 1.0;
+    
+    // (v)-(F): The semi-major axis of the trajectory ellipse
+    double a_t = r0 / (1 - eps_cos);
+    if (a_t <= 0.0) // then the trajectory orbit is not elliptical, but is hyperbolic or parabolic, and an impact point cannot be computed
+        return Vector3d::Zero();      // no solution
+    
+    // (v)-(G): The eccentricity of the trajectory ellipse multiplied by the sine of the eccentric anomaly at epoch
+    double eps_sin = posECI_init_.dot(velECI_init_) / sqrt(mu * a_t);
+    
+    // (v)-(H): The eccentricity of the trajectory ellipse squared 
+    double eps2 = eps_cos * eps_cos + eps_sin * eps_sin;
+    if (sqrt(eps2) <= 1.0 && a_t * (1 - sqrt(eps2)) - Ra >= 0.0) // then the trajectory perigee height is positive and an impact point cannot be computed
+        return Vector3d::Zero();      // no solution
+    
+    double eps_k_cos, eps_k_sin, delta_eps_k_cos, delta_eps_k_sin;
+    double fseries_2, gseries_2, Ek, Fk, Gk, r_k2, r_k1_tmp;
+    
+    for (int i=0; i<n_iter; i++){
+        // (v)-(I): The eccentricity of the trajectory ellipse multiplied by the cosine of the eccentric anomaly at impact
+        eps_k_cos = (a_t - r_k1) / a_t;
+        
+        // (v)-(J): The eccentricity of the trajectory ellipse multiplied by the sine of the eccentric anomaly at impact
+        if ((eps2 - eps_k_cos * eps_k_cos) < 0) // then the trajectory orbit does not intersect the Earth's surface and an impact point cannot be computed
+            return Vector3d::Zero();      // no solution
+        eps_k_sin = -sqrt(eps2 - eps_k_cos * eps_k_cos);
+        
+        // (v)-(K): The cosine of the difference between the eccentric anomaly at impact and epoch
+        delta_eps_k_cos = (eps_k_cos*eps_cos + eps_k_sin*eps_sin) / eps2;
+        
+        // (v)-(L): The sine of the difference between the eccentric anomaly at impact and epoch
+        delta_eps_k_sin = (eps_k_sin*eps_cos - eps_k_cos*eps_sin) / eps2;
+        
+        // (v)-(M): The f-series expansion of Kepler's equations
+        fseries_2 = (delta_eps_k_cos - eps_cos) / (1 - eps_cos);
+        // (v)-(N): The g-series expansion of Kepler's equations
+        gseries_2 = (delta_eps_k_sin + eps_sin - eps_k_sin) * sqrt(a_t*a_t*a_t / mu);
+        
+        // (v)-(O): The E,F,G coordinates at impact
+        Ek = fseries_2*posECI_init_[0] + gseries_2*velECI_init_[0];
+        Fk = fseries_2*posECI_init_[1] + gseries_2*velECI_init_[1];
+        Gk = fseries_2*posECI_init_[2] + gseries_2*velECI_init_[2];
+        
+        // (v)-(P): The approximated distance from the geocenter to the launch vehicle position at impact
+        r_k2 = Ra / sqrt((e2/(1 - e2))*(Gk/r_k1)*(Gk/r_k1) + 1);
+        
+        // (v)-(Q): Substituting and repeating
+        r_k1_tmp = r_k1;
+        r_k1 = r_k2;
+    }
+
+    // (v)-(Q): check convergence
+    if (abs(r_k1_tmp - r_k2) > 1.0) // then the iterative solution does not converge and an impact point does not meet the accuracy tolerance
+        return Vector3d::Zero();      // no solution
+    
+    // (v)-(R): The difference between the eccentric anomaly at impact and epoch
+    double delta_eps = atan2(delta_eps_k_sin, delta_eps_k_cos);
+    
+    // (v)-(S): The time of flight from epoch to impact
+    double time_sec = (delta_eps + eps_sin - eps_k_sin) * sqrt(a_t*a_t*a_t / mu);
+    
+    // (v)-(T): The geocentric latitude at impact
+    double phi_impact_tmp = asin(Gk / r_k2);
+    // (v)-(U): The geodetic latitude at impact
+    double phi_impact = atan2(tan(phi_impact_tmp), 1.0 - e2);
+    // (v)-(V): The East longitude at impact
+    double lambda_impact = atan2(Fk, Ek) - omega*time_sec;
+    
+    // finish: convert to posECEF_IIP_
+    // posECEF_IIP_ = coord_utils.CoordUtils([rad2deg(phi_impact), rad2deg(lammda_impact), 0]).ecef_origin
+    
+    Vector3d posIIP(phi_impact, lambda_impact, 0.0);
+    return posIIP * 180.0 / M_PI;
+
 }
 
