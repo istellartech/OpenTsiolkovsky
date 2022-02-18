@@ -1072,7 +1072,7 @@ void CsvObserver::operator()(const state& x, double t){
             << dcmBODY2ECI_(2, 0) << "," << dcmBODY2ECI_(2, 1) << "," << dcmBODY2ECI_(2, 2) << ","
             << int(velECI_.norm()) << "," << kinematic_energy << ","
             << loss_gravity << "," << loss_aerodynamics << "," << loss_thrust << ","
-            << is_powered << "," << is_separated << ","
+            << is_powered << "," << is_separated 
             << endl;
     }
     flag_duplicate = false;
