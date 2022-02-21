@@ -285,10 +285,11 @@ Vector3d posLLH_IIP(Vector3d posECEF_, Vector3d vel_ECEF_ECEFframe_){
     // (v)-(E): The eccentricity of the trajectory ellipse multiplied by the cosine of the eccentric anomaly at epoch
     double eps_cos = (r0 * v0 * v0 / mu) - 1.0;
     
+    if (eps_cos >= 1.0) // then the trajectory orbit is not elliptical, but is hyperbolic or parabolic, and an impact point cannot be computed
+        return Vector3d::Zero();      // no solution
+
     // (v)-(F): The semi-major axis of the trajectory ellipse
     double a_t = r0 / (1 - eps_cos);
-    if (a_t <= 0.0) // then the trajectory orbit is not elliptical, but is hyperbolic or parabolic, and an impact point cannot be computed
-        return Vector3d::Zero();      // no solution
     
     // (v)-(G): The eccentricity of the trajectory ellipse multiplied by the sine of the eccentric anomaly at epoch
     double eps_sin = posECI_init_.dot(velECI_init_) / sqrt(mu * a_t);
