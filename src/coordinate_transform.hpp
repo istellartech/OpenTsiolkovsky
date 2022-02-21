@@ -42,7 +42,7 @@ Vector3d vel_ECI_ECIframe(Matrix3d dcmNED2ECI_, Vector3d vel_ECEF_NEDframe_, Vec
 Vector3d posECI_init(Vector3d posLLH_);
 Vector3d velECI_init(Vector3d vel_ECEF_NEDframe_, Vector3d posLLH_);
 double distance_surface(Vector3d pos0_LLH, Vector3d pos1_LLH);
-Vector3d posLLH_IIP(double t, Vector3d posECI_, Vector3d vel_ECEF_NEDframe_);
+Vector3d posLLH_IIP(Vector3d posECEF_, Vector3d vel_ECEF_ECEFframe_);
 
 inline double deg2rad(double deg){
     return deg / 180.0 * pi;
