@@ -14,6 +14,8 @@
 #include "../lib/Eigen/Core"
 #include "../lib/Eigen/Geometry"
 
+#define EIGEN_MPL2_ONLY
+
 const double pi = 3.14159265358979323846;
 
 using namespace Eigen;

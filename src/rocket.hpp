@@ -25,6 +25,8 @@
 #include "fileio.hpp"
 #include "coordinate_transform.hpp"
 
+#define EIGEN_MPL2_ONLY
+
 using namespace Eigen;
 using namespace std;
 
