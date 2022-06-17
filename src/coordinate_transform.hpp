@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <iostream>
 #include "../lib/Eigen/Core"
+#include "../lib/Eigen/Geometry"
 
 const double pi = 3.14159265358979323846;
 
