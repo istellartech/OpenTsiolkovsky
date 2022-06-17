@@ -16,8 +16,6 @@
 #include "../lib/Eigen/Core"
 #include "../lib/Eigen/Geometry"
 
-#define EIGEN_MPL2_ONLY
-
 using namespace std;
 using namespace Eigen;
 

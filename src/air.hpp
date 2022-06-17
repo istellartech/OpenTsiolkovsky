@@ -13,8 +13,6 @@
 #include <vector>
 #include "../lib/Eigen/Core"
 
-#define EIGEN_MPL2_ONLY
-
 using namespace std;
 using namespace Eigen;
 

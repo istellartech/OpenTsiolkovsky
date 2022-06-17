@@ -20,8 +20,6 @@
 #include "../lib/Eigen/Core"
 #include "../lib/csv.h"
 
-#define EIGEN_MPL2_ONLY
-
 using namespace std;
 using namespace Eigen;
 

@@ -21,8 +21,6 @@
 #include "fileio.hpp"
 #include "Orbit.hpp"
 
-#define EIGEN_MPL2_ONLY
-
 using namespace std;
 using namespace Eigen;
 using namespace boost::numeric::odeint;
