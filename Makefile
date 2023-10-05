@@ -7,7 +7,12 @@ ifeq ($(UNAME_S),Linux)
 endif
 ifeq ($(UNAME_S),Darwin)
 	# OSX
+ifneq ($(shell which brew),)
+	# Homebrew
+	INCPATHS += $(shell brew --prefix boost)/include
+else
 	INCPATHS += /opt/local/include
+endif
 endif
 ifneq ($(filter MINGW64%, $(UNAME_S)),)
 	# MinGW64
