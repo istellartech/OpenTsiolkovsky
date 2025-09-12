@@ -134,6 +134,7 @@ rust/*_trajectory.csv
 rust/*_summary.json
 rust/test_result*
 rust/sample_result*
+rust/test_*.json
 
 # WebAssembly build artifacts
 rust/pkg/

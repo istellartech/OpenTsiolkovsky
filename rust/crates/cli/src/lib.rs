@@ -1,1 +1,6 @@
-// CLI and WASM modules will be implemented later
+// Re-export core types for convenience
+pub use openTsiolkovsky_core::*;
+
+// WASM module - conditionally compiled
+#[cfg(feature = "wasm")]
+pub mod wasm;

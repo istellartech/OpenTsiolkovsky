@@ -34,8 +34,8 @@ OBJS += $(SRCDIR)/gravity.o
 OBJS += $(SRCDIR)/Orbit.o
 OBJS += $(SRCDIR)/coordinate_transform.o
 CC = g++
-CFLAGS = -O2 -std=gnu++11 -DEIGEN_MPL2_ONLY
-# CFLAGS = -g -Wall -O0 -std=gnu++11 -DEIGEN_MPL2_ONLY
+CFLAGS = -O2 -std=gnu++14 -DEIGEN_MPL2_ONLY
+# CFLAGS = -g -Wall -O0 -std=gnu++14 -DEIGEN_MPL2_ONLY
 LDLIBS = -lpthread
 
 .SUFFIXES: .c .o

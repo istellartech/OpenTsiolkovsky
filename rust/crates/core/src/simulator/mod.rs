@@ -110,6 +110,11 @@ impl Simulator {
         self.trajectory.clone()
     }
     
+    /// Get current simulation state
+    pub fn current_state(&self) -> &SimulationState {
+        &self.state
+    }
+    
     /// Single integration step
     pub fn step(&mut self, dt: f64) {
         // State vector: [mass, px, py, pz, vx, vy, vz]
@@ -254,7 +259,7 @@ impl Simulator {
         
         // Thrust direction in NED frame
         let dcm_ned_to_body = CoordinateTransform::dcm_ned_to_body(azimuth_rad, elevation_rad, None);
-        let thrust_ned = dcm_ned_to_body * Vector3::new(0.0, 0.0, -thrust_magnitude); // Thrust in -Z body direction
+        let thrust_ned = dcm_ned_to_body * Vector3::new(0.0, 0.0, thrust_magnitude); // Thrust in +Z body direction
         
         // Transform thrust to ECI frame
         let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
@@ -362,10 +367,6 @@ impl Simulator {
         dcm_ned_to_eci * aero_force_ned
     }
     
-    /// Get current state
-    pub fn current_state(&self) -> &SimulationState {
-        &self.state
-    }
 }
 
 #[cfg(test)]

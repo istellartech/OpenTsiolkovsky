@@ -17,8 +17,9 @@ js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", optional = true }
 console_error_panic_hook = { version = "0.1", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
+serde_json = { version = "1.0", optional = true }
 
 [features]
 default = ["cli"]
 cli = []
-wasm = ["wasm-bindgen", "js-sys", "web-sys", "console_error_panic_hook", "serde-wasm-bindgen"]
+wasm = ["wasm-bindgen", "js-sys", "web-sys", "console_error_panic_hook", "serde-wasm-bindgen", "serde_json"]

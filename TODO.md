@@ -100,7 +100,7 @@ C++で実装されているOpenTsiolkovskyロケット飛行シミュレータ�
   - [x] **Simulator構造体** - 設定・物理エンジン・積分器統合
   - [x] **ステップ実行** - step()メソッド、時間積分
 - [x] **Orbit.cpp軌道計算統合**
-  - [x] **3DoF飛行** - 質点運動方程式
+  - [ ] **3DoF飛行** - 質点運動方程式（推力方向問題修正中）
   - [ ] **6DoF飛行** - 剛体運動方程式（未実装）
   - [x] **段分離処理** - 状態量継承（基本実装）
 
@@ -127,15 +127,15 @@ C++で実装されているOpenTsiolkovskyロケット飛行シミュレータ�
 - [x] **エラーハンドリング** - ファイルエラー、計算エラー対応
 
 ### 5.2 WASM Bindgen対応
-- [ ] **wasm.rs実装** - WebAssembly向けインターフェース
-- [ ] **WasmSimulator構造体** - JavaScript API設計
-- [ ] **JSON入出力** - 設定・結果のJSON変換
-- [ ] **エラー変換** - Rust Error → JsError
+- [x] **wasm.rs実装** - WebAssembly向けインターフェース
+- [x] **WasmSimulator構造体** - JavaScript API設計
+- [x] **JSON入出力** - 設定・結果のJSON変換
+- [x] **エラー変換** - Rust Error → JsError
 
 ### 5.3 ビルド設定
-- [ ] **Cargo.toml設定** - crate-type = ["cdylib"], wasm-bindgen features
-- [ ] **ビルドスクリプト** - wasm-pack使用
-- [ ] **型定義生成** - TypeScript型定義ファイル
+- [x] **Cargo.toml設定** - crate-type = ["cdylib"], wasm-bindgen features
+- [x] **ビルドスクリプト** - wasm-pack使用
+- [x] **型定義生成** - TypeScript型定義ファイル
 
 ---
 
