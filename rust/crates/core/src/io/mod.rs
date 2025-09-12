@@ -2,7 +2,7 @@
 /// 
 /// Handles JSON configuration files and CSV data files
 
-use crate::rocket::{RocketConfig, TimeSeriesData, Rocket};
+use crate::rocket::{RocketConfig, TimeSeriesData, SurfaceData2D, Rocket};
 use crate::simulator::SimulationState;
 use serde_json;
 use std::fs;
@@ -38,7 +38,7 @@ pub fn load_csv_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64)>> {
     for result in reader.records() {
         let record = result?;
         if record.len() >= 2 {
-            if let (Ok(time), Ok(value)) = (record[0].parse::<f64>(), record[1].parse::<f64>()) {
+            if let (Ok(time), Ok(value)) = (record[0].trim().parse::<f64>(), record[1].trim().parse::<f64>()) {
                 data.push((time, value));
             }
         }
@@ -60,6 +60,67 @@ pub fn load_time_series<P: AsRef<Path>>(path: P) -> Result<TimeSeriesData> {
     Ok(ts)
 }
 
+/// Load CN 2D surface from special 15-column CSV (first row: angles, first col: Mach)
+pub fn load_cn_surface<P: AsRef<Path>>(path: P) -> Result<SurfaceData2D> {
+    let content = std::fs::read_to_string(path)?;
+    let mut rows: Vec<Vec<f64>> = Vec::new();
+    for (li, line) in content.lines().enumerate() {
+        let mut vals: Vec<f64> = Vec::new();
+        for token in line.split(',') {
+            let t = token.trim();
+            if t.is_empty() {
+                vals.push(0.0);
+            } else {
+                match t.parse::<f64>() {
+                    Ok(v) => vals.push(v),
+                    Err(_) => {
+                        // if header like "mach[-]" etc; skip line
+                        vals.clear();
+                        break;
+                    }
+                }
+            }
+        }
+        if !vals.is_empty() {
+            // Ensure exactly 15 columns when possible; pad or truncate
+            if vals.len() > 15 { vals.truncate(15); }
+            if vals.len() < 15 { vals.resize(15, *vals.last().unwrap_or(&0.0)); }
+            rows.push(vals);
+        } else if li == 0 {
+            // If the first row is non-numeric header, continue
+            continue;
+        }
+    }
+
+    if rows.len() < 3 { // need at least header+2 rows
+        return Err(IoError::FileRead(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "CN surface CSV too short",
+        )));
+    }
+
+    // First row (row 0): angles in columns 1..=
+    let mut y: Vec<f64> = rows[0][1..].to_vec();
+    // Some files may duplicate last value; ensure ascending by making non-decreasing
+    for k in 1..y.len() { if y[k] < y[k-1] { y[k] = y[k-1]; } }
+
+    // Remaining rows: x = Mach in col 0, z row = columns 1..
+    let mut x: Vec<f64> = Vec::new();
+    let mut z: Vec<Vec<f64>> = Vec::new();
+    for r in rows.iter().skip(1) {
+        x.push(r[0]);
+        z.push(r[1..].to_vec());
+    }
+
+    // Ensure ascending x as well
+    let mut idx: Vec<usize> = (0..x.len()).collect();
+    idx.sort_by(|&i, &j| x[i].partial_cmp(&x[j]).unwrap());
+    let x_sorted: Vec<f64> = idx.iter().map(|&i| x[i]).collect();
+    let z_sorted: Vec<Vec<f64>> = idx.iter().map(|&i| z[i].clone()).collect();
+
+    Ok(SurfaceData2D { x: x_sorted, y, z: z_sorted })
+}
+
 /// Load attitude data from CSV file (time, azimuth, elevation)
 pub fn load_attitude_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)>> {
     let mut reader = csv::Reader::from_path(path)?;
@@ -69,9 +130,9 @@ pub fn load_attitude_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)
         let record = result?;
         if record.len() >= 3 {
             if let (Ok(time), Ok(azimuth), Ok(elevation)) = (
-                record[0].parse::<f64>(),
-                record[1].parse::<f64>(),
-                record[2].parse::<f64>()
+                record[0].trim().parse::<f64>(),
+                record[1].trim().parse::<f64>(),
+                record[2].trim().parse::<f64>()
             ) {
                 data.push((time, azimuth, elevation));
             }
@@ -90,9 +151,9 @@ pub fn load_wind_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)>> {
         let record = result?;
         if record.len() >= 3 {
             if let (Ok(altitude), Ok(speed), Ok(direction)) = (
-                record[0].parse::<f64>(),
-                record[1].parse::<f64>(),
-                record[2].parse::<f64>()
+                record[0].trim().parse::<f64>(),
+                record[1].trim().parse::<f64>(),
+                record[2].trim().parse::<f64>()
             ) {
                 data.push((altitude, speed, direction));
             }
@@ -122,11 +183,17 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
         }
     }
     
-    // Load CN coefficient data if file exists
+    // Load CN coefficient data if file exists (prefer 2D surface)
     if rocket.config.stage1.aero.cn_file_exists {
         let cn_path = base.join(&rocket.config.stage1.aero.cn_file_name);
         if cn_path.exists() {
-            rocket.cn_data = Some(load_time_series(cn_path)?);
+            match load_cn_surface(&cn_path) {
+                Ok(s) => rocket.cn_surface = Some(s),
+                Err(_) => {
+                    // Fallback to 1D timeseries if parsing as surface fails
+                    rocket.cn_data = Some(load_time_series(cn_path)?);
+                }
+            }
         }
     }
     

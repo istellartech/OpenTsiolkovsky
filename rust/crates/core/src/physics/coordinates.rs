@@ -200,8 +200,8 @@ impl CoordinateTransform {
             return Vector3::zeros();
         }
         
-        let alpha = (vel_air_body.z / vel_air_body.x).atan();
-        let beta = (vel_air_body.y / vel_air_body.x).atan();
+        let alpha = (vel_air_body.z / vel_air_body.x).atan();  // pitch AoA
+        let beta = (vel_air_body.y / vel_air_body.x).atan();   // yaw sideslip
         
         Vector3::new(alpha, beta, 0.0)
     }
@@ -230,6 +230,19 @@ impl CoordinateTransform {
         );
         
         vel_ecef + omega_cross_r
+    }
+
+    /// Surface distance between two LLH points using ECEF chord angle
+    pub fn distance_surface(pos_llh0: &Vector3<f64>, pos_llh1: &Vector3<f64>) -> f64 {
+        let pos0_ecef = Self::pos_llh_to_ecef(pos_llh0);
+        let pos1_ecef = Self::pos_llh_to_ecef(pos_llh1);
+        let dot = pos0_ecef.dot(&pos1_ecef);
+        let n0 = pos0_ecef.magnitude();
+        let n1 = pos1_ecef.magnitude();
+        if n0 <= 0.0 || n1 <= 0.0 { return 0.0; }
+        let cos_theta = (dot / (n0 * n1)).clamp(-1.0, 1.0);
+        let theta = cos_theta.acos();
+        WGS84_A * theta
     }
 }
 

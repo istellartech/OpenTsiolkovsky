@@ -5,6 +5,100 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 2D surface data for bilinear interpolation (e.g., CN(Mach, alpha_deg))
+#[derive(Debug, Clone)]
+pub struct SurfaceData2D {
+    pub x: Vec<f64>,      // primary axis (e.g., Mach), length M (ascending)
+    pub y: Vec<f64>,      // secondary axis (e.g., angle [deg]), length N (ascending)
+    pub z: Vec<Vec<f64>>, // M x N grid values
+}
+
+impl SurfaceData2D {
+    pub fn interpolate(&self, xv: f64, yv: f64) -> f64 {
+        let m = self.x.len();
+        let n = self.y.len();
+        if m == 0 || n == 0 { return 0.0; }
+
+        // Find x indices (clamped)
+        let mut i = 0usize;
+        while i + 1 < m && xv > self.x[i + 1] { i += 1; }
+        if i + 1 >= m { i = m - 2; }
+        if xv < self.x[0] { i = 0; }
+        let x0 = self.x[i];
+        let x1 = self.x[i + 1];
+        let tx = if (x1 - x0).abs() < 1e-12 { 0.0 } else { (xv - x0) / (x1 - x0) };
+
+        // Find y indices (clamped)
+        let mut j = 0usize;
+        while j + 1 < n && yv > self.y[j + 1] { j += 1; }
+        if j + 1 >= n { j = n - 2; }
+        if yv < self.y[0] { j = 0; }
+        let y0 = self.y[j];
+        let y1 = self.y[j + 1];
+        let ty = if (y1 - y0).abs() < 1e-12 { 0.0 } else { (yv - y0) / (y1 - y0) };
+
+        // Bilinear interpolation
+        let z00 = self.z[i][j];
+        let z10 = self.z[i + 1][j];
+        let z01 = self.z[i][j + 1];
+        let z11 = self.z[i + 1][j + 1];
+        let z0 = z00 + (z10 - z00) * tx;
+        let z1 = z01 + (z11 - z01) * tx;
+        z0 + (z1 - z0) * ty
+    }
+
+    /// Interpolate with C++-compatible triangular scheme (interp_matrix_2d)
+    pub fn interpolate_cxx(&self, mach: f64, alpha_deg: f64) -> f64 {
+        let m = self.x.len();
+        let n = self.y.len();
+        if m < 2 || n < 2 { return 0.0; }
+
+        // Clamp into bounds (C++版は範囲外エラーだが、ここでは端値に丸める)
+        let mach_c = mach.clamp(self.x[0], self.x[m-1]);
+        let alpha_c = alpha_deg.clamp(self.y[0], self.y[n-1]);
+
+        // Find lower index for mach: i such that x[i] <= mach < x[i+1]
+        let mut i = 0usize;
+        for k in 1..m { if mach_c < self.x[k] { i = k-1; break; } i = (m-2).min(k-1); }
+        let x0 = self.x[i];
+        let x1 = self.x[i+1];
+        let d_mach = if (x1 - x0).abs() < 1e-12 { 0.0 } else { (mach_c - x0) / (x1 - x0) };
+
+        // Find lower index for alpha: j such that y[j] <= alpha < y[j+1]
+        let mut j = 0usize;
+        for k in 1..n { if alpha_c < self.y[k] { j = k-1; break; } j = (n-2).min(k-1); }
+        let y0 = self.y[j];
+        let y1 = self.y[j+1];
+        let d_alpha = if (y1 - y0).abs() < 1e-12 { 0.0 } else { (alpha_c - y0) / (y1 - y0) };
+
+        // Sample corners
+        let f = |ii: usize, jj: usize| -> f64 { self.z[ii][jj] };
+
+        // C++の分割三角形補間に合わせる
+        if d_mach < 0.5 {
+            if d_alpha < 0.5 {
+                f(i,j)
+                    + (f(i+1,j) - f(i,j)) * d_mach
+                    + (f(i,j+1) - f(i,j)) * d_alpha
+            } else {
+                f(i,j+1)
+                    + (f(i+1,j+1) - f(i,j+1)) * d_mach
+                    + (f(i,j+1) - f(i,j)) * (d_alpha - 1.0)
+            }
+        } else {
+            if d_alpha < 0.5 {
+                f(i+1,j)
+                    + (f(i+1,j) - f(i,j)) * (d_mach - 1.0)
+                    + (f(i+1,j+1) - f(i+1,j)) * d_alpha
+            } else {
+                f(i+1,j+1)
+                    + (f(i+1,j+1) - f(i,j+1)) * (d_mach - 1.0)
+                    + (f(i+1,j+1) - f(i+1,j)) * (d_alpha - 1.0)
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RocketConfig {
     #[serde(rename = "name(str)")]
@@ -301,6 +395,7 @@ pub struct Rocket {
     pub thrust_data: Option<TimeSeriesData>,
     pub isp_data: Option<TimeSeriesData>,
     pub cn_data: Option<TimeSeriesData>,
+    pub cn_surface: Option<SurfaceData2D>,
     pub ca_data: Option<TimeSeriesData>,
     pub attitude_data: Option<Vec<(f64, f64, f64)>>, // (time, azimuth, elevation)
     pub wind_data: Option<Vec<(f64, f64, f64)>>, // (altitude, speed, direction)
@@ -313,6 +408,7 @@ impl Rocket {
             thrust_data: None,
             isp_data: None,
             cn_data: None,
+            cn_surface: None,
             ca_data: None,
             attitude_data: None,
             wind_data: None,
@@ -343,6 +439,18 @@ impl Rocket {
             data.interpolate(mach) * self.config.stage1.aero.normal_multiplier
         } else {
             self.config.stage1.aero.const_normal_coefficient
+        }
+    }
+
+    /// Get CN at given Mach and |angle| in degrees (like C++ interp_matrix_2d)
+    pub fn cn_at(&self, mach: f64, angle_deg_abs: f64) -> f64 {
+        if let Some(ref surf) = self.cn_surface {
+            let v = surf.interpolate_cxx(mach, angle_deg_abs.max(0.0));
+            v * self.config.stage1.aero.normal_multiplier
+        } else {
+            // Fallback: scale constant/1D CN by radians
+            let base = self.cn_at_mach(mach);
+            base * (angle_deg_abs.to_radians())
         }
     }
     

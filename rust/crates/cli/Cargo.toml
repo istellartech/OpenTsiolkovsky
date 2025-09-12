@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 openTsiolkovsky-core = { path = "../core" }
 clap = { version = "4.4", features = ["derive"] }
 thiserror = "1.0"
+csv = { workspace = true }
 wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", optional = true }

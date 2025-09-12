@@ -649,6 +649,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "console_error_panic_hook",
+ "csv",
  "js-sys",
  "openTsiolkovsky-core",
  "serde-wasm-bindgen",
