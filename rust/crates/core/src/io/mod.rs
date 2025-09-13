@@ -60,9 +60,30 @@ pub fn load_time_series<P: AsRef<Path>>(path: P) -> Result<TimeSeriesData> {
     Ok(ts)
 }
 
+/// Parse time-series CSV from string content
+pub fn parse_time_series_from_str(content: &str) -> Result<TimeSeriesData> {
+    let mut rdr = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
+    let mut ts = TimeSeriesData::new();
+    for result in rdr.records() {
+        let record = result?;
+        if record.len() >= 2 {
+            if let (Ok(time), Ok(value)) = (record[0].trim().parse::<f64>(), record[1].trim().parse::<f64>()) {
+                ts.time.push(time);
+                ts.values.push(value);
+            }
+        }
+    }
+    Ok(ts)
+}
+
 /// Load CN 2D surface from special 15-column CSV (first row: angles, first col: Mach)
 pub fn load_cn_surface<P: AsRef<Path>>(path: P) -> Result<SurfaceData2D> {
     let content = std::fs::read_to_string(path)?;
+    parse_cn_surface_from_str(&content)
+}
+
+/// Parse CN 2D surface from CSV string content
+pub fn parse_cn_surface_from_str(content: &str) -> Result<SurfaceData2D> {
     let mut rows: Vec<Vec<f64>> = Vec::new();
     for (li, line) in content.lines().enumerate() {
         let mut vals: Vec<f64> = Vec::new();
@@ -142,6 +163,25 @@ pub fn load_attitude_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)
     Ok(data)
 }
 
+/// Parse attitude data CSV from string content (time, azimuth, elevation)
+pub fn parse_attitude_from_str(content: &str) -> Result<Vec<(f64, f64, f64)>> {
+    let mut reader = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
+    let mut data = Vec::new();
+    for result in reader.records() {
+        let record = result?;
+        if record.len() >= 3 {
+            if let (Ok(time), Ok(azimuth), Ok(elevation)) = (
+                record[0].trim().parse::<f64>(),
+                record[1].trim().parse::<f64>(),
+                record[2].trim().parse::<f64>()
+            ) {
+                data.push((time, azimuth, elevation));
+            }
+        }
+    }
+    Ok(data)
+}
+
 /// Load wind data from CSV file (altitude, wind_speed, wind_direction)
 pub fn load_wind_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)>> {
     let mut reader = csv::Reader::from_path(path)?;
@@ -160,6 +200,25 @@ pub fn load_wind_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)>> {
         }
     }
     
+    Ok(data)
+}
+
+/// Parse wind data CSV from string content (altitude, wind_speed, wind_direction)
+pub fn parse_wind_from_str(content: &str) -> Result<Vec<(f64, f64, f64)>> {
+    let mut reader = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
+    let mut data = Vec::new();
+    for result in reader.records() {
+        let record = result?;
+        if record.len() >= 3 {
+            if let (Ok(altitude), Ok(speed), Ok(direction)) = (
+                record[0].trim().parse::<f64>(),
+                record[1].trim().parse::<f64>(),
+                record[2].trim().parse::<f64>()
+            ) {
+                data.push((altitude, speed, direction));
+            }
+        }
+    }
     Ok(data)
 }
 
@@ -383,6 +442,15 @@ mod tests {
         assert_eq!(data[1], (10.0, 45.0, 85.0));
         assert_eq!(data[2], (20.0, 90.0, 80.0));
         
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_time_series_from_str() -> Result<()> {
+        let csv = "time,value\n0,10\n1,20\n2,30\n";
+        let ts = parse_time_series_from_str(csv)?;
+        assert_eq!(ts.time.len(), 3);
+        assert_eq!(ts.values[1], 20.0);
         Ok(())
     }
 }

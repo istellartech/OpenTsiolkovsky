@@ -1,8 +1,7 @@
 use wasm_bindgen::prelude::*;
 use openTsiolkovsky_core::{
-    Simulator, 
-    rocket::RocketConfig,
-    // simulator::SimulationState
+    Simulator,
+    rocket::{RocketConfig, Rocket},
 };
 // use serde_wasm_bindgen::{to_value, from_value};
 
@@ -39,7 +38,7 @@ impl WasmSimulator {
         let config: RocketConfig = serde_json::from_str(config_json)
             .map_err(|e| JsError::new(&format!("Failed to parse config JSON: {}", e)))?;
         
-        let simulator = Simulator::new(config)
+        let simulator = Simulator::new(Rocket::new(config))
             .map_err(|e| JsError::new(&format!("Failed to create simulator: {}", e)))?;
             
         Ok(WasmSimulator { inner: simulator })
