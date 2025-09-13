@@ -1,26 +1,27 @@
+use crate::math::{constants::G0, deg2rad, integrator::DormandPrince54};
+use crate::physics::{
+    atmosphere::AtmosphereModel, coordinates::CoordinateTransform, gravity::GravityModel,
+};
+use crate::rocket::{Rocket, RocketConfig};
 /// Main simulation engine
-/// 
+///
 /// This module will contain the core simulation logic
-
 use nalgebra::Vector3;
 use serde::{Deserialize, Serialize};
-use crate::rocket::{Rocket, RocketConfig};
-use crate::physics::{coordinates::CoordinateTransform, atmosphere::AtmosphereModel, gravity::GravityModel};
-use crate::math::{integrator::DormandPrince54, constants::G0, deg2rad};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationState {
     pub time: f64,
-    pub position: Vector3<f64>,     // ECI coordinates [m]
-    pub velocity: Vector3<f64>,     // ECI coordinates [m/s]
-    pub mass: f64,                  // [kg]
+    pub position: Vector3<f64>, // ECI coordinates [m]
+    pub velocity: Vector3<f64>, // ECI coordinates [m/s]
+    pub mass: f64,              // [kg]
     pub stage: u8,
-    pub altitude: f64,              // Altitude above sea level [m]
-    pub velocity_magnitude: f64,    // |velocity| [m/s]
-    pub mach_number: f64,           // Mach number [-]
-    pub dynamic_pressure: f64,      // Dynamic pressure [Pa]
-    pub thrust: f64,                // Current thrust [N]
-    pub drag_force: f64,            // Current drag force [N]
+    pub altitude: f64,           // Altitude above sea level [m]
+    pub velocity_magnitude: f64, // |velocity| [m/s]
+    pub mach_number: f64,        // Mach number [-]
+    pub dynamic_pressure: f64,   // Dynamic pressure [Pa]
+    pub thrust: f64,             // Current thrust [N]
+    pub drag_force: f64,         // Current drag force [N]
 }
 
 /// C++-compatible CSV row telemetry
@@ -85,10 +86,10 @@ pub struct Simulator {
 pub enum SimError {
     #[error("Configuration error: {0}")]
     Config(String),
-    
+
     #[error("Integration error: {0}")]
     Integration(String),
-    
+
     #[error("Physics error: {0}")]
     Physics(String),
 }
@@ -100,22 +101,22 @@ impl Simulator {
         let atmosphere = AtmosphereModel::new();
         let gravity = GravityModel::new();
         let integrator = DormandPrince54::new(1.0e-9, 1.0e-9, 1.0e-6, 10.0);
-        
+
         // Initialize state from launch conditions
         let pos_llh = Vector3::new(
             config.launch.position_llh[0],
-            config.launch.position_llh[1], 
-            config.launch.position_llh[2]
+            config.launch.position_llh[1],
+            config.launch.position_llh[2],
         );
         let vel_ned = Vector3::new(
             config.launch.velocity_ned[0],
             config.launch.velocity_ned[1],
-            config.launch.velocity_ned[2]
+            config.launch.velocity_ned[2],
         );
-        
+
         let position = CoordinateTransform::pos_eci_init(&pos_llh);
         let velocity = CoordinateTransform::vel_eci_init(&vel_ned, &pos_llh);
-        
+
         let state = SimulationState {
             time: 0.0,
             position,
@@ -129,7 +130,7 @@ impl Simulator {
             thrust: 0.0,
             drag_force: 0.0,
         };
-        
+
         Ok(Simulator {
             config,
             rocket,
@@ -144,7 +145,7 @@ impl Simulator {
             telemetry_cpp: Vec::new(),
         })
     }
-    
+
     /// Run full simulation
     pub fn run(&mut self) -> Vec<SimulationState> {
         self.trajectory.clear();
@@ -156,23 +157,27 @@ impl Simulator {
             let sub = 2u32;
             let h = dt_out / sub as f64;
             for _ in 0..sub {
-                if self.state.time >= end_time { break; }
+                if self.state.time >= end_time {
+                    break;
+                }
                 self.step(h);
             }
             self.trajectory.push(self.state.clone());
             // capture C++-compatible telemetry row for this output time
             let row = self.capture_cpp_row();
             self.telemetry_cpp.push(row);
-            if self.state.altitude <= 0.0 { break; }
+            if self.state.altitude <= 0.0 {
+                break;
+            }
         }
         self.trajectory.clone()
     }
-    
+
     /// Get current simulation state
     pub fn current_state(&self) -> &SimulationState {
         &self.state
     }
-    
+
     /// Single integration step
     pub fn step(&mut self, dt: f64) {
         // For backward compatibility in tests: perform a simple RK4 step
@@ -187,14 +192,16 @@ impl Simulator {
             self.state.velocity.y,
             self.state.velocity.z,
         ];
-        let new_state = rk4.integrate(&current_state, self.state.time, dt, |t, state| self.dynamics(t, state));
+        let new_state = rk4.integrate(&current_state, self.state.time, dt, |t, state| {
+            self.dynamics(t, state)
+        });
         self.state.time += dt;
         self.state.mass = new_state[0];
         self.state.position = Vector3::new(new_state[1], new_state[2], new_state[3]);
         self.state.velocity = Vector3::new(new_state[4], new_state[5], new_state[6]);
         self.update_derived_quantities();
     }
-    
+
     /// Update derived quantities for telemetry
     fn update_derived_quantities(&mut self) {
         let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&self.state.position, self.state.time);
@@ -207,7 +214,10 @@ impl Simulator {
         // Transform velocity into NED and compute air-relative values
         let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, self.state.time);
         let vel_ned = CoordinateTransform::vel_eci_to_ecef_ned_frame(
-            &self.state.position, &self.state.velocity, &dcm_eci_to_ned);
+            &self.state.position,
+            &self.state.velocity,
+            &dcm_eci_to_ned,
+        );
 
         // Wind
         let wind_ned = if let Some(ref wind_data) = self.rocket.wind_data {
@@ -223,14 +233,18 @@ impl Simulator {
                         ws = wind_data[i].1 + a * (wind_data[i + 1].1 - wind_data[i].1);
                         wd = wind_data[i].2 + a * (wind_data[i + 1].2 - wind_data[i].2);
                     } else {
-                        ws = wind_data[i].1; wd = wind_data[i].2;
+                        ws = wind_data[i].1;
+                        wd = wind_data[i].2;
                     }
                     break;
                 }
             }
             CoordinateTransform::vel_wind_ned_frame(ws, wd)
         } else {
-            CoordinateTransform::vel_wind_ned_frame(self.config.wind.const_wind[0], self.config.wind.const_wind[1])
+            CoordinateTransform::vel_wind_ned_frame(
+                self.config.wind.const_wind[0],
+                self.config.wind.const_wind[1],
+            )
         };
 
         let vel_air_ned = vel_ned - wind_ned;
@@ -238,15 +252,28 @@ impl Simulator {
 
         // Use air-relative speed for Mach/Q like C++
         self.state.velocity_magnitude = self.state.velocity.magnitude(); // keep ECI |v| for reference
-        self.state.mach_number = if atm.speed_of_sound > 0.0 { vel_air_mag / atm.speed_of_sound } else { 0.0 };
+        self.state.mach_number = if atm.speed_of_sound > 0.0 {
+            vel_air_mag / atm.speed_of_sound
+        } else {
+            0.0
+        };
         self.state.dynamic_pressure = 0.5 * atm.density * vel_air_mag.powi(2);
         self.last_dynamic_pressure = self.state.dynamic_pressure;
 
         // Burning window for thrust (C++同等)
         let t = self.state.time;
         let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end = self.config.stage1.thrust.burn_end_time.min(self.config.stage1.thrust.forced_cutoff_time);
-        self.state.thrust = if t >= burn_start && t < burn_end { self.rocket.thrust_at_time(t) } else { 0.0 };
+        let burn_end = self
+            .config
+            .stage1
+            .thrust
+            .burn_end_time
+            .min(self.config.stage1.thrust.forced_cutoff_time);
+        self.state.thrust = if t >= burn_start && t < burn_end {
+            self.rocket.thrust_at_time(t)
+        } else {
+            0.0
+        };
         self.last_thrust_magnitude = self.state.thrust;
 
         // Drag magnitude using CA(Mach)
@@ -256,29 +283,29 @@ impl Simulator {
         self.state.drag_force = ca * self.state.dynamic_pressure * reference_area;
         self.last_drag_magnitude = self.state.drag_force;
     }
-    
+
     /// System dynamics function
-    /// 
+    ///
     /// Computes derivatives: [dmass/dt, dpos/dt, dvel/dt]
     fn dynamics(&self, t: f64, state: &[f64]) -> Vec<f64> {
         // Extract state variables
         let mass = state[0];
         let position = Vector3::new(state[1], state[2], state[3]);
         let velocity = Vector3::new(state[4], state[5], state[6]);
-        
+
         // Convert to LLH for altitude calculation
         let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&position, t);
         let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
         let altitude = pos_llh.z;
-        
+
         // Atmospheric conditions
         let atm_conditions = self.atmosphere.conditions(altitude);
-        let air_density = atm_conditions.density;
         let speed_of_sound = atm_conditions.speed_of_sound;
 
         // Velocity analysis in air-relative NED frame
         let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
-        let velocity_ned = CoordinateTransform::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
+        let velocity_ned =
+            CoordinateTransform::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
         let wind_ned = if let Some(ref wind_data) = self.rocket.wind_data {
             let altitude = pos_llh.z;
             let mut wind_speed = 0.0;
@@ -289,7 +316,8 @@ impl Simulator {
                     if dt.abs() > 1e-10 {
                         let alpha = (altitude - wind_data[i].0) / dt;
                         wind_speed = wind_data[i].1 + alpha * (wind_data[i + 1].1 - wind_data[i].1);
-                        wind_direction = wind_data[i].2 + alpha * (wind_data[i + 1].2 - wind_data[i].2);
+                        wind_direction =
+                            wind_data[i].2 + alpha * (wind_data[i + 1].2 - wind_data[i].2);
                     } else {
                         wind_speed = wind_data[i].1;
                         wind_direction = wind_data[i].2;
@@ -299,43 +327,59 @@ impl Simulator {
             }
             CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_direction)
         } else {
-            CoordinateTransform::vel_wind_ned_frame(self.config.wind.const_wind[0], self.config.wind.const_wind[1])
+            CoordinateTransform::vel_wind_ned_frame(
+                self.config.wind.const_wind[0],
+                self.config.wind.const_wind[1],
+            )
         };
         let vel_air_ned = velocity_ned - wind_ned;
         let vel_air_magnitude = vel_air_ned.magnitude();
-        let mach_number = if speed_of_sound > 0.0 { vel_air_magnitude / speed_of_sound } else { 0.0 };
-        let dynamic_pressure = 0.5 * air_density * vel_air_magnitude * vel_air_magnitude;
-        
+        let mach_number = if speed_of_sound > 0.0 {
+            vel_air_magnitude / speed_of_sound
+        } else {
+            0.0
+        };
+        // dynamic pressure is recomputed where needed based on air-relative velocity
+
         // Forces in ECI frame
         let mut total_force = Vector3::zeros();
-        
+
         // 1. Gravity force
         let gravity_acceleration = self.gravity.gravity_eci(&position);
         total_force += mass * gravity_acceleration;
-        
+
         // 2. Thrust force
         let (thrust_force, mass_flow_rate) = self.compute_thrust_force(t, &position, &velocity);
         total_force += thrust_force;
-        
+
         // 3. Aerodynamic forces
-        let aero_force = self.compute_aerodynamic_forces(&position, &velocity, t, mach_number, dynamic_pressure, mass);
+        let aero_force = self.compute_aerodynamic_forces(
+            &position,
+            &velocity,
+            t,
+            mach_number,
+            mass,
+        );
         total_force += aero_force;
-        
+
         // Acceleration
-        let acceleration = if mass > 0.0 { total_force / mass } else { Vector3::zeros() };
-        
+        let acceleration = if mass > 0.0 {
+            total_force / mass
+        } else {
+            Vector3::zeros()
+        };
+
         // Derivatives
         vec![
-            -mass_flow_rate,        // dmass/dt (propellant consumption)
-            velocity.x,             // dx/dt
-            velocity.y,             // dy/dt  
-            velocity.z,             // dz/dt
-            acceleration.x,         // dvx/dt
-            acceleration.y,         // dvy/dt
-            acceleration.z,         // dvz/dt
+            -mass_flow_rate, // dmass/dt (propellant consumption)
+            velocity.x,      // dx/dt
+            velocity.y,      // dy/dt
+            velocity.z,      // dz/dt
+            acceleration.x,  // dvx/dt
+            acceleration.y,  // dvy/dt
+            acceleration.z,  // dvz/dt
         ]
     }
-
 
     fn capture_cpp_row(&self) -> CsvCppRow {
         use crate::physics::coordinates::CoordinateTransform as CT;
@@ -347,11 +391,12 @@ impl Simulator {
         // Position LLH and ECEF
         let pos_ecef = CT::pos_eci_to_ecef(&pos, t);
         let pos_llh = CT::pos_ecef_to_llh(&pos_ecef);
-        let lat_deg = pos_llh.x; let lon_deg = pos_llh.y; let alt_m = pos_llh.z;
+        let lat_deg = pos_llh.x;
+        let lon_deg = pos_llh.y;
+        let alt_m = pos_llh.z;
 
         // DCMs
         let dcm_eci_to_ned = CT::dcm_eci_to_ned(&pos_llh, t);
-        let dcm_ned_to_eci = dcm_eci_to_ned.transpose();
 
         // Velocities
         let vel_ned = CT::vel_eci_to_ecef_ned_frame(&pos, &vel, &dcm_eci_to_ned);
@@ -369,12 +414,20 @@ impl Simulator {
                         let a = (alt - wind_data[i].0) / dt;
                         ws = wind_data[i].1 + a * (wind_data[i + 1].1 - wind_data[i].1);
                         wd = wind_data[i].2 + a * (wind_data[i + 1].2 - wind_data[i].2);
-                    } else { ws = wind_data[i].1; wd = wind_data[i].2; }
+                    } else {
+                        ws = wind_data[i].1;
+                        wd = wind_data[i].2;
+                    }
                     break;
                 }
             }
             (ws, wd)
-        } else { (self.config.wind.const_wind[0], self.config.wind.const_wind[1]) };
+        } else {
+            (
+                self.config.wind.const_wind[0],
+                self.config.wind.const_wind[1],
+            )
+        };
         let wind_ned = CT::vel_wind_ned_frame(wind_speed, wind_dir);
 
         // Air-relative velocity and body frame vectors
@@ -385,7 +438,9 @@ impl Simulator {
         let dcm_body_to_eci = (dcm_ned_to_body * dcm_eci_to_ned).transpose();
         let vel_air_body = CT::vel_air_body_frame(&dcm_ned_to_body, &vel_ned, &wind_ned);
         let angles = CT::angle_of_attack(&vel_air_body);
-        let alpha = angles.x; let beta = angles.y; let gamma = angles.z;
+        let alpha = angles.x;
+        let beta = angles.y;
+        let gamma = angles.z;
 
         // Aerodynamics
         let q = 0.5 * atm.density * vel_air_mag.powi(2);
@@ -393,8 +448,14 @@ impl Simulator {
         let body_diameter = self.config.stage1.aero.body_diameter;
         let ref_area = std::f64::consts::PI * (body_diameter / 2.0).powi(2);
         let drag = ca * q * ref_area;
-        let cn_pitch = alpha.signum() * self.rocket.cn_at(self.state.mach_number, alpha.to_degrees().abs());
-        let cn_yaw = beta.signum() * self.rocket.cn_at(self.state.mach_number, beta.to_degrees().abs());
+        let cn_pitch = alpha.signum()
+            * self
+                .rocket
+                .cn_at(self.state.mach_number, alpha.to_degrees().abs());
+        let cn_yaw = beta.signum()
+            * self
+                .rocket
+                .cn_at(self.state.mach_number, beta.to_degrees().abs());
         let force_normal_pitch = cn_pitch * q * ref_area;
         let force_normal_yaw = cn_yaw * q * ref_area;
         let aero_body = Vector3::new(-drag, -force_normal_yaw, -force_normal_pitch);
@@ -402,31 +463,67 @@ impl Simulator {
 
         // Thrust
         let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end_eff = self.config.stage1.thrust.burn_end_time.min(self.config.stage1.thrust.forced_cutoff_time);
+        let burn_end_eff = self
+            .config
+            .stage1
+            .thrust
+            .burn_end_time
+            .min(self.config.stage1.thrust.forced_cutoff_time);
         let is_powered = t >= burn_start && t < burn_end_eff;
-        let thrust_vac = if is_powered { self.rocket.thrust_at_time(t) } else { 0.0 };
-        let isp_vac = if is_powered { self.rocket.isp_at_time(t) } else { 0.0 };
+        let thrust_vac = if is_powered {
+            self.rocket.thrust_at_time(t)
+        } else {
+            0.0
+        };
+        let isp_vac = if is_powered {
+            self.rocket.isp_at_time(t)
+        } else {
+            0.0
+        };
         let throat_diameter = self.config.stage1.thrust.throat_diameter;
-        let exit_area = std::f64::consts::PI * (throat_diameter * throat_diameter) * 0.25 * self.config.stage1.thrust.nozzle_expansion_ratio;
-        let thrust_effective = if is_powered { thrust_vac - exit_area * atm.pressure } else { 0.0 };
+        let exit_area = std::f64::consts::PI
+            * (throat_diameter * throat_diameter)
+            * 0.25
+            * self.config.stage1.thrust.nozzle_expansion_ratio;
+        let thrust_effective = if is_powered {
+            thrust_vac - exit_area * atm.pressure
+        } else {
+            0.0
+        };
         let thrust_body = Vector3::new(thrust_effective, 0.0, 0.0);
         let thrust_eci = dcm_body_to_eci * thrust_body;
 
         // Accelerations
         let gravity_eci = self.gravity.gravity_eci(&pos);
-        let acc_eci = if mass > 0.0 { (thrust_eci + aero_eci) / mass + gravity_eci } else { gravity_eci };
+        let acc_eci = if mass > 0.0 {
+            (thrust_eci + aero_eci) / mass + gravity_eci
+        } else {
+            gravity_eci
+        };
         let acc_body = (dcm_ned_to_body * dcm_eci_to_ned) * (acc_eci - gravity_eci);
 
         // Loss terms
-        let vel_xy = (vel_ned.x*vel_ned.x + vel_ned.y*vel_ned.y).sqrt();
+        let vel_xy = (vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y).sqrt();
         let path_angle = (-vel_ned.z).atan2(vel_xy);
         let gravity_ned = dcm_eci_to_ned * gravity_eci;
-        let loss_gravity = if is_powered { gravity_ned.z * path_angle.sin() } else { 0.0 };
-        let loss_thrust = if is_powered { atm.pressure * exit_area / mass } else { 0.0 };
+        let loss_gravity = if is_powered {
+            gravity_ned.z * path_angle.sin()
+        } else {
+            0.0
+        };
+        let loss_thrust = if is_powered {
+            atm.pressure * exit_area / mass
+        } else {
+            0.0
+        };
         let loss_aero = drag / mass;
 
         // Downrange
-        let launch_llh = Vector3::new(self.config.launch.position_llh[0], self.config.launch.position_llh[1], self.config.launch.position_llh[2]);
+        let launch_llh = Vector3::new(
+            self.config.launch.position_llh[0],
+            self.config.launch.position_llh[1],
+            self.config.launch.position_llh[2],
+        );
         let downrange = CT::distance_surface(&launch_llh, &pos_llh);
 
         CsvCppRow {
@@ -459,35 +556,45 @@ impl Simulator {
             downrange,
             iip_lat_deg: 0.0,
             iip_lon_deg: 0.0,
-            dcm_body_to_eci: dcm_body_to_eci,
+            dcm_body_to_eci,
             inertial_speed: vel.magnitude(),
             kinetic_energy_ned: 0.5 * mass * vel_ned.magnitude().powi(2),
             loss_gravity,
             loss_aero,
             loss_thrust,
-            is_powered: if is_powered {1} else {0},
+            is_powered: if is_powered { 1 } else { 0 },
             is_separated: 0,
         }
     }
-    
+
     /// Compute thrust force in ECI frame
-    fn compute_thrust_force(&self, t: f64, position: &Vector3<f64>, _velocity: &Vector3<f64>) -> (Vector3<f64>, f64) {
+    fn compute_thrust_force(
+        &self,
+        t: f64,
+        position: &Vector3<f64>,
+        _velocity: &Vector3<f64>,
+    ) -> (Vector3<f64>, f64) {
         let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end = self.config.stage1.thrust.burn_end_time.min(self.config.stage1.thrust.forced_cutoff_time);
-        
+        let burn_end = self
+            .config
+            .stage1
+            .thrust
+            .burn_end_time
+            .min(self.config.stage1.thrust.forced_cutoff_time);
+
         // Check if engine is burning
         if t < burn_start || t >= burn_end {
             return (Vector3::zeros(), 0.0);
         }
-        
+
         // Get thrust (vacuum) and Isp (vacuum) at current time
         let thrust_vac = self.rocket.thrust_at_time(t);
         let isp_vac = self.rocket.isp_at_time(t);
-        
+
         if thrust_vac <= 0.0 || isp_vac <= 0.0 {
             return (Vector3::zeros(), 0.0);
         }
-        
+
         // Mass flow rate (use vacuum values like C++)
         let mass_flow_rate = thrust_vac / (isp_vac * G0);
 
@@ -496,10 +603,12 @@ impl Simulator {
         let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
         let atm = self.atmosphere.conditions(pos_llh.z);
         let throat_diameter = self.config.stage1.thrust.throat_diameter;
-        let exit_area = std::f64::consts::PI * (throat_diameter * throat_diameter) * 0.25 *
-                            self.config.stage1.thrust.nozzle_expansion_ratio;
+        let exit_area = std::f64::consts::PI
+            * (throat_diameter * throat_diameter)
+            * 0.25
+            * self.config.stage1.thrust.nozzle_expansion_ratio;
         let thrust_effective = thrust_vac - exit_area * atm.pressure;
-        
+
         // Thrust direction from attitude (Body +X) — C++互換
         let (azimuth_deg, elevation_deg) = self.rocket.attitude_at_time(t);
         let azimuth_rad = deg2rad(azimuth_deg);
@@ -507,7 +616,8 @@ impl Simulator {
 
         // Body->ECI DCM = (NED->BODY * ECI->NED)^T
         let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
-        let dcm_ned_to_body = CoordinateTransform::dcm_ned_to_body(azimuth_rad, elevation_rad, None);
+        let dcm_ned_to_body =
+            CoordinateTransform::dcm_ned_to_body(azimuth_rad, elevation_rad, None);
         let dcm_eci_to_body = dcm_ned_to_body * dcm_eci_to_ned;
         let dcm_body_to_eci = dcm_eci_to_body.transpose();
 
@@ -517,15 +627,14 @@ impl Simulator {
 
         (thrust_eci, mass_flow_rate)
     }
-    
+
     /// Compute aerodynamic forces in ECI frame
     fn compute_aerodynamic_forces(
-        &self, 
-        position: &Vector3<f64>, 
-        velocity: &Vector3<f64>, 
-        t: f64, 
-        mach_number: f64, 
-        dynamic_pressure: f64,
+        &self,
+        position: &Vector3<f64>,
+        velocity: &Vector3<f64>,
+        t: f64,
+        mach_number: f64,
         mass: f64,
     ) -> Vector3<f64> {
         if velocity.magnitude() < 0.1 {
@@ -536,7 +645,8 @@ impl Simulator {
         let pos_ecef = CoordinateTransform::pos_eci_to_ecef(position, t);
         let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
         let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
-        let velocity_ned = CoordinateTransform::vel_eci_to_ecef_ned_frame(position, velocity, &dcm_eci_to_ned);
+        let velocity_ned =
+            CoordinateTransform::vel_eci_to_ecef_ned_frame(position, velocity, &dcm_eci_to_ned);
 
         // Apply wind (if any)
         let wind_ned = if let Some(ref wind_data) = self.rocket.wind_data {
@@ -550,27 +660,41 @@ impl Simulator {
                     if dt.abs() > 1e-10 {
                         let alpha = (altitude - wind_data[i].0) / dt;
                         wind_speed = wind_data[i].1 + alpha * (wind_data[i + 1].1 - wind_data[i].1);
-                        wind_direction = wind_data[i].2 + alpha * (wind_data[i + 1].2 - wind_data[i].2);
-                    } else { wind_speed = wind_data[i].1; wind_direction = wind_data[i].2; }
+                        wind_direction =
+                            wind_data[i].2 + alpha * (wind_data[i + 1].2 - wind_data[i].2);
+                    } else {
+                        wind_speed = wind_data[i].1;
+                        wind_direction = wind_data[i].2;
+                    }
                     break;
                 }
             }
             CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_direction)
         } else {
-            CoordinateTransform::vel_wind_ned_frame(self.config.wind.const_wind[0], self.config.wind.const_wind[1])
+            CoordinateTransform::vel_wind_ned_frame(
+                self.config.wind.const_wind[0],
+                self.config.wind.const_wind[1],
+            )
         };
 
         // Relative air velocity and dynamic pressure from air-relative speed
         let vel_air_ned = velocity_ned - wind_ned;
         let vel_air_magnitude = vel_air_ned.magnitude();
-        if vel_air_magnitude < 0.1 { return Vector3::zeros(); }
+        if vel_air_magnitude < 0.1 {
+            return Vector3::zeros();
+        }
 
         let (azimuth_deg, elevation_deg) = self.rocket.attitude_at_time(t);
         let azimuth_rad = deg2rad(azimuth_deg);
         let elevation_rad = deg2rad(elevation_deg);
-        let dcm_ned_to_body = CoordinateTransform::dcm_ned_to_body(azimuth_rad, elevation_rad, None);
+        let dcm_ned_to_body =
+            CoordinateTransform::dcm_ned_to_body(azimuth_rad, elevation_rad, None);
 
-        let vel_air_body = CoordinateTransform::vel_air_body_frame(&dcm_ned_to_body, &vel_air_ned, &Vector3::zeros());
+        let vel_air_body = CoordinateTransform::vel_air_body_frame(
+            &dcm_ned_to_body,
+            &vel_air_ned,
+            &Vector3::zeros(),
+        );
         let angles = CoordinateTransform::angle_of_attack(&vel_air_body);
         let alpha = angles.x;
         let beta = angles.y;
@@ -615,16 +739,15 @@ impl Simulator {
         let dcm_ned_to_eci = dcm_eci_to_ned.transpose();
         dcm_ned_to_eci * aero_force_ned
     }
-    
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     fn create_test_config() -> RocketConfig {
         use crate::rocket::*;
-        
+
         RocketConfig {
             name: "test".to_string(),
             calculate_condition: CalculateCondition {
@@ -711,7 +834,7 @@ mod tests {
             },
         }
     }
-    
+
     #[test]
     fn test_simulator_creation() {
         let config = create_test_config();
@@ -719,7 +842,7 @@ mod tests {
         let simulator = Simulator::new(rocket);
         assert!(simulator.is_ok());
     }
-    
+
     #[test]
     fn test_simulation_step() {
         let config = create_test_config();

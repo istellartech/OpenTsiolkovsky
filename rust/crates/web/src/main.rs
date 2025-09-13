@@ -1,7 +1,8 @@
+#![allow(non_snake_case)]
 use axum::{
-    extract::{State, Multipart},
-    http::{HeaderValue, StatusCode},
-    response::{IntoResponse},
+    extract::{Multipart, State},
+    http::{self, StatusCode},
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
@@ -9,12 +10,12 @@ use serde_json::json;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
-use openTsiolkovsky_core as core;
-use core::{
-    simulator::{Simulator, SimulationState},
-    rocket::{RocketConfig, Rocket},
-};
 use core::io as core_io;
+use core::{
+    rocket::{Rocket, RocketConfig},
+    simulator::{SimulationState, Simulator},
+};
+use openTsiolkovsky_core as core;
 
 #[derive(Clone, Default)]
 struct AppState;
@@ -26,7 +27,7 @@ async fn main() {
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any)
-        .expose_headers(["content-type".parse::<HeaderValue>().unwrap()]);
+        .expose_headers([http::header::CONTENT_TYPE]);
 
     let app = Router::new()
         .route("/", get(|| async { "OpenTsiolkovsky Web API" }))
@@ -34,7 +35,7 @@ async fn main() {
         .route("/api/simulation", post(run_simulation))
         .route("/api/simulation/path", post(run_simulation_from_path))
         .route("/api/upload", post(run_simulation_upload))
-        .with_state(AppState::default())
+        .with_state(AppState)
         .layer(cors);
 
     let addr: SocketAddr = "0.0.0.0:3001".parse().unwrap();
@@ -46,8 +47,7 @@ async fn main() {
 async fn run_simulation(
     State(_state): State<AppState>,
     Json(config): Json<RocketConfig>,
-)
--> impl IntoResponse {
+) -> impl IntoResponse {
     // Build Rocket directly from JSON config (CSV等の外部ファイルは省略)
     let rocket = Rocket::new(config);
     let mut sim = match Simulator::new(rocket) {
@@ -66,7 +66,9 @@ async fn run_simulation(
 }
 
 #[derive(serde::Deserialize)]
-struct PathPayload { config_path: String }
+struct PathPayload {
+    config_path: String,
+}
 
 async fn run_simulation_from_path(
     State(_state): State<AppState>,
@@ -112,11 +114,15 @@ async fn run_simulation_upload(
         let data = match field.bytes().await {
             Ok(b) => b.to_vec(),
             Err(e) => {
-                let body = Json(json!({"error":"Failed to read field","field": name, "detail": e.to_string()}));
+                let body = Json(
+                    json!({"error":"Failed to read field","field": name, "detail": e.to_string()}),
+                );
                 return (StatusCode::BAD_REQUEST, body).into_response();
             }
         };
-        if !name.is_empty() { parts.insert(name, data); }
+        if !name.is_empty() {
+            parts.insert(name, data);
+        }
     }
 
     let config_bytes = match parts.remove("config") {
@@ -137,12 +143,14 @@ async fn run_simulation_upload(
     // Build rocket and inject uploaded CSV datasets if provided
     let mut rocket = Rocket::new(config);
     if let Some(csv) = parts.get("thrust") {
-        if let Ok(ts) = core_io::parse_time_series_from_str(std::str::from_utf8(csv).unwrap_or("")) {
+        if let Ok(ts) = core_io::parse_time_series_from_str(std::str::from_utf8(csv).unwrap_or(""))
+        {
             rocket.thrust_data = Some(ts);
         }
     }
     if let Some(csv) = parts.get("isp") {
-        if let Ok(ts) = core_io::parse_time_series_from_str(std::str::from_utf8(csv).unwrap_or("")) {
+        if let Ok(ts) = core_io::parse_time_series_from_str(std::str::from_utf8(csv).unwrap_or(""))
+        {
             rocket.isp_data = Some(ts);
         }
     }
@@ -155,7 +163,8 @@ async fn run_simulation_upload(
         }
     }
     if let Some(csv) = parts.get("ca") {
-        if let Ok(ts) = core_io::parse_time_series_from_str(std::str::from_utf8(csv).unwrap_or("")) {
+        if let Ok(ts) = core_io::parse_time_series_from_str(std::str::from_utf8(csv).unwrap_or(""))
+        {
             rocket.ca_data = Some(ts);
         }
     }

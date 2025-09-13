@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 // Re-export core types for convenience
 pub use openTsiolkovsky_core::*;
 

@@ -20,6 +20,6 @@ pub const G0: f64 = 9.80665;
 pub const R_DRY_AIR: f64 = 287.05287;
 
 /// Standard atmosphere conditions at sea level
-pub const STD_PRESSURE_SL: f64 = 101325.0;    // [Pa]
-pub const STD_TEMPERATURE_SL: f64 = 288.15;   // [K]
-pub const STD_DENSITY_SL: f64 = 1.225;        // [kg/m³]
+pub const STD_PRESSURE_SL: f64 = 101325.0; // [Pa]
+pub const STD_TEMPERATURE_SL: f64 = 288.15; // [K]
+pub const STD_DENSITY_SL: f64 = 1.225; // [kg/m³]
