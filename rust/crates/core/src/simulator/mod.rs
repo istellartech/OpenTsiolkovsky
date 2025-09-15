@@ -149,6 +149,13 @@ impl Simulator {
     /// Run full simulation
     pub fn run(&mut self) -> Vec<SimulationState> {
         self.trajectory.clear();
+        self.telemetry_cpp.clear();
+
+        // Record initial state (t=0) so outputs include the starting sample
+        self.update_derived_quantities();
+        self.trajectory.push(self.state.clone());
+        let row0 = self.capture_cpp_row();
+        self.telemetry_cpp.push(row0);
         let end_time = self.config.calculate_condition.end_time;
         let dt_out = self.config.calculate_condition.time_step;
 

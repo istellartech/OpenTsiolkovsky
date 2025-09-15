@@ -10,7 +10,22 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 CRATE_DIR="$REPO_ROOT/rust/crates/cli"
 OUT_DIR="$REPO_ROOT/frontend/src/wasm"
 
-echo "Building WASM (target=web, features=wasm)"
+# Check wasm-pack
+if ! command -v wasm-pack >/dev/null 2>&1; then
+  echo "[ERROR] wasm-pack is not installed."
+  echo "Install: https://rustwasm.github.io/wasm-pack/installer/"
+  echo "Or via cargo-binstall: cargo binstall wasm-pack"
+  exit 1
+fi
+
+# Ensure wasm target is available (best-effort)
+if command -v rustup >/dev/null 2>&1; then
+  rustup target add wasm32-unknown-unknown >/dev/null 2>&1 || true
+fi
+
+mkdir -p "$OUT_DIR"
+
+echo "[WASM] Building (target=web, features=wasm)"
 wasm-pack build "$CRATE_DIR" \
   --release \
   --target web \
@@ -18,5 +33,4 @@ wasm-pack build "$CRATE_DIR" \
   --out-dir "$OUT_DIR" \
   --out-name openTsiolkovsky_cli
 
-echo "Done. Output written to $OUT_DIR"
-
+echo "[WASM] Done. Output written to $OUT_DIR"

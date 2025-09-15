@@ -5,10 +5,12 @@
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ES2020", "DOM"],
     "baseUrl": ".",
     "paths": {},
-    "types": ["vite/client"]
+    "types": ["vite/client", "react", "react-dom"]
   },
   "include": ["src"]
 }
-

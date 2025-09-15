@@ -29,9 +29,9 @@ C++で実装されているOpenTsiolkovskyロケット飛行シミュレータ�
 - [x] **ディレクトリ構造作成** - src/, tests/, docs/, examples/フォルダ
 
 ### 1.2 開発環境セットアップ
-- [ ] **Rust toolchain設定** - wasm32-unknown-unknown target追加
-- [ ] **開発用設定ファイル** - .gitignore, rustfmt.toml, clippy設定
-- [ ] **CI/CD基盤** - GitHub Actions for testing
+- [x] **Rust toolchain設定** - wasm32-unknown-unknown target追加
+- [x] **開発用設定ファイル** - .gitignore, rustfmt.toml, clippy設定
+- [x] **CI/CD基盤** - GitHub Actions for testing
 
 ---
 
@@ -177,14 +177,14 @@ C++で実装されているOpenTsiolkovskyロケット飛行シミュレータ�
 - [ ] **shadcn/ui** - UIコンポーネントライブラリ
 
 ### 7.3 コンポーネント実装
-- [ ] **SimulationPanel** - パラメータ入力・実行制御（簡易版はApp内に仮実装）
+- [x] **SimulationPanel** - パラメータ入力・実行制御（簡易版はApp内に仮実装）
 - [x] **TrajectoryViewer** - Three.js 3D軌道表示（最小版）
 - [x] **GraphPanel** - Chart.js 2Dグラフ表示（最小版）
 - [x] **FileUpload** - 設定・データファイルアップロード（簡易フォームを実装）
 
 ### 7.4 WASM統合
-- [ ] **simulation.ts** - WASM呼び出し処理
-- [ ] **型定義** - TypeScript型定義ファイル
+- [ ] **simulation.ts** - WASM呼び出し処理（wasm.tsに分離・準備済み）
+- [x] **型定義** - TypeScript型定義ファイル
 - [ ] **エラーハンドリング** - WASM実行エラー対応
 - [ ] **非同期処理** - Web Worker使用検討
 
@@ -234,7 +234,8 @@ C++で実装されているOpenTsiolkovskyロケット飛行シミュレータ�
 ## Phase 10: ドキュメント・デプロイ
 
 ### 10.1 技術ドキュメント
-- [ ] **API文書** - Rust docコメント、Web API仕様
+- [ ] **API文書（Rust doc）** - Rust側の公開APIにdocコメント整備
+- [x] **API文書（Web API仕様）** - docs/api/web_api.md 更新
 - [ ] **設計文書** - アーキテクチャ、モジュール設計
 - [ ] **テスト文書** - テスト戦略、カバレッジレポート
 

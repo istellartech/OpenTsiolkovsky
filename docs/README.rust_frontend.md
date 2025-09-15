@@ -16,12 +16,14 @@ CLI の使い方
 - 出力: output_trajectory.csv, output_summary.json, output_dynamics_cpp.csv
 
 Web API サーバー
-- 起動: cargo run -p openTsiolkovsky-web （http://localhost:3001）
+- 起動: cargo run -p openTsiolkovsky-web（既定 :3001 / 使用中なら自動で次ポートにフォールバック）
+- 固定ポート指定: `OT_WEB_PORT=3002 cargo run -p openTsiolkovsky-web`
 - 主要エンドポイント: /api/simulation, /api/simulation/path, /api/upload（詳細: docs/api/web_api.md）
 
 Frontend（Vite + React）
 - 起動: cd frontend && npm i && npm run dev （http://localhost:5173）
 - devサーバーは /api を http://localhost:3001 にプロキシ（frontend/vite.config.ts）
+  - Web API が別ポートで起動した場合は、`vite.config.ts` のプロキシ先を合わせてください。
 
 WASM（任意）
 - 準備: rustup target add wasm32-unknown-unknown, wasm-pack をインストール

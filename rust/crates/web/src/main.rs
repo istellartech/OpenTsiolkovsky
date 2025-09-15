@@ -8,6 +8,7 @@ use axum::{
 };
 use serde_json::json;
 use std::net::SocketAddr;
+use std::io::ErrorKind;
 use tower_http::cors::{Any, CorsLayer};
 
 use core::io as core_io;
@@ -38,10 +39,48 @@ async fn main() {
         .with_state(AppState)
         .layer(cors);
 
-    let addr: SocketAddr = "0.0.0.0:3001".parse().unwrap();
-    println!("OpenTsiolkovsky Web API listening on http://{}", addr);
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let start_port: u16 = std::env::var("OT_WEB_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3001);
+    let listener = bind_with_autofallback(start_port).await;
+    let local = listener.local_addr().unwrap_or_else(|_| format!("0.0.0.0:{}", start_port).parse().unwrap());
+    println!("OpenTsiolkovsky Web API listening on http://{}", local);
+    axum::serve(listener, app).await.expect("server error");
+}
+
+async fn bind_with_autofallback(start_port: u16) -> tokio::net::TcpListener {
+    // Try up to 20 consecutive ports starting from start_port.
+    // As a last resort, fall back to port 0 (OS-assigned ephemeral port).
+    let host = "0.0.0.0";
+    for offset in 0u16..20u16 {
+        let port = start_port.saturating_add(offset);
+        let addr: SocketAddr = format!("{}:{}", host, port).parse().unwrap();
+        match tokio::net::TcpListener::bind(addr).await {
+            Ok(l) => {
+                if offset > 0 {
+                    eprintln!(
+                        "[info] Port {} in use. Falling back to {}",
+                        start_port,
+                        port
+                    );
+                }
+                return l;
+            }
+            Err(e) if e.kind() == ErrorKind::AddrInUse => {
+                continue;
+            }
+            Err(e) => {
+                eprintln!("[warn] Failed to bind {}:{}: {}", host, port, e);
+                continue;
+            }
+        }
+    }
+    // Last resort: OS picks a free port
+    let addr0: SocketAddr = format!("{}:{}", host, 0).parse().unwrap();
+    tokio::net::TcpListener::bind(addr0)
+        .await
+        .expect("failed to bind to any port")
 }
 
 async fn run_simulation(
