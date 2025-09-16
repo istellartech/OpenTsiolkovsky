@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { SimulationState } from '../lib/types'
 import { vec3ToObject } from '../lib/types'
+import { eciToLatLon } from '../lib/geo'
 
 export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -106,7 +107,7 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
         const posEci = vec3ToObject(lastState.position)
         const latLonAlt = eciToLatLon(posEci)
         infoRef.current.innerText =
-          `Lat: ${latLonAlt.lat.toFixed(2)}°, Lon: ${latLonAlt.lon.toFixed(2)}°, Alt: ${(latLonAlt.alt_km).toFixed(1)} km`
+          `Lat: ${latLonAlt.lat.toFixed(2)}°, Lon: ${latLonAlt.lon.toFixed(2)}°, Alt: ${(latLonAlt.altKm).toFixed(1)} km`
       }
     }
 
@@ -189,16 +190,6 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
       />
     </div>
   )
-}
-
-function eciToLatLon(pos: { x: number, y: number, z: number }) {
-  const rad2deg = 180 / Math.PI
-  const r = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z)
-  const lat = Math.atan2(pos.z, Math.sqrt(pos.x * pos.x + pos.y * pos.y)) * rad2deg
-  let lon = Math.atan2(pos.y, pos.x) * rad2deg
-  if (lon > 180) lon -= 360
-  if (lon < -180) lon += 360
-  return { lat, lon, alt_km: r / 1000 - 6371 }
 }
 
 function createLatLonGrid(radius: number) {
