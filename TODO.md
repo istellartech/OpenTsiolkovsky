@@ -1,318 +1,160 @@
-# OpenTsiolkovsky Rust移植 実装TODO
+# OpenTsiolkovsky Rust移植 TODO
 
 ## プロジェクト概要
 
-C++で実装されているOpenTsiolkovskyロケット飛行シミュレータをRustに移植し、TypeScriptでWebブラウザ対応の可視化を実現する大規模実装プロジェクト。
+C++で実装されたOpenTsiolkovskyロケット飛行シミュレータをRustへ移植し、TypeScript/ReactによるWeb可視化とAPIを整備するプロジェクト。Rust版はC++と数値互換の3DoF解析を実現しつつ、CLI・Web API・WASMの3経路で利用できることを目指す。
 
-### 移植元コードマッピング
-
-| C++モジュール | Rust移植先 | 責務 |
-|-------------|----------|------|
-| `main.cpp` | `cli::main.rs` | エントリーポイント |
-| `rocket.cpp/.hpp` | `core::simulator` | メインシミュレータ・ロケットモデル |
-| `air.cpp/.hpp` | `core::physics::atmosphere` | ISA大気モデル |
-| `gravity.cpp/.hpp` | `core::physics::gravity` | WGS84重力モデル |
-| `coordinate_transform.cpp/.hpp` | `core::physics::coordinates` | 座標変換（LLH/ECEF/ECI） |
-| `Orbit.cpp/.hpp` | `core::simulator` | 軌道計算（統合） |
-| `fileio.cpp/.hpp` | `core::io` | JSON/CSVファイル入出力 |
-| Python tools (`bin/`) | 一部Web UIへ統合 | 後処理・可視化ツール |
+## 進捗ハイライト
+- Rust workspace（core/cli/web）構築済み。CLippy/formatter設定とGitHub Actions CIを導入済み。
+- 核となる数学・物理・I/O・3DoFシミュレーションはRustへ移植し、C++互換のCSV/JSON出力とダイナミクスCSVを生成できる。
+- CLI（clap + 詳細ログ）、Axum製Web API（JSON/パス/ファイル入力）、Reactフロントエンド（Three.js + Chart.js）が連携。WASMラッパとビルドスクリプトも整備済み。
 
 ---
 
-## Phase 1: プロジェクト構造セットアップ
-
-### 1.1 Rust Workspace構成
-- [x] **ルートCargo.toml作成** - workspace定義、共通依存関係設定
-- [x] **crates/core/Cargo.toml** - コアシミュレータcrate（nalgebra, serde, csv, rayon）
-- [x] **crates/cli/Cargo.toml** - CLI + WASM crate（clap, wasm-bindgen）
-- [x] **crates/web/Cargo.toml** - APIサーバーcrate（axum, tokio）
-- [x] **ディレクトリ構造作成** - src/, tests/, docs/, examples/フォルダ
-
-### 1.2 開発環境セットアップ
-- [x] **Rust toolchain設定** - wasm32-unknown-unknown target追加
-- [x] **開発用設定ファイル** - .gitignore, rustfmt.toml, clippy設定
-- [x] **CI/CD基盤** - GitHub Actions for testing
+## Phase 1-5: 完了済み要約
+- [x] Rust workspaceとcrate配置、ツールチェーン設定、CI/整形設定。
+- [x] 数学・座標・大気・重力・I/O・ロケット設定のRust移植と3DoFシミュレーション本体、C++互換CSV/JSON出力。
+- [x] CLI & wasm-bindgenラッパ、Axum Web API、React UI（土台 + 3D/グラフ/ファイルアップロード）。
 
 ---
 
-## Phase 2: コア数学・物理ライブラリ基盤（core crate）
-
-### 2.1 数学モジュール (`core/src/math/`)
-- [x] **integrator.rs** - Runge-Kutta4積分器実装（boost::odeint代替）
-- [x] **linalg.rs** - 線形代数ヘルパー関数（nalgebra wrapper）
-- [x] **constants.rs** - 物理定数定義（地球半径、重力定数等）
-- [x] **単体テスト** - 積分精度検証、行列演算テスト
-
-### 2.2 座標変換モジュール (`core/src/physics/coordinates/`)
-- [x] **coordinate_transform.cpp移植**
-  - [x] **LLH ↔ ECEF変換** - WGS84楕円体パラメータ
-  - [x] **ECEF ↔ ECI変換** - 地球自転考慮
-  - [x] **NED座標変換** - 局所座標系
-  - [x] **回転行列・クォータニオン** - 姿勢表現
-- [x] **単体テスト** - 各座標変換の精度検証
-- [x] **C++版結果との比較テスト**
-
-### 2.3 大気モデル (`core/src/physics/atmosphere.rs`)
-- [x] **air.cpp/hpp移植**
-  - [x] **ISA標準大気実装** - 温度・圧力・密度計算
-  - [x] **高度別層構造** - 対流圏～熱圏対応
-  - [x] **大気密度変動** - ファイル入力対応
-- [x] **単体テスト** - 各高度での標準値検証
-- [x] **精度テスト** - C++版との相対誤差 < 1e-10確認
-
-### 2.4 重力モデル (`core/src/physics/gravity.rs`)
-- [x] **gravity.cpp/hpp移植**
-  - [x] **WGS84重力場** - 扁平楕円体重力計算
-  - [x] **高度変化対応** - 逆2乗則からの補正
-  - [x] **重力ベクトル計算** - ECEF座標系
-- [x] **単体テスト** - 地表・軌道高度での重力値検証
-- [x] **精度検証** - 標準重力値との比較
-
----
-
-## Phase 3: I/Oとデータ構造 (`core/src/io/`, `core/src/rocket/`)
-
-### 3.1 設定ファイル処理 (`core/src/io/`)
-- [x] **fileio.cpp移植**
-  - [x] **JSON設定読み込み** - param_sample.json互換フォーマット
-  - [x] **CSV時系列データ** - 推力・比推力・姿勢・風データ
-  - [x] **出力ファイル生成** - CSV軌道データ、JSON統計情報
-  - [x] **C++互換ダイナミクスCSV** - CsvObserver互換列をCLI出力に追加
-- [x] **構造体定義** - RocketConfig, StageConfig, LaunchCondition
-- [x] **エラーハンドリング** - ファイル読み込みエラー対応
-- [x] **互換性テスト** - 既存JSONファイルでのパース確認
-
-### 3.2 ロケットデータ構造 (`core/src/rocket/`)
-- [x] **RocketStage構造体** - rocket.hpp移植
-  - [x] **推進系パラメータ** - 推力、比推力、燃焼時間
-  - [x] **空力パラメータ** - CN、CA、弾道係数
-  - [x] **質量特性** - 初期質量、燃料消費
-  - [x] **姿勢制御** - TVC、姿勢プログラム
-- [x] **多段ロケット対応** - 段分離条件、連続計算（基本実装）
-- [x] **飛行モード** - 3DoF実装完了
-
----
-
-## Phase 4: シミュレーションエンジン (`core/src/simulator/`)
-
-### 4.1 メインシミュレータ
-- [x] **rocket.cpp主要部分移植**
-  - [x] **状態量定義** - SimulationState構造体（位置・速度・質量・姿勢）
-  - [x] **Simulator構造体** - 設定・物理エンジン・積分器統合
-  - [x] **ステップ実行** - step()メソッド、時間積分
-- [x] **Orbit.cpp軌道計算統合**
-  - [x] **3DoF飛行** - 推力方向/ノズル背圧/空力(CA・CN, 空気相対Mach/Q) 同等化（最大高度誤差 < 1% 達成）
-  - [ ] **6DoF飛行** - 剛体運動方程式（未実装）
-  - [x] **段分離処理** - 状態量継承（基本実装）
-
-### 4.2 物理計算統合
-- [x] **PhysicsEngine構造体** - 各物理モデル統合
-- [x] **力・モーメント計算** - 推力、空力、重力統合
-- [x] **環境条件** - 風モデル、大気密度変動
-- [x] **積分テスト** - Runge-Kutta4での軌道計算精度
-
-### 4.3 出力・ログ機能
-- [x] **軌道データ出力** - CSV形式、時系列状態量
-- [x] **統計情報** - JSON形式、到達高度・速度等
-- [x] **ログ機能** - 計算進捗、エラー情報
-- [x] **デバッグ出力** - 詳細物理量（開発用）
-
----
-
-## Phase 5: CLIアプリケーション (`crates/cli/`)
-
-### 5.1 コマンドラインインターフェース
-- [x] **main.cpp移植** - CLI引数処理、シミュレーション実行制御
-- [x] **clap設定** - 設定ファイルパス指定、オプション定義
-- [x] **実行制御** - Simulatorインスタンス化、結果出力
-- [x] **エラーハンドリング** - ファイルエラー、計算エラー対応
-
-### 5.2 WASM Bindgen対応
-- [x] **wasm.rs実装** - WebAssembly向けインターフェース
-- [x] **WasmSimulator構造体** - JavaScript API設計
-- [x] **JSON入出力** - 設定・結果のJSON変換
-- [x] **エラー変換** - Rust Error → JsError
-
-### 5.3 ビルド設定
-- [x] **Cargo.toml設定** - crate-type = ["cdylib"], wasm-bindgen features
-- [x] **ビルドスクリプト** - wasm-pack使用（`scripts/wasm_build.sh` 追加）
-- [x] **型定義生成** - wasm-pack出力を `frontend/src/wasm` に配置（d.ts含む）
+## Phase 4+: コア機能拡張
+- [ ] 6DoF剛体ダイナミクスと姿勢統合（スピン、モーメント、質量モーメント）
+- [ ] 多段ロケット/段分離の質量・推力・空力切替
+- [ ] Dumping product・姿勢ニュートラリティ等の追加設定項目を計算に反映
+- [ ] 数値安定性向上（DP54適応制御の活用、停止条件/地面衝突処理）
+- [ ] 出力サマリ拡充（IIP計算、downrange統計、ログ明細）
 
 ---
 
 ## Phase 6: テストとバリデーション
 
-### 6.1 単体テスト (`tests/unit/`)
-- [x] **数学モジュール** - 積分器精度、座標変換正確性
-- [x] **物理モデル** - 大気・重力モデルの標準値検証
-- [x] **I/O機能** - JSON/CSV読み書き、エラー処理
-- [x] **カバレッジ** - 27テスト全合格（十分な網羅率）
+### 6.1 単体テスト
+- [x] math/physics/io/simulatorモジュールの基本ユニットテスト（approx使用）を整備済み
+- [ ] 風・CN/CA補間・エラー系など境界ケースの追加テスト
 
-### 6.2 統合テスト (`tests/integration/`)
-- [x] **サンプルデータテスト** - param_sample_01.json使用
-- [x] **C++版比較** - 同一条件での結果比較（tools/compare_cpp_csv.py追加）
-- [x] **数値精度検証（実シナリオ）** - 最大高度の相対誤差 < 1%
-- [ ] **多段ロケット** - SS-520-4パラメータテスト
+### 6.2 統合テスト
+- [ ] `cargo test`または`cargo nextest`でparam_sample_01.jsonを用いた再現テスト
+- [ ] C++版CSVとの比較を自動化（tools/compare_cpp_csv.pyをRustテスト/CIから呼び出す）
+- [ ] 段分離/モンテカルロ等のシナリオテスト追加
 
-### 6.3 性能テスト (`tests/benchmark/`)
-- [ ] **計算速度** - C++版との実行時間比較
-- [ ] **メモリ使用量** - 大規模モンテカルロ時のメモリ効率
-- [ ] **WASM性能** - ブラウザでの実行性能測定
+### 6.3 性能テスト
+- [ ] Rust vs C++のパフォーマンス・メモリ計測と回帰監視
+- [ ] WASM実行時のCPU/メモリ測定、閾値設定
 
 ---
 
-## Phase 7: Webインターフェース (`crates/web/`, `frontend/`)
+## Phase 7: Webインターフェース
 
-### 7.1 APIサーバー (`crates/web/`)
-- [x] **axum REST API** - シミュレーション実行エンドポイント（/api/simulation, JSON受理, /api/simulation/path）
-- [x] **ファイルアップロード** - 設定・データファイル受信（multipart /api/upload, thrust/isp/cn/ca/attitude/wind対応）
-- [x] **CORS設定** - フロントエンドとの連携（開発用に全許可）
-- [x] **エラーレスポンス** - API エラーハンドリング（JSONメッセージ返却）
+### 7.1 APIサーバー（`rust/crates/web`）
+- [x] `/api/simulation`・`/api/simulation/path`・`/api/upload`実装、CORS、ポート自動フォールバック
+- [ ] ロギング/トレーシング、設定リロード、詳細なエラーメッセージ
 
-### 7.2 フロントエンド基盤 (`frontend/`)
-- [x] **React + TypeScript** - プロジェクト初期設定（Vite + React）
-- [x] **Vite設定** - devサーバープロキシ(API連携) / 型設定
-- [ ] **WASM対応** - wasm-bindgen連携、型定義
-- [ ] **Tailwind CSS** - CSS設定、CDN使用
-- [ ] **shadcn/ui** - UIコンポーネントライブラリ
+### 7.2 フロントエンド基盤（`frontend/`）
+- [x] Vite + React + TypeScript構成、APIクライアント（`lib/simulation.ts`）
+- [x] WASMローダ（`lib/wasm.ts`）と`scripts/wasm_build.sh`
+- [ ] npm scripts/CIでのWASMバンドル自動生成・配信
+- [ ] スタイルフレームワーク導入（Tailwind、shadcn/ui等）
 
-### 7.3 コンポーネント実装
-- [x] **SimulationPanel** - パラメータ入力・実行制御（簡易版はApp内に仮実装）
-- [x] **TrajectoryViewer** - Three.js 3D軌道表示（最小版）
-- [x] **GraphPanel** - Chart.js 2Dグラフ表示（最小版）
-- [x] **FileUpload** - 設定・データファイルアップロード（簡易フォームを実装）
+### 7.3 コンポーネント
+- [x] SimulationPanel: JSON/ファイル入力、API/WASM切替、エラーメッセージ
+- [x] TrajectoryViewer: Three.jsで軌道ラインと地球球体を描画
+- [x] GraphPanel: 高度・速度・Mach・動圧グラフ
+- [ ] 追加グラフ（ダウンレンジ、比較、統計分布）
+- [ ] 実行状態の可視化（進捗/キャンセル/入力バリデーション強化）
 
 ### 7.4 WASM統合
-- [ ] **simulation.ts** - WASM呼び出し処理（wasm.tsに分離・準備済み）
-- [x] **型定義** - TypeScript型定義ファイル
-- [ ] **エラーハンドリング** - WASM実行エラー対応
-- [ ] **非同期処理** - Web Worker使用検討
+- [ ] wasm-pack成果物の配信戦略（Vite assets/CI上の公開）整理
+- [ ] ブラウザ実行時のエラー処理・リトライUI実装
+- [ ] Web Worker等を使った非同期実行検討
 
 ---
 
 ## Phase 8: 可視化機能強化
 
-### 8.1 3D可視化 (Three.js)
-- [ ] **軌道描画** - 3D空間での軌道線表示
-- [ ] **地球モデル** - WGS84楕円体、テクスチャマッピング
-- [ ] **カメラ制御** - 軌道追跡、マウス操作
-- [ ] **アニメーション** - 時系列再生、速度制御
+### 8.1 Three.js
+- [x] 軌道ライン描画と簡易地球モデル
+- [ ] カメラ操作（マウス操作、自動追尾）
+- [ ] 再生アニメーション/タイムスライダー
+- [ ] 姿勢ベクトルや風向きなどのオーバーレイ表示
 
 ### 8.2 2Dグラフ (Chart.js)
-- [ ] **時系列グラフ** - 高度・速度・加速度
-- [ ] **軌跡プロット** - Ground track表示
-- [ ] **比較表示** - 複数シミュレーション重ね合わせ
-- [ ] **統計グラフ** - モンテカルロ結果分布
+- [x] 時系列グラフ: 高度・速度・Mach・動圧
+- [ ] Ground track・ダウンレンジ表示
+- [ ] 複数シミュレーション比較、モンテカルロ統計
+- [ ] CSV/JSONダウンロード導線
 
 ### 8.3 インタラクティブ機能
-- [ ] **パラメータ調整** - リアルタイム設定変更
-- [ ] **結果エクスポート** - CSV/JSON/画像ダウンロード
-- [ ] **データ共有** - 結果URL生成
+- [ ] パラメータ編集→再実行の差分UI
+- [ ] 結果エクスポート（CSV/JSON/画像）
+- [ ] データ共有・リンク生成
 
 ---
 
-## Phase 9: Python tools移植判断・互換性
-
-### 9.1 既存Python toolsの分析
-- [ ] **bin/make_plot.py** → Web UI統合検討
-- [ ] **bin/monte_carlo.py** → Rust並列処理実装
-- [ ] **bin/make_kml.py** → 地図表示機能統合
-- [ ] **bin/make_html.py** → Web UI置き換え
-
-### 9.2 重要ツールの移植
-- [ ] **モンテカルロシミュレーション** - Rust rayon使用
-- [ ] **統計解析** - 分散・共分散計算
-- [ ] **可視化データ生成** - KML、NMEA出力
-
-### 9.3 互換性維持
-- [x] **出力フォーマット** - CSV互換性確保（C++互換ダイナミクスCSVを追加）
-- [ ] **設定ファイル** - JSON完全互換
-- [ ] **移行ガイド** - ユーザー向けドキュメント
+## Phase 9: Python tools互換・移行
+- [ ] `bin/make_plot.py`など既存ツールの移行方針整理
+- [ ] モンテカルロバッチ処理（rayon）をRustで実装
+- [ ] KML/NMEA等の地図・航跡出力のRust/フロント移植
+- [ ] JSON設定フォーマット完全互換の検証と移行ガイド作成
 
 ---
 
 ## Phase 10: ドキュメント・デプロイ
 
 ### 10.1 技術ドキュメント
-- [ ] **API文書（Rust doc）** - Rust側の公開APIにdocコメント整備
-- [x] **API文書（Web API仕様）** - docs/api/web_api.md 更新
-- [ ] **設計文書** - アーキテクチャ、モジュール設計
-- [ ] **テスト文書** - テスト戦略、カバレッジレポート
+- [x] Web API仕様（`docs/api/web_api.md`）更新
+- [ ] Rust API docコメント整備・docs.rs公開
+- [ ] アーキテクチャ/モジュール設計・テスト戦略ドキュメント
 
 ### 10.2 ユーザードキュメント
-- [ ] **インストールガイド** - Rust/bun環境構築
-- [ ] **使用方法** - CLI・Web UI操作方法
-- [ ] **移行ガイド** - C++版からの移行手順
+- [ ] インストール/ビルドガイド（C++/Rust/Frontend）
+- [ ] CLI・Web UI利用手順書
+- [ ] C++版からの移行ガイド
 
 ### 10.3 デプロイ・リリース
-- [ ] **ビルドパイプライン** - CI/CD自動化
-- [ ] **リリースバイナリ** - クロスプラットフォームビルド
-- [ ] **Web デプロイ** - 静的サイト・APIサーバー
+- [ ] CI/CDパイプライン整備（ビルド・テスト・配布）
+- [ ] リリースバイナリ/WASMパッケージ作成
+- [ ] Web API + Frontendのデプロイ運用設計
 
 ---
 
-## プロジェクト管理
-
-### 開発フォルダ構成（提案）
+## 開発フォルダ構成（現状）
 ```
 OpenTsiolkovsky/
-├── rust/                        # 新規Rust実装
-│   ├── Cargo.toml              # Workspace設定
-│   ├── crates/
-│   │   ├── core/               # コアシミュレータ
-│   │   │   ├── src/
-│   │   │   │   ├── lib.rs
-│   │   │   │   ├── simulator/
-│   │   │   │   ├── physics/    # 物理モデル
-│   │   │   │   ├── rocket/     # ロケットモデル
-│   │   │   │   ├── math/       # 数学ライブラリ
-│   │   │   │   └── io/         # ファイル入出力
-│   │   │   └── Cargo.toml
-│   │   ├── cli/                # CLI + WASM
-│   │   │   ├── src/
-│   │   │   │   ├── main.rs     # CLI entry
-│   │   │   │   └── wasm.rs     # WASM bindings
-│   │   │   └── Cargo.toml
-│   │   └── web/                # APIサーバー
-│   │       ├── src/main.rs
-│   │       └── Cargo.toml
-│   ├── tests/                  # 統合テスト
-│   │   ├── integration/
-│   │   ├── benchmark/
-│   │   └── data/              # テストデータ
-│   └── examples/              # 使用例
-├── frontend/                    # Web UI
-│   ├── package.json           # bun設定
-│   ├── vite.config.ts
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── components/
-│   │   ├── lib/              # ユーティリティ・型定義
-│   │   └── wasm/            # WASM出力先
-│   └── public/
-├── src/                         # 既存C++コード（参照用）
-├── bin/                         # 既存Python tools（参照用）
-├── docs/                        # 新規ドキュメント
-│   ├── design/
-│   ├── api/
-│   └── user/
-└── TODO.md                      # 本ファイル
+├── src/                 # 既存C++シミュレータ
+├── rust/                # Rust workspace (core/cli/web, examples, tests, target/)
+│   ├── Cargo.toml
+│   ├── crates/{core,cli,web}/
+│   ├── examples/
+│   ├── tests/           # 統合テスト予定地
+│   ├── docs/            # Rust側ドキュメント
+│   └── target/
+├── frontend/            # Vite + React UI
+│   ├── package.json
+│   └── src/{components,lib}
+├── bin/                 # Pythonユーティリティ & サンプル入力
+├── tools/               # 分析・比較スクリプト
+├── scripts/             # wasm_build.sh 等
+├── boost/, lib/         # C++依存ライブラリ
+├── docs/, doc/          # 仕様・設計資料
+├── test/                # C++テストスクリプト
+├── misc/                # 実験用リソース
+├── README.md / TODO.md
+└── 要求書.md / 設計書.md
 ```
 
 ### 優先順位・依存関係
-1. **Phase 1-2** - 数学・物理基盤（他すべてに影響）
-2. **Phase 3-4** - I/O・シミュレータ（コア機能）
-3. **Phase 5-6** - CLI・テスト（機能完成・品質確保）
-4. **Phase 7-8** - Web UI（ユーザビリティ）
-5. **Phase 9-10** - 移植・文書（運用・保守）
+1. コア拡張（6DoF・段分離）とそれに伴うテスト整備
+2. C++比較・性能測定を含む自動テスト/CI強化
+3. WASM配信戦略とフロントエンドUX改善
+4. Python工具群の移行方針決定
+5. ドキュメント/リリース整備
 
-### 品質管理
-- **コードレビュー** - 各Phase完了時
-- **C++版比較テスト** - 数値精度・性能確認
-- **継続的統合** - 自動テスト・ビルド
-- **メモリ安全性** - Rustのメリット活用
-- **エラーハンドリング** - Result型使用、panic回避
+### 品質管理メモ
+- コア更新時はC++版とCSV/JSON差分を比較すること。
+- `cargo fmt` / `cargo clippy -D warnings` / `cargo test` / `npm run build` をCIに組み込み、回帰検知を行う。
+- 大規模シナリオやブラウザ実行時のメモリ使用を監視し、閾値超過時のアラートを計画する。
 
 ---
 
-このTODO.mdを実装の進捗管理とマイルストーン確認に使用し、完了項目にチェックを入れながら着実に進めてください。
+このTODO.mdを進捗管理に使用し、完了した項目にチェックを追加しながら計画的に進めてください。

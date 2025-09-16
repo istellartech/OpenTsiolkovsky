@@ -199,9 +199,8 @@ impl Simulator {
             self.state.velocity.y,
             self.state.velocity.z,
         ];
-        let new_state = rk4.integrate(&current_state, self.state.time, dt, |t, state| {
-            self.dynamics(t, state)
-        });
+        let new_state =
+            rk4.integrate(&current_state, self.state.time, dt, |t, state| self.dynamics(t, state));
         self.state.time += dt;
         self.state.mass = new_state[0];
         self.state.position = Vector3::new(new_state[1], new_state[2], new_state[3]);
@@ -259,11 +258,8 @@ impl Simulator {
 
         // Use air-relative speed for Mach/Q like C++
         self.state.velocity_magnitude = self.state.velocity.magnitude(); // keep ECI |v| for reference
-        self.state.mach_number = if atm.speed_of_sound > 0.0 {
-            vel_air_mag / atm.speed_of_sound
-        } else {
-            0.0
-        };
+        self.state.mach_number =
+            if atm.speed_of_sound > 0.0 { vel_air_mag / atm.speed_of_sound } else { 0.0 };
         self.state.dynamic_pressure = 0.5 * atm.density * vel_air_mag.powi(2);
         self.last_dynamic_pressure = self.state.dynamic_pressure;
 
@@ -276,11 +272,8 @@ impl Simulator {
             .thrust
             .burn_end_time
             .min(self.config.stage1.thrust.forced_cutoff_time);
-        self.state.thrust = if t >= burn_start && t < burn_end {
-            self.rocket.thrust_at_time(t)
-        } else {
-            0.0
-        };
+        self.state.thrust =
+            if t >= burn_start && t < burn_end { self.rocket.thrust_at_time(t) } else { 0.0 };
         self.last_thrust_magnitude = self.state.thrust;
 
         // Drag magnitude using CA(Mach)
@@ -341,11 +334,8 @@ impl Simulator {
         };
         let vel_air_ned = velocity_ned - wind_ned;
         let vel_air_magnitude = vel_air_ned.magnitude();
-        let mach_number = if speed_of_sound > 0.0 {
-            vel_air_magnitude / speed_of_sound
-        } else {
-            0.0
-        };
+        let mach_number =
+            if speed_of_sound > 0.0 { vel_air_magnitude / speed_of_sound } else { 0.0 };
         // dynamic pressure is recomputed where needed based on air-relative velocity
 
         // Forces in ECI frame
@@ -360,21 +350,12 @@ impl Simulator {
         total_force += thrust_force;
 
         // 3. Aerodynamic forces
-        let aero_force = self.compute_aerodynamic_forces(
-            &position,
-            &velocity,
-            t,
-            mach_number,
-            mass,
-        );
+        let aero_force =
+            self.compute_aerodynamic_forces(&position, &velocity, t, mach_number, mass);
         total_force += aero_force;
 
         // Acceleration
-        let acceleration = if mass > 0.0 {
-            total_force / mass
-        } else {
-            Vector3::zeros()
-        };
+        let acceleration = if mass > 0.0 { total_force / mass } else { Vector3::zeros() };
 
         // Derivatives
         vec![
@@ -430,10 +411,7 @@ impl Simulator {
             }
             (ws, wd)
         } else {
-            (
-                self.config.wind.const_wind[0],
-                self.config.wind.const_wind[1],
-            )
+            (self.config.wind.const_wind[0], self.config.wind.const_wind[1])
         };
         let wind_ned = CT::vel_wind_ned_frame(wind_speed, wind_dir);
 
@@ -455,14 +433,10 @@ impl Simulator {
         let body_diameter = self.config.stage1.aero.body_diameter;
         let ref_area = std::f64::consts::PI * (body_diameter / 2.0).powi(2);
         let drag = ca * q * ref_area;
-        let cn_pitch = alpha.signum()
-            * self
-                .rocket
-                .cn_at(self.state.mach_number, alpha.to_degrees().abs());
-        let cn_yaw = beta.signum()
-            * self
-                .rocket
-                .cn_at(self.state.mach_number, beta.to_degrees().abs());
+        let cn_pitch =
+            alpha.signum() * self.rocket.cn_at(self.state.mach_number, alpha.to_degrees().abs());
+        let cn_yaw =
+            beta.signum() * self.rocket.cn_at(self.state.mach_number, beta.to_degrees().abs());
         let force_normal_pitch = cn_pitch * q * ref_area;
         let force_normal_yaw = cn_yaw * q * ref_area;
         let aero_body = Vector3::new(-drag, -force_normal_yaw, -force_normal_pitch);
@@ -477,52 +451,29 @@ impl Simulator {
             .burn_end_time
             .min(self.config.stage1.thrust.forced_cutoff_time);
         let is_powered = t >= burn_start && t < burn_end_eff;
-        let thrust_vac = if is_powered {
-            self.rocket.thrust_at_time(t)
-        } else {
-            0.0
-        };
-        let isp_vac = if is_powered {
-            self.rocket.isp_at_time(t)
-        } else {
-            0.0
-        };
+        let thrust_vac = if is_powered { self.rocket.thrust_at_time(t) } else { 0.0 };
+        let isp_vac = if is_powered { self.rocket.isp_at_time(t) } else { 0.0 };
         let throat_diameter = self.config.stage1.thrust.throat_diameter;
         let exit_area = std::f64::consts::PI
             * (throat_diameter * throat_diameter)
             * 0.25
             * self.config.stage1.thrust.nozzle_expansion_ratio;
-        let thrust_effective = if is_powered {
-            thrust_vac - exit_area * atm.pressure
-        } else {
-            0.0
-        };
+        let thrust_effective = if is_powered { thrust_vac - exit_area * atm.pressure } else { 0.0 };
         let thrust_body = Vector3::new(thrust_effective, 0.0, 0.0);
         let thrust_eci = dcm_body_to_eci * thrust_body;
 
         // Accelerations
         let gravity_eci = self.gravity.gravity_eci(&pos);
-        let acc_eci = if mass > 0.0 {
-            (thrust_eci + aero_eci) / mass + gravity_eci
-        } else {
-            gravity_eci
-        };
+        let acc_eci =
+            if mass > 0.0 { (thrust_eci + aero_eci) / mass + gravity_eci } else { gravity_eci };
         let acc_body = (dcm_ned_to_body * dcm_eci_to_ned) * (acc_eci - gravity_eci);
 
         // Loss terms
         let vel_xy = (vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y).sqrt();
         let path_angle = (-vel_ned.z).atan2(vel_xy);
         let gravity_ned = dcm_eci_to_ned * gravity_eci;
-        let loss_gravity = if is_powered {
-            gravity_ned.z * path_angle.sin()
-        } else {
-            0.0
-        };
-        let loss_thrust = if is_powered {
-            atm.pressure * exit_area / mass
-        } else {
-            0.0
-        };
+        let loss_gravity = if is_powered { gravity_ned.z * path_angle.sin() } else { 0.0 };
+        let loss_thrust = if is_powered { atm.pressure * exit_area / mass } else { 0.0 };
         let loss_aero = drag / mass;
 
         // Downrange

@@ -115,9 +115,7 @@ impl WasmSimulator {
     pub fn reset(&mut self) -> Result<(), JsError> {
         // For now, we'd need to reconstruct the simulator with original config
         // This would require storing the original config or implementing a reset method in core
-        Err(JsError::new(
-            "Reset not yet implemented - please create a new WasmSimulator",
-        ))
+        Err(JsError::new("Reset not yet implemented - please create a new WasmSimulator"))
     }
 }
 

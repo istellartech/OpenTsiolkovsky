@@ -45,10 +45,7 @@ fn main() -> Result<()> {
         println!("Configuration loaded: {}", rocket.config.name);
         println!("Launch position: {:?}", rocket.config.launch.position_llh);
         println!("Initial mass: {:.1} kg", rocket.config.stage1.mass_initial);
-        println!(
-            "Simulation end time: {:.1} s",
-            rocket.config.calculate_condition.end_time
-        );
+        println!("Simulation end time: {:.1} s", rocket.config.calculate_condition.end_time);
         println!();
     }
 
@@ -72,9 +69,8 @@ fn main() -> Result<()> {
             println!("  Final velocity: {:.1} m/s", last.velocity_magnitude);
 
             // Find max altitude
-            if let Some(max_alt_state) = trajectory
-                .iter()
-                .max_by(|a, b| a.altitude.partial_cmp(&b.altitude).unwrap())
+            if let Some(max_alt_state) =
+                trajectory.iter().max_by(|a, b| a.altitude.partial_cmp(&b.altitude).unwrap())
             {
                 println!(
                     "  Max altitude: {:.1} m at {:.1} s",
@@ -83,11 +79,10 @@ fn main() -> Result<()> {
             }
 
             // Find max velocity
-            if let Some(max_vel_state) = trajectory.iter().max_by(|a, b| {
-                a.velocity_magnitude
-                    .partial_cmp(&b.velocity_magnitude)
-                    .unwrap()
-            }) {
+            if let Some(max_vel_state) = trajectory
+                .iter()
+                .max_by(|a, b| a.velocity_magnitude.partial_cmp(&b.velocity_magnitude).unwrap())
+            {
                 println!(
                     "  Max velocity: {:.1} m/s at {:.1} s",
                     max_vel_state.velocity_magnitude, max_vel_state.time

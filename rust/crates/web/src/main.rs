@@ -7,8 +7,8 @@ use axum::{
     Json, Router,
 };
 use serde_json::json;
-use std::net::SocketAddr;
 use std::io::ErrorKind;
+use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
 
 use core::io as core_io;
@@ -39,12 +39,12 @@ async fn main() {
         .with_state(AppState)
         .layer(cors);
 
-    let start_port: u16 = std::env::var("OT_WEB_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(3001);
+    let start_port: u16 =
+        std::env::var("OT_WEB_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(3001);
     let listener = bind_with_autofallback(start_port).await;
-    let local = listener.local_addr().unwrap_or_else(|_| format!("0.0.0.0:{}", start_port).parse().unwrap());
+    let local = listener
+        .local_addr()
+        .unwrap_or_else(|_| format!("0.0.0.0:{}", start_port).parse().unwrap());
     println!("OpenTsiolkovsky Web API listening on http://{}", local);
     axum::serve(listener, app).await.expect("server error");
 }
@@ -59,11 +59,7 @@ async fn bind_with_autofallback(start_port: u16) -> tokio::net::TcpListener {
         match tokio::net::TcpListener::bind(addr).await {
             Ok(l) => {
                 if offset > 0 {
-                    eprintln!(
-                        "[info] Port {} in use. Falling back to {}",
-                        start_port,
-                        port
-                    );
+                    eprintln!("[info] Port {} in use. Falling back to {}", start_port, port);
                 }
                 return l;
             }
@@ -78,9 +74,7 @@ async fn bind_with_autofallback(start_port: u16) -> tokio::net::TcpListener {
     }
     // Last resort: OS picks a free port
     let addr0: SocketAddr = format!("{}:{}", host, 0).parse().unwrap();
-    tokio::net::TcpListener::bind(addr0)
-        .await
-        .expect("failed to bind to any port")
+    tokio::net::TcpListener::bind(addr0).await.expect("failed to bind to any port")
 }
 
 async fn run_simulation(

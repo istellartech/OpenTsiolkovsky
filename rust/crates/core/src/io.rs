@@ -37,10 +37,9 @@ pub fn load_csv_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64)>> {
     for result in reader.records() {
         let record = result?;
         if record.len() >= 2 {
-            if let (Ok(time), Ok(value)) = (
-                record[0].trim().parse::<f64>(),
-                record[1].trim().parse::<f64>(),
-            ) {
+            if let (Ok(time), Ok(value)) =
+                (record[0].trim().parse::<f64>(), record[1].trim().parse::<f64>())
+            {
                 data.push((time, value));
             }
         }
@@ -64,17 +63,14 @@ pub fn load_time_series<P: AsRef<Path>>(path: P) -> Result<TimeSeriesData> {
 
 /// Parse time-series CSV from string content
 pub fn parse_time_series_from_str(content: &str) -> Result<TimeSeriesData> {
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(content.as_bytes());
+    let mut rdr = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
     let mut ts = TimeSeriesData::new();
     for result in rdr.records() {
         let record = result?;
         if record.len() >= 2 {
-            if let (Ok(time), Ok(value)) = (
-                record[0].trim().parse::<f64>(),
-                record[1].trim().parse::<f64>(),
-            ) {
+            if let (Ok(time), Ok(value)) =
+                (record[0].trim().parse::<f64>(), record[1].trim().parse::<f64>())
+            {
                 ts.time.push(time);
                 ts.values.push(value);
             }
@@ -155,11 +151,7 @@ pub fn parse_cn_surface_from_str(content: &str) -> Result<SurfaceData2D> {
     let x_sorted: Vec<f64> = idx.iter().map(|&i| x[i]).collect();
     let z_sorted: Vec<Vec<f64>> = idx.iter().map(|&i| z[i].clone()).collect();
 
-    Ok(SurfaceData2D {
-        x: x_sorted,
-        y,
-        z: z_sorted,
-    })
+    Ok(SurfaceData2D { x: x_sorted, y, z: z_sorted })
 }
 
 /// Load attitude data from CSV file (time, azimuth, elevation)
@@ -185,9 +177,7 @@ pub fn load_attitude_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)
 
 /// Parse attitude data CSV from string content (time, azimuth, elevation)
 pub fn parse_attitude_from_str(content: &str) -> Result<Vec<(f64, f64, f64)>> {
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(content.as_bytes());
+    let mut reader = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
     let mut data = Vec::new();
     for result in reader.records() {
         let record = result?;
@@ -227,9 +217,7 @@ pub fn load_wind_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)>> {
 
 /// Parse wind data CSV from string content (altitude, wind_speed, wind_direction)
 pub fn parse_wind_from_str(content: &str) -> Result<Vec<(f64, f64, f64)>> {
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .from_reader(content.as_bytes());
+    let mut reader = csv::ReaderBuilder::new().has_headers(true).from_reader(content.as_bytes());
     let mut data = Vec::new();
     for result in reader.records() {
         let record = result?;
@@ -380,17 +368,11 @@ pub fn save_summary_json<P: AsRef<Path>>(
         )));
     }
 
-    let max_altitude_state = trajectory
-        .iter()
-        .max_by(|a, b| a.altitude.partial_cmp(&b.altitude).unwrap())
-        .unwrap();
+    let max_altitude_state =
+        trajectory.iter().max_by(|a, b| a.altitude.partial_cmp(&b.altitude).unwrap()).unwrap();
     let max_velocity_state = trajectory
         .iter()
-        .max_by(|a, b| {
-            a.velocity_magnitude
-                .partial_cmp(&b.velocity_magnitude)
-                .unwrap()
-        })
+        .max_by(|a, b| a.velocity_magnitude.partial_cmp(&b.velocity_magnitude).unwrap())
         .unwrap();
     let max_mach_state = trajectory
         .iter()

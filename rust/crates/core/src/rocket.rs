@@ -33,11 +33,7 @@ impl SurfaceData2D {
         }
         let x0 = self.x[i];
         let x1 = self.x[i + 1];
-        let tx = if (x1 - x0).abs() < 1e-12 {
-            0.0
-        } else {
-            (xv - x0) / (x1 - x0)
-        };
+        let tx = if (x1 - x0).abs() < 1e-12 { 0.0 } else { (xv - x0) / (x1 - x0) };
 
         // Find y indices (clamped)
         let mut j = 0usize;
@@ -52,11 +48,7 @@ impl SurfaceData2D {
         }
         let y0 = self.y[j];
         let y1 = self.y[j + 1];
-        let ty = if (y1 - y0).abs() < 1e-12 {
-            0.0
-        } else {
-            (yv - y0) / (y1 - y0)
-        };
+        let ty = if (y1 - y0).abs() < 1e-12 { 0.0 } else { (yv - y0) / (y1 - y0) };
 
         // Bilinear interpolation
         let z00 = self.z[i][j];
@@ -91,11 +83,7 @@ impl SurfaceData2D {
         }
         let x0 = self.x[i];
         let x1 = self.x[i + 1];
-        let d_mach = if (x1 - x0).abs() < 1e-12 {
-            0.0
-        } else {
-            (mach_c - x0) / (x1 - x0)
-        };
+        let d_mach = if (x1 - x0).abs() < 1e-12 { 0.0 } else { (mach_c - x0) / (x1 - x0) };
 
         // Find lower index for alpha: j such that y[j] <= alpha < y[j+1]
         let mut j = 0usize;
@@ -108,11 +96,7 @@ impl SurfaceData2D {
         }
         let y0 = self.y[j];
         let y1 = self.y[j + 1];
-        let d_alpha = if (y1 - y0).abs() < 1e-12 {
-            0.0
-        } else {
-            (alpha_c - y0) / (y1 - y0)
-        };
+        let d_alpha = if (y1 - y0).abs() < 1e-12 { 0.0 } else { (alpha_c - y0) / (y1 - y0) };
 
         // Sample corners
         let f = |ii: usize, jj: usize| -> f64 { self.z[ii][jj] };
@@ -391,10 +375,7 @@ pub struct TimeSeriesData {
 
 impl TimeSeriesData {
     pub fn new() -> Self {
-        TimeSeriesData {
-            time: Vec::new(),
-            values: Vec::new(),
-        }
+        TimeSeriesData { time: Vec::new(), values: Vec::new() }
     }
 
     /// Linear interpolation for given time
@@ -540,10 +521,7 @@ impl Rocket {
                 (data[last].1, data[last].2)
             }
         } else {
-            (
-                self.config.stage1.attitude.const_azimuth,
-                self.config.stage1.attitude.const_elevation,
-            )
+            (self.config.stage1.attitude.const_azimuth, self.config.stage1.attitude.const_elevation)
         }
     }
 
