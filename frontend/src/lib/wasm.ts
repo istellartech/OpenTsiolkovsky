@@ -15,7 +15,12 @@ export function initWasm(): Promise<any> {
     if (keys.length === 0) {
       modPromise = Promise.reject(new Error('WASM bundle not found. Run: bash scripts/wasm_build.sh'))
     } else {
-      modPromise = candidates[keys[0]]()
+      modPromise = candidates[keys[0]]().then(async (module) => {
+        if (typeof module.default === 'function') {
+          await module.default()
+        }
+        return module
+      })
     }
   }
   return modPromise

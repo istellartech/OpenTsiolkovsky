@@ -23,14 +23,20 @@ if command -v rustup >/dev/null 2>&1; then
   rustup target add wasm32-unknown-unknown >/dev/null 2>&1 || true
 fi
 
-mkdir -p "$OUT_DIR"
-
 echo "[WASM] Building (target=web, features=wasm)"
 wasm-pack build "$CRATE_DIR" \
   --release \
   --target web \
-  --features wasm \
-  --out-dir "$OUT_DIR" \
-  --out-name openTsiolkovsky_cli
+  --features wasm
 
-echo "[WASM] Done. Output written to $OUT_DIR"
+PKG_DIR="$CRATE_DIR/pkg"
+if [ ! -d "$PKG_DIR" ]; then
+  echo "[ERROR] wasm-pack did not produce expected pkg/ directory" >&2
+  exit 1
+fi
+
+rm -rf "$OUT_DIR"
+mkdir -p "$OUT_DIR"
+cp -R "$PKG_DIR"/. "$OUT_DIR"/
+
+echo "[WASM] Done. Output copied to $OUT_DIR"
