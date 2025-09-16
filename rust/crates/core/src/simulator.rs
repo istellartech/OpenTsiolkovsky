@@ -226,32 +226,8 @@ impl Simulator {
         );
 
         // Wind
-        let wind_ned = if let Some(ref wind_data) = self.rocket.wind_data {
-            // Simple linear interpolation in altitude
-            let alt = self.state.altitude;
-            let mut ws = self.config.wind.const_wind[0];
-            let mut wd = self.config.wind.const_wind[1];
-            for i in 0..wind_data.len().saturating_sub(1) {
-                if alt >= wind_data[i].0 && alt <= wind_data[i + 1].0 {
-                    let dt = wind_data[i + 1].0 - wind_data[i].0;
-                    if dt.abs() > 1e-12 {
-                        let a = (alt - wind_data[i].0) / dt;
-                        ws = wind_data[i].1 + a * (wind_data[i + 1].1 - wind_data[i].1);
-                        wd = wind_data[i].2 + a * (wind_data[i + 1].2 - wind_data[i].2);
-                    } else {
-                        ws = wind_data[i].1;
-                        wd = wind_data[i].2;
-                    }
-                    break;
-                }
-            }
-            CoordinateTransform::vel_wind_ned_frame(ws, wd)
-        } else {
-            CoordinateTransform::vel_wind_ned_frame(
-                self.config.wind.const_wind[0],
-                self.config.wind.const_wind[1],
-            )
-        };
+        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(self.state.altitude);
+        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir);
 
         let vel_air_ned = vel_ned - wind_ned;
         let vel_air_mag = vel_air_ned.magnitude();
@@ -306,32 +282,8 @@ impl Simulator {
         let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
         let velocity_ned =
             CoordinateTransform::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
-        let wind_ned = if let Some(ref wind_data) = self.rocket.wind_data {
-            let altitude = pos_llh.z;
-            let mut wind_speed = 0.0;
-            let mut wind_direction = 0.0;
-            for i in 0..wind_data.len().saturating_sub(1) {
-                if altitude >= wind_data[i].0 && altitude <= wind_data[i + 1].0 {
-                    let dt = wind_data[i + 1].0 - wind_data[i].0;
-                    if dt.abs() > 1e-10 {
-                        let alpha = (altitude - wind_data[i].0) / dt;
-                        wind_speed = wind_data[i].1 + alpha * (wind_data[i + 1].1 - wind_data[i].1);
-                        wind_direction =
-                            wind_data[i].2 + alpha * (wind_data[i + 1].2 - wind_data[i].2);
-                    } else {
-                        wind_speed = wind_data[i].1;
-                        wind_direction = wind_data[i].2;
-                    }
-                    break;
-                }
-            }
-            CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_direction)
-        } else {
-            CoordinateTransform::vel_wind_ned_frame(
-                self.config.wind.const_wind[0],
-                self.config.wind.const_wind[1],
-            )
-        };
+        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(pos_llh.z);
+        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir);
         let vel_air_ned = velocity_ned - wind_ned;
         let vel_air_magnitude = vel_air_ned.magnitude();
         let mach_number =
@@ -391,28 +343,7 @@ impl Simulator {
 
         // Atmosphere and wind
         let atm = self.atmosphere.conditions(alt_m);
-        let (wind_speed, wind_dir) = if let Some(ref wind_data) = self.rocket.wind_data {
-            let alt = alt_m;
-            let mut ws = self.config.wind.const_wind[0];
-            let mut wd = self.config.wind.const_wind[1];
-            for i in 0..wind_data.len().saturating_sub(1) {
-                if alt >= wind_data[i].0 && alt <= wind_data[i + 1].0 {
-                    let dt = wind_data[i + 1].0 - wind_data[i].0;
-                    if dt.abs() > 1e-12 {
-                        let a = (alt - wind_data[i].0) / dt;
-                        ws = wind_data[i].1 + a * (wind_data[i + 1].1 - wind_data[i].1);
-                        wd = wind_data[i].2 + a * (wind_data[i + 1].2 - wind_data[i].2);
-                    } else {
-                        ws = wind_data[i].1;
-                        wd = wind_data[i].2;
-                    }
-                    break;
-                }
-            }
-            (ws, wd)
-        } else {
-            (self.config.wind.const_wind[0], self.config.wind.const_wind[1])
-        };
+        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(alt_m);
         let wind_ned = CT::vel_wind_ned_frame(wind_speed, wind_dir);
 
         // Air-relative velocity and body frame vectors
@@ -607,33 +538,8 @@ impl Simulator {
             CoordinateTransform::vel_eci_to_ecef_ned_frame(position, velocity, &dcm_eci_to_ned);
 
         // Apply wind (if any)
-        let wind_ned = if let Some(ref wind_data) = self.rocket.wind_data {
-            // Interpolate wind based on altitude
-            let altitude = pos_llh.z;
-            let mut wind_speed = 0.0;
-            let mut wind_direction = 0.0;
-            for i in 0..wind_data.len().saturating_sub(1) {
-                if altitude >= wind_data[i].0 && altitude <= wind_data[i + 1].0 {
-                    let dt = wind_data[i + 1].0 - wind_data[i].0;
-                    if dt.abs() > 1e-10 {
-                        let alpha = (altitude - wind_data[i].0) / dt;
-                        wind_speed = wind_data[i].1 + alpha * (wind_data[i + 1].1 - wind_data[i].1);
-                        wind_direction =
-                            wind_data[i].2 + alpha * (wind_data[i + 1].2 - wind_data[i].2);
-                    } else {
-                        wind_speed = wind_data[i].1;
-                        wind_direction = wind_data[i].2;
-                    }
-                    break;
-                }
-            }
-            CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_direction)
-        } else {
-            CoordinateTransform::vel_wind_ned_frame(
-                self.config.wind.const_wind[0],
-                self.config.wind.const_wind[1],
-            )
-        };
+        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(pos_llh.z);
+        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir);
 
         // Relative air velocity and dynamic pressure from air-relative speed
         let vel_air_ned = velocity_ned - wind_ned;

@@ -378,6 +378,20 @@ impl TimeSeriesData {
         TimeSeriesData { time: Vec::new(), values: Vec::new() }
     }
 
+    pub fn from_pairs<I, T>(pairs: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+        T: Into<(f64, f64)>,
+    {
+        let mut ts = TimeSeriesData::new();
+        for pair in pairs {
+            let (time, value) = pair.into();
+            ts.time.push(time);
+            ts.values.push(value);
+        }
+        ts
+    }
+
     /// Linear interpolation for given time
     pub fn interpolate(&self, t: f64) -> f64 {
         if self.time.is_empty() {
@@ -523,6 +537,38 @@ impl Rocket {
         } else {
             (self.config.stage1.attitude.const_azimuth, self.config.stage1.attitude.const_elevation)
         }
+    }
+
+    /// Interpolated wind speed/direction at altitude [m]
+    pub fn wind_at_altitude(&self, altitude: f64) -> (f64, f64) {
+        let default = (self.config.wind.const_wind[0], self.config.wind.const_wind[1]);
+
+        let data = match &self.wind_data {
+            Some(data) if !data.is_empty() => data,
+            _ => return default,
+        };
+
+        if altitude <= data[0].0 {
+            return (data[0].1, data[0].2);
+        }
+
+        for pair in data.windows(2) {
+            let (alt0, speed0, dir0) = pair[0];
+            let (alt1, speed1, dir1) = pair[1];
+            if altitude >= alt0 && altitude <= alt1 {
+                let delta_alt = alt1 - alt0;
+                if delta_alt.abs() < 1e-10 {
+                    return (speed0, dir0);
+                }
+                let alpha = (altitude - alt0) / delta_alt;
+                let speed = speed0 + alpha * (speed1 - speed0);
+                let direction = dir0 + alpha * (dir1 - dir0);
+                return (speed, direction);
+            }
+        }
+
+        let last = data.last().unwrap();
+        (last.1, last.2)
     }
 
     /// Get current stage mass [kg]
