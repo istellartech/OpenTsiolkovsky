@@ -1,7 +1,9 @@
+export type Vec3Json = { x: number, y: number, z: number } | [number, number, number]
+
 export type SimulationState = {
   time: number
-  position: { x: number, y: number, z: number }
-  velocity: { x: number, y: number, z: number }
+  position: Vec3Json
+  velocity: Vec3Json
   mass: number
   stage: number
   altitude: number
@@ -10,6 +12,22 @@ export type SimulationState = {
   dynamic_pressure: number
   thrust: number
   drag_force: number
+}
+
+export function vec3ToObject(vec: Vec3Json): { x: number, y: number, z: number } {
+  if (Array.isArray(vec)) {
+    const [x, y, z] = vec
+    return {
+      x: Number(x),
+      y: Number(y),
+      z: Number(z),
+    }
+  }
+  return {
+    x: Number(vec.x),
+    y: Number(vec.y),
+    z: Number(vec.z),
+  }
 }
 
 // Minimal API error shape returned by the web server

@@ -7,8 +7,10 @@ use axum::{
     Json, Router,
 };
 use serde_json::json;
+use std::fs;
 use std::io::ErrorKind;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use tower_http::cors::{Any, CorsLayer};
 
 use core::io as core_io;
@@ -103,11 +105,52 @@ struct PathPayload {
     config_path: String,
 }
 
+fn resolve_config_path(raw: &str) -> Result<PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("config_path must not be empty".to_string());
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if candidate.is_absolute() {
+        return if candidate.exists() {
+            Ok(fs::canonicalize(&candidate).unwrap_or(candidate))
+        } else {
+            Err(format!("Config file not found: {}", candidate.display()))
+        };
+    }
+
+    if candidate.exists() {
+        return Ok(fs::canonicalize(&candidate).unwrap_or(candidate));
+    }
+
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for ancestor in manifest_dir.ancestors().skip(1) {
+        let joined = ancestor.join(&candidate);
+        if joined.exists() {
+            return Ok(fs::canonicalize(&joined).unwrap_or(joined));
+        }
+    }
+
+    Err(format!("Config file not found: {} (searched relative to workspace roots)", trimmed))
+}
+
 async fn run_simulation_from_path(
     State(_state): State<AppState>,
     Json(payload): Json<PathPayload>,
 ) -> impl IntoResponse {
-    let rocket = match core_io::create_rocket_from_config(&payload.config_path) {
+    let resolved_path = match resolve_config_path(&payload.config_path) {
+        Ok(p) => p,
+        Err(e) => {
+            let body = Json(json!({
+                "error": "Failed to resolve config path",
+                "detail": e,
+            }));
+            return (StatusCode::BAD_REQUEST, body).into_response();
+        }
+    };
+
+    let rocket = match core_io::create_rocket_from_config(&resolved_path) {
         Ok(r) => r,
         Err(e) => {
             let body = Json(json!({

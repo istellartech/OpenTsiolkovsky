@@ -1,16 +1,27 @@
 import type { SimulationState, RocketConfig, ApiError } from './types'
 
 async function parseMaybeError(res: Response): Promise<never> {
+  let raw = ''
   try {
-    const data = await res.json() as ApiError | any
-    if (data && typeof data === 'object' && 'error' in data) {
-      const msg = data.detail ? `${data.error}: ${data.detail}` : String(data.error)
-      throw new Error(msg)
-    }
-    throw new Error(JSON.stringify(data))
-  } catch {
-    throw new Error(await res.text())
+    raw = await res.text()
+  } catch (_err) {
+    throw new Error(`${res.status} ${res.statusText}`)
   }
+
+  if (raw.length > 0) {
+    try {
+      const data = JSON.parse(raw) as ApiError | any
+      if (data && typeof data === 'object' && 'error' in data) {
+        const msg = data.detail ? `${data.error}: ${data.detail}` : String(data.error)
+        throw new Error(msg)
+      }
+      throw new Error(typeof data === 'string' ? data : JSON.stringify(data))
+    } catch {
+      throw new Error(raw)
+    }
+  }
+
+  throw new Error(`${res.status} ${res.statusText}`)
 }
 
 export async function runSimulation(config: RocketConfig): Promise<SimulationState[]> {
