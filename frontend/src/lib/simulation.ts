@@ -1,4 +1,4 @@
-import type { SimulationState, RocketConfig, ApiError } from './types'
+import type { SimulationState, ClientConfig, ApiError } from './types'
 
 async function parseMaybeError(res: Response): Promise<never> {
   let raw = ''
@@ -24,26 +24,11 @@ async function parseMaybeError(res: Response): Promise<never> {
   throw new Error(`${res.status} ${res.statusText}`)
 }
 
-export async function runSimulation(config: RocketConfig): Promise<SimulationState[]> {
+export async function runSimulation(config: ClientConfig): Promise<SimulationState[]> {
   const res = await fetch('/api/simulation', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config)
   })
-  if (!res.ok) return parseMaybeError(res)
-  return res.json()
-}
-
-export async function runSimulationFromPath(configPath: string): Promise<SimulationState[]> {
-  const res = await fetch('/api/simulation/path', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config_path: configPath })
-  })
-  if (!res.ok) return parseMaybeError(res)
-  return res.json()
-}
-
-export async function uploadAndRun(formData: FormData): Promise<SimulationState[]> {
-  const res = await fetch('/api/upload', { method: 'POST', body: formData })
   if (!res.ok) return parseMaybeError(res)
   return res.json()
 }

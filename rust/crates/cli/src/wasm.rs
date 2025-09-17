@@ -1,5 +1,5 @@
 use openTsiolkovsky_core::{
-    rocket::{Rocket, RocketConfig},
+    rocket::{ClientConfig, Rocket, RocketConfig},
     Simulator,
 };
 use wasm_bindgen::prelude::*;
@@ -38,10 +38,16 @@ impl WasmSimulator {
             &config_json[..config_json.len().min(100)]
         );
 
-        let config: RocketConfig = serde_json::from_str(config_json)
-            .map_err(|e| JsError::new(&format!("Failed to parse config JSON: {}", e)))?;
+        let rocket = match serde_json::from_str::<ClientConfig>(config_json) {
+            Ok(client) => client.into_rocket(),
+            Err(_) => {
+                let legacy: RocketConfig = serde_json::from_str(config_json)
+                    .map_err(|e| JsError::new(&format!("Failed to parse config JSON: {}", e)))?;
+                Rocket::new(legacy)
+            }
+        };
 
-        let simulator = Simulator::new(Rocket::new(config))
+        let simulator = Simulator::new(rocket)
             .map_err(|e| JsError::new(&format!("Failed to create simulator: {}", e)))?;
 
         Ok(WasmSimulator { inner: simulator })
@@ -122,6 +128,9 @@ impl WasmSimulator {
 /// Utility function to validate JSON configuration without creating simulator
 #[wasm_bindgen]
 pub fn validate_config(config_json: &str) -> Result<bool, JsError> {
+    if serde_json::from_str::<ClientConfig>(config_json).is_ok() {
+        return Ok(true);
+    }
     match serde_json::from_str::<RocketConfig>(config_json) {
         Ok(_) => Ok(true),
         Err(e) => Err(JsError::new(&format!("Config validation failed: {}", e))),

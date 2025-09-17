@@ -2,7 +2,7 @@
 // This expects `scripts/wasm_build.sh` to have emitted artifacts into
 // `frontend/src/wasm` with out-name `openTsiolkovsky_cli`.
 
-import type { SimulationState } from './types'
+import type { ClientConfig, SimulationState } from './types'
 
 let modPromise: Promise<any> | null = null
 
@@ -26,9 +26,9 @@ export function initWasm(): Promise<any> {
   return modPromise
 }
 
-export async function runSimulationWasm(config: unknown): Promise<SimulationState[]> {
+export async function runSimulationWasm(config: ClientConfig): Promise<SimulationState[]> {
   const mod = await initWasm()
-  // WasmSimulator expects JSON string of RocketConfig (C++-compatible keys)
+  // WasmSimulator accepts the client config JSON and performs conversion internally
   const sim = new mod.WasmSimulator(JSON.stringify(config))
   const json = await sim.run()
   return JSON.parse(json) as SimulationState[]

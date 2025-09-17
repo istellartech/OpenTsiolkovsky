@@ -593,3 +593,407 @@ impl Rocket {
         }
     }
 }
+
+/// -------------------------------------------------------------------------------------------------
+/// Client-friendly configuration (used by web API and WASM bridge)
+/// -------------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientConfig {
+    pub name: String,
+    pub simulation: ClientSimulation,
+    pub launch: ClientLaunch,
+    #[serde(default)]
+    pub stage: ClientStage,
+    #[serde(default)]
+    pub aerodynamics: ClientAerodynamics,
+    #[serde(default)]
+    pub attitude: ClientAttitude,
+    #[serde(default)]
+    pub wind: ClientWind,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientSimulation {
+    #[serde(default = "default_duration_s")]
+    pub duration_s: f64,
+    #[serde(default = "default_output_step_s")]
+    pub output_step_s: f64,
+    #[serde(default)]
+    pub air_density_percent: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientLaunch {
+    pub latitude_deg: f64,
+    pub longitude_deg: f64,
+    #[serde(default)]
+    pub altitude_m: f64,
+    #[serde(default = "default_velocity_ned")]
+    pub velocity_ned_mps: [f64; 3],
+    pub datetime_utc: ClientDateTime,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientDateTime {
+    pub year: i32,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientStage {
+    #[serde(default = "default_power_mode")]
+    pub power_mode: i32,
+    #[serde(default = "default_free_mode")]
+    pub free_mode: i32,
+    #[serde(default = "default_stage_mass")]
+    pub mass_initial_kg: f64,
+    #[serde(default = "default_burn_start")]
+    pub burn_start_s: f64,
+    #[serde(default = "default_burn_end")]
+    pub burn_end_s: f64,
+    #[serde(default = "default_forced_cutoff")]
+    pub forced_cutoff_s: f64,
+    #[serde(default = "default_throat_diameter")]
+    pub throat_diameter_m: f64,
+    #[serde(default = "default_nozzle_expansion")]
+    pub nozzle_expansion_ratio: f64,
+    #[serde(default = "default_nozzle_exit_pressure")]
+    pub nozzle_exit_pressure_pa: f64,
+    #[serde(default = "default_thrust_constant")]
+    pub thrust_constant: f64,
+    #[serde(default = "default_multiplier")]
+    pub thrust_multiplier: f64,
+    #[serde(default)]
+    pub thrust_profile: Vec<ClientTimeSample>,
+    #[serde(default = "default_isp_constant")]
+    pub isp_constant: f64,
+    #[serde(default = "default_multiplier")]
+    pub isp_multiplier: f64,
+    #[serde(default)]
+    pub isp_profile: Vec<ClientTimeSample>,
+}
+
+impl Default for ClientStage {
+    fn default() -> Self {
+        Self {
+            power_mode: default_power_mode(),
+            free_mode: default_free_mode(),
+            mass_initial_kg: default_stage_mass(),
+            burn_start_s: default_burn_start(),
+            burn_end_s: default_burn_end(),
+            forced_cutoff_s: default_forced_cutoff(),
+            throat_diameter_m: default_throat_diameter(),
+            nozzle_expansion_ratio: default_nozzle_expansion(),
+            nozzle_exit_pressure_pa: default_nozzle_exit_pressure(),
+            thrust_constant: default_thrust_constant(),
+            thrust_multiplier: default_multiplier(),
+            thrust_profile: Vec::new(),
+            isp_constant: default_isp_constant(),
+            isp_multiplier: default_multiplier(),
+            isp_profile: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientAerodynamics {
+    #[serde(default = "default_body_diameter")]
+    pub body_diameter_m: f64,
+    #[serde(default)]
+    pub cn_constant: f64,
+    #[serde(default = "default_multiplier")]
+    pub cn_multiplier: f64,
+    #[serde(default)]
+    pub cn_profile: Vec<ClientMachSample>,
+    #[serde(default)]
+    pub ca_constant: f64,
+    #[serde(default = "default_multiplier")]
+    pub ca_multiplier: f64,
+    #[serde(default)]
+    pub ca_profile: Vec<ClientMachSample>,
+    #[serde(default = "default_ballistic_coefficient")]
+    pub ballistic_coefficient: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientAttitude {
+    #[serde(default = "default_attitude_elevation")]
+    pub elevation_deg: f64,
+    #[serde(default = "default_attitude_azimuth")]
+    pub azimuth_deg: f64,
+    #[serde(default)]
+    pub pitch_offset_deg: f64,
+    #[serde(default)]
+    pub yaw_offset_deg: f64,
+    #[serde(default)]
+    pub roll_offset_deg: f64,
+    #[serde(default = "default_gyro_bias")]
+    pub gyro_bias_deg_h: [f64; 3],
+    #[serde(default)]
+    pub profile: Vec<ClientAttitudeSample>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientWind {
+    #[serde(default)]
+    pub speed_mps: f64,
+    #[serde(default = "default_wind_direction")]
+    pub direction_deg: f64,
+    #[serde(default)]
+    pub profile: Vec<ClientWindSample>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientTimeSample {
+    pub time: f64,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientMachSample {
+    pub mach: f64,
+    pub value: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientAttitudeSample {
+    pub time: f64,
+    pub azimuth_deg: f64,
+    pub elevation_deg: f64,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientWindSample {
+    pub altitude_m: f64,
+    pub speed_mps: f64,
+    pub direction_deg: f64,
+}
+
+fn default_duration_s() -> f64 {
+    120.0
+}
+fn default_output_step_s() -> f64 {
+    1.0
+}
+fn default_velocity_ned() -> [f64; 3] {
+    [0.0, 0.0, 0.0]
+}
+fn default_power_mode() -> i32 {
+    0
+}
+fn default_free_mode() -> i32 {
+    2
+}
+fn default_stage_mass() -> f64 {
+    1000.0
+}
+fn default_burn_start() -> f64 {
+    0.0
+}
+fn default_burn_end() -> f64 {
+    30.0
+}
+fn default_forced_cutoff() -> f64 {
+    30.0
+}
+fn default_throat_diameter() -> f64 {
+    0.1
+}
+fn default_nozzle_expansion() -> f64 {
+    5.0
+}
+fn default_nozzle_exit_pressure() -> f64 {
+    101_300.0
+}
+fn default_thrust_constant() -> f64 {
+    50_000.0
+}
+fn default_isp_constant() -> f64 {
+    200.0
+}
+fn default_multiplier() -> f64 {
+    1.0
+}
+fn default_body_diameter() -> f64 {
+    0.5
+}
+fn default_ballistic_coefficient() -> f64 {
+    100.0
+}
+fn default_attitude_elevation() -> f64 {
+    83.0
+}
+fn default_attitude_azimuth() -> f64 {
+    113.0
+}
+fn default_gyro_bias() -> [f64; 3] {
+    [0.0, 0.0, 0.0]
+}
+fn default_wind_direction() -> f64 {
+    270.0
+}
+
+impl ClientConfig {
+    pub fn into_rocket(self) -> Rocket {
+        let calc = CalculateCondition {
+            end_time: self.simulation.duration_s,
+            time_step: self.simulation.output_step_s,
+            air_density_file_exists: false,
+            air_density_file: String::new(),
+            air_density_variation: self.simulation.air_density_percent,
+        };
+
+        let launch = LaunchCondition {
+            position_llh: [
+                self.launch.latitude_deg,
+                self.launch.longitude_deg,
+                self.launch.altitude_m,
+            ],
+            velocity_ned: self.launch.velocity_ned_mps,
+            launch_time: [
+                self.launch.datetime_utc.year,
+                self.launch.datetime_utc.month as i32,
+                self.launch.datetime_utc.day as i32,
+                self.launch.datetime_utc.hour as i32,
+                self.launch.datetime_utc.minute as i32,
+                self.launch.datetime_utc.second as i32,
+            ],
+        };
+
+        let thrust = ThrustConfig {
+            isp_file_exists: false,
+            isp_file_name: String::new(),
+            isp_coefficient: self.stage.isp_multiplier,
+            const_isp_vac: self.stage.isp_constant,
+            thrust_file_exists: false,
+            thrust_file_name: String::new(),
+            thrust_coefficient: self.stage.thrust_multiplier,
+            const_thrust_vac: self.stage.thrust_constant,
+            burn_start_time: self.stage.burn_start_s,
+            burn_end_time: self.stage.burn_end_s,
+            forced_cutoff_time: self.stage.forced_cutoff_s,
+            throat_diameter: self.stage.throat_diameter_m,
+            nozzle_expansion_ratio: self.stage.nozzle_expansion_ratio,
+            nozzle_exhaust_pressure: self.stage.nozzle_exit_pressure_pa,
+        };
+
+        let aero = AeroConfig {
+            body_diameter: self.aerodynamics.body_diameter_m,
+            cn_file_exists: false,
+            cn_file_name: String::new(),
+            normal_multiplier: self.aerodynamics.cn_multiplier,
+            const_normal_coefficient: self.aerodynamics.cn_constant,
+            ca_file_exists: false,
+            ca_file_name: String::new(),
+            axial_multiplier: self.aerodynamics.ca_multiplier,
+            const_axial_coefficient: self.aerodynamics.ca_constant,
+            ballistic_coefficient: self.aerodynamics.ballistic_coefficient,
+        };
+
+        let attitude = AttitudeConfig {
+            attitude_file_exists: false,
+            attitude_file_name: String::new(),
+            const_elevation: self.attitude.elevation_deg,
+            const_azimuth: self.attitude.azimuth_deg,
+            pitch_offset: self.attitude.pitch_offset_deg,
+            yaw_offset: self.attitude.yaw_offset_deg,
+            roll_offset: self.attitude.roll_offset_deg,
+            gyro_bias_x: self.attitude.gyro_bias_deg_h[0],
+            gyro_bias_y: self.attitude.gyro_bias_deg_h[1],
+            gyro_bias_z: self.attitude.gyro_bias_deg_h[2],
+        };
+
+        let stage = StageConfig {
+            power_flight_mode: self.stage.power_mode,
+            free_flight_mode: self.stage.free_mode,
+            mass_initial: self.stage.mass_initial_kg,
+            thrust,
+            aero,
+            attitude,
+            dumping_product: DumpingProductConfig {
+                dumping_product_exists: false,
+                dumping_product_separation_time: 0.0,
+                dumping_product_mass: 0.0,
+                dumping_product_ballistic_coefficient: 0.0,
+                additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
+            },
+            attitude_neutrality: AttitudeNeutralityConfig {
+                considering_neutrality: false,
+                cg_controller_position_file: String::new(),
+                cp_file: String::new(),
+            },
+            six_dof: SixDofConfig {
+                cg_cp_controller_position_file: String::new(),
+                moment_of_inertia_file_name: String::new(),
+            },
+            stage: StageTransitionConfig { following_stage_exists: false, separation_time: 1.0e6 },
+        };
+
+        let wind = WindConfig {
+            wind_file_exists: false,
+            wind_file_name: String::new(),
+            const_wind: [self.wind.speed_mps, self.wind.direction_deg],
+        };
+
+        let config = RocketConfig {
+            name: self.name,
+            calculate_condition: calc,
+            launch,
+            stage1: stage,
+            wind,
+        };
+
+        let mut rocket = Rocket::new(config);
+
+        if !self.stage.thrust_profile.is_empty() {
+            rocket.thrust_data = Some(TimeSeriesData::from_pairs(
+                self.stage.thrust_profile.into_iter().map(|p| (p.time, p.value)),
+            ));
+        }
+
+        if !self.stage.isp_profile.is_empty() {
+            rocket.isp_data = Some(TimeSeriesData::from_pairs(
+                self.stage.isp_profile.into_iter().map(|p| (p.time, p.value)),
+            ));
+        }
+
+        if !self.aerodynamics.cn_profile.is_empty() {
+            rocket.cn_data = Some(TimeSeriesData::from_pairs(
+                self.aerodynamics.cn_profile.into_iter().map(|p| (p.mach, p.value)),
+            ));
+        }
+
+        if !self.aerodynamics.ca_profile.is_empty() {
+            rocket.ca_data = Some(TimeSeriesData::from_pairs(
+                self.aerodynamics.ca_profile.into_iter().map(|p| (p.mach, p.value)),
+            ));
+        }
+
+        if !self.attitude.profile.is_empty() {
+            rocket.attitude_data = Some(
+                self.attitude
+                    .profile
+                    .into_iter()
+                    .map(|p| (p.time, p.azimuth_deg, p.elevation_deg))
+                    .collect(),
+            );
+        }
+
+        if !self.wind.profile.is_empty() {
+            rocket.wind_data = Some(
+                self.wind
+                    .profile
+                    .into_iter()
+                    .map(|p| (p.altitude_m, p.speed_mps, p.direction_deg))
+                    .collect(),
+            );
+        }
+
+        rocket
+    }
+}

@@ -30,94 +30,73 @@ export function vec3ToObject(vec: Vec3Json): { x: number, y: number, z: number }
   }
 }
 
-// Minimal API error shape returned by the web server
 export type ApiError = { error: string, detail?: string }
 
-// RocketConfig (ergonomic TypeScript shape for client-side usage)
-// Note: Server expects C++-compatible JSON keys; when sending manual JSON,
-// ensure keys match `rust/crates/core/src/rocket/mod.rs` serde rename strings.
-export interface RocketConfig {
+export type ClientTimeSample = { time: number, value: number }
+export type ClientMachSample = { mach: number, value: number }
+export type ClientAttitudeSample = { time: number, azimuth_deg: number, elevation_deg: number }
+export type ClientWindSample = { altitude_m: number, speed_mps: number, direction_deg: number }
+
+export type ClientConfig = {
   name: string
-  calculate_condition: {
-    end_time: number
-    time_step: number
-    air_density_file_exists?: boolean
-    air_density_file?: string
-    air_density_variation?: number
+  simulation: {
+    duration_s: number
+    output_step_s: number
+    air_density_percent: number
   }
   launch: {
-    position_llh: [number, number, number]
-    velocity_ned: [number, number, number]
-    launch_time: [number, number, number, number, number, number]
+    latitude_deg: number
+    longitude_deg: number
+    altitude_m: number
+    velocity_ned_mps: [number, number, number]
+    datetime_utc: {
+      year: number
+      month: number
+      day: number
+      hour: number
+      minute: number
+      second: number
+    }
   }
-  stage1: {
-    power_flight_mode: number
-    free_flight_mode: number
-    mass_initial: number
-    thrust: {
-      isp_file_exists: boolean
-      isp_file_name: string
-      isp_coefficient: number
-      const_isp_vac: number
-      thrust_file_exists: boolean
-      thrust_file_name: string
-      thrust_coefficient: number
-      const_thrust_vac: number
-      burn_start_time: number
-      burn_end_time: number
-      forced_cutoff_time: number
-      throat_diameter: number
-      nozzle_expansion_ratio: number
-      nozzle_exhaust_pressure: number
-    }
-    aero: {
-      body_diameter: number
-      cn_file_exists: boolean
-      cn_file_name: string
-      normal_multiplier: number
-      const_normal_coefficient: number
-      ca_file_exists: boolean
-      ca_file_name: string
-      axial_multiplier: number
-      const_axial_coefficient: number
-      ballistic_coefficient: number
-    }
-    attitude: {
-      attitude_file_exists: boolean
-      attitude_file_name: string
-      const_elevation: number
-      const_azimuth: number
-      pitch_offset: number
-      yaw_offset: number
-      roll_offset: number
-      gyro_bias_x: number
-      gyro_bias_y: number
-      gyro_bias_z: number
-    }
-    dumping_product: {
-      dumping_product_exists: boolean
-      dumping_product_separation_time: number
-      dumping_product_mass: number
-      dumping_product_ballistic_coefficient: number
-      additional_speed_at_dumping_ned: [number, number, number]
-    }
-    attitude_neutrality: {
-      considering_neutrality: boolean
-      cg_controller_position_file: string
-      cp_file: string
-    }
-    six_dof: {
-      cg_cp_controller_position_file: string
-      moment_of_inertia_file_name: string
-    }
-    stage: {
-      following_stage_exists: boolean
-      separation_time: number
-    }
+  stage: {
+    power_mode: number
+    free_mode: number
+    mass_initial_kg: number
+    burn_start_s: number
+    burn_end_s: number
+    forced_cutoff_s: number
+    throat_diameter_m: number
+    nozzle_expansion_ratio: number
+    nozzle_exit_pressure_pa: number
+    thrust_constant: number
+    thrust_multiplier: number
+    thrust_profile: ClientTimeSample[]
+    isp_constant: number
+    isp_multiplier: number
+    isp_profile: ClientTimeSample[]
+  }
+  aerodynamics: {
+    body_diameter_m: number
+    cn_constant: number
+    cn_multiplier: number
+    cn_profile: ClientMachSample[]
+    ca_constant: number
+    ca_multiplier: number
+    ca_profile: ClientMachSample[]
+    ballistic_coefficient: number
+  }
+  attitude: {
+    elevation_deg: number
+    azimuth_deg: number
+    pitch_offset_deg: number
+    yaw_offset_deg: number
+    roll_offset_deg: number
+    gyro_bias_deg_h: [number, number, number]
+    profile: ClientAttitudeSample[]
   }
   wind: {
-    wind_file_exists: boolean
-    wind_file_name: string
-    const_wind: [number, number] // [speed(m/s), direction(deg)]
+    speed_mps: number
+    direction_deg: number
+    profile: ClientWindSample[]
   }
 }
