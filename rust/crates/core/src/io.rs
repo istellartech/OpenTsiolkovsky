@@ -215,13 +215,17 @@ where
 pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<Rocket> {
     let base = base_path.unwrap_or_else(|| Path::new("."));
 
-    let thrust = &rocket.config.stage1.thrust;
-    rocket.thrust_data =
-        maybe_load(base, thrust.thrust_file_exists, &thrust.thrust_file_name, |p| {
-            load_time_series(p)
-        })?;
-    rocket.isp_data =
-        maybe_load(base, thrust.isp_file_exists, &thrust.isp_file_name, |p| load_time_series(p))?;
+    for idx in 0..rocket.stage_count() {
+        let thrust_cfg = rocket.stage_config(idx).thrust.clone();
+        rocket.thrust_tables[idx] =
+            maybe_load(base, thrust_cfg.thrust_file_exists, &thrust_cfg.thrust_file_name, |p| {
+                load_time_series(p)
+            })?;
+        rocket.isp_tables[idx] =
+            maybe_load(base, thrust_cfg.isp_file_exists, &thrust_cfg.isp_file_name, |p| {
+                load_time_series(p)
+            })?;
+    }
 
     let aero = &rocket.config.stage1.aero;
     if let Some(path) = resolve_data_path(base, aero.cn_file_exists, &aero.cn_file_name) {

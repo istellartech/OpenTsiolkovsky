@@ -107,6 +107,10 @@ Content-Type: application/json
 }
 ```
 
+> **Multi-stage configuration**
+>
+> For multi-stage vehicles the request body can include a `stages` array (each element mirroring the `stage1` schema and adding `separation_time_s`). When present, the server emits the legacy `stage1`, `stage2`, `stage3`, … blocks expected by the C++ simulator. If `stages` is omitted the single `stage` object remains fully supported for backward compatibility.
+
 ## POST /api/simulation/path
 
 - Request: `application/json` `{ "config_path": "bin/param_sample_01.json" }`
@@ -157,4 +161,3 @@ Content-Type: application/json
 
 { "error": "Failed to create simulator", "detail": "...message..." }
 ```
-

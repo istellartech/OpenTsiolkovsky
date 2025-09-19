@@ -135,6 +135,12 @@ pub struct RocketConfig {
     #[serde(rename = "stage1")]
     pub stage1: StageConfig,
 
+    #[serde(rename = "stage2", skip_serializing_if = "Option::is_none")]
+    pub stage2: Option<StageConfig>,
+
+    #[serde(rename = "stage3", skip_serializing_if = "Option::is_none")]
+    pub stage3: Option<StageConfig>,
+
     pub wind: WindConfig,
 }
 
@@ -432,8 +438,9 @@ impl Default for TimeSeriesData {
 #[derive(Debug, Clone)]
 pub struct Rocket {
     pub config: RocketConfig,
-    pub thrust_data: Option<TimeSeriesData>,
-    pub isp_data: Option<TimeSeriesData>,
+    pub stage_configs: Vec<StageConfig>,
+    pub thrust_tables: Vec<Option<TimeSeriesData>>,
+    pub isp_tables: Vec<Option<TimeSeriesData>>,
     pub cn_data: Option<TimeSeriesData>,
     pub cn_surface: Option<SurfaceData2D>,
     pub ca_data: Option<TimeSeriesData>,
@@ -443,10 +450,22 @@ pub struct Rocket {
 
 impl Rocket {
     pub fn new(config: RocketConfig) -> Self {
+        let mut stage_configs = Vec::new();
+        stage_configs.push(config.stage1.clone());
+        if let Some(ref stage2) = config.stage2 {
+            stage_configs.push(stage2.clone());
+        }
+        if let Some(ref stage3) = config.stage3 {
+            stage_configs.push(stage3.clone());
+        }
+
+        let stage_count = stage_configs.len();
+
         Rocket {
             config,
-            thrust_data: None,
-            isp_data: None,
+            stage_configs,
+            thrust_tables: vec![None; stage_count],
+            isp_tables: vec![None; stage_count],
             cn_data: None,
             cn_surface: None,
             ca_data: None,
@@ -455,51 +474,73 @@ impl Rocket {
         }
     }
 
-    /// Get thrust at given time [N]
+    pub fn stage_count(&self) -> usize {
+        self.stage_configs.len()
+    }
+
+    pub fn stage_config(&self, index: usize) -> &StageConfig {
+        &self.stage_configs[index]
+    }
+
+    /// Get thrust for a specific stage at stage-relative time [N]
+    pub fn thrust_at(&self, stage_index: usize, time: f64) -> f64 {
+        let stage = &self.stage_configs[stage_index];
+        if let Some(Some(data)) = self.thrust_tables.get(stage_index) {
+            data.interpolate(time) * stage.thrust.thrust_coefficient
+        } else {
+            stage.thrust.const_thrust_vac
+        }
+    }
+
+    /// Legacy helper (stage 0)
     pub fn thrust_at_time(&self, time: f64) -> f64 {
-        if let Some(ref data) = self.thrust_data {
-            data.interpolate(time) * self.config.stage1.thrust.thrust_coefficient
+        self.thrust_at(0, time)
+    }
+
+    /// Get specific impulse for a stage at stage-relative time [s]
+    pub fn isp_at(&self, stage_index: usize, time: f64) -> f64 {
+        let stage = &self.stage_configs[stage_index];
+        if let Some(Some(data)) = self.isp_tables.get(stage_index) {
+            data.interpolate(time) * stage.thrust.isp_coefficient
         } else {
-            self.config.stage1.thrust.const_thrust_vac
+            stage.thrust.const_isp_vac
         }
     }
 
-    /// Get specific impulse at given time [s]
     pub fn isp_at_time(&self, time: f64) -> f64 {
-        if let Some(ref data) = self.isp_data {
-            data.interpolate(time) * self.config.stage1.thrust.isp_coefficient
-        } else {
-            self.config.stage1.thrust.const_isp_vac
-        }
+        self.isp_at(0, time)
     }
 
-    /// Get normal force coefficient at given Mach number
-    pub fn cn_at_mach(&self, mach: f64) -> f64 {
+    /// Get normal force coefficient at given Mach number for a stage
+    pub fn cn_at_mach(&self, stage_index: usize, mach: f64) -> f64 {
+        let stage = &self.stage_configs[stage_index];
         if let Some(ref data) = self.cn_data {
-            data.interpolate(mach) * self.config.stage1.aero.normal_multiplier
+            data.interpolate(mach) * stage.aero.normal_multiplier
         } else {
-            self.config.stage1.aero.const_normal_coefficient
+            stage.aero.const_normal_coefficient
         }
     }
 
     /// Get CN at given Mach and |angle| in degrees (like C++ interp_matrix_2d)
-    pub fn cn_at(&self, mach: f64, angle_deg_abs: f64) -> f64 {
+    pub fn cn_at(&self, stage_index: usize, mach: f64, angle_deg_abs: f64) -> f64 {
+        let multiplier = self.stage_configs[stage_index].aero.normal_multiplier;
         if let Some(ref surf) = self.cn_surface {
             let v = surf.interpolate_cxx(mach, angle_deg_abs.max(0.0));
-            v * self.config.stage1.aero.normal_multiplier
+            v * multiplier
         } else {
             // Fallback: scale constant/1D CN by radians
-            let base = self.cn_at_mach(mach);
+            let base = self.cn_at_mach(stage_index, mach);
             base * (angle_deg_abs.to_radians())
         }
     }
 
-    /// Get axial force coefficient at given Mach number
-    pub fn ca_at_mach(&self, mach: f64) -> f64 {
+    /// Get axial force coefficient at given Mach number for a stage
+    pub fn ca_at_mach(&self, stage_index: usize, mach: f64) -> f64 {
+        let stage = &self.stage_configs[stage_index];
         if let Some(ref data) = self.ca_data {
-            data.interpolate(mach) * self.config.stage1.aero.axial_multiplier
+            data.interpolate(mach) * stage.aero.axial_multiplier
         } else {
-            self.config.stage1.aero.const_axial_coefficient
+            stage.aero.const_axial_coefficient
         }
     }
 
@@ -572,24 +613,25 @@ impl Rocket {
     }
 
     /// Get current stage mass [kg]
-    pub fn mass_at_time(&self, time: f64) -> f64 {
-        let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end = self.config.stage1.thrust.burn_end_time;
+    pub fn mass_at_time(&self, stage_index: usize, time: f64) -> f64 {
+        let stage_cfg = &self.stage_configs[stage_index];
+        let burn_start = stage_cfg.thrust.burn_start_time;
+        let burn_end = stage_cfg.thrust.burn_end_time;
 
         if time < burn_start || time > burn_end {
-            return self.config.stage1.mass_initial;
+            return stage_cfg.mass_initial;
         }
 
-        let thrust = self.thrust_at_time(time);
-        let isp = self.isp_at_time(time);
+        let thrust = self.thrust_at(stage_index, time);
+        let isp = self.isp_at(stage_index, time);
         let g0 = 9.80665; // Standard gravity
 
         if isp > 0.0 {
             let mass_flow_rate = thrust / (isp * g0);
             let burn_time = time - burn_start;
-            self.config.stage1.mass_initial - mass_flow_rate * burn_time
+            stage_cfg.mass_initial - mass_flow_rate * burn_time
         } else {
-            self.config.stage1.mass_initial
+            stage_cfg.mass_initial
         }
     }
 }
@@ -603,6 +645,8 @@ pub struct ClientConfig {
     pub name: String,
     pub simulation: ClientSimulation,
     pub launch: ClientLaunch,
+    #[serde(default)]
+    pub stages: Vec<ClientStage>,
     #[serde(default)]
     pub stage: ClientStage,
     #[serde(default)]
@@ -658,6 +702,8 @@ pub struct ClientStage {
     pub burn_end_s: f64,
     #[serde(default = "default_forced_cutoff")]
     pub forced_cutoff_s: f64,
+    #[serde(default = "default_separation_time")]
+    pub separation_time_s: f64,
     #[serde(default = "default_throat_diameter")]
     pub throat_diameter_m: f64,
     #[serde(default = "default_nozzle_expansion")]
@@ -687,6 +733,7 @@ impl Default for ClientStage {
             burn_start_s: default_burn_start(),
             burn_end_s: default_burn_end(),
             forced_cutoff_s: default_forced_cutoff(),
+            separation_time_s: default_separation_time(),
             throat_diameter_m: default_throat_diameter(),
             nozzle_expansion_ratio: default_nozzle_expansion(),
             nozzle_exit_pressure_pa: default_nozzle_exit_pressure(),
@@ -801,6 +848,9 @@ fn default_burn_end() -> f64 {
 fn default_forced_cutoff() -> f64 {
     30.0
 }
+fn default_separation_time() -> f64 {
+    default_forced_cutoff()
+}
 fn default_throat_diameter() -> f64 {
     0.1
 }
@@ -840,143 +890,97 @@ fn default_wind_direction() -> f64 {
 
 impl ClientConfig {
     pub fn into_rocket(self) -> Rocket {
+        let ClientConfig { name, simulation, launch, stages, stage, aerodynamics, attitude, wind } =
+            self;
+
         let calc = CalculateCondition {
-            end_time: self.simulation.duration_s,
-            time_step: self.simulation.output_step_s,
+            end_time: simulation.duration_s,
+            time_step: simulation.output_step_s,
             air_density_file_exists: false,
             air_density_file: String::new(),
-            air_density_variation: self.simulation.air_density_percent,
+            air_density_variation: simulation.air_density_percent,
         };
 
         let launch = LaunchCondition {
-            position_llh: [
-                self.launch.latitude_deg,
-                self.launch.longitude_deg,
-                self.launch.altitude_m,
-            ],
-            velocity_ned: self.launch.velocity_ned_mps,
+            position_llh: [launch.latitude_deg, launch.longitude_deg, launch.altitude_m],
+            velocity_ned: launch.velocity_ned_mps,
             launch_time: [
-                self.launch.datetime_utc.year,
-                self.launch.datetime_utc.month as i32,
-                self.launch.datetime_utc.day as i32,
-                self.launch.datetime_utc.hour as i32,
-                self.launch.datetime_utc.minute as i32,
-                self.launch.datetime_utc.second as i32,
+                launch.datetime_utc.year,
+                launch.datetime_utc.month as i32,
+                launch.datetime_utc.day as i32,
+                launch.datetime_utc.hour as i32,
+                launch.datetime_utc.minute as i32,
+                launch.datetime_utc.second as i32,
             ],
         };
 
-        let thrust = ThrustConfig {
-            isp_file_exists: false,
-            isp_file_name: String::new(),
-            isp_coefficient: self.stage.isp_multiplier,
-            const_isp_vac: self.stage.isp_constant,
-            thrust_file_exists: false,
-            thrust_file_name: String::new(),
-            thrust_coefficient: self.stage.thrust_multiplier,
-            const_thrust_vac: self.stage.thrust_constant,
-            burn_start_time: self.stage.burn_start_s,
-            burn_end_time: self.stage.burn_end_s,
-            forced_cutoff_time: self.stage.forced_cutoff_s,
-            throat_diameter: self.stage.throat_diameter_m,
-            nozzle_expansion_ratio: self.stage.nozzle_expansion_ratio,
-            nozzle_exhaust_pressure: self.stage.nozzle_exit_pressure_pa,
-        };
+        let mut stage_sources = if !stages.is_empty() { stages } else { vec![stage] };
+        if stage_sources.is_empty() {
+            stage_sources.push(ClientStage::default());
+        }
 
-        let aero = AeroConfig {
-            body_diameter: self.aerodynamics.body_diameter_m,
-            cn_file_exists: false,
-            cn_file_name: String::new(),
-            normal_multiplier: self.aerodynamics.cn_multiplier,
-            const_normal_coefficient: self.aerodynamics.cn_constant,
-            ca_file_exists: false,
-            ca_file_name: String::new(),
-            axial_multiplier: self.aerodynamics.ca_multiplier,
-            const_axial_coefficient: self.aerodynamics.ca_constant,
-            ballistic_coefficient: self.aerodynamics.ballistic_coefficient,
-        };
+        // Limit to three stages to match backend RocketConfig representation
+        if stage_sources.len() > 3 {
+            stage_sources.truncate(3);
+        }
 
-        let attitude = AttitudeConfig {
-            attitude_file_exists: false,
-            attitude_file_name: String::new(),
-            const_elevation: self.attitude.elevation_deg,
-            const_azimuth: self.attitude.azimuth_deg,
-            pitch_offset: self.attitude.pitch_offset_deg,
-            yaw_offset: self.attitude.yaw_offset_deg,
-            roll_offset: self.attitude.roll_offset_deg,
-            gyro_bias_x: self.attitude.gyro_bias_deg_h[0],
-            gyro_bias_y: self.attitude.gyro_bias_deg_h[1],
-            gyro_bias_z: self.attitude.gyro_bias_deg_h[2],
-        };
+        let mut stage_configs: Vec<StageConfig> = Vec::new();
+        for (idx, client_stage) in stage_sources.iter().enumerate() {
+            stage_configs.push(build_stage_config(
+                client_stage,
+                &aerodynamics,
+                &attitude,
+                idx + 1 < stage_sources.len(),
+            ));
+        }
 
-        let stage = StageConfig {
-            power_flight_mode: self.stage.power_mode,
-            free_flight_mode: self.stage.free_mode,
-            mass_initial: self.stage.mass_initial_kg,
-            thrust,
-            aero,
-            attitude,
-            dumping_product: DumpingProductConfig {
-                dumping_product_exists: false,
-                dumping_product_separation_time: 0.0,
-                dumping_product_mass: 0.0,
-                dumping_product_ballistic_coefficient: 0.0,
-                additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
-            },
-            attitude_neutrality: AttitudeNeutralityConfig {
-                considering_neutrality: false,
-                cg_controller_position_file: String::new(),
-                cp_file: String::new(),
-            },
-            six_dof: SixDofConfig {
-                cg_cp_controller_position_file: String::new(),
-                moment_of_inertia_file_name: String::new(),
-            },
-            stage: StageTransitionConfig { following_stage_exists: false, separation_time: 1.0e6 },
-        };
-
-        let wind = WindConfig {
+        let wind_cfg = WindConfig {
             wind_file_exists: false,
             wind_file_name: String::new(),
-            const_wind: [self.wind.speed_mps, self.wind.direction_deg],
+            const_wind: [wind.speed_mps, wind.direction_deg],
         };
 
-        let config = RocketConfig {
-            name: self.name,
+        let rocket_config = RocketConfig {
+            name,
             calculate_condition: calc,
             launch,
-            stage1: stage,
-            wind,
+            stage1: stage_configs[0].clone(),
+            stage2: stage_configs.get(1).cloned(),
+            stage3: stage_configs.get(2).cloned(),
+            wind: wind_cfg,
         };
 
-        let mut rocket = Rocket::new(config);
+        let mut rocket = Rocket::new(rocket_config);
 
-        if !self.stage.thrust_profile.is_empty() {
-            rocket.thrust_data = Some(TimeSeriesData::from_pairs(
-                self.stage.thrust_profile.into_iter().map(|p| (p.time, p.value)),
-            ));
+        for (idx, client_stage) in stage_sources.into_iter().enumerate() {
+            if !client_stage.thrust_profile.is_empty() {
+                rocket.thrust_tables[idx] = Some(TimeSeriesData::from_pairs(
+                    client_stage.thrust_profile.into_iter().map(|p| (p.time, p.value)),
+                ));
+            }
+
+            if !client_stage.isp_profile.is_empty() {
+                rocket.isp_tables[idx] = Some(TimeSeriesData::from_pairs(
+                    client_stage.isp_profile.into_iter().map(|p| (p.time, p.value)),
+                ));
+            }
         }
 
-        if !self.stage.isp_profile.is_empty() {
-            rocket.isp_data = Some(TimeSeriesData::from_pairs(
-                self.stage.isp_profile.into_iter().map(|p| (p.time, p.value)),
-            ));
-        }
-
-        if !self.aerodynamics.cn_profile.is_empty() {
+        if !aerodynamics.cn_profile.is_empty() {
             rocket.cn_data = Some(TimeSeriesData::from_pairs(
-                self.aerodynamics.cn_profile.into_iter().map(|p| (p.mach, p.value)),
+                aerodynamics.cn_profile.into_iter().map(|p| (p.mach, p.value)),
             ));
         }
 
-        if !self.aerodynamics.ca_profile.is_empty() {
+        if !aerodynamics.ca_profile.is_empty() {
             rocket.ca_data = Some(TimeSeriesData::from_pairs(
-                self.aerodynamics.ca_profile.into_iter().map(|p| (p.mach, p.value)),
+                aerodynamics.ca_profile.into_iter().map(|p| (p.mach, p.value)),
             ));
         }
 
-        if !self.attitude.profile.is_empty() {
+        if !attitude.profile.is_empty() {
             rocket.attitude_data = Some(
-                self.attitude
+                attitude
                     .profile
                     .into_iter()
                     .map(|p| (p.time, p.azimuth_deg, p.elevation_deg))
@@ -984,10 +988,9 @@ impl ClientConfig {
             );
         }
 
-        if !self.wind.profile.is_empty() {
+        if !wind.profile.is_empty() {
             rocket.wind_data = Some(
-                self.wind
-                    .profile
+                wind.profile
                     .into_iter()
                     .map(|p| (p.altitude_m, p.speed_mps, p.direction_deg))
                     .collect(),
@@ -995,5 +998,84 @@ impl ClientConfig {
         }
 
         rocket
+    }
+}
+
+fn build_stage_config(
+    stage: &ClientStage,
+    aerodynamics: &ClientAerodynamics,
+    attitude: &ClientAttitude,
+    has_following_stage: bool,
+) -> StageConfig {
+    let thrust = ThrustConfig {
+        isp_file_exists: false,
+        isp_file_name: String::new(),
+        isp_coefficient: stage.isp_multiplier,
+        const_isp_vac: stage.isp_constant,
+        thrust_file_exists: false,
+        thrust_file_name: String::new(),
+        thrust_coefficient: stage.thrust_multiplier,
+        const_thrust_vac: stage.thrust_constant,
+        burn_start_time: stage.burn_start_s,
+        burn_end_time: stage.burn_end_s,
+        forced_cutoff_time: stage.forced_cutoff_s,
+        throat_diameter: stage.throat_diameter_m,
+        nozzle_expansion_ratio: stage.nozzle_expansion_ratio,
+        nozzle_exhaust_pressure: stage.nozzle_exit_pressure_pa,
+    };
+
+    let aero = AeroConfig {
+        body_diameter: aerodynamics.body_diameter_m,
+        cn_file_exists: false,
+        cn_file_name: String::new(),
+        normal_multiplier: aerodynamics.cn_multiplier,
+        const_normal_coefficient: aerodynamics.cn_constant,
+        ca_file_exists: false,
+        ca_file_name: String::new(),
+        axial_multiplier: aerodynamics.ca_multiplier,
+        const_axial_coefficient: aerodynamics.ca_constant,
+        ballistic_coefficient: aerodynamics.ballistic_coefficient,
+    };
+
+    let attitude_cfg = AttitudeConfig {
+        attitude_file_exists: false,
+        attitude_file_name: String::new(),
+        const_elevation: attitude.elevation_deg,
+        const_azimuth: attitude.azimuth_deg,
+        pitch_offset: attitude.pitch_offset_deg,
+        yaw_offset: attitude.yaw_offset_deg,
+        roll_offset: attitude.roll_offset_deg,
+        gyro_bias_x: attitude.gyro_bias_deg_h[0],
+        gyro_bias_y: attitude.gyro_bias_deg_h[1],
+        gyro_bias_z: attitude.gyro_bias_deg_h[2],
+    };
+
+    StageConfig {
+        power_flight_mode: stage.power_mode,
+        free_flight_mode: stage.free_mode,
+        mass_initial: stage.mass_initial_kg,
+        thrust,
+        aero,
+        attitude: attitude_cfg,
+        dumping_product: DumpingProductConfig {
+            dumping_product_exists: false,
+            dumping_product_separation_time: 0.0,
+            dumping_product_mass: 0.0,
+            dumping_product_ballistic_coefficient: 0.0,
+            additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
+        },
+        attitude_neutrality: AttitudeNeutralityConfig {
+            considering_neutrality: false,
+            cg_controller_position_file: String::new(),
+            cp_file: String::new(),
+        },
+        six_dof: SixDofConfig {
+            cg_cp_controller_position_file: String::new(),
+            moment_of_inertia_file_name: String::new(),
+        },
+        stage: StageTransitionConfig {
+            following_stage_exists: has_following_stage,
+            separation_time: if has_following_stage { stage.separation_time_s } else { 1.0e6 },
+        },
     }
 }

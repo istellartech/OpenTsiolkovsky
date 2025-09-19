@@ -58,23 +58,8 @@ export type ClientConfig = {
       second: number
     }
   }
-  stage: {
-    power_mode: number
-    free_mode: number
-    mass_initial_kg: number
-    burn_start_s: number
-    burn_end_s: number
-    forced_cutoff_s: number
-    throat_diameter_m: number
-    nozzle_expansion_ratio: number
-    nozzle_exit_pressure_pa: number
-    thrust_constant: number
-    thrust_multiplier: number
-    thrust_profile: ClientTimeSample[]
-    isp_constant: number
-    isp_multiplier: number
-    isp_profile: ClientTimeSample[]
-  }
+  stage: ClientStageConfig
+  stages?: ClientStageConfig[]
   aerodynamics: {
     body_diameter_m: number
     cn_constant: number
@@ -99,4 +84,23 @@ export type ClientConfig = {
     direction_deg: number
     profile: ClientWindSample[]
   }
+}
+
+export type ClientStageConfig = {
+  power_mode: number
+  free_mode: number
+  mass_initial_kg: number
+  burn_start_s: number
+  burn_end_s: number
+  forced_cutoff_s: number
+  separation_time_s: number
+  throat_diameter_m: number
+  nozzle_expansion_ratio: number
+  nozzle_exit_pressure_pa: number
+  thrust_constant: number
+  thrust_multiplier: number
+  thrust_profile: ClientTimeSample[]
+  isp_constant: number
+  isp_multiplier: number
+  isp_profile: ClientTimeSample[]
 }

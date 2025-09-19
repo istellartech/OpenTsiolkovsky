@@ -66,6 +66,63 @@ pub struct CsvCppRow {
     pub is_separated: i32,
 }
 
+#[derive(Debug, Clone)]
+struct StageRuntime {
+    index: usize,
+    start_time: f64,
+    burn_start: f64,
+    burn_end: f64,
+    forced_cutoff: f64,
+    separation_time: f64,
+    stack_mass: f64,
+}
+
+fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRuntime> {
+    let mut stages = Vec::new();
+    let mut start_time = 0.0;
+    let end_time = config.calculate_condition.end_time;
+
+    let mut stack_mass = vec![0.0; rocket.stage_count()];
+    let mut cumulative = 0.0;
+    for idx in (0..rocket.stage_count()).rev() {
+        cumulative += rocket.stage_config(idx).mass_initial;
+        stack_mass[idx] = cumulative;
+    }
+
+    for idx in 0..rocket.stage_count() {
+        let stage_cfg = rocket.stage_config(idx);
+        let burn_start = start_time + stage_cfg.thrust.burn_start_time;
+        let burn_end = start_time + stage_cfg.thrust.burn_end_time;
+        let forced_cutoff = start_time + stage_cfg.thrust.forced_cutoff_time;
+
+        let mut separation_time = if stage_cfg.stage.following_stage_exists {
+            start_time + stage_cfg.stage.separation_time
+        } else {
+            end_time
+        };
+
+        if !separation_time.is_finite() {
+            separation_time = end_time;
+        }
+
+        separation_time = separation_time.min(end_time);
+
+        stages.push(StageRuntime {
+            index: idx,
+            start_time,
+            burn_start,
+            burn_end: burn_end.min(separation_time),
+            forced_cutoff: forced_cutoff.min(separation_time),
+            separation_time,
+            stack_mass: stack_mass[idx],
+        });
+
+        start_time = separation_time;
+    }
+
+    stages
+}
+
 /// Main simulator struct
 pub struct Simulator {
     pub config: RocketConfig,
@@ -75,6 +132,8 @@ pub struct Simulator {
     pub integrator: DormandPrince54,
     pub state: SimulationState,
     pub trajectory: Vec<SimulationState>,
+    stage_runtime: Vec<StageRuntime>,
+    current_stage_index: usize,
     // Telemetry helpers (computed consistently with dynamics)
     last_dynamic_pressure: f64,
     last_thrust_magnitude: f64,
@@ -117,12 +176,16 @@ impl Simulator {
         let position = CoordinateTransform::pos_eci_init(&pos_llh);
         let velocity = CoordinateTransform::vel_eci_init(&vel_ned, &pos_llh);
 
-        let state = SimulationState {
+        let stage_runtime = build_stage_runtime(&config, &rocket);
+        let current_stage_index = 0;
+        let current_stage_cfg = rocket.stage_config(current_stage_index);
+
+        let mut state = SimulationState {
             time: 0.0,
             position,
             velocity,
-            mass: config.stage1.mass_initial,
-            stage: 0,
+            mass: current_stage_cfg.mass_initial,
+            stage: 1,
             altitude: config.launch.position_llh[2],
             velocity_magnitude: velocity.magnitude(),
             mach_number: 0.0,
@@ -130,6 +193,8 @@ impl Simulator {
             thrust: 0.0,
             drag_force: 0.0,
         };
+        state.mass =
+            stage_runtime.get(0).map(|rt| rt.stack_mass).unwrap_or(current_stage_cfg.mass_initial);
 
         Ok(Simulator {
             config,
@@ -139,6 +204,8 @@ impl Simulator {
             integrator,
             state,
             trajectory: Vec::new(),
+            stage_runtime,
+            current_stage_index,
             last_dynamic_pressure: 0.0,
             last_thrust_magnitude: 0.0,
             last_drag_magnitude: 0.0,
@@ -185,6 +252,28 @@ impl Simulator {
         &self.state
     }
 
+    fn stage_index_for_time(&self, time: f64) -> usize {
+        for stage in &self.stage_runtime {
+            if time < stage.separation_time {
+                return stage.index;
+            }
+        }
+        self.stage_runtime.len().saturating_sub(1)
+    }
+
+    fn stage_local_time(&self, stage_index: usize, time: f64) -> f64 {
+        (time - self.stage_runtime[stage_index].start_time).max(0.0)
+    }
+
+    fn update_stage_index(&mut self) {
+        let new_stage = self.stage_index_for_time(self.state.time);
+        self.state.stage = (new_stage + 1) as u8;
+        if new_stage != self.current_stage_index {
+            self.current_stage_index = new_stage;
+            self.state.mass = self.stage_runtime[new_stage].stack_mass;
+        }
+    }
+
     /// Single integration step
     pub fn step(&mut self, dt: f64) {
         // For backward compatibility in tests: perform a simple RK4 step
@@ -205,6 +294,7 @@ impl Simulator {
         self.state.mass = new_state[0];
         self.state.position = Vector3::new(new_state[1], new_state[2], new_state[3]);
         self.state.velocity = Vector3::new(new_state[4], new_state[5], new_state[6]);
+        self.update_stage_index();
         self.update_derived_quantities();
     }
 
@@ -241,20 +331,20 @@ impl Simulator {
 
         // Burning window for thrust (C++同等)
         let t = self.state.time;
-        let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end = self
-            .config
-            .stage1
-            .thrust
-            .burn_end_time
-            .min(self.config.stage1.thrust.forced_cutoff_time);
-        self.state.thrust =
-            if t >= burn_start && t < burn_end { self.rocket.thrust_at_time(t) } else { 0.0 };
+        let stage_idx = self.current_stage_index;
+        let stage_info = &self.stage_runtime[stage_idx];
+        let stage_local_time = self.stage_local_time(stage_idx, t);
+        self.state.thrust = if t >= stage_info.burn_start && t < stage_info.forced_cutoff {
+            self.rocket.thrust_at(stage_idx, stage_local_time)
+        } else {
+            0.0
+        };
         self.last_thrust_magnitude = self.state.thrust;
 
         // Drag magnitude using CA(Mach)
-        let ca = self.rocket.ca_at_mach(self.state.mach_number);
-        let body_diameter = self.config.stage1.aero.body_diameter;
+        let ca = self.rocket.ca_at_mach(stage_idx, self.state.mach_number);
+        let stage_cfg = self.rocket.stage_config(stage_idx);
+        let body_diameter = stage_cfg.aero.body_diameter;
         let reference_area = std::f64::consts::PI * (body_diameter / 2.0).powi(2);
         self.state.drag_force = ca * self.state.dynamic_pressure * reference_area;
         self.last_drag_magnitude = self.state.drag_force;
@@ -358,37 +448,36 @@ impl Simulator {
         let beta = angles.y;
         let gamma = angles.z;
 
+        let stage_idx = self.stage_index_for_time(t);
+        let stage_cfg = self.rocket.stage_config(stage_idx);
+        let stage_info = &self.stage_runtime[stage_idx];
+        let stage_local_time = self.stage_local_time(stage_idx, t);
+
         // Aerodynamics
         let q = 0.5 * atm.density * vel_air_mag.powi(2);
-        let ca = self.rocket.ca_at_mach(self.state.mach_number);
-        let body_diameter = self.config.stage1.aero.body_diameter;
-        let ref_area = std::f64::consts::PI * (body_diameter / 2.0).powi(2);
+        let ca = self.rocket.ca_at_mach(stage_idx, self.state.mach_number);
+        let ref_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
         let drag = ca * q * ref_area;
-        let cn_pitch =
-            alpha.signum() * self.rocket.cn_at(self.state.mach_number, alpha.to_degrees().abs());
-        let cn_yaw =
-            beta.signum() * self.rocket.cn_at(self.state.mach_number, beta.to_degrees().abs());
+        let cn_pitch = alpha.signum()
+            * self.rocket.cn_at(stage_idx, self.state.mach_number, alpha.to_degrees().abs());
+        let cn_yaw = beta.signum()
+            * self.rocket.cn_at(stage_idx, self.state.mach_number, beta.to_degrees().abs());
         let force_normal_pitch = cn_pitch * q * ref_area;
         let force_normal_yaw = cn_yaw * q * ref_area;
         let aero_body = Vector3::new(-drag, -force_normal_yaw, -force_normal_pitch);
         let aero_eci = dcm_body_to_eci * aero_body;
 
         // Thrust
-        let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end_eff = self
-            .config
-            .stage1
-            .thrust
-            .burn_end_time
-            .min(self.config.stage1.thrust.forced_cutoff_time);
-        let is_powered = t >= burn_start && t < burn_end_eff;
-        let thrust_vac = if is_powered { self.rocket.thrust_at_time(t) } else { 0.0 };
-        let isp_vac = if is_powered { self.rocket.isp_at_time(t) } else { 0.0 };
-        let throat_diameter = self.config.stage1.thrust.throat_diameter;
+        let is_powered = t >= stage_info.burn_start && t < stage_info.forced_cutoff;
+        let thrust_vac =
+            if is_powered { self.rocket.thrust_at(stage_idx, stage_local_time) } else { 0.0 };
+        let isp_vac =
+            if is_powered { self.rocket.isp_at(stage_idx, stage_local_time) } else { 0.0 };
+        let throat_diameter = stage_cfg.thrust.throat_diameter;
         let exit_area = std::f64::consts::PI
             * (throat_diameter * throat_diameter)
             * 0.25
-            * self.config.stage1.thrust.nozzle_expansion_ratio;
+            * stage_cfg.thrust.nozzle_expansion_ratio;
         let thrust_effective = if is_powered { thrust_vac - exit_area * atm.pressure } else { 0.0 };
         let thrust_body = Vector3::new(thrust_effective, 0.0, 0.0);
         let thrust_eci = dcm_body_to_eci * thrust_body;
@@ -452,7 +541,7 @@ impl Simulator {
             loss_aero,
             loss_thrust,
             is_powered: if is_powered { 1 } else { 0 },
-            is_separated: 0,
+            is_separated: if stage_idx > 0 { 1 } else { 0 },
         }
     }
 
@@ -463,22 +552,19 @@ impl Simulator {
         position: &Vector3<f64>,
         _velocity: &Vector3<f64>,
     ) -> (Vector3<f64>, f64) {
-        let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end = self
-            .config
-            .stage1
-            .thrust
-            .burn_end_time
-            .min(self.config.stage1.thrust.forced_cutoff_time);
+        let stage_idx = self.stage_index_for_time(t);
+        let stage_info = &self.stage_runtime[stage_idx];
+        let stage_cfg = self.rocket.stage_config(stage_idx);
+        let local_time = self.stage_local_time(stage_idx, t);
 
         // Check if engine is burning
-        if t < burn_start || t >= burn_end {
+        if t < stage_info.burn_start || t >= stage_info.forced_cutoff {
             return (Vector3::zeros(), 0.0);
         }
 
         // Get thrust (vacuum) and Isp (vacuum) at current time
-        let thrust_vac = self.rocket.thrust_at_time(t);
-        let isp_vac = self.rocket.isp_at_time(t);
+        let thrust_vac = self.rocket.thrust_at(stage_idx, local_time);
+        let isp_vac = self.rocket.isp_at(stage_idx, local_time);
 
         if thrust_vac <= 0.0 || isp_vac <= 0.0 {
             return (Vector3::zeros(), 0.0);
@@ -491,11 +577,11 @@ impl Simulator {
         let pos_ecef = CoordinateTransform::pos_eci_to_ecef(position, t);
         let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
         let atm = self.atmosphere.conditions(pos_llh.z);
-        let throat_diameter = self.config.stage1.thrust.throat_diameter;
+        let throat_diameter = stage_cfg.thrust.throat_diameter;
         let exit_area = std::f64::consts::PI
             * (throat_diameter * throat_diameter)
             * 0.25
-            * self.config.stage1.thrust.nozzle_expansion_ratio;
+            * stage_cfg.thrust.nozzle_expansion_ratio;
         let thrust_effective = thrust_vac - exit_area * atm.pressure;
 
         // Thrust direction from attitude (Body +X) — C++互換
@@ -563,21 +649,20 @@ impl Simulator {
         let alpha = angles.x;
         let beta = angles.y;
 
-        // Body reference area
-        let body_diameter = self.config.stage1.aero.body_diameter;
-        let reference_area = std::f64::consts::PI * (body_diameter / 2.0).powi(2);
-        let ca = self.rocket.ca_at_mach(mach_number);
+        let stage_idx = self.stage_index_for_time(t);
+        let stage_cfg = self.rocket.stage_config(stage_idx);
+        let stage_info = &self.stage_runtime[stage_idx];
+        let reference_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
+        let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
 
         // Recompute dynamic_pressure based on air-relative speed
         let atm_density = self.atmosphere.conditions(pos_llh.z).density;
         let q = 0.5 * atm_density * vel_air_magnitude.powi(2);
 
         // If in free flight and ballistic mode is requested, use ballistic coefficient model
-        let burn_start = self.config.stage1.thrust.burn_start_time;
-        let burn_end = self.config.stage1.thrust.burn_end_time;
-        let is_burning = t >= burn_start && t <= burn_end;
-        if !is_burning && self.config.stage1.free_flight_mode == 2 {
-            let bc = self.config.stage1.aero.ballistic_coefficient.max(1e-9);
+        let is_burning = t >= stage_info.burn_start && t <= stage_info.burn_end;
+        if !is_burning && stage_cfg.free_flight_mode == 2 {
+            let bc = stage_cfg.aero.ballistic_coefficient.max(1e-9);
             // Acceleration magnitude along -airflow
             let accel_mag = q / bc; // [m/s^2]
             let force_ned = -accel_mag * mass * (vel_air_ned / vel_air_magnitude);
@@ -588,8 +673,8 @@ impl Simulator {
         // Otherwise use aerodynamic coefficients (CA, CN from Mach x |angle| table)
         let alpha_deg = alpha.to_degrees().abs();
         let beta_deg = beta.to_degrees().abs();
-        let cn_pitch = alpha.signum() * self.rocket.cn_at(mach_number, alpha_deg);
-        let cn_yaw = beta.signum() * self.rocket.cn_at(mach_number, beta_deg);
+        let cn_pitch = alpha.signum() * self.rocket.cn_at(stage_idx, mach_number, alpha_deg);
+        let cn_yaw = beta.signum() * self.rocket.cn_at(stage_idx, mach_number, beta_deg);
 
         let drag_magnitude = ca * q * reference_area;
         let force_normal_pitch = cn_pitch * q * reference_area;
@@ -691,6 +776,8 @@ mod tests {
                     separation_time: 1e6,
                 },
             },
+            stage2: None,
+            stage3: None,
             wind: WindConfig {
                 wind_file_exists: false,
                 wind_file_name: "".to_string(),
@@ -716,5 +803,34 @@ mod tests {
         simulator.run();
         assert!(simulator.trajectory.len() >= 2);
         assert!(simulator.state.time >= t0);
+    }
+
+    #[test]
+    fn test_stage_transition() {
+        let mut config = create_test_config();
+        let mut stage2 = config.stage1.clone();
+        stage2.mass_initial = 200.0;
+        stage2.thrust.const_thrust_vac = 0.0;
+        stage2.thrust.burn_start_time = 0.0;
+        stage2.thrust.burn_end_time = 0.5;
+        stage2.thrust.forced_cutoff_time = 0.5;
+        stage2.stage.following_stage_exists = false;
+        stage2.stage.separation_time = 1.0e6;
+
+        config.stage1.thrust.const_thrust_vac = 100_000.0;
+        config.stage1.thrust.burn_end_time = 1.0;
+        config.stage1.thrust.forced_cutoff_time = 1.0;
+        config.stage1.stage.following_stage_exists = true;
+        config.stage1.stage.separation_time = 1.5;
+        config.stage2 = Some(stage2);
+        config.stage3 = None;
+        config.calculate_condition.end_time = 3.0;
+
+        let rocket = Rocket::new(config.clone());
+        let mut simulator = Simulator::new(rocket).unwrap();
+        let trajectory = simulator.run();
+        assert!(trajectory.iter().any(|state| state.stage >= 2));
+        let final_stage = trajectory.last().unwrap().stage;
+        assert!(final_stage >= 2);
     }
 }
