@@ -44,7 +44,7 @@ fn main() -> Result<()> {
     if args.verbose {
         println!("Configuration loaded: {}", rocket.config.name);
         println!("Launch position: {:?}", rocket.config.launch.position_llh);
-        println!("Initial mass: {:.1} kg", rocket.config.stage1.mass_initial);
+        println!("Initial mass: {:.1} kg", rocket.config.primary_stage().mass_initial);
         println!("Simulation end time: {:.1} s", rocket.config.calculate_condition.end_time);
         println!();
     }

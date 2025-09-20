@@ -58,8 +58,7 @@ export type ClientConfig = {
       second: number
     }
   }
-  stage: ClientStageConfig
-  stages?: ClientStageConfig[]
+  stages: ClientStageConfig[]
   aerodynamics: {
     body_diameter_m: number
     cn_constant: number

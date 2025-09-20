@@ -697,6 +697,69 @@ mod tests {
     fn create_test_config() -> RocketConfig {
         use crate::rocket::*;
 
+        let stage = StageConfig {
+            power_flight_mode: 0,
+            free_flight_mode: 2,
+            mass_initial: 1000.0,
+            thrust: ThrustConfig {
+                isp_file_exists: false,
+                isp_file_name: "".to_string(),
+                isp_coefficient: 1.0,
+                const_isp_vac: 200.0,
+                thrust_file_exists: false,
+                thrust_file_name: "".to_string(),
+                thrust_coefficient: 1.0,
+                const_thrust_vac: 0.0,
+                burn_start_time: 0.0,
+                burn_end_time: 0.0,
+                forced_cutoff_time: 0.0,
+                throat_diameter: 0.1,
+                nozzle_expansion_ratio: 5.0,
+                nozzle_exhaust_pressure: 101300.0,
+            },
+            aero: AeroConfig {
+                body_diameter: 0.5,
+                cn_file_exists: false,
+                cn_file_name: "".to_string(),
+                normal_multiplier: 1.0,
+                const_normal_coefficient: 0.2,
+                ca_file_exists: false,
+                ca_file_name: "".to_string(),
+                axial_multiplier: 1.0,
+                const_axial_coefficient: 0.2,
+                ballistic_coefficient: 100.0,
+            },
+            attitude: AttitudeConfig {
+                attitude_file_exists: false,
+                attitude_file_name: "".to_string(),
+                const_elevation: 83.0,
+                const_azimuth: 113.0,
+                pitch_offset: 0.0,
+                yaw_offset: 0.0,
+                roll_offset: 0.0,
+                gyro_bias_x: 0.0,
+                gyro_bias_y: 0.0,
+                gyro_bias_z: 0.0,
+            },
+            dumping_product: DumpingProductConfig {
+                dumping_product_exists: false,
+                dumping_product_separation_time: 130.0,
+                dumping_product_mass: 10.0,
+                dumping_product_ballistic_coefficient: 100.0,
+                additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
+            },
+            attitude_neutrality: AttitudeNeutralityConfig {
+                considering_neutrality: false,
+                cg_controller_position_file: "".to_string(),
+                cp_file: "".to_string(),
+            },
+            six_dof: SixDofConfig {
+                cg_cp_controller_position_file: "".to_string(),
+                moment_of_inertia_file_name: "".to_string(),
+            },
+            stage: StageTransitionConfig { following_stage_exists: false, separation_time: 1e6 },
+        };
+
         RocketConfig {
             name: "test".to_string(),
             calculate_condition: CalculateCondition {
@@ -711,73 +774,7 @@ mod tests {
                 velocity_ned: [0.0, 0.0, 0.0],
                 launch_time: [2023, 1, 1, 12, 0, 0],
             },
-            stage1: StageConfig {
-                power_flight_mode: 0,
-                free_flight_mode: 2,
-                mass_initial: 1000.0,
-                thrust: ThrustConfig {
-                    isp_file_exists: false,
-                    isp_file_name: "".to_string(),
-                    isp_coefficient: 1.0,
-                    const_isp_vac: 200.0,
-                    thrust_file_exists: false,
-                    thrust_file_name: "".to_string(),
-                    thrust_coefficient: 1.0,
-                    const_thrust_vac: 0.0,
-                    burn_start_time: 0.0,
-                    burn_end_time: 0.0,
-                    forced_cutoff_time: 0.0,
-                    throat_diameter: 0.1,
-                    nozzle_expansion_ratio: 5.0,
-                    nozzle_exhaust_pressure: 101300.0,
-                },
-                aero: AeroConfig {
-                    body_diameter: 0.5,
-                    cn_file_exists: false,
-                    cn_file_name: "".to_string(),
-                    normal_multiplier: 1.0,
-                    const_normal_coefficient: 0.2,
-                    ca_file_exists: false,
-                    ca_file_name: "".to_string(),
-                    axial_multiplier: 1.0,
-                    const_axial_coefficient: 0.2,
-                    ballistic_coefficient: 100.0,
-                },
-                attitude: AttitudeConfig {
-                    attitude_file_exists: false,
-                    attitude_file_name: "".to_string(),
-                    const_elevation: 83.0,
-                    const_azimuth: 113.0,
-                    pitch_offset: 0.0,
-                    yaw_offset: 0.0,
-                    roll_offset: 0.0,
-                    gyro_bias_x: 0.0,
-                    gyro_bias_y: 0.0,
-                    gyro_bias_z: 0.0,
-                },
-                dumping_product: DumpingProductConfig {
-                    dumping_product_exists: false,
-                    dumping_product_separation_time: 130.0,
-                    dumping_product_mass: 10.0,
-                    dumping_product_ballistic_coefficient: 100.0,
-                    additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
-                },
-                attitude_neutrality: AttitudeNeutralityConfig {
-                    considering_neutrality: false,
-                    cg_controller_position_file: "".to_string(),
-                    cp_file: "".to_string(),
-                },
-                six_dof: SixDofConfig {
-                    cg_cp_controller_position_file: "".to_string(),
-                    moment_of_inertia_file_name: "".to_string(),
-                },
-                stage: StageTransitionConfig {
-                    following_stage_exists: false,
-                    separation_time: 1e6,
-                },
-            },
-            stage2: None,
-            stage3: None,
+            stages: vec![stage],
             wind: WindConfig {
                 wind_file_exists: false,
                 wind_file_name: "".to_string(),
@@ -808,7 +805,7 @@ mod tests {
     #[test]
     fn test_stage_transition() {
         let mut config = create_test_config();
-        let mut stage2 = config.stage1.clone();
+        let mut stage2 = config.stages[0].clone();
         stage2.mass_initial = 200.0;
         stage2.thrust.const_thrust_vac = 0.0;
         stage2.thrust.burn_start_time = 0.0;
@@ -817,13 +814,12 @@ mod tests {
         stage2.stage.following_stage_exists = false;
         stage2.stage.separation_time = 1.0e6;
 
-        config.stage1.thrust.const_thrust_vac = 100_000.0;
-        config.stage1.thrust.burn_end_time = 1.0;
-        config.stage1.thrust.forced_cutoff_time = 1.0;
-        config.stage1.stage.following_stage_exists = true;
-        config.stage1.stage.separation_time = 1.5;
-        config.stage2 = Some(stage2);
-        config.stage3 = None;
+        config.stages[0].thrust.const_thrust_vac = 100_000.0;
+        config.stages[0].thrust.burn_end_time = 1.0;
+        config.stages[0].thrust.forced_cutoff_time = 1.0;
+        config.stages[0].stage.following_stage_exists = true;
+        config.stages[0].stage.separation_time = 1.5;
+        config.stages.push(stage2);
         config.calculate_condition.end_time = 3.0;
 
         let rocket = Rocket::new(config.clone());
@@ -832,5 +828,77 @@ mod tests {
         assert!(trajectory.iter().any(|state| state.stage >= 2));
         let final_stage = trajectory.last().unwrap().stage;
         assert!(final_stage >= 2);
+    }
+
+    #[test]
+    fn client_config_multi_stage_progresses() {
+        use crate::rocket::*;
+
+        let mut stage1 = ClientStage::default();
+        stage1.mass_initial_kg = 1000.0;
+        stage1.burn_end_s = 6.0;
+        stage1.forced_cutoff_s = 6.0;
+        stage1.separation_time_s = 6.5;
+        stage1.thrust_constant = 200_000.0;
+        stage1.isp_constant = 250.0;
+
+        let mut stage2 = ClientStage::default();
+        stage2.mass_initial_kg = 200.0;
+        stage2.burn_end_s = 8.0;
+        stage2.forced_cutoff_s = 8.0;
+        stage2.separation_time_s = 1000.0;
+        stage2.thrust_constant = 60_000.0;
+        stage2.isp_constant = 270.0;
+
+        let config = ClientConfig {
+            name: "multi".to_string(),
+            simulation: ClientSimulation {
+                duration_s: 60.0,
+                output_step_s: 1.0,
+                air_density_percent: 0.0,
+            },
+            launch: ClientLaunch {
+                latitude_deg: 35.0,
+                longitude_deg: 139.0,
+                altitude_m: 0.0,
+                velocity_ned_mps: [0.0, 0.0, 0.0],
+                datetime_utc: ClientDateTime {
+                    year: 2023,
+                    month: 1,
+                    day: 1,
+                    hour: 0,
+                    minute: 0,
+                    second: 0,
+                },
+            },
+            stages: vec![stage1, stage2],
+            stage: None,
+            aerodynamics: ClientAerodynamics {
+                body_diameter_m: 1.0,
+                cn_constant: 0.1,
+                cn_multiplier: 1.0,
+                cn_profile: Vec::new(),
+                ca_constant: 0.2,
+                ca_multiplier: 1.0,
+                ca_profile: Vec::new(),
+                ballistic_coefficient: 120.0,
+            },
+            attitude: ClientAttitude {
+                elevation_deg: 85.0,
+                azimuth_deg: 113.0,
+                pitch_offset_deg: 0.0,
+                yaw_offset_deg: 0.0,
+                roll_offset_deg: 0.0,
+                gyro_bias_deg_h: [0.0, 0.0, 0.0],
+                profile: Vec::new(),
+            },
+            wind: ClientWind { speed_mps: 0.0, direction_deg: 270.0, profile: Vec::new() },
+        };
+
+        let rocket = config.into_rocket();
+        let mut simulator = Simulator::new(rocket).unwrap();
+        let trajectory = simulator.run();
+        let max_stage = trajectory.iter().map(|state| state.stage).max().unwrap_or(0);
+        assert!(max_stage >= 2, "expected to reach stage 2, got {}", max_stage);
     }
 }

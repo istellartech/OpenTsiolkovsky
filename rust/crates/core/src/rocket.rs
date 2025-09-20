@@ -2,7 +2,8 @@
 ///
 /// This module contains rocket configuration structures
 /// that are compatible with the existing JSON format.
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// 2D surface data for bilinear interpolation (e.g., CN(Mach, alpha_deg))
 #[derive(Debug, Clone)]
@@ -122,26 +123,87 @@ impl SurfaceData2D {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RocketConfig {
-    #[serde(rename = "name(str)")]
     pub name: String,
-
-    #[serde(rename = "calculate condition")]
     pub calculate_condition: CalculateCondition,
-
     pub launch: LaunchCondition,
-
-    #[serde(rename = "stage1")]
-    pub stage1: StageConfig,
-
-    #[serde(rename = "stage2", skip_serializing_if = "Option::is_none")]
-    pub stage2: Option<StageConfig>,
-
-    #[serde(rename = "stage3", skip_serializing_if = "Option::is_none")]
-    pub stage3: Option<StageConfig>,
-
+    pub stages: Vec<StageConfig>,
     pub wind: WindConfig,
+}
+
+impl Serialize for RocketConfig {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("RocketConfig", 5)?;
+        state.serialize_field("name(str)", &self.name)?;
+        state.serialize_field("calculate condition", &self.calculate_condition)?;
+        state.serialize_field("launch", &self.launch)?;
+        state.serialize_field("stages", &self.stages)?;
+        state.serialize_field("wind", &self.wind)?;
+        state.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for RocketConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RocketConfigHelper {
+            #[serde(rename = "name(str)")]
+            name: String,
+            #[serde(rename = "calculate condition")]
+            calculate_condition: CalculateCondition,
+            launch: LaunchCondition,
+            #[serde(default)]
+            stages: Vec<StageConfig>,
+            #[serde(rename = "stage1", default)]
+            stage1: Option<StageConfig>,
+            #[serde(rename = "stage2", default)]
+            stage2: Option<StageConfig>,
+            #[serde(rename = "stage3", default)]
+            stage3: Option<StageConfig>,
+            #[serde(rename = "stage", default)]
+            stage: Option<StageConfig>,
+            wind: WindConfig,
+        }
+
+        let helper = RocketConfigHelper::deserialize(deserializer)?;
+        let mut stages = helper.stages;
+
+        if stages.is_empty() {
+            if let Some(stage) = helper.stage1 {
+                stages.push(stage);
+            }
+            if let Some(stage) = helper.stage2 {
+                stages.push(stage);
+            }
+            if let Some(stage) = helper.stage3 {
+                stages.push(stage);
+            }
+            if stages.is_empty() {
+                if let Some(stage) = helper.stage {
+                    stages.push(stage);
+                }
+            }
+        }
+
+        if stages.is_empty() {
+            return Err(serde::de::Error::custom("Rocket config must include at least one stage"));
+        }
+
+        Ok(RocketConfig {
+            name: helper.name,
+            calculate_condition: helper.calculate_condition,
+            launch: helper.launch,
+            stages,
+            wind: helper.wind,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -434,6 +496,20 @@ impl Default for TimeSeriesData {
     }
 }
 
+impl RocketConfig {
+    pub fn stage_count(&self) -> usize {
+        self.stages.len()
+    }
+
+    pub fn stage(&self, index: usize) -> Option<&StageConfig> {
+        self.stages.get(index)
+    }
+
+    pub fn primary_stage(&self) -> &StageConfig {
+        self.stages.first().expect("RocketConfig must contain at least one stage")
+    }
+}
+
 /// Rocket struct containing processed configuration and data
 #[derive(Debug, Clone)]
 pub struct Rocket {
@@ -450,15 +526,7 @@ pub struct Rocket {
 
 impl Rocket {
     pub fn new(config: RocketConfig) -> Self {
-        let mut stage_configs = Vec::new();
-        stage_configs.push(config.stage1.clone());
-        if let Some(ref stage2) = config.stage2 {
-            stage_configs.push(stage2.clone());
-        }
-        if let Some(ref stage3) = config.stage3 {
-            stage_configs.push(stage3.clone());
-        }
-
+        let stage_configs = config.stages.clone();
         let stage_count = stage_configs.len();
 
         Rocket {
@@ -549,10 +617,8 @@ impl Rocket {
         if let Some(ref data) = self.attitude_data {
             // Linear interpolation for attitude data
             if data.is_empty() {
-                return (
-                    self.config.stage1.attitude.const_azimuth,
-                    self.config.stage1.attitude.const_elevation,
-                );
+                let default_attitude = &self.config.primary_stage().attitude;
+                return (default_attitude.const_azimuth, default_attitude.const_elevation);
             }
 
             // Find appropriate interval
@@ -576,7 +642,8 @@ impl Rocket {
                 (data[last].1, data[last].2)
             }
         } else {
-            (self.config.stage1.attitude.const_azimuth, self.config.stage1.attitude.const_elevation)
+            let default_attitude = &self.config.primary_stage().attitude;
+            (default_attitude.const_azimuth, default_attitude.const_elevation)
         }
     }
 
@@ -647,8 +714,8 @@ pub struct ClientConfig {
     pub launch: ClientLaunch,
     #[serde(default)]
     pub stages: Vec<ClientStage>,
-    #[serde(default)]
-    pub stage: ClientStage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<ClientStage>,
     #[serde(default)]
     pub aerodynamics: ClientAerodynamics,
     #[serde(default)]
@@ -914,25 +981,25 @@ impl ClientConfig {
             ],
         };
 
-        let mut stage_sources = if !stages.is_empty() { stages } else { vec![stage] };
+        let mut stage_sources = if !stages.is_empty() {
+            stages
+        } else if let Some(stage) = stage {
+            vec![stage]
+        } else {
+            Vec::new()
+        };
         if stage_sources.is_empty() {
             stage_sources.push(ClientStage::default());
         }
 
-        // Limit to three stages to match backend RocketConfig representation
-        if stage_sources.len() > 3 {
-            stage_sources.truncate(3);
-        }
-
-        let mut stage_configs: Vec<StageConfig> = Vec::new();
-        for (idx, client_stage) in stage_sources.iter().enumerate() {
-            stage_configs.push(build_stage_config(
-                client_stage,
-                &aerodynamics,
-                &attitude,
-                idx + 1 < stage_sources.len(),
-            ));
-        }
+        let total_stages = stage_sources.len();
+        let stage_configs: Vec<StageConfig> = stage_sources
+            .iter()
+            .enumerate()
+            .map(|(idx, client_stage)| {
+                build_stage_config(client_stage, &aerodynamics, &attitude, idx + 1 < total_stages)
+            })
+            .collect();
 
         let wind_cfg = WindConfig {
             wind_file_exists: false,
@@ -944,9 +1011,7 @@ impl ClientConfig {
             name,
             calculate_condition: calc,
             launch,
-            stage1: stage_configs[0].clone(),
-            stage2: stage_configs.get(1).cloned(),
-            stage3: stage_configs.get(2).cloned(),
+            stages: stage_configs,
             wind: wind_cfg,
         };
 

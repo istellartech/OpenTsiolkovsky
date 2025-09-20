@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply min-h-screen bg-white text-slate-900 antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 0;
+  }
+
+  h1 {
+    @apply text-3xl font-semibold tracking-tight text-slate-950;
+  }
+
+  h2 {
+    @apply text-2xl font-semibold tracking-tight text-slate-900;
+  }
+
+  h3 {
+    @apply text-lg font-semibold tracking-tight text-slate-900;
+  }
+}
+
+@layer components {
+  .panel-card {
+    @apply rounded-2xl border border-slate-200 bg-white/80 shadow-soft backdrop-blur;
+  }
+
+  .section-shell {
+    @apply rounded-xl border border-slate-200/80 bg-white/95 p-5 shadow-sm;
+  }
+
+  .field-grid {
+    @apply grid gap-4 sm:grid-cols-2 lg:grid-cols-3;
+  }
+}

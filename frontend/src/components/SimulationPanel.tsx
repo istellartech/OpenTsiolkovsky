@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
 import { runSimulation } from '../lib/simulation'
+import { cn } from '../lib/utils'
+import { Button } from './ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Switch } from './ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion'
+import { Badge } from './ui/badge'
 import type {
   ClientAttitudeSample,
   ClientConfig,
@@ -12,7 +21,7 @@ import type {
 } from '../lib/types'
 
 type Props = {
-  onResult: (trajectory: SimulationState[]) => void
+  onResult: (trajectory: SimulationState[], config: ClientConfig) => void
 }
 
 type Mode = 'api' | 'wasm'
@@ -52,7 +61,7 @@ const FREE_MODE_OPTIONS = [
   { value: 2, label: '2: 弾道飛行' },
 ]
 
-const MAX_STAGE_COUNT = 3
+const MAX_STAGE_COUNT = 5
 
 function createDefaultStage(): ClientStageConfig {
   return {
@@ -84,7 +93,7 @@ function cloneStage(stage: ClientStageConfig): ClientStageConfig {
 }
 
 function snapshotStages(config: ClientConfig): ClientStageConfig[] {
-  const stages = config.stages && config.stages.length > 0 ? config.stages : [config.stage]
+  const stages = config.stages && config.stages.length > 0 ? config.stages : [createDefaultStage()]
   return stages.map((stage) => cloneStage(stage))
 }
 
@@ -101,12 +110,12 @@ function isFiniteNumber(value: unknown): value is number {
 function validateConfig(config: ClientConfig): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   const { simulation, launch, aerodynamics, attitude, wind } = config
-  const stageList = config.stages && config.stages.length > 0 ? config.stages : [config.stage]
+  const stageList = config.stages && config.stages.length > 0 ? config.stages : [createDefaultStage()]
   if (stageList.length === 0) {
     issues.push({ field: 'stages', message: '少なくとも1段は設定してください。' })
     return issues
   }
-  const stage = stageList[0] ?? config.stage
+  const stage = stageList[0]
 
   const push = (field: string, message: string) => {
     issues.push({ field, message })
@@ -463,55 +472,149 @@ function EditableTable<T extends Record<string, number>>({ title, columns, rows,
   }
 
   const handleAdd = () => {
-    const blank = columns.reduce((acc, col) => {
-      return { ...acc, [col.key]: 0 }
-    }, {} as T)
+    const blank = columns.reduce((acc, col) => ({ ...acc, [col.key]: 0 }), {} as T)
     onChange([...rows, blank])
   }
 
   return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <h4 style={{ margin: 0 }}>{title}</h4>
-        <button type="button" onClick={handleAdd}>{addLabel ?? 'Add row'}</button>
+    <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+        <h4 className="text-sm font-semibold text-slate-800">{title}</h4>
+        <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
+          {addLabel ?? 'Add row'}
+        </Button>
       </div>
       {rows.length === 0 ? (
-        <div style={{ color: '#6b7280' }}>No rows yet. Add one to begin.</div>
+        <div className="px-4 py-6 text-sm text-slate-500">No rows yet. Add one to begin.</div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              {columns.map((col) => (
-                <th key={String(col.key)} style={{ textAlign: 'left', fontWeight: 600, paddingBottom: 6 }}>
-                  {col.label}
-                </th>
-              ))}
-              <th style={{ width: 48 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, rowIdx) => (
-              <tr key={rowIdx}>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr>
                 {columns.map((col) => (
-                  <td key={String(col.key)} style={{ padding: '4px 8px 4px 0' }}>
-                    <input
-                      type="number"
-                      step={col.step ?? 'any'}
-                      min={col.min}
-                      value={Number(row[col.key])}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleCellChange(rowIdx, col, e.target.value)}
-                      style={{ width: '100%' }}
-                    />
-                  </td>
+                  <th
+                    key={String(col.key)}
+                    className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    {col.label}
+                  </th>
                 ))}
-                <td style={{ textAlign: 'right' }}>
-                  <button type="button" onClick={() => handleRemove(rowIdx)}>×</button>
-                </td>
+                <th className="w-16 px-3 py-2" />
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {rows.map((row, rowIdx) => (
+                <tr key={rowIdx} className="hover:bg-slate-50/80">
+                  {columns.map((col) => (
+                    <td key={String(col.key)} className="px-4 py-2">
+                      <Input
+                        type="number"
+                        step={col.step ?? 'any'}
+                        min={col.min}
+                        value={Number(row[col.key])}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleCellChange(rowIdx, col, e.target.value)}
+                      />
+                    </td>
+                  ))}
+                  <td className="px-3 py-2 text-right">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemove(rowIdx)}
+                      aria-label="Remove row"
+                    >
+                      Remove
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
+    </div>
+  )
+}
+
+type NumberFieldProps = {
+  id: string
+  label: string
+  value: number
+  onChange: (value: number) => void
+  step?: string
+  min?: number
+  max?: number
+  disabled?: boolean
+  className?: string
+  inputMode?: 'decimal' | 'numeric'
+}
+
+function NumberField({ id, label, value, onChange, step = 'any', min, max, disabled, className, inputMode = 'decimal' }: NumberFieldProps) {
+  return (
+    <div className={cn('space-y-2', className)}>
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        type="number"
+        value={value}
+        onChange={(e) => onChange(numberFromInput(e.target.value))}
+        step={step}
+        min={min}
+        max={max}
+        disabled={disabled}
+        inputMode={inputMode}
+      />
+    </div>
+  )
+}
+
+type SelectFieldProps = {
+  id: string
+  label: string
+  value: number
+  options: { value: number; label: string }[]
+  onChange: (value: number) => void
+  className?: string
+}
+
+function SelectField({ id, label, value, options, onChange, className }: SelectFieldProps) {
+  return (
+    <div className={cn('space-y-2', className)}>
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+type SwitchFieldProps = {
+  id: string
+  label: string
+  description?: string
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  disabled?: boolean
+}
+
+function SwitchField({ id, label, description, checked, onCheckedChange, disabled }: SwitchFieldProps) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white/90 px-4 py-3 shadow-inner">
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-slate-800">{label}</p>
+        {description && <p className="text-xs text-slate-500">{description}</p>}
+      </div>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   )
 }
@@ -539,7 +642,6 @@ export function createDefaultConfig(): ClientConfig {
         second: 0,
       },
     },
-    stage,
     stages: [cloneStage(stage)],
     aerodynamics: {
       body_diameter_m: 0.5,
@@ -570,8 +672,8 @@ export function createDefaultConfig(): ClientConfig {
 
 export function SimulationPanel({ onResult }: Props) {
   const [config, setConfig] = useState<ClientConfig>(() => createDefaultConfig())
-  const [useThrustProfile, setUseThrustProfile] = useState(() => config.stage.thrust_profile.length > 0)
-  const [useIspProfile, setUseIspProfile] = useState(() => config.stage.isp_profile.length > 0)
+  const [useThrustProfile, setUseThrustProfile] = useState(() => (config.stages[0]?.thrust_profile.length ?? 0) > 0)
+  const [useIspProfile, setUseIspProfile] = useState(() => (config.stages[0]?.isp_profile.length ?? 0) > 0)
   const [useCnProfile, setUseCnProfile] = useState(() => config.aerodynamics.cn_profile.length > 0)
   const [useCaProfile, setUseCaProfile] = useState(() => config.aerodynamics.ca_profile.length > 0)
   const [useAttitudeProfile, setUseAttitudeProfile] = useState(() => config.attitude.profile.length > 0)
@@ -589,7 +691,7 @@ export function SimulationPanel({ onResult }: Props) {
     ? `Generated JSON preview (要調整: ${validationIssues.length}件のエラー)`
     : 'Generated JSON preview (OK)'
 
-  const stages = config.stages && config.stages.length > 0 ? config.stages : [config.stage]
+  const stages = config.stages && config.stages.length > 0 ? config.stages : [createDefaultStage()]
   const stageCount = stages.length
 
   useEffect(() => {
@@ -613,13 +715,12 @@ export function SimulationPanel({ onResult }: Props) {
       nextStages = updatedStages
       return {
         ...prev,
-        stage: updatedStages[0],
         stages: updatedStages,
       }
     })
     if (nextStages.length > 0) {
-      setUseThrustProfile(nextStages[0].thrust_profile.length > 0)
-      setUseIspProfile(nextStages[0].isp_profile.length > 0)
+      setUseThrustProfile((nextStages[0]?.thrust_profile.length ?? 0) > 0)
+      setUseIspProfile((nextStages[0]?.isp_profile.length ?? 0) > 0)
     }
   }
 
@@ -656,7 +757,6 @@ export function SimulationPanel({ onResult }: Props) {
       stages[stageIndex] = updatedStage
       return {
         ...prev,
-        stage: stageIndex === 0 ? updatedStage : stages[0],
         stages,
       }
     })
@@ -695,23 +795,26 @@ export function SimulationPanel({ onResult }: Props) {
   function toggleThrustProfile(checked: boolean) {
     setUseThrustProfile(checked)
     setConfig((prev) => {
+      const stages = snapshotStages(prev)
+      if (stages.length === 0) {
+        return prev
+      }
+      const baseStage = stages[0]
       const nextProfile = checked
-        ? prev.stage.thrust_profile.length > 0
-          ? prev.stage.thrust_profile
+        ? baseStage.thrust_profile.length > 0
+          ? baseStage.thrust_profile
           : [
-              { time: prev.stage.burn_start_s, value: prev.stage.thrust_constant },
-              { time: prev.stage.burn_end_s, value: prev.stage.thrust_constant },
+              { time: baseStage.burn_start_s, value: baseStage.thrust_constant },
+              { time: baseStage.burn_end_s, value: baseStage.thrust_constant },
             ]
         : []
-      const stages = snapshotStages(prev)
       const updatedStage = {
-        ...prev.stage,
+        ...baseStage,
         thrust_profile: nextProfile,
       }
       stages[0] = updatedStage
       return {
         ...prev,
-        stage: updatedStage,
         stages,
       }
     })
@@ -720,23 +823,26 @@ export function SimulationPanel({ onResult }: Props) {
   function toggleIspProfile(checked: boolean) {
     setUseIspProfile(checked)
     setConfig((prev) => {
+      const stages = snapshotStages(prev)
+      if (stages.length === 0) {
+        return prev
+      }
+      const baseStage = stages[0]
       const nextProfile = checked
-        ? prev.stage.isp_profile.length > 0
-          ? prev.stage.isp_profile
+        ? baseStage.isp_profile.length > 0
+          ? baseStage.isp_profile
           : [
-              { time: prev.stage.burn_start_s, value: prev.stage.isp_constant },
-              { time: prev.stage.burn_end_s, value: prev.stage.isp_constant },
+              { time: baseStage.burn_start_s, value: baseStage.isp_constant },
+              { time: baseStage.burn_end_s, value: baseStage.isp_constant },
             ]
         : []
-      const stages = snapshotStages(prev)
       const updatedStage = {
-        ...prev.stage,
+        ...baseStage,
         isp_profile: nextProfile,
       }
       stages[0] = updatedStage
       return {
         ...prev,
-        stage: updatedStage,
         stages,
       }
     })
@@ -842,14 +948,19 @@ export function SimulationPanel({ onResult }: Props) {
     setLoading(true)
     setError(null)
     try {
+      const stagesSnapshot = snapshotStages(config)
+      const configSnapshot: ClientConfig = {
+        ...config,
+        stages: stagesSnapshot,
+      }
       let trajectory: SimulationState[]
       if (mode === 'wasm') {
         const { runSimulationWasm } = await import('../lib/wasm')
-        trajectory = await runSimulationWasm(config)
+        trajectory = await runSimulationWasm(configSnapshot)
       } else {
-        trajectory = await runSimulation(config)
+        trajectory = await runSimulation(configSnapshot)
       }
-      onResult(trajectory)
+      onResult(trajectory, configSnapshot)
     } catch (err: any) {
       setError(err?.message ?? String(err))
     } finally {
@@ -887,746 +998,758 @@ export function SimulationPanel({ onResult }: Props) {
   }
 
   return (
-    <form onSubmit={handleRun} style={{ display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-        <div>
-          <label style={{ display: 'block', fontWeight: 600 }}>Vehicle name</label>
-          <input
-            value={config.name}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig((prev) => ({ ...prev, name: e.target.value }))}
-            style={{ width: 240 }}
-          />
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>Execution mode</div>
-          <label>
-            <input type="radio" value="api" checked={mode === 'api'} onChange={() => setMode('api')} />
-            <span style={{ marginLeft: 6 }}>Server API</span>
-          </label>
-          <label style={{ marginLeft: 16 }}>
-            <input type="radio" value="wasm" checked={mode === 'wasm'} onChange={() => setMode('wasm')} />
-            <span style={{ marginLeft: 6 }}>Browser (WASM)</span>
-          </label>
-        </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            type="checkbox"
-            checked={showVariations}
-            onChange={(e) => setShowVariations(e.target.checked)}
-          />
-          <span>Show Monte Carlo variations</span>
-        </label>
-        <div style={{ marginLeft: 'auto' }}>
-          <button type="submit" disabled={loading || hasValidationIssues} style={{ padding: '8px 16px' }}>
-            {loading ? 'Running…' : `Run (${mode.toUpperCase()})`}
-          </button>
-          <button type="button" disabled={loading} onClick={resetToDefault} style={{ marginLeft: 8 }}>
-            Reset form
-          </button>
-        </div>
-      </div>
-
-      {hasValidationIssues && (
-        <div>
-          <div style={{ fontWeight: 600, color: 'crimson' }}>
-            {`設定に${validationIssues.length}件の問題があります。`}
+    <form onSubmit={handleRun} noValidate className="flex flex-col gap-6">
+      <Card className="overflow-hidden border-0 shadow-soft ring-1 ring-slate-100/60">
+        <CardHeader className="space-y-6 bg-gradient-to-r from-white via-white to-brand/5">
+          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+            <div className="space-y-2">
+              <CardTitle>Simulation setup</CardTitle>
+              <CardDescription>
+                Configure the vehicle, launch environment, and output cadence before running the solver.
+              </CardDescription>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+              <Button type="submit" disabled={loading || hasValidationIssues} className="gap-2">
+                {loading ? 'Running…' : `Run (${mode.toUpperCase()})`}
+              </Button>
+              <Button type="button" variant="outline" disabled={loading} onClick={resetToDefault}>
+                Reset form
+              </Button>
+            </div>
           </div>
-          <ul style={{ marginTop: 8, paddingLeft: 20, color: 'crimson' }}>
-            {validationIssues.map((issue) => (
-              <li key={`${issue.field}-${issue.message}`}>{issue.message}</li>
-            ))}
-          </ul>
+
+          <div className="grid w-full gap-5 md:grid-cols-[minmax(0,260px)_1fr] md:items-end">
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-name">Vehicle name</Label>
+              <Input
+                id="vehicle-name"
+                value={config.name}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setConfig((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Execution mode</span>
+                <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-inner">
+                  {(['api', 'wasm'] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setMode(option)}
+                      className={cn(
+                        'flex-1 rounded-md px-3 py-1.5 font-medium transition',
+                        mode === option
+                          ? 'bg-slate-900 text-white shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                      )}
+                    >
+                      {option === 'api' ? 'Server API' : 'Browser (WASM)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 shadow-inner">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Monte Carlo</span>
+                  <span className="text-sm text-slate-600">Show variations</span>
+                </div>
+                <Switch id="monte-carlo-toggle" checked={showVariations} onCheckedChange={setShowVariations} />
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {hasValidationIssues && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3 text-sm text-rose-700 shadow-sm">
+              <p className="font-semibold">{VALIDATION_ERROR_MESSAGE}</p>
+              <ul className="mt-2 space-y-1 text-xs">
+                {validationIssues.map((issue) => (
+                  <li key={`${issue.field}-${issue.message}`} className="flex items-start gap-2">
+                    <span className="mt-1 h-1.5 w-1.5 rounded-full bg-rose-400" />
+                    <span>{issue.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <Tabs defaultValue="inputs" className="w-full">
+            <TabsList className="w-full justify-start bg-slate-100/70">
+              <TabsTrigger value="inputs" className="flex-1 sm:flex-none">
+                Configuration
+              </TabsTrigger>
+              <TabsTrigger value="json" className="flex-1 sm:flex-none">
+                JSON preview
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="inputs">
+              <Accordion type="multiple" defaultValue={['mission', 'stages', 'environment']}>
+                <AccordionItem value="mission">
+                  <AccordionTrigger>Mission basics</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="flex flex-col gap-5">
+                      <div className="section-shell space-y-4">
+                        <div>
+                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Simulation</h4>
+                          <p className="text-sm text-slate-600">Define the mission horizon and output cadence.</p>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                          <NumberField
+                            id="simulation-duration"
+                            label="Duration [s]"
+                            value={config.simulation.duration_s}
+                            step="1"
+                            min={1}
+                            onChange={(value) => updateSimulation('duration_s', value)}
+                          />
+                          <NumberField
+                            id="simulation-output-step"
+                            label="Output step [s]"
+                            value={config.simulation.output_step_s}
+                            step="0.1"
+                            min={0.01}
+                            onChange={(value) => updateSimulation('output_step_s', value)}
+                          />
+                          {showVariations && (
+                            <NumberField
+                              id="simulation-air-density"
+                              label="Air density variation [%]"
+                              value={config.simulation.air_density_percent}
+                              step="1"
+                              min={-100}
+                              max={100}
+                              onChange={(value) => updateSimulation('air_density_percent', value)}
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="section-shell space-y-5">
+                        <div>
+                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Launch site</h4>
+                          <p className="text-sm text-slate-600">Set geodetic coordinates, altitude, and initial velocity.</p>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                          <NumberField
+                            id="launch-latitude"
+                            label="Latitude [deg]"
+                            value={config.launch.latitude_deg}
+                            step="0.0001"
+                            min={-90}
+                            max={90}
+                            onChange={(value) => updateLaunch('latitude_deg', value)}
+                          />
+                          <NumberField
+                            id="launch-longitude"
+                            label="Longitude [deg]"
+                            value={config.launch.longitude_deg}
+                            step="0.0001"
+                            min={-180}
+                            max={180}
+                            onChange={(value) => updateLaunch('longitude_deg', value)}
+                          />
+                          <NumberField
+                            id="launch-altitude"
+                            label="Altitude [m]"
+                            value={config.launch.altitude_m}
+                            step="1"
+                            onChange={(value) => updateLaunch('altitude_m', value)}
+                          />
+                        </div>
+
+                        <div className="space-y-3">
+                          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Velocity NED [m/s]</h5>
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            <NumberField
+                              id="launch-vel-n"
+                              label="North"
+                              value={config.launch.velocity_ned_mps[0]}
+                              step="0.1"
+                              onChange={(value) => setVelocityComponent(0, value)}
+                            />
+                            <NumberField
+                              id="launch-vel-e"
+                              label="East"
+                              value={config.launch.velocity_ned_mps[1]}
+                              step="0.1"
+                              onChange={(value) => setVelocityComponent(1, value)}
+                            />
+                            <NumberField
+                              id="launch-vel-d"
+                              label="Down"
+                              value={config.launch.velocity_ned_mps[2]}
+                              step="0.1"
+                              onChange={(value) => setVelocityComponent(2, value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Launch time (UTC)</h5>
+                          <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-6">
+                            <NumberField
+                              id="launch-year"
+                              label="Year"
+                              value={config.launch.datetime_utc.year}
+                              step="1"
+                              onChange={(value) => updateDateField('year', value)}
+                            />
+                            <NumberField
+                              id="launch-month"
+                              label="Month"
+                              value={config.launch.datetime_utc.month}
+                              step="1"
+                              min={1}
+                              max={12}
+                              onChange={(value) => updateDateField('month', value)}
+                            />
+                            <NumberField
+                              id="launch-day"
+                              label="Day"
+                              value={config.launch.datetime_utc.day}
+                              step="1"
+                              min={1}
+                              max={31}
+                              onChange={(value) => updateDateField('day', value)}
+                            />
+                            <NumberField
+                              id="launch-hour"
+                              label="Hour"
+                              value={config.launch.datetime_utc.hour}
+                              step="1"
+                              min={0}
+                              max={23}
+                              onChange={(value) => updateDateField('hour', value)}
+                            />
+                            <NumberField
+                              id="launch-minute"
+                              label="Minute"
+                              value={config.launch.datetime_utc.minute}
+                              step="1"
+                              min={0}
+                              max={59}
+                              onChange={(value) => updateDateField('minute', value)}
+                            />
+                            <NumberField
+                              id="launch-second"
+                              label="Second"
+                              value={config.launch.datetime_utc.second}
+                              step="1"
+                              min={0}
+                              max={59}
+                              onChange={(value) => updateDateField('second', value)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="stages">
+                  <AccordionTrigger>Vehicle stages &amp; propulsion</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="flex flex-col gap-5">
+                      <div className="section-shell flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Stage count</h4>
+                          <p className="text-sm text-slate-600">Simulate up to {MAX_STAGE_COUNT} stages.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setStageCount(stageCount - 1)} disabled={stageCount <= 1}>
+                            -
+                          </Button>
+                          <Input
+                            type="number"
+                            value={stageCount}
+                            min={1}
+                            max={MAX_STAGE_COUNT}
+                            onChange={(e) => setStageCount(numberFromInput(e.target.value))}
+                            inputMode="numeric"
+                            className="h-10 w-20 text-center"
+                          />
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setStageCount(stageCount + 1)} disabled={stageCount >= MAX_STAGE_COUNT}>
+                            +
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-4">
+                        {stages.map((stageData, idx) => {
+                          const stagePrefix = `stage-${idx}`
+                          const thrustToggleId = `${stagePrefix}-thrust-profile-toggle`
+                          const ispToggleId = `${stagePrefix}-isp-profile-toggle`
+                          return (
+                            <div key={stagePrefix} className="section-shell space-y-6">
+                              <div className="flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                  <Badge className="bg-slate-900 text-white">Stage {idx + 1}</Badge>
+                                  <span className="text-sm text-slate-600">Configure mass, guidance, and propulsion parameters.</span>
+                                </div>
+                              </div>
+
+                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                <NumberField
+                                  id={`${stagePrefix}-mass`}
+                                  label="Initial mass [kg]"
+                                  value={stageData.mass_initial_kg}
+                                  step="1"
+                                  min={0}
+                                  onChange={(value) => updateStage('mass_initial_kg', value, idx)}
+                                />
+                                <SelectField
+                                  id={`${stagePrefix}-power-mode`}
+                                  label="Power flight mode"
+                                  value={stageData.power_mode}
+                                  options={POWER_MODE_OPTIONS}
+                                  onChange={(value) => updateStage('power_mode', value as ClientStageConfig['power_mode'], idx)}
+                                />
+                                <SelectField
+                                  id={`${stagePrefix}-free-mode`}
+                                  label="Free flight mode"
+                                  value={stageData.free_mode}
+                                  options={FREE_MODE_OPTIONS}
+                                  onChange={(value) => updateStage('free_mode', value as ClientStageConfig['free_mode'], idx)}
+                                />
+                              </div>
+
+                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                <NumberField
+                                  id={`${stagePrefix}-burn-start`}
+                                  label="Burn start [s]"
+                                  value={stageData.burn_start_s}
+                                  step="0.1"
+                                  onChange={(value) => updateStage('burn_start_s', value, idx)}
+                                />
+                                <NumberField
+                                  id={`${stagePrefix}-burn-end`}
+                                  label="Burn end [s]"
+                                  value={stageData.burn_end_s}
+                                  step="0.1"
+                                  onChange={(value) => updateStage('burn_end_s', value, idx)}
+                                />
+                                <NumberField
+                                  id={`${stagePrefix}-forced-cutoff`}
+                                  label="Forced cutoff [s]"
+                                  value={stageData.forced_cutoff_s}
+                                  step="0.1"
+                                  onChange={(value) => updateStage('forced_cutoff_s', value, idx)}
+                                />
+                                <NumberField
+                                  id={`${stagePrefix}-separation-time`}
+                                  label="Separation time [s]"
+                                  value={stageData.separation_time_s}
+                                  step="0.1"
+                                  onChange={(value) => updateStage('separation_time_s', value, idx)}
+                                />
+                              </div>
+
+                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                <NumberField
+                                  id={`${stagePrefix}-throat-diameter`}
+                                  label="Throat diameter [m]"
+                                  value={stageData.throat_diameter_m}
+                                  step="0.001"
+                                  onChange={(value) => updateStage('throat_diameter_m', value, idx)}
+                                />
+                                <NumberField
+                                  id={`${stagePrefix}-nozzle-expansion`}
+                                  label="Nozzle expansion ratio"
+                                  value={stageData.nozzle_expansion_ratio}
+                                  step="0.1"
+                                  onChange={(value) => updateStage('nozzle_expansion_ratio', value, idx)}
+                                />
+                                <NumberField
+                                  id={`${stagePrefix}-nozzle-exit-pressure`}
+                                  label="Nozzle exit pressure [Pa]"
+                                  value={stageData.nozzle_exit_pressure_pa}
+                                  step="10"
+                                  onChange={(value) => updateStage('nozzle_exit_pressure_pa', value, idx)}
+                                />
+                              </div>
+
+                              <div className="space-y-4 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-inner">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div>
+                                    <h5 className="text-sm font-semibold text-slate-800">Thrust curve</h5>
+                                    <p className="text-xs text-slate-500">Provide constant vacuum thrust or import a CSV time-series.</p>
+                                  </div>
+                                  {idx === 0 && (
+                                    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
+                                      <Switch
+                                        id={thrustToggleId}
+                                        checked={useThrustProfile}
+                                        onCheckedChange={toggleThrustProfile}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {idx === 0 ? (
+                                  useThrustProfile ? (
+                                    <EditableTable<ClientTimeSample>
+                                      title="Thrust profile (time-series)"
+                                      columns={[
+                                        { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
+                                        { key: 'value', label: 'Thrust [N]', step: '10' },
+                                      ]}
+                                      rows={stageData.thrust_profile}
+                                      onChange={(rows) => updateStage('thrust_profile', rows, idx)}
+                                      addLabel="Add thrust sample"
+                                    />
+                                  ) : (
+                                    <NumberField
+                                      id={`${stagePrefix}-thrust-constant`}
+                                      label="Const thrust vac [N]"
+                                      value={stageData.thrust_constant}
+                                      step="10"
+                                      onChange={(value) => updateStage('thrust_constant', value, idx)}
+                                    />
+                                  )
+                                ) : (
+                                  <NumberField
+                                    id={`${stagePrefix}-thrust-constant`}
+                                    label="Const thrust vac [N]"
+                                    value={stageData.thrust_constant}
+                                    step="10"
+                                    onChange={(value) => updateStage('thrust_constant', value, idx)}
+                                  />
+                                )}
+
+                                {showVariations && (
+                                  <NumberField
+                                    id={`${stagePrefix}-thrust-multiplier`}
+                                    label="Thrust multiplier"
+                                    value={stageData.thrust_multiplier}
+                                    step="0.01"
+                                    onChange={(value) => updateStage('thrust_multiplier', value, idx)}
+                                  />
+                                )}
+                              </div>
+
+                              <div className="space-y-4 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-inner">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div>
+                                    <h5 className="text-sm font-semibold text-slate-800">Specific impulse</h5>
+                                    <p className="text-xs text-slate-500">Set a constant vacuum Isp or provide a profile.</p>
+                                  </div>
+                                  {idx === 0 && (
+                                    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
+                                      <Switch
+                                        id={ispToggleId}
+                                        checked={useIspProfile}
+                                        onCheckedChange={toggleIspProfile}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {idx === 0 ? (
+                                  useIspProfile ? (
+                                    <EditableTable<ClientTimeSample>
+                                      title="Isp profile (time-series)"
+                                      columns={[
+                                        { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
+                                        { key: 'value', label: 'Isp [s]', step: '0.1' },
+                                      ]}
+                                      rows={stageData.isp_profile}
+                                      onChange={(rows) => updateStage('isp_profile', rows, idx)}
+                                      addLabel="Add Isp sample"
+                                    />
+                                  ) : (
+                                    <NumberField
+                                      id={`${stagePrefix}-isp-constant`}
+                                      label="Const Isp vac [s]"
+                                      value={stageData.isp_constant}
+                                      step="0.1"
+                                      onChange={(value) => updateStage('isp_constant', value, idx)}
+                                    />
+                                  )
+                                ) : (
+                                  <NumberField
+                                    id={`${stagePrefix}-isp-constant`}
+                                    label="Const Isp vac [s]"
+                                    value={stageData.isp_constant}
+                                    step="0.1"
+                                    onChange={(value) => updateStage('isp_constant', value, idx)}
+                                  />
+                                )}
+
+                                {showVariations && (
+                                  <NumberField
+                                    id={`${stagePrefix}-isp-multiplier`}
+                                    label="Isp multiplier"
+                                    value={stageData.isp_multiplier}
+                                    step="0.01"
+                                    onChange={(value) => updateStage('isp_multiplier', value, idx)}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="environment">
+                  <AccordionTrigger>Environment &amp; guidance</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="flex flex-col gap-5">
+                      <div className="section-shell space-y-4">
+                        <div className="flex flex-col gap-2">
+                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Aerodynamics</h4>
+                          <p className="text-sm text-slate-600">Adjust reference geometry and optional Mach profiles.</p>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                          <NumberField
+                            id="aero-body-diameter"
+                            label="Body diameter [m]"
+                            value={config.aerodynamics.body_diameter_m}
+                            step="0.01"
+                            onChange={(value) => updateAerodynamics('body_diameter_m', value)}
+                          />
+                          <NumberField
+                            id="aero-ballistic"
+                            label="Ballistic coefficient [kg/m²]"
+                            value={config.aerodynamics.ballistic_coefficient}
+                            step="0.1"
+                            onChange={(value) => updateAerodynamics('ballistic_coefficient', value)}
+                          />
+                          <NumberField
+                            id="aero-cn-constant"
+                            label="Normal force coefficient (CNa)"
+                            value={config.aerodynamics.cn_constant}
+                            step="0.01"
+                            onChange={(value) => updateAerodynamics('cn_constant', value)}
+                          />
+                          <NumberField
+                            id="aero-cn-multiplier"
+                            label="CNa multiplier"
+                            value={config.aerodynamics.cn_multiplier}
+                            step="0.01"
+                            onChange={(value) => updateAerodynamics('cn_multiplier', value)}
+                          />
+                          <NumberField
+                            id="aero-ca-constant"
+                            label="Axial force coefficient (CA)"
+                            value={config.aerodynamics.ca_constant}
+                            step="0.01"
+                            onChange={(value) => updateAerodynamics('ca_constant', value)}
+                          />
+                          <NumberField
+                            id="aero-ca-multiplier"
+                            label="CA multiplier"
+                            value={config.aerodynamics.ca_multiplier}
+                            step="0.01"
+                            onChange={(value) => updateAerodynamics('ca_multiplier', value)}
+                          />
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <SwitchField
+                            id="cn-profile-toggle"
+                            label="Use CNa profile"
+                            description="Upload Mach table for the normal force coefficient."
+                            checked={useCnProfile}
+                            onCheckedChange={toggleCnProfile}
+                          />
+                          <SwitchField
+                            id="ca-profile-toggle"
+                            label="Use CA profile"
+                            description="Upload Mach table for the axial force coefficient."
+                            checked={useCaProfile}
+                            onCheckedChange={toggleCaProfile}
+                          />
+                        </div>
+                        <div className="grid gap-4">
+                          {useCnProfile && (
+                            <EditableTable<ClientMachSample>
+                              title="CNa profile"
+                              columns={[
+                                { key: 'mach', label: 'Mach [-]', step: '0.01', min: 0 },
+                                { key: 'value', label: 'CNa [-]', step: '0.01' },
+                              ]}
+                              rows={config.aerodynamics.cn_profile}
+                              onChange={(rows) => updateAerodynamics('cn_profile', rows)}
+                              addLabel="Add CNa sample"
+                            />
+                          )}
+                          {useCaProfile && (
+                            <EditableTable<ClientMachSample>
+                              title="CA profile"
+                              columns={[
+                                { key: 'mach', label: 'Mach [-]', step: '0.01', min: 0 },
+                                { key: 'value', label: 'CA [-]', step: '0.01' },
+                              ]}
+                              rows={config.aerodynamics.ca_profile}
+                              onChange={(rows) => updateAerodynamics('ca_profile', rows)}
+                              addLabel="Add CA sample"
+                            />
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="section-shell space-y-4">
+                        <div>
+                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Attitude guidance</h4>
+                          <p className="text-sm text-slate-600">Set default pointing or provide a trajectory profile.</p>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                          <NumberField
+                            id="attitude-elevation"
+                            label="Elevation [deg]"
+                            value={config.attitude.elevation_deg}
+                            step="0.1"
+                            onChange={(value) => updateAttitude('elevation_deg', value)}
+                          />
+                          <NumberField
+                            id="attitude-azimuth"
+                            label="Azimuth [deg]"
+                            value={config.attitude.azimuth_deg}
+                            step="0.1"
+                            onChange={(value) => updateAttitude('azimuth_deg', value)}
+                          />
+                          <NumberField
+                            id="attitude-pitch"
+                            label="Pitch offset [deg]"
+                            value={config.attitude.pitch_offset_deg}
+                            step="0.1"
+                            onChange={(value) => updateAttitude('pitch_offset_deg', value)}
+                          />
+                          <NumberField
+                            id="attitude-yaw"
+                            label="Yaw offset [deg]"
+                            value={config.attitude.yaw_offset_deg}
+                            step="0.1"
+                            onChange={(value) => updateAttitude('yaw_offset_deg', value)}
+                          />
+                          <NumberField
+                            id="attitude-roll"
+                            label="Roll offset [deg]"
+                            value={config.attitude.roll_offset_deg}
+                            step="0.1"
+                            onChange={(value) => updateAttitude('roll_offset_deg', value)}
+                          />
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          {(['x', 'y', 'z'] as const).map((axis, axisIdx) => (
+                            <NumberField
+                              key={`gyro-${axis}`}
+                              id={`gyro-${axis}`}
+                              label={`Gyro bias ${axis.toUpperCase()} [deg/h]`}
+                              value={config.attitude.gyro_bias_deg_h[axisIdx]}
+                              step="0.01"
+                              onChange={(value) => {
+                                const next: [number, number, number] = [...config.attitude.gyro_bias_deg_h] as [number, number, number]
+                                next[axisIdx] = value
+                                updateAttitude('gyro_bias_deg_h', next)
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <SwitchField
+                          id="attitude-profile-toggle"
+                          label="Use attitude profile"
+                          description="Upload azimuth/elevation waypoints over time."
+                          checked={useAttitudeProfile}
+                          onCheckedChange={toggleAttitudeProfile}
+                        />
+                        {useAttitudeProfile && (
+                          <EditableTable<ClientAttitudeSample>
+                            title="Attitude profile"
+                            columns={[
+                              { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
+                              { key: 'azimuth_deg', label: 'Azimuth [deg]', step: '0.1' },
+                              { key: 'elevation_deg', label: 'Elevation [deg]', step: '0.1' },
+                            ]}
+                            rows={config.attitude.profile}
+                            onChange={(rows) => updateAttitude('profile', rows)}
+                            addLabel="Add attitude waypoint"
+                          />
+                        )}
+                      </div>
+
+                      <div className="section-shell space-y-4">
+                        <div>
+                          <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Wind</h4>
+                          <p className="text-sm text-slate-600">Select a constant wind vector or altitude profile.</p>
+                        </div>
+                        <SwitchField
+                          id="wind-profile-toggle"
+                          label="Use wind profile"
+                          description="Upload altitude vs. wind speed/direction table."
+                          checked={useWindProfile}
+                          onCheckedChange={toggleWindProfile}
+                        />
+                        {!useWindProfile && (
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <NumberField
+                              id="wind-speed"
+                              label="Constant wind speed [m/s]"
+                              value={config.wind.speed_mps}
+                              step="0.1"
+                              min={0}
+                              onChange={(value) => updateWind('speed_mps', value)}
+                            />
+                            <NumberField
+                              id="wind-direction"
+                              label="Direction (from) [deg]"
+                              value={config.wind.direction_deg}
+                              step="1"
+                              min={0}
+                              max={360}
+                              onChange={(value) => updateWind('direction_deg', value)}
+                            />
+                          </div>
+                        )}
+                        {useWindProfile && (
+                          <EditableTable<ClientWindSample>
+                            title="Wind profile"
+                            columns={[
+                              { key: 'altitude_m', label: 'Altitude [m]', step: '1', min: 0 },
+                              { key: 'speed_mps', label: 'Speed [m/s]', step: '0.1' },
+                              { key: 'direction_deg', label: 'Direction [deg]', step: '1' },
+                            ]}
+                            rows={config.wind.profile}
+                            onChange={(rows) => updateWind('profile', rows)}
+                            addLabel="Add wind datum"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </TabsContent>
+
+            <TabsContent value="json">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 shadow-inner">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="text-sm font-semibold text-slate-700">{jsonSummaryLabel}</h4>
+                </div>
+                <pre className="mt-4 max-h-[360px] overflow-auto rounded-xl bg-slate-950/95 p-4 text-xs leading-relaxed text-slate-100 shadow-inner">
+                  {jsonPreview}
+                </pre>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+
+      {error && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
+          {error}
         </div>
       )}
-
-      <div style={{ display: 'grid', gap: 12 }}>
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-          <h3>Simulation</h3>
-          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <label>
-              <div>Duration [s]</div>
-              <input
-                type="number"
-                min={1}
-                step="1"
-                value={config.simulation.duration_s}
-                onChange={(e) => updateSimulation('duration_s', numberFromInput(e.target.value))}
-              />
-            </label>
-            <label>
-              <div>Output step [s]</div>
-              <input
-                type="number"
-                min={0.01}
-                step="any"
-                value={config.simulation.output_step_s}
-                onChange={(e) => updateSimulation('output_step_s', numberFromInput(e.target.value))}
-              />
-            </label>
-            {showVariations && (
-              <label>
-                <div>Air density variation [%]</div>
-                <input
-                  type="number"
-                  step="1"
-                  value={config.simulation.air_density_percent}
-                  onChange={(e) => updateSimulation('air_density_percent', numberFromInput(e.target.value))}
-                />
-              </label>
-            )}
-          </div>
-        </div>
-
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-          <h3>Launch</h3>
-          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <label>
-              <div>Latitude [deg]</div>
-              <input
-                type="number"
-                step="0.0001"
-                value={config.launch.latitude_deg}
-                onChange={(e) => updateLaunch('latitude_deg', numberFromInput(e.target.value))}
-              />
-            </label>
-            <label>
-              <div>Longitude [deg]</div>
-              <input
-                type="number"
-                step="0.0001"
-                value={config.launch.longitude_deg}
-                onChange={(e) => updateLaunch('longitude_deg', numberFromInput(e.target.value))}
-              />
-            </label>
-            <label>
-              <div>Altitude [m]</div>
-              <input
-                type="number"
-                step="1"
-                value={config.launch.altitude_m}
-                onChange={(e) => updateLaunch('altitude_m', numberFromInput(e.target.value))}
-              />
-            </label>
-          </div>
-          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-            <label>
-              <div>Velocity North [m/s]</div>
-              <input
-                type="number"
-                step="0.1"
-                value={config.launch.velocity_ned_mps[0]}
-                onChange={(e) => setVelocityComponent(0, numberFromInput(e.target.value))}
-              />
-            </label>
-            <label>
-              <div>Velocity East [m/s]</div>
-              <input
-                type="number"
-                step="0.1"
-                value={config.launch.velocity_ned_mps[1]}
-                onChange={(e) => setVelocityComponent(1, numberFromInput(e.target.value))}
-              />
-            </label>
-            <label>
-              <div>Velocity Down [m/s]</div>
-              <input
-                type="number"
-                step="0.1"
-                value={config.launch.velocity_ned_mps[2]}
-                onChange={(e) => setVelocityComponent(2, numberFromInput(e.target.value))}
-              />
-            </label>
-          </div>
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>Launch time (UTC)</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {(['year', 'month', 'day', 'hour', 'minute', 'second'] as const).map((field) => (
-                <label key={field} style={{ display: 'flex', flexDirection: 'column', minWidth: 90 }}>
-                  <span style={{ textTransform: 'capitalize' }}>{field}</span>
-                  <input
-                    type="number"
-                    step="1"
-                    value={config.launch.datetime_utc[field]}
-                    onChange={(e) => updateDateField(field, numberFromInput(e.target.value))}
-                  />
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-          <h3>Stage & Motor</h3>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', maxWidth: 180 }}>
-              <span>Stage count</span>
-              <select
-                value={stageCount}
-                onChange={(e) => setStageCount(Number(e.target.value))}
-                style={{ padding: '4px 8px' }}
-              >
-                {Array.from({ length: MAX_STAGE_COUNT }, (_, idx) => idx + 1).map((count) => (
-                  <option key={count} value={count}>{count}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
-            {stages.map((stageData, idx) => {
-              const stageLabel = `Stage ${idx + 1}`
-              return (
-                <details key={`stage-${idx}`} open={idx === 0} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-                  <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{stageLabel}</summary>
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                    <label>
-                      <div>Mass initial [kg]</div>
-                      <input
-                        type="number"
-                        step="1"
-                        value={stageData.mass_initial_kg}
-                        onChange={(e) => updateStage('mass_initial_kg', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                    <label>
-                      <div>Power flight mode</div>
-                      <select
-                        value={stageData.power_mode}
-                        onChange={(e) => updateStage('power_mode', Number(e.target.value), idx)}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        {POWER_MODE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <div>Free flight mode</div>
-                      <select
-                        value={stageData.free_mode}
-                        onChange={(e) => updateStage('free_mode', Number(e.target.value), idx)}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        {FREE_MODE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                    <label>
-                      <div>Burn start [s]</div>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={stageData.burn_start_s}
-                        onChange={(e) => updateStage('burn_start_s', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                    <label>
-                      <div>Burn end [s]</div>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={stageData.burn_end_s}
-                        onChange={(e) => updateStage('burn_end_s', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                    <label>
-                      <div>Forced cutoff [s]</div>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={stageData.forced_cutoff_s}
-                        onChange={(e) => updateStage('forced_cutoff_s', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                    <label>
-                      <div>Separation time [s]</div>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={stageData.separation_time_s}
-                        onChange={(e) => updateStage('separation_time_s', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                  </div>
-
-                  <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                    <label>
-                      <div>Throat diameter [m]</div>
-                      <input
-                        type="number"
-                        step="0.001"
-                        value={stageData.throat_diameter_m}
-                        onChange={(e) => updateStage('throat_diameter_m', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                    <label>
-                      <div>Nozzle expansion ratio</div>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={stageData.nozzle_expansion_ratio}
-                        onChange={(e) => updateStage('nozzle_expansion_ratio', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                    <label>
-                      <div>Nozzle exit pressure [Pa]</div>
-                      <input
-                        type="number"
-                        step="10"
-                        value={stageData.nozzle_exit_pressure_pa}
-                        onChange={(e) => updateStage('nozzle_exit_pressure_pa', numberFromInput(e.target.value), idx)}
-                      />
-                    </label>
-                  </div>
-
-                  <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 16, paddingTop: 12 }}>
-                    <div style={{ fontWeight: 600 }}>Thrust curve</div>
-                    {idx === 0 ? (
-                      <>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                          <input
-                            type="checkbox"
-                            checked={useThrustProfile}
-                            onChange={(e) => toggleThrustProfile(e.target.checked)}
-                          />
-                          <span>Use thrust profile (CSV / time-series)</span>
-                        </label>
-                        {!useThrustProfile && (
-                          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                            <label>
-                              <div>Const thrust vac [N]</div>
-                              <input
-                                type="number"
-                                step="10"
-                                value={stageData.thrust_constant}
-                                onChange={(e) => updateStage('thrust_constant', numberFromInput(e.target.value), idx)}
-                              />
-                            </label>
-                          </div>
-                        )}
-                        {showVariations && (
-                          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                            <label>
-                              <div>Thrust multiplier</div>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={stageData.thrust_multiplier}
-                                onChange={(e) => updateStage('thrust_multiplier', numberFromInput(e.target.value), idx)}
-                              />
-                            </label>
-                          </div>
-                        )}
-                        {useThrustProfile && (
-                          <EditableTable<ClientTimeSample>
-                            title="Thrust profile (time-series)"
-                            columns={[
-                              { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
-                              { key: 'value', label: 'Thrust [N]', step: '10' },
-                            ]}
-                            rows={stageData.thrust_profile}
-                            onChange={(rows) => updateStage('thrust_profile', rows, idx)}
-                            addLabel="Add thrust sample"
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                          <label>
-                            <div>Const thrust vac [N]</div>
-                            <input
-                              type="number"
-                              step="10"
-                              value={stageData.thrust_constant}
-                              onChange={(e) => updateStage('thrust_constant', numberFromInput(e.target.value), idx)}
-                            />
-                          </label>
-                        </div>
-                        {showVariations && (
-                          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                            <label>
-                              <div>Thrust multiplier</div>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={stageData.thrust_multiplier}
-                                onChange={(e) => updateStage('thrust_multiplier', numberFromInput(e.target.value), idx)}
-                              />
-                            </label>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-
-                  <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 16, paddingTop: 12 }}>
-                    <div style={{ fontWeight: 600 }}>Specific impulse</div>
-                    {idx === 0 ? (
-                      <>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                          <input
-                            type="checkbox"
-                            checked={useIspProfile}
-                            onChange={(e) => toggleIspProfile(e.target.checked)}
-                          />
-                          <span>Use Isp profile (CSV / time-series)</span>
-                        </label>
-                        {!useIspProfile && (
-                          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                            <label>
-                              <div>Const Isp vac [s]</div>
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={stageData.isp_constant}
-                                onChange={(e) => updateStage('isp_constant', numberFromInput(e.target.value), idx)}
-                              />
-                            </label>
-                          </div>
-                        )}
-                        {showVariations && (
-                          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                            <label>
-                              <div>Isp multiplier</div>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={stageData.isp_multiplier}
-                                onChange={(e) => updateStage('isp_multiplier', numberFromInput(e.target.value), idx)}
-                              />
-                            </label>
-                          </div>
-                        )}
-                        {useIspProfile && (
-                          <EditableTable<ClientTimeSample>
-                            title="Isp profile (time-series)"
-                            columns={[
-                              { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
-                              { key: 'value', label: 'Isp [s]', step: '0.1' },
-                            ]}
-                            rows={stageData.isp_profile}
-                            onChange={(rows) => updateStage('isp_profile', rows, idx)}
-                            addLabel="Add Isp sample"
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                          <label>
-                            <div>Const Isp vac [s]</div>
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={stageData.isp_constant}
-                              onChange={(e) => updateStage('isp_constant', numberFromInput(e.target.value), idx)}
-                            />
-                          </label>
-                        </div>
-                        {showVariations && (
-                          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                            <label>
-                              <div>Isp multiplier</div>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={stageData.isp_multiplier}
-                                onChange={(e) => updateStage('isp_multiplier', numberFromInput(e.target.value), idx)}
-                              />
-                            </label>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </details>
-              )
-            })}
-          </div>
-        </div>
-
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-          <h3>Aerodynamics</h3>
-          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-            <label>
-              <div>Body diameter [m]</div>
-              <input
-                type="number"
-                step="0.01"
-                value={config.aerodynamics.body_diameter_m}
-                onChange={(e) => updateAerodynamics('body_diameter_m', numberFromInput(e.target.value))}
-              />
-            </label>
-            <label>
-              <div>Ballistic coefficient [kg/m²]</div>
-              <input
-                type="number"
-                step="1"
-                value={config.aerodynamics.ballistic_coefficient}
-                onChange={(e) => updateAerodynamics('ballistic_coefficient', numberFromInput(e.target.value))}
-              />
-            </label>
-          </div>
-
-          <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 16, paddingTop: 12 }}>
-            <div style={{ fontWeight: 600 }}>Normal force coefficient (CN)</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <input
-                type="checkbox"
-                checked={useCnProfile}
-                onChange={(e) => toggleCnProfile(e.target.checked)}
-              />
-              <span>Use CN profile (CSV / Mach table)</span>
-            </label>
-            {!useCnProfile && (
-              <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                <label>
-                  <div>CN constant</div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.aerodynamics.cn_constant}
-                    onChange={(e) => updateAerodynamics('cn_constant', numberFromInput(e.target.value))}
-                  />
-                </label>
-              </div>
-            )}
-            {showVariations && (
-              <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                <label>
-                  <div>CN multiplier</div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.aerodynamics.cn_multiplier}
-                    onChange={(e) => updateAerodynamics('cn_multiplier', numberFromInput(e.target.value))}
-                  />
-                </label>
-              </div>
-            )}
-            {useCnProfile && (
-              <EditableTable<ClientMachSample>
-                title="CN vs Mach"
-                columns={[
-                  { key: 'mach', label: 'Mach [-]', step: '0.01', min: 0 },
-                  { key: 'value', label: 'CN [-]', step: '0.01' },
-                ]}
-                rows={config.aerodynamics.cn_profile}
-                onChange={(rows) => updateAerodynamics('cn_profile', rows)}
-                addLabel="Add CN sample"
-              />
-            )}
-          </div>
-
-          <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 16, paddingTop: 12 }}>
-            <div style={{ fontWeight: 600 }}>Axial force coefficient (CA)</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-              <input
-                type="checkbox"
-                checked={useCaProfile}
-                onChange={(e) => toggleCaProfile(e.target.checked)}
-              />
-              <span>Use CA profile (CSV / Mach table)</span>
-            </label>
-            {!useCaProfile && (
-              <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                <label>
-                  <div>CA constant</div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.aerodynamics.ca_constant}
-                    onChange={(e) => updateAerodynamics('ca_constant', numberFromInput(e.target.value))}
-                  />
-                </label>
-              </div>
-            )}
-            {showVariations && (
-              <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                <label>
-                  <div>CA multiplier</div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.aerodynamics.ca_multiplier}
-                    onChange={(e) => updateAerodynamics('ca_multiplier', numberFromInput(e.target.value))}
-                  />
-                </label>
-              </div>
-            )}
-            {useCaProfile && (
-              <EditableTable<ClientMachSample>
-                title="CA vs Mach"
-                columns={[
-                  { key: 'mach', label: 'Mach [-]', step: '0.01', min: 0 },
-                  { key: 'value', label: 'CA [-]', step: '0.01' },
-                ]}
-                rows={config.aerodynamics.ca_profile}
-                onChange={(rows) => updateAerodynamics('ca_profile', rows)}
-                addLabel="Add CA sample"
-              />
-            )}
-          </div>
-        </div>
-
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-          <h3>Attitude guidance</h3>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={useAttitudeProfile}
-              onChange={(e) => toggleAttitudeProfile(e.target.checked)}
-            />
-            <span>Use attitude profile (CSV / time-series)</span>
-          </label>
-          {!useAttitudeProfile && (
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-              <label>
-                <div>Azimuth [deg]</div>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={config.attitude.azimuth_deg}
-                  onChange={(e) => updateAttitude('azimuth_deg', numberFromInput(e.target.value))}
-                />
-              </label>
-              <label>
-                <div>Elevation [deg]</div>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={config.attitude.elevation_deg}
-                  onChange={(e) => updateAttitude('elevation_deg', numberFromInput(e.target.value))}
-                />
-              </label>
-            </div>
-          )}
-          {showVariations && (
-            <>
-              <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-                <label>
-                  <div>Pitch offset [deg]</div>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={config.attitude.pitch_offset_deg}
-                    onChange={(e) => updateAttitude('pitch_offset_deg', numberFromInput(e.target.value))}
-                  />
-                </label>
-                <label>
-                  <div>Yaw offset [deg]</div>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={config.attitude.yaw_offset_deg}
-                    onChange={(e) => updateAttitude('yaw_offset_deg', numberFromInput(e.target.value))}
-                  />
-                </label>
-                <label>
-                  <div>Roll offset [deg]</div>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={config.attitude.roll_offset_deg}
-                    onChange={(e) => updateAttitude('roll_offset_deg', numberFromInput(e.target.value))}
-                  />
-                </label>
-              </div>
-              <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-                {(['x', 'y', 'z'] as const).map((axis, idx) => (
-                  <label key={axis} style={{ display: 'flex', flexDirection: 'column', minWidth: 140 }}>
-                    <span>Gyro bias {axis.toUpperCase()} [deg/h]</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={config.attitude.gyro_bias_deg_h[idx]}
-                      onChange={(e) => {
-                        const next: [number, number, number] = [...config.attitude.gyro_bias_deg_h] as [number, number, number]
-                        next[idx] = numberFromInput(e.target.value)
-                        updateAttitude('gyro_bias_deg_h', next)
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-          {useAttitudeProfile && (
-            <EditableTable<ClientAttitudeSample>
-              title="Attitude profile"
-              columns={[
-                { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
-                { key: 'azimuth_deg', label: 'Azimuth [deg]', step: '0.1' },
-                { key: 'elevation_deg', label: 'Elevation [deg]', step: '0.1' },
-              ]}
-              rows={config.attitude.profile}
-              onChange={(rows) => updateAttitude('profile', rows)}
-              addLabel="Add attitude waypoint"
-            />
-          )}
-        </div>
-
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-          <h3>Wind</h3>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={useWindProfile}
-              onChange={(e) => toggleWindProfile(e.target.checked)}
-            />
-            <span>Use wind profile (CSV / altitude table)</span>
-          </label>
-          {!useWindProfile && (
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 12 }}>
-              <label>
-                <div>Constant wind speed [m/s]</div>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={config.wind.speed_mps}
-                  onChange={(e) => updateWind('speed_mps', numberFromInput(e.target.value))}
-                />
-              </label>
-              <label>
-                <div>Direction (from) [deg]</div>
-                <input
-                  type="number"
-                  step="1"
-                  value={config.wind.direction_deg}
-                  onChange={(e) => updateWind('direction_deg', numberFromInput(e.target.value))}
-                />
-              </label>
-            </div>
-          )}
-          {useWindProfile && (
-            <EditableTable<ClientWindSample>
-              title="Wind profile"
-              columns={[
-                { key: 'altitude_m', label: 'Altitude [m]', step: '1', min: 0 },
-                { key: 'speed_mps', label: 'Speed [m/s]', step: '0.1' },
-                { key: 'direction_deg', label: 'Direction [deg]', step: '1' },
-              ]}
-              rows={config.wind.profile}
-              onChange={(rows) => updateWind('profile', rows)}
-              addLabel="Add wind datum"
-            />
-          )}
-        </div>
-      </div>
-
-      {error && <div style={{ color: 'crimson' }}>{error}</div>}
-
-      <details style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 600 }}>{jsonSummaryLabel}</summary>
-        <pre style={{ maxHeight: 240, overflow: 'auto', background: '#f9fafb', padding: 12, borderRadius: 6 }}>
-          {jsonPreview}
-        </pre>
-      </details>
     </form>
   )
 }

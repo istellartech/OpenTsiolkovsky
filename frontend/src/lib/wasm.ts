@@ -4,6 +4,27 @@
 
 import type { ClientConfig, ClientStageConfig, SimulationState } from './types'
 
+function fallbackStage(): ClientStageConfig {
+  return {
+    power_mode: 0,
+    free_mode: 2,
+    mass_initial_kg: 1000,
+    burn_start_s: 0,
+    burn_end_s: 30,
+    forced_cutoff_s: 30,
+    separation_time_s: 30,
+    throat_diameter_m: 0.1,
+    nozzle_expansion_ratio: 5,
+    nozzle_exit_pressure_pa: 101300,
+    thrust_constant: 50000,
+    thrust_multiplier: 1,
+    thrust_profile: [],
+    isp_constant: 200,
+    isp_multiplier: 1,
+    isp_profile: [],
+  }
+}
+
 type LegacyStage = {
   "power flight mode(int)": number
   "free flight mode(int)": number
@@ -96,7 +117,7 @@ type LegacyRocketConfig = {
 
 export function toLegacyRocketConfig(config: ClientConfig): LegacyRocketConfig {
   const { simulation, launch, aerodynamics, attitude, wind } = config
-  const stageList = config.stages && config.stages.length > 0 ? config.stages : [config.stage]
+  const stageList = config.stages.length > 0 ? config.stages : [fallbackStage()]
   const stages = stageList.slice(0, 3)
 
   const toLegacyStage = (stage: ClientStageConfig, hasNext: boolean): LegacyStage => {

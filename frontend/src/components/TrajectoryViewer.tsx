@@ -15,17 +15,53 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
     }
     if (!mountRef.current || !data || data.length === 0) return
 
-    const w = 640, h = 480
+    const container = mountRef.current
+    container.style.width = '100%'
+    container.style.maxWidth = '100%'
+    container.style.margin = '0 auto'
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x020617)
     const cameraFar = 1_000_000
-    const camera = new THREE.PerspectiveCamera(60, w / h, 0.1, cameraFar)
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.setSize(w, h)
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, cameraFar)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     if (typeof window !== 'undefined') {
       renderer.setPixelRatio(window.devicePixelRatio || 1)
     }
-    mountRef.current.appendChild(renderer.domElement)
+    container.appendChild(renderer.domElement)
+
+    const ensureWidth = () => {
+      const parentWidth = container.parentElement?.getBoundingClientRect().width ?? 0
+      const selfWidth = container.getBoundingClientRect().width
+      const fallback = Math.min(window.innerWidth - 48, 720)
+      const available = parentWidth > 0 ? parentWidth : selfWidth > 0 ? selfWidth : fallback
+      const width = Math.max(360, Math.min(available * 0.5, 480, fallback * 0.7))
+      return width
+    }
+
+    const applySize = () => {
+      const width = ensureWidth()
+      const desired = Math.round(width * 0.6)
+      const height = Math.max(320, Math.min(desired, 420))
+      renderer.setSize(width, height, false)
+      container.style.width = `${width}px`
+      container.style.maxWidth = `${width}px`
+      container.style.height = `${height}px`
+      camera.aspect = width / height
+      camera.updateProjectionMatrix()
+    }
+
+    applySize()
+    if (!(typeof ResizeObserver !== 'undefined')) {
+      requestAnimationFrame(applySize)
+    }
+
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => applySize())
+      resizeObserver.observe(container)
+    } else if (typeof window !== 'undefined') {
+      window.addEventListener('resize', applySize)
+    }
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
@@ -145,6 +181,17 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
     animate()
 
     return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      } else if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', applySize)
+      }
+      try {
+        container.style.height = ''
+        container.style.width = ''
+        container.style.maxWidth = ''
+        container.style.margin = ''
+      } catch {}
       try { mountRef.current?.removeChild(renderer.domElement) } catch {}
       cancelAnimationFrame(frame)
       controls.dispose()
@@ -172,21 +219,11 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
   }, [data])
 
   return (
-    <div style={{ position: 'relative', width: 640, height: 480 }}>
-      <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+    <div className="relative w-full min-h-[220px] max-h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-950/95 shadow-soft">
+      <div ref={mountRef} className="h-full w-full" />
       <div
         ref={infoRef}
-        style={{
-          position: 'absolute',
-          left: 12,
-          bottom: 12,
-          padding: '4px 8px',
-          background: 'rgba(15, 23, 42, 0.75)',
-          color: '#f1f5f9',
-          fontSize: 12,
-          fontFamily: 'monospace',
-          borderRadius: 4,
-        }}
+        className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/10 px-3 py-1 text-[11px] font-mono text-slate-100 shadow-inner backdrop-blur-sm"
       />
     </div>
   )

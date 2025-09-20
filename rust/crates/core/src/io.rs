@@ -227,7 +227,8 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
             })?;
     }
 
-    let aero = &rocket.config.stage1.aero;
+    let primary_stage = rocket.config.primary_stage();
+    let aero = &primary_stage.aero;
     if let Some(path) = resolve_data_path(base, aero.cn_file_exists, &aero.cn_file_name) {
         match load_cn_surface(&path) {
             Ok(surface) => {
@@ -242,7 +243,7 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
     rocket.ca_data =
         maybe_load(base, aero.ca_file_exists, &aero.ca_file_name, |p| load_time_series(p))?;
 
-    let attitude = &rocket.config.stage1.attitude;
+    let attitude = &primary_stage.attitude;
     rocket.attitude_data =
         maybe_load(base, attitude.attitude_file_exists, &attitude.attitude_file_name, |p| {
             load_attitude_data(p)

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { Chart, ChartConfiguration } from 'chart.js/auto'
 import type { Plugin } from 'chart.js'
-import type { SimulationState } from '../lib/types'
+import type { SimulationState, ClientConfig } from '../lib/types'
 import { vec3ToObject } from '../lib/types'
 import { computeDownrangeKm, eciToLatLon } from '../lib/geo'
+import { Badge } from './ui/badge'
 
 type EventMarker = {
   time: number
@@ -20,8 +21,19 @@ type StageBand = {
   labelColor: string
 }
 
+type StagePlan = {
+  index: number
+  startTime: number
+  burnStartTime: number
+  burnEndTime: number
+  cutoffTime: number
+  separationTime: number
+}
+
 type StageSummary = {
   stage: number
+  startIndex: number
+  endIndex: number
   startTime: number
   endTime: number
   duration: number
@@ -31,12 +43,21 @@ type StageSummary = {
   maxThrust: number
   accentColor: string
   fillColor: string
+  missing?: boolean
+  plan?: StagePlan
 }
 
 type ChartDefinition = {
   key: string
   config: ChartConfiguration
   height?: number
+}
+
+type StagePanelDefinition = {
+  summary: StageSummary
+  label: string
+  charts: ChartDefinition[]
+  missing?: boolean
 }
 
 type SummaryCard = {
@@ -52,6 +73,72 @@ const stagePalette = [
   { accent: '#ea580c', fill: 'rgba(249, 115, 22, 0.12)' },
   { accent: '#7c3aed', fill: 'rgba(147, 51, 234, 0.12)' },
 ]
+
+function resolveStageNumber(summary: StageSummary, idx: number): number {
+  const numeric = Number(summary.stage)
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric
+  }
+  return idx + 1
+}
+
+function formatStageLabel(summary: StageSummary, idx: number): string {
+  return `Stage ${resolveStageNumber(summary, idx)}`
+}
+
+function adjustAlpha(color: string, alpha: number): string {
+  if (color.startsWith('rgba(')) {
+    const body = color.slice(5, -1).split(',').map((token) => token.trim())
+    if (body.length === 4) {
+      return `rgba(${body[0]}, ${body[1]}, ${body[2]}, ${alpha})`
+    }
+  }
+  return color
+}
+
+function buildStagePlans(config?: ClientConfig): StagePlan[] {
+  if (!config || !config.stages || config.stages.length === 0) return []
+  const duration = Number.isFinite(config.simulation.duration_s)
+    ? config.simulation.duration_s
+    : Math.max(0, config.simulation.duration_s)
+
+  const plans: StagePlan[] = []
+  let cursor = 0
+  config.stages.forEach((stage, idx) => {
+    const stageStart = cursor
+    const burnStart = stageStart + Math.max(0, stage.burn_start_s ?? 0)
+    const burnEndRelative = Math.max(stage.burn_end_s ?? 0, stage.burn_start_s ?? 0)
+    const burnEnd = stageStart + burnEndRelative
+    const cutoffRelative = Math.max(stage.forced_cutoff_s ?? 0, burnEndRelative)
+    const cutoff = stageStart + cutoffRelative
+
+    let separationRelative = stage.separation_time_s ?? cutoffRelative
+    separationRelative = Math.max(separationRelative, cutoffRelative)
+
+    let separation = idx < config.stages.length - 1 ? stageStart + separationRelative : duration
+    if (!Number.isFinite(separation) || separation <= stageStart) {
+      separation = stageStart + cutoffRelative
+    }
+    if (!Number.isFinite(separation) || separation <= stageStart) {
+      separation = stageStart + 1
+    }
+    separation = Math.max(separation, stageStart)
+    separation = Number.isFinite(duration) ? Math.min(separation, duration) : separation
+
+    plans.push({
+      index: idx + 1,
+      startTime: stageStart,
+      burnStartTime: burnStart,
+      burnEndTime: burnEnd,
+      cutoffTime: cutoff,
+      separationTime: separation,
+    })
+
+    cursor = separation
+  })
+
+  return plans
+}
 
 const eventMarkerPlugin: Plugin = {
   id: 'eventMarkers',
@@ -167,7 +254,7 @@ function ChartCard({ config, height = 260 }: { config: ChartConfiguration; heigh
   )
 }
 
-export function GraphPanel({ data }: { data: SimulationState[] }) {
+export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[]; stagePlanConfig?: ClientConfig }) {
   const computed = useMemo(() => {
     if (!data || data.length === 0) return null
 
@@ -209,7 +296,7 @@ export function GraphPanel({ data }: { data: SimulationState[] }) {
     const thrustThreshold = maxThrust > 0 ? Math.max(maxThrust * 0.02, 1e-3) : 0
     const isPowered = thrust.map((t) => Math.abs(t) > thrustThreshold)
 
-    const stageSummaries: StageSummary[] = []
+    const stageSummariesRaw: StageSummary[] = []
     if (data.length > 0) {
       let stageStart = 0
       let stageIndex = 0
@@ -217,7 +304,6 @@ export function GraphPanel({ data }: { data: SimulationState[] }) {
       const lastIndex = data.length
 
       const pushStage = (endIdx: number) => {
-        const palette = stagePalette[stageIndex % stagePalette.length]
         const safeEnd = Math.max(stageStart + 1, endIdx)
         const startTime = times[stageStart]
         const endTime = times[Math.min(safeEnd - 1, times.length - 1)]
@@ -235,8 +321,11 @@ export function GraphPanel({ data }: { data: SimulationState[] }) {
         const maxAlt = altSlice.length > 0 ? Math.max(...altSlice) : 0
         const maxMachStage = machSlice.length > 0 ? Math.max(...machSlice) : 0
         const maxThrustStage = thrustSlice.length > 0 ? Math.max(...thrustSlice) : 0
-        stageSummaries.push({
-          stage: currentStage,
+        const stageValue = data[Math.min(stageStart, lastIndex - 1)]?.stage ?? currentStage
+        stageSummariesRaw.push({
+          stage: stageValue,
+          startIndex: stageStart,
+          endIndex: safeEnd,
           startTime,
           endTime,
           duration,
@@ -244,8 +333,8 @@ export function GraphPanel({ data }: { data: SimulationState[] }) {
           maxAltitude: maxAlt,
           maxMach: maxMachStage,
           maxThrust: maxThrustStage,
-          accentColor: palette.accent,
-          fillColor: palette.fill,
+          accentColor: '',
+          fillColor: '',
         })
         stageIndex += 1
       }
@@ -260,14 +349,96 @@ export function GraphPanel({ data }: { data: SimulationState[] }) {
       pushStage(lastIndex)
     }
 
-    const zeroIndexedStages = stageSummaries.length > 0 && stageSummaries[0].stage === 0
+    const executedSummaries = stageSummariesRaw.map((summary, idx) => {
+      const numericStage = Number(summary.stage)
+      const resolvedStage = Number.isFinite(numericStage) && numericStage > 0 ? numericStage : idx + 1
+      return { ...summary, stage: resolvedStage }
+    })
+
+    const stagePlans = buildStagePlans(stagePlanConfig)
+    const stageOrder = stagePlans.length > 0
+      ? stagePlans.map((plan) => plan.index)
+      : executedSummaries.map((summary) => summary.stage)
+
+    const summaryByStage = new Map<number, StageSummary>()
+    executedSummaries.forEach((summary) => {
+      summaryByStage.set(summary.stage, summary)
+    })
+
+    const orderedSummaries: StageSummary[] = []
+
+    stageOrder.forEach((stageIdx, idx) => {
+      const palette = stagePalette[idx % stagePalette.length]
+      const plan = stagePlans.find((entry) => entry.index === stageIdx)
+      const summary = summaryByStage.get(stageIdx)
+      if (summary) {
+        summaryByStage.delete(stageIdx)
+        orderedSummaries.push({
+          ...summary,
+          stage: stageIdx,
+          accentColor: palette.accent,
+          fillColor: palette.fill,
+          plan,
+          missing: false,
+        })
+      } else if (plan) {
+        orderedSummaries.push({
+          stage: stageIdx,
+          startIndex: 0,
+          endIndex: 0,
+          startTime: plan.startTime,
+          endTime: plan.separationTime,
+          duration: Math.max(0, plan.separationTime - plan.startTime),
+          poweredDuration: Math.max(0, plan.cutoffTime - plan.startTime),
+          maxAltitude: Number.NaN,
+          maxMach: Number.NaN,
+          maxThrust: Number.NaN,
+          accentColor: palette.accent,
+          fillColor: palette.fill,
+          plan,
+          missing: true,
+        })
+      }
+    })
+
+    if (summaryByStage.size > 0) {
+      const extras = Array.from(summaryByStage.values()).sort((a, b) => a.stage - b.stage)
+      extras.forEach((summary, extraIdx) => {
+        const palette = stagePalette[(orderedSummaries.length + extraIdx) % stagePalette.length]
+        orderedSummaries.push({
+          ...summary,
+          accentColor: palette.accent,
+          fillColor: palette.fill,
+          plan: stagePlans.find((plan) => plan.index === summary.stage),
+          missing: false,
+        })
+      })
+    }
+
+    if (orderedSummaries.length === 0) {
+      executedSummaries.forEach((summary, idx) => {
+        const palette = stagePalette[idx % stagePalette.length]
+        orderedSummaries.push({
+          ...summary,
+          accentColor: palette.accent,
+          fillColor: palette.fill,
+          plan: stagePlans.find((plan) => plan.index === summary.stage),
+          missing: false,
+        })
+      })
+    }
+
+    const stageSummaries = orderedSummaries
     const stageBands: StageBand[] = stageSummaries.map((summary, idx) => {
-      const stageNumber = zeroIndexedStages ? summary.stage + 1 : summary.stage
-      const label = Number.isFinite(stageNumber) ? `S${stageNumber}` : `S${idx + 1}`
+      const number = resolveStageNumber(summary, idx)
+      const labelBase = `S${number}`
+      const label = summary.missing ? `${labelBase} (予定)` : labelBase
+      const baseFill = summary.fillColor || stagePalette[idx % stagePalette.length].fill
+      const bandColor = summary.missing ? adjustAlpha(baseFill, 0.04) : baseFill
       return {
         start: summary.startTime,
         end: summary.endTime,
-        color: summary.fillColor,
+        color: bandColor,
         label,
         labelColor: summary.accentColor,
       }
@@ -311,6 +482,178 @@ export function GraphPanel({ data }: { data: SimulationState[] }) {
 
     const thrustKn = thrust.map((v) => v / 1000)
     const dragKn = drag.map((v) => v / 1000)
+
+    const stagePanels: StagePanelDefinition[] = stageSummaries.map((summary, idx) => {
+      const startIdx = summary.startIndex
+      const endIdx = summary.endIndex
+      const missing = Boolean(summary.missing)
+      const baseLabel = formatStageLabel(summary, idx)
+      const label = missing ? `${baseLabel} (未到達)` : baseLabel
+      if (startIdx >= endIdx || missing) {
+        return {
+          summary,
+          label,
+          charts: [],
+          missing,
+        }
+      }
+      const stageTimes = times.slice(startIdx, endIdx)
+      const stageMarkers = markers.filter(
+        (marker) => marker.time >= summary.startTime && marker.time <= summary.endTime,
+      )
+
+      const altitudeStage = altitudeKm.slice(startIdx, endIdx)
+      const velocityStage = velocity.slice(startIdx, endIdx)
+      const verticalStage = verticalSpeed.slice(startIdx, endIdx)
+      const horizontalStage = horizontalSpeed.slice(startIdx, endIdx)
+      const thrustStage = thrustKn.slice(startIdx, endIdx)
+      const dragStage = dragKn.slice(startIdx, endIdx)
+
+      const accent = summary.accentColor
+
+      const stageCharts: ChartDefinition[] = [
+        {
+          key: `stage-${idx}-altitude`,
+          config: {
+            type: 'line',
+            data: {
+              labels: stageTimes,
+              datasets: [
+                {
+                  label: 'Altitude [km]',
+                  data: altitudeStage,
+                  borderColor: accent,
+                  borderWidth: 2,
+                  tension: 0.18,
+                  pointRadius: 0,
+                  fill: false,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              animation: false,
+              maintainAspectRatio: false,
+              scales: {
+                x: { type: 'linear', title: { display: true, text: 'Time [s]' } },
+                y: { title: { display: true, text: 'Altitude [km]' } },
+              },
+              plugins: {
+                legend: { display: false },
+                title: { display: true, text: `${label}: Altitude`, align: 'start' },
+                tooltip: { intersect: false },
+                eventMarkers: { markers: stageMarkers },
+              },
+            } as any,
+          },
+          height: 220,
+        },
+        {
+          key: `stage-${idx}-velocity`,
+          config: {
+            type: 'line',
+            data: {
+              labels: stageTimes,
+              datasets: [
+                {
+                  label: '|Velocity| [m/s]',
+                  data: velocityStage,
+                  borderColor: '#0ea5e9',
+                  borderWidth: 2,
+                  tension: 0.18,
+                  pointRadius: 0,
+                },
+                {
+                  label: 'Vertical [m/s]',
+                  data: verticalStage,
+                  borderColor: '#14b8a6',
+                  borderWidth: 1.5,
+                  borderDash: [6, 3],
+                  tension: 0.15,
+                  pointRadius: 0,
+                },
+                {
+                  label: 'Horizontal [m/s]',
+                  data: horizontalStage,
+                  borderColor: '#f59e0b',
+                  borderWidth: 1.5,
+                  borderDash: [4, 4],
+                  tension: 0.15,
+                  pointRadius: 0,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              animation: false,
+              maintainAspectRatio: false,
+              scales: {
+                x: { type: 'linear', title: { display: true, text: 'Time [s]' } },
+                y: { title: { display: true, text: 'Velocity [m/s]' } },
+              },
+              plugins: {
+                legend: { display: true, position: 'bottom' },
+                title: { display: true, text: `${label}: Velocity`, align: 'start' },
+                tooltip: { intersect: false },
+                eventMarkers: { markers: stageMarkers },
+              },
+            } as any,
+          },
+          height: 220,
+        },
+        {
+          key: `stage-${idx}-thrust`,
+          config: {
+            type: 'line',
+            data: {
+              labels: stageTimes,
+              datasets: [
+                {
+                  label: 'Thrust [kN]',
+                  data: thrustStage,
+                  borderColor: '#ef4444',
+                  borderWidth: 2,
+                  tension: 0.18,
+                  pointRadius: 0,
+                },
+                {
+                  label: 'Drag [kN]',
+                  data: dragStage,
+                  borderColor: '#2563eb',
+                  borderWidth: 2,
+                  borderDash: [4, 4],
+                  tension: 0.18,
+                  pointRadius: 0,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              animation: false,
+              maintainAspectRatio: false,
+              scales: {
+                x: { type: 'linear', title: { display: true, text: 'Time [s]' } },
+                y: { title: { display: true, text: 'Force [kN]' } },
+              },
+              plugins: {
+                legend: { display: true, position: 'bottom' },
+                title: { display: true, text: `${label}: Thrust vs. drag`, align: 'start' },
+                tooltip: { intersect: false },
+                eventMarkers: { markers: stageMarkers },
+              },
+            } as any,
+          },
+          height: 220,
+        },
+      ]
+
+      return {
+        summary,
+        label,
+        charts: stageCharts,
+        missing: false,
+      }
+    })
 
     const altitudeDownrange = downrangeKm.map((x, idx) => ({ x, y: altitudeKm[idx] }))
 
@@ -735,89 +1078,169 @@ export function GraphPanel({ data }: { data: SimulationState[] }) {
     return {
       charts,
       stageSummaries,
+      stagePanels,
       summaryCards,
-      zeroIndexedStages,
     }
-  }, [data])
+  }, [data, stagePlanConfig])
 
   if (!computed) {
-    return <div>No simulation data.</div>
+    return <div className="text-sm text-slate-500">No simulation data.</div>
   }
 
-  const { charts, stageSummaries, summaryCards, zeroIndexedStages } = computed
+  const { charts, stageSummaries, stagePanels, summaryCards } = computed
 
-  const stageDisplay = (summary: StageSummary, idx: number) => {
-    const base = zeroIndexedStages ? summary.stage + 1 : summary.stage
-    if (!Number.isFinite(base)) return `Stage ${idx + 1}`
-    if (!zeroIndexedStages && base !== summary.stage) {
-      return `Stage ${base} (ID ${summary.stage})`
-    }
-    return `Stage ${base}`
-  }
+  const formatSeconds = (value: number) => (Number.isFinite(value) ? `${value.toFixed(1)} s` : 'N/A')
+  const formatKilometers = (value: number) => (Number.isFinite(value) ? `${value.toFixed(2)} km` : 'N/A')
+  const formatKn = (value: number) => (Number.isFinite(value) ? `${value.toFixed(1)} kN` : 'N/A')
+  const formatMach = (value: number) => (Number.isFinite(value) ? value.toFixed(2) : 'N/A')
 
   return (
-    <div style={{ display: 'grid', gap: 24 }}>
+    <div className="grid gap-6">
       {summaryCards.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {summaryCards.map((card) => (
             <div
               key={card.key}
-              style={{
-                padding: '12px 14px',
-                borderRadius: 10,
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                boxShadow: '0 1px 2px rgba(15, 23, 42, 0.08)',
-              }}
+              className="rounded-xl border border-slate-200 bg-white/95 p-4 text-slate-900 shadow-sm shadow-slate-200/60"
             >
-              <div style={{ fontSize: 12, color: '#475569', marginBottom: 4 }}>{card.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 600, color: '#0f172a' }}>{card.value}</div>
-              {card.detail && <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{card.detail}</div>}
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.label}</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{card.value}</div>
+              {card.detail && <div className="mt-1 text-xs text-slate-500">{card.detail}</div>}
             </div>
           ))}
         </div>
       )}
 
       {stageSummaries.length > 0 && (
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Stage timeline</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-            {stageSummaries.map((stage, idx) => (
-              <div
-                key={`${stage.stage}-${idx}`}
-                style={{
-                  padding: '14px 16px',
-                  borderRadius: 10,
-                  background: stage.fillColor,
-                  border: `1px solid ${stage.accentColor}33`,
-                }}
-              >
-                <div style={{ fontWeight: 600, color: stage.accentColor, marginBottom: 6 }}>{stageDisplay(stage, idx)}</div>
-                <div style={{ fontSize: 12, color: '#0f172a' }}>
-                  <div>t0: {stage.startTime.toFixed(1)} s</div>
-                  <div>t1: {stage.endTime.toFixed(1)} s</div>
-                  <div>dt: {stage.duration.toFixed(1)} s (powered {stage.poweredDuration.toFixed(1)} s)</div>
-                  <div>Max alt: {(stage.maxAltitude / 1000).toFixed(2)} km</div>
-                  <div>Max Mach: {stage.maxMach.toFixed(2)}</div>
-                  <div>Max thrust: {(stage.maxThrust / 1000).toFixed(1)} kN</div>
+        <div className="space-y-3">
+          <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Stage timeline</div>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {stageSummaries.map((stage, idx) => {
+              const label = stage.missing ? `${formatStageLabel(stage, idx)} (未到達)` : formatStageLabel(stage, idx)
+              const background = stage.missing ? adjustAlpha(stage.fillColor, 0.05) : stage.fillColor
+              const borderColor = `${stage.accentColor}33`
+              const durationText = Number.isFinite(stage.duration) ? `${stage.duration.toFixed(1)} s` : 'N/A'
+              const poweredText = Number.isFinite(stage.poweredDuration) ? `${stage.poweredDuration.toFixed(1)} s` : 'N/A'
+              const maxAltText = Number.isFinite(stage.maxAltitude) ? `${(stage.maxAltitude / 1000).toFixed(2)} km` : 'N/A'
+              const maxMachText = Number.isFinite(stage.maxMach) ? stage.maxMach.toFixed(2) : 'N/A'
+              const maxThrustText = Number.isFinite(stage.maxThrust) ? `${(stage.maxThrust / 1000).toFixed(1)} kN` : 'N/A'
+              return (
+                <div
+                  key={`${stage.stage}-${idx}`}
+                  className="rounded-xl border p-4 text-sm shadow-sm"
+                  style={{ background, borderColor }}
+                >
+                  <div className="text-sm font-semibold" style={{ color: stage.accentColor }}>
+                    {label}
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs text-slate-700">
+                    <div>t0: {Number.isFinite(stage.startTime) ? `${stage.startTime.toFixed(1)} s` : 'N/A'}</div>
+                    <div>t1: {Number.isFinite(stage.endTime) ? `${stage.endTime.toFixed(1)} s` : 'N/A'}</div>
+                    <div>
+                      dt: {durationText}
+                      <span className="text-slate-500"> (powered {poweredText})</span>
+                    </div>
+                    <div>Max alt: {maxAltText}</div>
+                    <div>Max Mach: {maxMachText}</div>
+                    <div>Max thrust: {maxThrustText}</div>
+                  </div>
+                  {stage.missing && stage.plan && (
+                    <div className="mt-3 text-[11px] text-slate-500">
+                      予定: t0 {stage.plan.startTime.toFixed(1)} s → 分離 {stage.plan.separationTime.toFixed(1)} s
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
+      {stagePanels.length > 0 && (
+        <div className="grid gap-4">
+          {stagePanels.map((panel, idx) => {
+            const { summary } = panel
+            const plan = summary.plan
+            const durationValue = summary.missing
+              ? plan
+                ? `${(plan.separationTime - plan.startTime).toFixed(1)} s (予定)`
+                : 'N/A'
+              : formatSeconds(summary.duration)
+            const poweredValue = summary.missing
+              ? plan
+                ? `${(plan.cutoffTime - plan.startTime).toFixed(1)} s (予定)`
+                : 'N/A'
+              : formatSeconds(summary.poweredDuration)
+            const maxAltValue = Number.isFinite(summary.maxAltitude)
+              ? formatKilometers(summary.maxAltitude / 1000)
+              : 'N/A'
+            const maxMachValue = formatMach(summary.maxMach)
+            const maxThrustValue = Number.isFinite(summary.maxThrust)
+              ? formatKn(summary.maxThrust / 1000)
+              : 'N/A'
+            const stats = [
+              { key: 'duration', label: 'Duration', value: durationValue },
+              { key: 'powered', label: 'Powered flight', value: poweredValue },
+              { key: 'max-alt', label: 'Max altitude', value: maxAltValue },
+              { key: 'max-mach', label: 'Max Mach', value: maxMachValue },
+              { key: 'max-thrust', label: 'Max thrust', value: maxThrustValue },
+            ]
+            return (
+              <div
+                key={`stage-panel-${summary.stage}-${idx}`}
+                className="rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm shadow-slate-200/60"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Badge className="bg-brand/10 text-brand-700">{panel.label}</Badge>
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      t0 {formatSeconds(summary.startTime)} → t1 {formatSeconds(summary.endTime)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500">{summary.missing ? 'Telemetry missing' : 'Telemetry captured'}</span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  {stats.map((stat) => (
+                    <div
+                      key={stat.key}
+                      className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-inner"
+                    >
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{stat.label}</div>
+                      <div className="mt-1 text-base font-semibold text-slate-900">{stat.value}</div>
+                    </div>
+                  ))}
+                </div>
+                {panel.missing && (
+                  <div className="mt-3 text-xs text-slate-500">
+                    テレメトリは取得されませんでした。
+                    {plan && (
+                      <span className="ml-1">予定: t0 {plan.startTime.toFixed(1)} s → 分離 {plan.separationTime.toFixed(1)} s</span>
+                    )}
+                  </div>
+                )}
+                {panel.charts.length > 0 && (
+                  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {panel.charts.map((chart) => (
+                      <div
+                        key={chart.key}
+                        className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-inner"
+                      >
+                        <ChartCard config={chart.config} height={chart.height ?? 220} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {charts.map((chart) => (
           <div
             key={chart.key}
-            style={{
-              padding: 16,
-              borderRadius: 12,
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
-            }}
+            className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm shadow-slate-200/60"
           >
             <ChartCard config={chart.config} height={chart.height ?? 260} />
           </div>
