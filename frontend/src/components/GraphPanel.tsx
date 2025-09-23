@@ -1128,7 +1128,7 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
           {summaryCards.map((card) => (
             <div
               key={card.key}
-              className="rounded-xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-sm shadow-slate-200/60"
+              className="rounded-xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-xs shadow-slate-200/60"
             >
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.label}</div>
               <div className="mt-2 text-2xl font-semibold text-slate-950">{card.value}</div>
@@ -1157,7 +1157,7 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
                   onClick={() => handleStagePanelToggle(panelId)}
                   className={cn(
                     'flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition',
-                    isOpen ? 'bg-white shadow-sm' : 'bg-white text-slate-600 hover:border-slate-300 hover:text-brand-700',
+                    isOpen ? 'bg-white shadow-xs' : 'bg-white text-slate-600 hover:border-slate-300 hover:text-brand-700',
                   )}
                   style={isOpen ? { borderColor: accent, color: accent } : { borderColor: adjustAlpha(accent, 0.3) }}
                 >
@@ -1177,7 +1177,7 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
             <button
               type="button"
               onClick={() => setShowStagePanels((prev) => !prev)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-xs transition hover:bg-slate-100"
             >
               {showStagePanels ? 'Hide stage panels' : 'Show stage panels'}
             </button>
@@ -1186,7 +1186,7 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
             <button
               type="button"
               onClick={() => setShowGlobalCharts((prev) => !prev)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-xs transition hover:bg-slate-100"
             >
               {showGlobalCharts ? 'Hide global charts' : 'Show global charts'}
             </button>
@@ -1234,7 +1234,7 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
                 key={`stage-panel-${summary.stage}-${idx}`}
                 value={accordionValue}
                 id={`graph-${accordionValue}`}
-                className="overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm shadow-slate-200/60"
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-xs shadow-slate-200/60"
               >
                 <AccordionTrigger className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 text-left">
                   <div className="flex items-center gap-2.5">
@@ -1291,7 +1291,7 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
           {charts.map((chart) => (
             <div
               key={chart.key}
-              className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm shadow-slate-200/60"
+              className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-xs shadow-slate-200/60"
             >
               <ChartCard config={chart.config} height={chart.height ?? 260} />
             </div>

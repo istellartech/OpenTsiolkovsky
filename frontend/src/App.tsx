@@ -12,7 +12,7 @@ export default function App() {
 
   return (
     <div className="relative min-h-screen bg-white">
-      <div className="pointer-events-none absolute inset-x-0 -top-32 h-72 bg-gradient-to-b from-brand/25 via-brand/5 to-transparent blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-0 -top-32 h-72 bg-linear-to-b from-brand/25 via-brand/5 to-transparent blur-3xl" />
       <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-10 px-4 pb-16 pt-12 md:px-8">
         <header className="space-y-4">
           <Badge className="bg-brand/15 text-brand-700">OpenTsiolkovsky</Badge>

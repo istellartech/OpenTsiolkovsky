@@ -297,21 +297,21 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
         <button
           type="button"
           onClick={handleToggleFullWidth}
-          className="pointer-events-auto rounded-md border border-white/30 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-100 shadow-sm transition hover:border-white/60 hover:bg-slate-900/90"
+          className="pointer-events-auto rounded-md border border-white/30 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-100 shadow-xs transition hover:border-white/60 hover:bg-slate-900/90"
         >
           {isFullWidth ? 'Default width' : 'Full width'}
         </button>
         <button
           type="button"
           onClick={handleToggleFullscreen}
-          className="pointer-events-auto rounded-md border border-white/30 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-100 shadow-sm transition hover:border-white/60 hover:bg-slate-900/90"
+          className="pointer-events-auto rounded-md border border-white/30 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-100 shadow-xs transition hover:border-white/60 hover:bg-slate-900/90"
         >
           {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         </button>
       </div>
       <div
         ref={infoRef}
-        className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/10 px-3 py-1 text-[11px] font-mono text-slate-100 shadow-inner backdrop-blur-sm"
+        className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/10 px-3 py-1 text-[11px] font-mono text-slate-100 shadow-inner backdrop-blur-xs"
       />
     </div>
   )

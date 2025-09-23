@@ -547,7 +547,7 @@ function EditableTable<T extends Record<string, number>>({ title, columns, rows,
   }
 
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white shadow-sm">
+    <div className="rounded-xl border border-slate-200/80 bg-white shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
         <h4 className="text-sm font-semibold text-slate-800">{title}</h4>
         <Button type="button" size="sm" variant="outline" onClick={handleAdd}>
@@ -685,7 +685,7 @@ function SelectField({ id, label, value, options, onChange, className, hasError 
         ref={registerRef}
         aria-invalid={hasError || undefined}
         className={cn(
-          'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1',
+          'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1',
           hasError && 'border-rose-300 bg-rose-50 text-rose-700 focus-visible:ring-rose-300 focus-visible:ring-offset-2',
         )}
       >
@@ -1458,7 +1458,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
   return (
     <form onSubmit={handleRun} noValidate className="flex flex-col gap-6">
       <Card className="overflow-hidden border-0 shadow-soft ring-1 ring-slate-100/60">
-        <CardHeader className="space-y-4 bg-gradient-to-r from-white via-white to-brand/5">
+        <CardHeader className="space-y-4 bg-linear-to-r from-white via-white to-brand/5">
           <div className="flex flex-col items-start justify-between gap-3 md:flex-row md:items-center">
             <div className="space-y-2">
               <CardTitle>Simulation setup</CardTitle>
@@ -1483,7 +1483,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
                 id="config-preset"
                 value={selectedPresetId}
                 onChange={handlePresetChange}
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1"
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1"
               >
                 {PRESET_OPTIONS.map((preset) => (
                   <option key={preset.id} value={preset.id}>
@@ -1493,7 +1493,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
                 <option value="custom">Custom configuration</option>
               </select>
             </div>
-            <p className="min-h-[2.25rem] text-sm text-slate-600">{presetDescription}</p>
+            <p className="min-h-9 text-sm text-slate-600">{presetDescription}</p>
           </div>
 
           <div className="grid w-full gap-3 md:grid-cols-[minmax(0,260px)_1fr] md:items-end">
@@ -1518,7 +1518,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
                       className={cn(
                         'flex-1 rounded-md px-3 py-1.5 font-medium transition',
                         mode === option
-                          ? 'bg-slate-900 text-white shadow-sm'
+                          ? 'bg-slate-900 text-white shadow-xs'
                           : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
                       )}
                     >
@@ -1545,7 +1545,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
               <button
                 type="button"
                 onClick={handleResetVariations}
-                className="rounded border border-amber-200 bg-white px-2 py-1 font-semibold text-amber-700 shadow-sm transition hover:border-amber-300"
+                className="rounded border border-amber-200 bg-white px-2 py-1 font-semibold text-amber-700 shadow-xs transition hover:border-amber-300"
               >
                 Reset variations
               </button>
@@ -1555,7 +1555,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
 
         <CardContent className="space-y-4">
           {hasValidationIssues && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3 text-sm text-rose-700 shadow-sm">
+            <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3 text-sm text-rose-700 shadow-xs">
               <p className="font-semibold">{VALIDATION_ERROR_MESSAGE}</p>
               <ul className="mt-2 space-y-1 text-xs">
                 {validationIssues.map((issue) => (
@@ -1785,7 +1785,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
                                 className={cn(
                                   'flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition',
                                   isOpen
-                                    ? 'bg-white shadow-sm'
+                                    ? 'bg-white shadow-xs'
                                     : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-brand-700',
                                 )}
                                 style={isOpen ? { borderColor: accent, color: accent } : undefined}
@@ -1819,7 +1819,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
                               <AccordionItem
                                 key={stagePrefix}
                                 value={stagePrefix}
-                                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/60"
+                                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs shadow-slate-200/60"
                               >
                                 <AccordionTrigger className="px-4 py-2.5 text-left">
                                   <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -1940,7 +1940,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
                                           <h5 className="text-sm font-semibold text-slate-800">Thrust curve</h5>
                                           <p className="text-xs text-slate-500">Provide constant vacuum thrust or import a CSV time-series.</p>
                                         </div>
-                                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+                                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-xs">
                                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
                                           <Switch
                                             id={thrustToggleId}
@@ -1992,7 +1992,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
                                           <h5 className="text-sm font-semibold text-slate-800">Specific impulse</h5>
                                           <p className="text-xs text-slate-500">Set a constant vacuum Isp or provide a profile.</p>
                                         </div>
-                                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+                                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-xs">
                                           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
                                           <Switch
                                             id={ispToggleId}
@@ -2355,7 +2355,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
       </Card>
 
       {error && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-xs">
           {error}
         </div>
       )}
