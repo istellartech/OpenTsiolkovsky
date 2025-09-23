@@ -1455,7 +1455,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
             <div className="space-y-2">
               <CardTitle>Simulation setup</CardTitle>
               <CardDescription>
-                Configure the vehicle, launch environment, and output cadence before running the solver.
+                Configure launch parameters.
               </CardDescription>
             </div>
             <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center">
