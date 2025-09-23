@@ -24,7 +24,6 @@ type Props = {
   onResult: (trajectory: SimulationState[], config: ClientConfig) => void
 }
 
-type Mode = 'api' | 'wasm'
 
 type Column<T extends Record<string, number>> = {
   key: keyof T
@@ -953,7 +952,6 @@ export function SimulationPanel({ onResult }: Props) {
   const [useCaProfile, setUseCaProfile] = useState(() => config.aerodynamics.ca_profile.length > 0)
   const [useAttitudeProfile, setUseAttitudeProfile] = useState(() => config.attitude.profile.length > 0)
   const [useWindProfile, setUseWindProfile] = useState(() => config.wind.profile.length > 0)
-  const [mode, setMode] = useState<Mode>('wasm')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showVariations, setShowVariations] = useState(false)
@@ -1321,13 +1319,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
         ...config,
         stages: stagesSnapshot,
       }
-      let trajectory: SimulationState[]
-      if (mode === 'wasm') {
-        const { runSimulationWasm } = await import('../lib/wasm')
-        trajectory = await runSimulationWasm(configSnapshot)
-      } else {
-        trajectory = await runSimulation(configSnapshot)
-      }
+      const trajectory = await runSimulation(configSnapshot)
       onResult(trajectory, configSnapshot)
     } catch (err: any) {
       setError(err?.message ?? String(err))
@@ -1468,7 +1460,7 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
             </div>
             <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center">
               <Button type="submit" disabled={loading || hasValidationIssues} className="gap-2">
-                {loading ? 'Running…' : `Run (${mode.toUpperCase()})`}
+                {loading ? 'Running…' : 'Run'}
               </Button>
               <Button type="button" variant="outline" disabled={loading} onClick={resetToDefault}>
                 Reset form
@@ -1507,26 +1499,6 @@ const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Execution mode</span>
-                <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-inner">
-                  {(['api', 'wasm'] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setMode(option)}
-                      className={cn(
-                        'flex-1 rounded-md px-3 py-1.5 font-medium transition',
-                        mode === option
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
-                      )}
-                    >
-                      {option === 'api' ? 'Server API' : 'Browser (WASM)'}
-                    </button>
-                  ))}
-                </div>
-              </div>
 
               <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white/80 px-3 py-2 shadow-inner">
                 <div className="space-y-0.5">

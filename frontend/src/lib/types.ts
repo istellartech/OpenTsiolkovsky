@@ -30,7 +30,6 @@ export function vec3ToObject(vec: Vec3Json): { x: number, y: number, z: number }
   }
 }
 
-export type ApiError = { error: string, detail?: string }
 
 export type ClientTimeSample = { time: number, value: number }
 export type ClientMachSample = { mach: number, value: number }
