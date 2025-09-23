@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chart, ChartConfiguration } from 'chart.js/auto'
 import type { Plugin } from 'chart.js'
 import type { SimulationState, ClientConfig } from '../lib/types'
 import { vec3ToObject } from '../lib/types'
 import { computeDownrangeKm, eciToLatLon } from '../lib/geo'
 import { Badge } from './ui/badge'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion'
+import { cn } from '../lib/utils'
 
 type EventMarker = {
   time: number
@@ -255,6 +257,9 @@ function ChartCard({ config, height = 260 }: { config: ChartConfiguration; heigh
 }
 
 export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[]; stagePlanConfig?: ClientConfig }) {
+  const [showStagePanels, setShowStagePanels] = useState(true)
+  const [showGlobalCharts, setShowGlobalCharts] = useState(true)
+  const [expandedStagePanels, setExpandedStagePanels] = useState<string[]>([])
   const computed = useMemo(() => {
     if (!data || data.length === 0) return null
 
@@ -1089,19 +1094,41 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
 
   const { charts, stageSummaries, stagePanels, summaryCards } = computed
 
+  useEffect(() => {
+    const allowed = stagePanels.map((panel, idx) => `stage-${panel.summary.stage}-${idx}`)
+    setExpandedStagePanels((prev) => {
+      const filtered = prev.filter((id) => allowed.includes(id))
+      if (filtered.length === 0 && allowed.length > 0) {
+        return [allowed[0]]
+      }
+      return filtered
+    })
+  }, [stagePanels])
+
   const formatSeconds = (value: number) => (Number.isFinite(value) ? `${value.toFixed(1)} s` : 'N/A')
   const formatKilometers = (value: number) => (Number.isFinite(value) ? `${value.toFixed(2)} km` : 'N/A')
   const formatKn = (value: number) => (Number.isFinite(value) ? `${value.toFixed(1)} kN` : 'N/A')
   const formatMach = (value: number) => (Number.isFinite(value) ? value.toFixed(2) : 'N/A')
 
+  const handleStagePanelToggle = (panelId: string) => {
+    setShowStagePanels(true)
+    setExpandedStagePanels((prev) => (prev.includes(panelId) ? prev.filter((id) => id !== panelId) : [...prev, panelId]))
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() => {
+        const element = document.getElementById(`graph-${panelId}`)
+        element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+    }
+  }
+
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-4">
       {summaryCards.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           {summaryCards.map((card) => (
             <div
               key={card.key}
-              className="rounded-xl border border-slate-200 bg-white/95 p-4 text-slate-900 shadow-sm shadow-slate-200/60"
+              className="rounded-xl border border-slate-200 bg-white/95 p-3 text-slate-900 shadow-sm shadow-slate-200/60"
             >
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{card.label}</div>
               <div className="mt-2 text-2xl font-semibold text-slate-950">{card.value}</div>
@@ -1112,52 +1139,68 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
       )}
 
       {stageSummaries.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-1.5">
           <div className="text-sm font-semibold uppercase tracking-wide text-slate-500">Stage timeline</div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="flex flex-wrap items-center gap-2">
             {stageSummaries.map((stage, idx) => {
-              const label = stage.missing ? `${formatStageLabel(stage, idx)} (未到達)` : formatStageLabel(stage, idx)
-              const background = stage.missing ? adjustAlpha(stage.fillColor, 0.05) : stage.fillColor
-              const borderColor = `${stage.accentColor}33`
-              const durationText = Number.isFinite(stage.duration) ? `${stage.duration.toFixed(1)} s` : 'N/A'
-              const poweredText = Number.isFinite(stage.poweredDuration) ? `${stage.poweredDuration.toFixed(1)} s` : 'N/A'
-              const maxAltText = Number.isFinite(stage.maxAltitude) ? `${(stage.maxAltitude / 1000).toFixed(2)} km` : 'N/A'
-              const maxMachText = Number.isFinite(stage.maxMach) ? stage.maxMach.toFixed(2) : 'N/A'
-              const maxThrustText = Number.isFinite(stage.maxThrust) ? `${(stage.maxThrust / 1000).toFixed(1)} kN` : 'N/A'
+              const panelId = `stage-${stage.stage}-${idx}`
+              const isOpen = expandedStagePanels.includes(panelId)
+              const label = formatStageLabel(stage, idx)
+              const startText = Number.isFinite(stage.startTime) ? `${stage.startTime.toFixed(0)}s` : '—'
+              const endText = Number.isFinite(stage.endTime) ? `${stage.endTime.toFixed(0)}s` : '—'
+              const durationText = Number.isFinite(stage.duration) ? `${stage.duration.toFixed(1)}s` : 'N/A'
+              const accent = stage.accentColor || '#1d4ed8'
               return (
-                <div
+                <button
                   key={`${stage.stage}-${idx}`}
-                  className="rounded-xl border p-4 text-sm shadow-sm"
-                  style={{ background, borderColor }}
-                >
-                  <div className="text-sm font-semibold" style={{ color: stage.accentColor }}>
-                    {label}
-                  </div>
-                  <div className="mt-3 space-y-1 text-xs text-slate-700">
-                    <div>t0: {Number.isFinite(stage.startTime) ? `${stage.startTime.toFixed(1)} s` : 'N/A'}</div>
-                    <div>t1: {Number.isFinite(stage.endTime) ? `${stage.endTime.toFixed(1)} s` : 'N/A'}</div>
-                    <div>
-                      dt: {durationText}
-                      <span className="text-slate-500"> (powered {poweredText})</span>
-                    </div>
-                    <div>Max alt: {maxAltText}</div>
-                    <div>Max Mach: {maxMachText}</div>
-                    <div>Max thrust: {maxThrustText}</div>
-                  </div>
-                  {stage.missing && stage.plan && (
-                    <div className="mt-3 text-[11px] text-slate-500">
-                      予定: t0 {stage.plan.startTime.toFixed(1)} s → 分離 {stage.plan.separationTime.toFixed(1)} s
-                    </div>
+                  type="button"
+                  onClick={() => handleStagePanelToggle(panelId)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition',
+                    isOpen ? 'bg-white shadow-sm' : 'bg-white text-slate-600 hover:border-slate-300 hover:text-brand-700',
                   )}
-                </div>
+                  style={isOpen ? { borderColor: accent, color: accent } : { borderColor: adjustAlpha(accent, 0.3) }}
+                >
+                  <span className="font-semibold">{stage.missing ? `${label} (予定)` : label}</span>
+                  <span className="text-[10px] text-slate-500">t0 {startText} → t1 {endText}</span>
+                  <span className="text-[10px] text-slate-400">Δt {durationText}</span>
+                </button>
               )
             })}
           </div>
         </div>
       )}
 
-      {stagePanels.length > 0 && (
-        <div className="grid gap-4">
+      {(stagePanels.length > 0 || charts.length > 0) && (
+        <div className="mb-2 flex flex-wrap items-center justify-end gap-1.5">
+          {stagePanels.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowStagePanels((prev) => !prev)}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100"
+            >
+              {showStagePanels ? 'Hide stage panels' : 'Show stage panels'}
+            </button>
+          )}
+          {charts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowGlobalCharts((prev) => !prev)}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-100"
+            >
+              {showGlobalCharts ? 'Hide global charts' : 'Show global charts'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {stagePanels.length > 0 && showStagePanels && (
+        <Accordion
+          type="multiple"
+          value={expandedStagePanels}
+          onValueChange={setExpandedStagePanels}
+          className="grid gap-3"
+        >
           {stagePanels.map((panel, idx) => {
             const { summary } = panel
             const plan = summary.plan
@@ -1185,67 +1228,76 @@ export function GraphPanel({ data, stagePlanConfig }: { data: SimulationState[];
               { key: 'max-mach', label: 'Max Mach', value: maxMachValue },
               { key: 'max-thrust', label: 'Max thrust', value: maxThrustValue },
             ]
+            const accordionValue = `stage-${summary.stage}-${idx}`
             return (
-              <div
+              <AccordionItem
                 key={`stage-panel-${summary.stage}-${idx}`}
-                className="rounded-2xl border border-slate-200 bg-white/95 p-6 shadow-sm shadow-slate-200/60"
+                value={accordionValue}
+                id={`graph-${accordionValue}`}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white/95 shadow-sm shadow-slate-200/60"
               >
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <div className="flex items-center gap-3">
+                <AccordionTrigger className="flex flex-wrap items-center justify-between gap-2.5 px-4 py-3 text-left">
+                  <div className="flex items-center gap-2.5">
                     <Badge className="bg-brand/10 text-brand-700">{panel.label}</Badge>
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                       t0 {formatSeconds(summary.startTime)} → t1 {formatSeconds(summary.endTime)}
                     </span>
                   </div>
                   <span className="text-xs text-slate-500">{summary.missing ? 'Telemetry missing' : 'Telemetry captured'}</span>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                  {stats.map((stat) => (
-                    <div
-                      key={stat.key}
-                      className="rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-inner"
-                    >
-                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{stat.label}</div>
-                      <div className="mt-1 text-base font-semibold text-slate-900">{stat.value}</div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-3 px-4 pb-4">
+                    <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+                      {stats.map((stat) => (
+                        <div
+                          key={stat.key}
+                          className="rounded-xl border border-slate-200/80 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 shadow-inner"
+                        >
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{stat.label}</div>
+                          <div className="mt-1 text-base font-semibold text-slate-900">{stat.value}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                {panel.missing && (
-                  <div className="mt-3 text-xs text-slate-500">
-                    テレメトリは取得されませんでした。
-                    {plan && (
-                      <span className="ml-1">予定: t0 {plan.startTime.toFixed(1)} s → 分離 {plan.separationTime.toFixed(1)} s</span>
+                    {panel.missing && (
+                      <div className="text-xs text-slate-500">
+                        テレメトリは取得されませんでした。
+                        {plan && (
+                          <span className="ml-1">予定: t0 {plan.startTime.toFixed(1)} s → 分離 {plan.separationTime.toFixed(1)} s</span>
+                        )}
+                      </div>
+                    )}
+                    {panel.charts.length > 0 && (
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {panel.charts.map((chart) => (
+                          <div
+                            key={chart.key}
+                            className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 shadow-inner"
+                          >
+                            <ChartCard config={chart.config} height={chart.height ?? 220} />
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                )}
-                {panel.charts.length > 0 && (
-                  <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {panel.charts.map((chart) => (
-                      <div
-                        key={chart.key}
-                        className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-inner"
-                      >
-                        <ChartCard config={chart.config} height={chart.height ?? 220} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                </AccordionContent>
+              </AccordionItem>
             )
           })}
-        </div>
+        </Accordion>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {charts.map((chart) => (
-          <div
-            key={chart.key}
-            className="rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-sm shadow-slate-200/60"
-          >
-            <ChartCard config={chart.config} height={chart.height ?? 260} />
-          </div>
-        ))}
-      </div>
+      {charts.length > 0 && showGlobalCharts && (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {charts.map((chart) => (
+            <div
+              key={chart.key}
+              className="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm shadow-slate-200/60"
+            >
+              <ChartCard config={chart.config} height={chart.height ?? 260} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

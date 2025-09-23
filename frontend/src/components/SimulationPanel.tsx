@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { runSimulation } from '../lib/simulation'
 import { cn } from '../lib/utils'
@@ -62,6 +62,76 @@ const FREE_MODE_OPTIONS = [
 ]
 
 const MAX_STAGE_COUNT = 5
+
+const pad2 = (value: number) => value.toString().padStart(2, '0')
+
+function formatDateInput(datetime: ClientConfig['launch']['datetime_utc']): string {
+  return `${datetime.year}-${pad2(datetime.month)}-${pad2(datetime.day)}`
+}
+
+function formatTimeInput(datetime: ClientConfig['launch']['datetime_utc']): string {
+  return `${pad2(datetime.hour)}:${pad2(datetime.minute)}:${pad2(datetime.second)}`
+}
+
+function parseDateTimeInputs(
+  dateValue: string,
+  timeValue: string,
+  fallback: ClientConfig['launch']['datetime_utc'],
+): ClientConfig['launch']['datetime_utc'] {
+  if (!dateValue) {
+    return fallback
+  }
+
+  const [yearStr, monthStr, dayStr] = dateValue.split('-')
+  const [hourStr = '0', minuteStr = '0', secondStr = '0'] = timeValue.split(':')
+
+  const year = Number(yearStr)
+  const month = Number(monthStr)
+  const day = Number(dayStr)
+  const hour = Number(hourStr)
+  const minute = Number(minuteStr)
+  const second = Number(secondStr)
+
+  if (
+    [year, month, day, hour, minute, second].some((value) => !Number.isFinite(value)) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return fallback
+  }
+
+  const launchDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
+  if (Number.isNaN(launchDate.getTime())) {
+    return fallback
+  }
+
+  return {
+    year: launchDate.getUTCFullYear(),
+    month: launchDate.getUTCMonth() + 1,
+    day: launchDate.getUTCDate(),
+    hour: launchDate.getUTCHours(),
+    minute: launchDate.getUTCMinutes(),
+    second: launchDate.getUTCSeconds(),
+  }
+}
+
+function detectHasVariations(config: ClientConfig): boolean {
+  const simulationVariation = config.simulation.air_density_percent !== 0
+  const stageVariation = (config.stages ?? []).some(
+    (stage) => stage.thrust_multiplier !== 1 || stage.isp_multiplier !== 1,
+  )
+  const aeroVariation =
+    config.aerodynamics.cn_multiplier !== 1 || config.aerodynamics.ca_multiplier !== 1
+  const attitudeVariation =
+    Math.abs(config.attitude.pitch_offset_deg) > 0 ||
+    Math.abs(config.attitude.yaw_offset_deg) > 0 ||
+    Math.abs(config.attitude.roll_offset_deg) > 0 ||
+    config.attitude.gyro_bias_deg_h.some((bias) => Math.abs(bias) > 0)
+
+  return simulationVariation || stageVariation || aeroVariation || attitudeVariation
+}
 
 function createDefaultStage(): ClientStageConfig {
   return {
@@ -548,12 +618,29 @@ type NumberFieldProps = {
   disabled?: boolean
   className?: string
   inputMode?: 'decimal' | 'numeric'
+  hasError?: boolean
+  registerRef?: (el: HTMLInputElement | null) => void
 }
 
-function NumberField({ id, label, value, onChange, step = 'any', min, max, disabled, className, inputMode = 'decimal' }: NumberFieldProps) {
+function NumberField({
+  id,
+  label,
+  value,
+  onChange,
+  step = 'any',
+  min,
+  max,
+  disabled,
+  className,
+  inputMode = 'decimal',
+  hasError = false,
+  registerRef,
+}: NumberFieldProps) {
   return (
     <div className={cn('space-y-2', className)}>
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className={cn(hasError && 'text-rose-600')}>
+        {label}
+      </Label>
       <Input
         id={id}
         type="number"
@@ -564,6 +651,11 @@ function NumberField({ id, label, value, onChange, step = 'any', min, max, disab
         max={max}
         disabled={disabled}
         inputMode={inputMode}
+        aria-invalid={hasError || undefined}
+        ref={registerRef}
+        className={cn(
+          hasError && 'border-rose-300 bg-rose-50 focus-visible:ring-rose-300 focus-visible:ring-offset-2',
+        )}
       />
     </div>
   )
@@ -576,17 +668,26 @@ type SelectFieldProps = {
   options: { value: number; label: string }[]
   onChange: (value: number) => void
   className?: string
+  hasError?: boolean
+  registerRef?: (el: HTMLSelectElement | null) => void
 }
 
-function SelectField({ id, label, value, options, onChange, className }: SelectFieldProps) {
+function SelectField({ id, label, value, options, onChange, className, hasError = false, registerRef }: SelectFieldProps) {
   return (
     <div className={cn('space-y-2', className)}>
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className={cn(hasError && 'text-rose-600')}>
+        {label}
+      </Label>
       <select
         id={id}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1"
+        ref={registerRef}
+        aria-invalid={hasError || undefined}
+        className={cn(
+          'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1',
+          hasError && 'border-rose-300 bg-rose-50 text-rose-700 focus-visible:ring-rose-300 focus-visible:ring-offset-2',
+        )}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -609,7 +710,7 @@ type SwitchFieldProps = {
 
 function SwitchField({ id, label, description, checked, onCheckedChange, disabled }: SwitchFieldProps) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-white/90 px-4 py-3 shadow-inner">
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white/90 px-3 py-2.5 shadow-inner">
       <div className="space-y-1">
         <p className="text-sm font-medium text-slate-800">{label}</p>
         {description && <p className="text-xs text-slate-500">{description}</p>}
@@ -670,22 +771,242 @@ export function createDefaultConfig(): ClientConfig {
   }
 }
 
+type PresetOption = {
+  id: string
+  label: string
+  description: string
+  create: () => ClientConfig
+}
+
+function createOrbitalDemoPreset(): ClientConfig {
+  const stage1 = cloneStage({
+    ...createDefaultStage(),
+    power_mode: 2,
+    free_mode: 0,
+    mass_initial_kg: 42000,
+    burn_start_s: 0,
+    burn_end_s: 160,
+    forced_cutoff_s: 165,
+    separation_time_s: 170,
+    throat_diameter_m: 0.9,
+    nozzle_expansion_ratio: 12,
+    nozzle_exit_pressure_pa: 2500,
+    thrust_constant: 950000,
+    isp_constant: 285,
+  })
+
+  const stage2 = cloneStage({
+    ...createDefaultStage(),
+    power_mode: 2,
+    free_mode: 1,
+    mass_initial_kg: 9000,
+    burn_start_s: 170,
+    burn_end_s: 420,
+    forced_cutoff_s: 420,
+    separation_time_s: 425,
+    throat_diameter_m: 0.6,
+    nozzle_expansion_ratio: 35,
+    nozzle_exit_pressure_pa: 1200,
+    thrust_constant: 210000,
+    isp_constant: 320,
+  })
+
+  return {
+    name: 'Orbital Demo Launcher',
+    simulation: {
+      duration_s: 520,
+      output_step_s: 2,
+      air_density_percent: 0,
+    },
+    launch: {
+      latitude_deg: 30.0,
+      longitude_deg: -80.5,
+      altitude_m: 5,
+      velocity_ned_mps: [0, 0, 0],
+      datetime_utc: {
+        year: 2024,
+        month: 4,
+        day: 12,
+        hour: 14,
+        minute: 30,
+        second: 0,
+      },
+    },
+    stages: [stage1, stage2],
+    aerodynamics: {
+      body_diameter_m: 3.5,
+      cn_constant: 0.35,
+      cn_multiplier: 1,
+      cn_profile: [],
+      ca_constant: 0.32,
+      ca_multiplier: 1,
+      ca_profile: [],
+      ballistic_coefficient: 270,
+    },
+    attitude: {
+      elevation_deg: 88,
+      azimuth_deg: 92,
+      pitch_offset_deg: 0,
+      yaw_offset_deg: 0,
+      roll_offset_deg: 0,
+      gyro_bias_deg_h: [0, 0, 0],
+      profile: [],
+    },
+    wind: {
+      speed_mps: 4,
+      direction_deg: 250,
+      profile: [],
+    },
+  }
+}
+
+function createHopperTestPreset(): ClientConfig {
+  const stage = cloneStage({
+    ...createDefaultStage(),
+    power_mode: 1,
+    free_mode: 2,
+    mass_initial_kg: 850,
+    burn_start_s: 0,
+    burn_end_s: 45,
+    forced_cutoff_s: 48,
+    separation_time_s: 60,
+    throat_diameter_m: 0.25,
+    nozzle_expansion_ratio: 8,
+    nozzle_exit_pressure_pa: 6000,
+    thrust_constant: 52000,
+    isp_constant: 215,
+  })
+
+  return {
+    name: 'VTOL Hopper Test',
+    simulation: {
+      duration_s: 180,
+      output_step_s: 0.5,
+      air_density_percent: 0,
+    },
+    launch: {
+      latitude_deg: 32.98,
+      longitude_deg: -106.97,
+      altitude_m: 1200,
+      velocity_ned_mps: [0, 0, 0],
+      datetime_utc: {
+        year: 2024,
+        month: 7,
+        day: 8,
+        hour: 22,
+        minute: 5,
+        second: 0,
+      },
+    },
+    stages: [stage],
+    aerodynamics: {
+      body_diameter_m: 1.6,
+      cn_constant: 0.18,
+      cn_multiplier: 1,
+      cn_profile: [],
+      ca_constant: 0.24,
+      ca_multiplier: 1,
+      ca_profile: [],
+      ballistic_coefficient: 140,
+    },
+    attitude: {
+      elevation_deg: 90,
+      azimuth_deg: 0,
+      pitch_offset_deg: 0,
+      yaw_offset_deg: 0,
+      roll_offset_deg: 0,
+      gyro_bias_deg_h: [0, 0, 0],
+      profile: [],
+    },
+    wind: {
+      speed_mps: 2,
+      direction_deg: 180,
+      profile: [],
+    },
+  }
+}
+
+const PRESET_OPTIONS: PresetOption[] = [
+  {
+    id: 'sample',
+    label: 'Sample Vehicle (default)',
+    description: 'Baseline single-stage sounding rocket useful for quick functional checks.',
+    create: () => createDefaultConfig(),
+  },
+  {
+    id: 'orbital',
+    label: 'Orbital Demo Launcher',
+    description: 'Two-stage launcher profile tuned for an orbital insertion rehearsal.',
+    create: () => createOrbitalDemoPreset(),
+  },
+  {
+    id: 'hopper',
+    label: 'VTOL Hopper Test',
+    description: 'Low-altitude vertical hop scenario for landing guidance experiments.',
+    create: () => createHopperTestPreset(),
+  },
+]
+
 export function SimulationPanel({ onResult }: Props) {
   const [config, setConfig] = useState<ClientConfig>(() => createDefaultConfig())
-  const [useThrustProfile, setUseThrustProfile] = useState(() => (config.stages[0]?.thrust_profile.length ?? 0) > 0)
-  const [useIspProfile, setUseIspProfile] = useState(() => (config.stages[0]?.isp_profile.length ?? 0) > 0)
   const [useCnProfile, setUseCnProfile] = useState(() => config.aerodynamics.cn_profile.length > 0)
   const [useCaProfile, setUseCaProfile] = useState(() => config.aerodynamics.ca_profile.length > 0)
   const [useAttitudeProfile, setUseAttitudeProfile] = useState(() => config.attitude.profile.length > 0)
   const [useWindProfile, setUseWindProfile] = useState(() => config.wind.profile.length > 0)
-  const [mode, setMode] = useState<Mode>('api')
+  const [mode, setMode] = useState<Mode>('wasm')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showVariations, setShowVariations] = useState(false)
+  const [selectedPresetId, setSelectedPresetId] = useState<string>('sample')
+  const [openStageIds, setOpenStageIds] = useState<string[]>(['stage-0'])
 
   const jsonPreview = useMemo(() => JSON.stringify(config, null, 2), [config])
   const validationIssues = useMemo(() => validateConfig(config), [config])
   const hasValidationIssues = validationIssues.length > 0
+  const issuesSet = useMemo(() => new Set(validationIssues.map((issue) => issue.field)), [validationIssues])
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
+  const makeFieldRef = useCallback(
+    (field?: string) => (el: HTMLElement | null) => {
+      if (!field) return
+      if (el) {
+        fieldRefs.current[field] = el
+      } else {
+        delete fieldRefs.current[field]
+      }
+    },
+    [],
+  )
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [jsonMessage, setJsonMessage] = useState<string | null>(null)
+  const variationsActive = useMemo(() => detectHasVariations(config), [config])
+  const selectedPreset = useMemo(
+    () => PRESET_OPTIONS.find((option) => option.id === selectedPresetId),
+    [selectedPresetId],
+  )
+  const presetDescription =
+    selectedPresetId === 'custom'
+      ? 'Custom configuration derived from manual edits or imported settings.'
+      : selectedPreset?.description ?? ''
+  const markCustomized = useCallback(() => {
+    setSelectedPresetId((prev) => (prev === 'custom' ? prev : 'custom'))
+  }, [])
+
+  const applyPreset = useCallback(
+    (presetId: string) => {
+      const preset = PRESET_OPTIONS.find((option) => option.id === presetId)
+      if (!preset) return
+      const presetConfig = preset.create()
+      setConfig(presetConfig)
+      setUseCnProfile(presetConfig.aerodynamics.cn_profile.length > 0)
+      setUseCaProfile(presetConfig.aerodynamics.ca_profile.length > 0)
+      setUseAttitudeProfile(presetConfig.attitude.profile.length > 0)
+      setUseWindProfile(presetConfig.wind.profile.length > 0)
+      setShowVariations(detectHasVariations(presetConfig))
+      setSelectedPresetId(presetId)
+      setError(null)
+    },
+    [],
+  )
 
   const jsonSummaryLabel = hasValidationIssues
     ? `Generated JSON preview (要調整: ${validationIssues.length}件のエラー)`
@@ -693,6 +1014,10 @@ export function SimulationPanel({ onResult }: Props) {
 
   const stages = config.stages && config.stages.length > 0 ? config.stages : [createDefaultStage()]
   const stageCount = stages.length
+  const launchDateValue = formatDateInput(config.launch.datetime_utc)
+  const launchTimeValue = formatTimeInput(config.launch.datetime_utc)
+  const launchDateHasError = issuesSet.has('launch.datetime_utc')
+const stageAccentPalette = ['#1d4ed8', '#047857', '#ea580c', '#7c3aed']
 
   useEffect(() => {
     if (!hasValidationIssues && error === VALIDATION_ERROR_MESSAGE) {
@@ -700,9 +1025,27 @@ export function SimulationPanel({ onResult }: Props) {
     }
   }, [error, hasValidationIssues])
 
+  useEffect(() => {
+    if (!jsonMessage) return
+    if (typeof window === 'undefined') return
+    const timeout = window.setTimeout(() => setJsonMessage(null), 2600)
+    return () => window.clearTimeout(timeout)
+  }, [jsonMessage])
+
+  useEffect(() => {
+    const allowed = stages.map((_, idx) => `stage-${idx}`)
+    setOpenStageIds((prev) => {
+      const filtered = prev.filter((id) => allowed.includes(id))
+      if (filtered.length === 0 && allowed.length > 0) {
+        return [allowed[0]]
+      }
+      return filtered
+    })
+  }, [stageCount, stages])
+
   const setStageCount = (count: number) => {
     const normalized = Math.min(MAX_STAGE_COUNT, Math.max(1, Math.round(count)))
-    let nextStages: ClientStageConfig[] = []
+    markCustomized()
     setConfig((prev) => {
       const stagesSnapshot = snapshotStages(prev)
       let updatedStages = stagesSnapshot
@@ -712,19 +1055,15 @@ export function SimulationPanel({ onResult }: Props) {
       } else if (normalized < stagesSnapshot.length) {
         updatedStages = stagesSnapshot.slice(0, normalized)
       }
-      nextStages = updatedStages
       return {
         ...prev,
         stages: updatedStages,
       }
     })
-    if (nextStages.length > 0) {
-      setUseThrustProfile((nextStages[0]?.thrust_profile.length ?? 0) > 0)
-      setUseIspProfile((nextStages[0]?.isp_profile.length ?? 0) > 0)
-    }
   }
 
   function updateSimulation<K extends keyof ClientConfig['simulation']>(key: K, value: number) {
+    markCustomized()
     setConfig((prev) => ({
       ...prev,
       simulation: {
@@ -735,6 +1074,7 @@ export function SimulationPanel({ onResult }: Props) {
   }
 
   function updateLaunch<K extends keyof ClientConfig['launch']>(key: K, value: any) {
+    markCustomized()
     setConfig((prev) => ({
       ...prev,
       launch: {
@@ -745,6 +1085,7 @@ export function SimulationPanel({ onResult }: Props) {
   }
 
   function updateStage<K extends keyof ClientStageConfig>(key: K, value: ClientStageConfig[K], stageIndex = 0) {
+    markCustomized()
     setConfig((prev) => {
       const stages = snapshotStages(prev)
       if (stageIndex >= stages.length) {
@@ -763,6 +1104,7 @@ export function SimulationPanel({ onResult }: Props) {
   }
 
   function updateAerodynamics<K extends keyof ClientConfig['aerodynamics']>(key: K, value: any) {
+    markCustomized()
     setConfig((prev) => ({
       ...prev,
       aerodynamics: {
@@ -773,6 +1115,7 @@ export function SimulationPanel({ onResult }: Props) {
   }
 
   function updateAttitude<K extends keyof ClientConfig['attitude']>(key: K, value: any) {
+    markCustomized()
     setConfig((prev) => ({
       ...prev,
       attitude: {
@@ -783,6 +1126,7 @@ export function SimulationPanel({ onResult }: Props) {
   }
 
   function updateWind<K extends keyof ClientConfig['wind']>(key: K, value: any) {
+    markCustomized()
     setConfig((prev) => ({
       ...prev,
       wind: {
@@ -792,27 +1136,35 @@ export function SimulationPanel({ onResult }: Props) {
     }))
   }
 
-  function toggleThrustProfile(checked: boolean) {
-    setUseThrustProfile(checked)
+  const handleLaunchDateChange = (field: 'date' | 'time', value: string) => {
+    const current = config.launch.datetime_utc
+    const nextDateValue = field === 'date' ? value : launchDateValue
+    const nextTimeValue = field === 'time' ? value : launchTimeValue
+    const updated = parseDateTimeInputs(nextDateValue, nextTimeValue, current)
+    updateLaunch('datetime_utc', updated)
+  }
+
+  const toggleStageThrustProfile = (stageIndex: number, checked: boolean) => {
+    markCustomized()
     setConfig((prev) => {
       const stages = snapshotStages(prev)
-      if (stages.length === 0) {
+      if (stageIndex >= stages.length) {
         return prev
       }
-      const baseStage = stages[0]
+      const stage = stages[stageIndex]
+      const fallbackProfile: ClientTimeSample[] = [
+        { time: stage.burn_start_s, value: stage.thrust_constant },
+        { time: stage.burn_end_s, value: stage.thrust_constant },
+      ]
       const nextProfile = checked
-        ? baseStage.thrust_profile.length > 0
-          ? baseStage.thrust_profile
-          : [
-              { time: baseStage.burn_start_s, value: baseStage.thrust_constant },
-              { time: baseStage.burn_end_s, value: baseStage.thrust_constant },
-            ]
+        ? stage.thrust_profile.length > 0
+          ? stage.thrust_profile
+          : fallbackProfile
         : []
-      const updatedStage = {
-        ...baseStage,
+      stages[stageIndex] = {
+        ...stage,
         thrust_profile: nextProfile,
       }
-      stages[0] = updatedStage
       return {
         ...prev,
         stages,
@@ -820,27 +1172,27 @@ export function SimulationPanel({ onResult }: Props) {
     })
   }
 
-  function toggleIspProfile(checked: boolean) {
-    setUseIspProfile(checked)
+  const toggleStageIspProfile = (stageIndex: number, checked: boolean) => {
+    markCustomized()
     setConfig((prev) => {
       const stages = snapshotStages(prev)
-      if (stages.length === 0) {
+      if (stageIndex >= stages.length) {
         return prev
       }
-      const baseStage = stages[0]
+      const stage = stages[stageIndex]
+      const fallbackProfile: ClientTimeSample[] = [
+        { time: stage.burn_start_s, value: stage.isp_constant },
+        { time: stage.burn_end_s, value: stage.isp_constant },
+      ]
       const nextProfile = checked
-        ? baseStage.isp_profile.length > 0
-          ? baseStage.isp_profile
-          : [
-              { time: baseStage.burn_start_s, value: baseStage.isp_constant },
-              { time: baseStage.burn_end_s, value: baseStage.isp_constant },
-            ]
+        ? stage.isp_profile.length > 0
+          ? stage.isp_profile
+          : fallbackProfile
         : []
-      const updatedStage = {
-        ...baseStage,
+      stages[stageIndex] = {
+        ...stage,
         isp_profile: nextProfile,
       }
-      stages[0] = updatedStage
       return {
         ...prev,
         stages,
@@ -850,6 +1202,7 @@ export function SimulationPanel({ onResult }: Props) {
 
   function toggleCnProfile(checked: boolean) {
     setUseCnProfile(checked)
+    markCustomized()
     setConfig((prev) => {
       const nextProfile = checked
         ? prev.aerodynamics.cn_profile.length > 0
@@ -871,6 +1224,7 @@ export function SimulationPanel({ onResult }: Props) {
 
   function toggleCaProfile(checked: boolean) {
     setUseCaProfile(checked)
+    markCustomized()
     setConfig((prev) => {
       const nextProfile = checked
         ? prev.aerodynamics.ca_profile.length > 0
@@ -892,6 +1246,7 @@ export function SimulationPanel({ onResult }: Props) {
 
   function toggleAttitudeProfile(checked: boolean) {
     setUseAttitudeProfile(checked)
+    markCustomized()
     setConfig((prev) => {
       const nextProfile = checked
         ? prev.attitude.profile.length > 0
@@ -916,6 +1271,7 @@ export function SimulationPanel({ onResult }: Props) {
 
   function toggleWindProfile(checked: boolean) {
     setUseWindProfile(checked)
+    markCustomized()
     setConfig((prev) => {
       const nextProfile = checked
         ? prev.wind.profile.length > 0
@@ -943,6 +1299,18 @@ export function SimulationPanel({ onResult }: Props) {
     e.preventDefault()
     if (hasValidationIssues) {
       setError(VALIDATION_ERROR_MESSAGE)
+      const firstField = validationIssues[0]?.field
+      if (firstField) {
+        const target = fieldRefs.current[firstField]
+        if (target) {
+          if (typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+          if (typeof target.focus === 'function') {
+            target.focus()
+          }
+        }
+      }
       return
     }
     setLoading(true)
@@ -969,13 +1337,7 @@ export function SimulationPanel({ onResult }: Props) {
   }
 
   const resetToDefault = () => {
-    setConfig(createDefaultConfig())
-    setUseThrustProfile(false)
-    setUseIspProfile(false)
-    setUseCnProfile(false)
-    setUseCaProfile(false)
-    setUseAttitudeProfile(false)
-    setUseWindProfile(false)
+    applyPreset('sample')
   }
 
   const setVelocityComponent = (index: number, value: number) => {
@@ -984,31 +1346,127 @@ export function SimulationPanel({ onResult }: Props) {
     updateLaunch('velocity_ned_mps', next)
   }
 
-  const updateDateField = (key: keyof ClientConfig['launch']['datetime_utc'], value: number) => {
+  const handleNameChange = (value: string) => {
+    markCustomized()
     setConfig((prev) => ({
       ...prev,
-      launch: {
-        ...prev.launch,
-        datetime_utc: {
-          ...prev.launch.datetime_utc,
-          [key]: value,
-        },
-      },
+      name: value,
     }))
+  }
+
+  const toggleStageSection = (stageId: string) => {
+    setOpenStageIds((prev) => (prev.includes(stageId) ? prev.filter((value) => value !== stageId) : [...prev, stageId]))
+  }
+
+  const handlePresetChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const presetId = event.target.value
+    if (presetId === 'custom') {
+      setSelectedPresetId('custom')
+      return
+    }
+    applyPreset(presetId)
+  }
+
+  const handleResetVariations = () => {
+    if (!variationsActive) return
+    markCustomized()
+    setConfig((prev) => {
+      const stages = snapshotStages(prev).map((stage) => ({
+        ...stage,
+        thrust_multiplier: 1,
+        isp_multiplier: 1,
+      }))
+      return {
+        ...prev,
+        simulation: {
+          ...prev.simulation,
+          air_density_percent: 0,
+        },
+        stages,
+        aerodynamics: {
+          ...prev.aerodynamics,
+          cn_multiplier: 1,
+          ca_multiplier: 1,
+        },
+        attitude: {
+          ...prev.attitude,
+          pitch_offset_deg: 0,
+          yaw_offset_deg: 0,
+          roll_offset_deg: 0,
+          gyro_bias_deg_h: [0, 0, 0],
+          profile: [...prev.attitude.profile],
+        },
+      }
+    })
+    setShowVariations(false)
+    setJsonMessage('Variation parameters reset')
+  }
+
+  const handleCopyJson = async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(jsonPreview)
+        setJsonMessage('Copied configuration to clipboard')
+      } else {
+        throw new Error('Clipboard access unavailable')
+      }
+    } catch (err) {
+      setJsonMessage(err instanceof Error ? err.message : 'Copy failed')
+    }
+  }
+
+  const handleDownloadJson = () => {
+    if (typeof window === 'undefined') return
+    const blob = new Blob([jsonPreview], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    const safeName = config.name?.trim() ? config.name.trim().replace(/\s+/g, '_') : 'simulation-config'
+    link.href = url
+    link.download = `${safeName}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    setJsonMessage('Download started')
+  }
+
+  const handleTriggerImport = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleImportJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text) as ClientConfig
+      markCustomized()
+      setConfig(parsed)
+      setUseCnProfile(parsed.aerodynamics?.cn_profile?.length > 0)
+      setUseCaProfile(parsed.aerodynamics?.ca_profile?.length > 0)
+      setUseAttitudeProfile(parsed.attitude?.profile?.length > 0)
+      setUseWindProfile(parsed.wind?.profile?.length > 0)
+      setShowVariations(detectHasVariations(parsed))
+      setJsonMessage('Imported configuration')
+      setError(null)
+      setSelectedPresetId('custom')
+    } catch (err) {
+      setJsonMessage(err instanceof Error ? err.message : 'Failed to import JSON')
+    } finally {
+      event.target.value = ''
+    }
   }
 
   return (
     <form onSubmit={handleRun} noValidate className="flex flex-col gap-6">
       <Card className="overflow-hidden border-0 shadow-soft ring-1 ring-slate-100/60">
-        <CardHeader className="space-y-6 bg-gradient-to-r from-white via-white to-brand/5">
-          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+        <CardHeader className="space-y-4 bg-gradient-to-r from-white via-white to-brand/5">
+          <div className="flex flex-col items-start justify-between gap-3 md:flex-row md:items-center">
             <div className="space-y-2">
               <CardTitle>Simulation setup</CardTitle>
               <CardDescription>
                 Configure the vehicle, launch environment, and output cadence before running the solver.
               </CardDescription>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center">
               <Button type="submit" disabled={loading || hasValidationIssues} className="gap-2">
                 {loading ? 'Running…' : `Run (${mode.toUpperCase()})`}
               </Button>
@@ -1018,19 +1476,37 @@ export function SimulationPanel({ onResult }: Props) {
             </div>
           </div>
 
-          <div className="grid w-full gap-5 md:grid-cols-[minmax(0,260px)_1fr] md:items-end">
+          <div className="grid gap-2 md:grid-cols-[minmax(0,260px)_1fr] md:items-end">
+            <div className="space-y-2">
+              <Label htmlFor="config-preset">Configuration preset</Label>
+              <select
+                id="config-preset"
+                value={selectedPresetId}
+                onChange={handlePresetChange}
+                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1"
+              >
+                {PRESET_OPTIONS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+                <option value="custom">Custom configuration</option>
+              </select>
+            </div>
+            <p className="min-h-[2.25rem] text-sm text-slate-600">{presetDescription}</p>
+          </div>
+
+          <div className="grid w-full gap-3 md:grid-cols-[minmax(0,260px)_1fr] md:items-end">
             <div className="space-y-2">
               <Label htmlFor="vehicle-name">Vehicle name</Label>
               <Input
                 id="vehicle-name"
                 value={config.name}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setConfig((prev) => ({ ...prev, name: e.target.value }))
-                }
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleNameChange(e.target.value)}
               />
             </div>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Execution mode</span>
                 <div className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1 text-sm shadow-inner">
@@ -1061,9 +1537,23 @@ export function SimulationPanel({ onResult }: Props) {
               </div>
             </div>
           </div>
+
+          {!showVariations && variationsActive && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-amber-700">
+              <Badge className="bg-amber-100 text-amber-800">Variations active</Badge>
+              <span>Hidden variation parameters remain active for this simulation.</span>
+              <button
+                type="button"
+                onClick={handleResetVariations}
+                className="rounded border border-amber-200 bg-white px-2 py-1 font-semibold text-amber-700 shadow-sm transition hover:border-amber-300"
+              >
+                Reset variations
+              </button>
+            </div>
+          )}
         </CardHeader>
 
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           {hasValidationIssues && (
             <div className="rounded-lg border border-rose-200 bg-rose-50/80 px-4 py-3 text-sm text-rose-700 shadow-sm">
               <p className="font-semibold">{VALIDATION_ERROR_MESSAGE}</p>
@@ -1089,17 +1579,17 @@ export function SimulationPanel({ onResult }: Props) {
             </TabsList>
 
             <TabsContent value="inputs">
-              <Accordion type="multiple" defaultValue={['mission', 'stages', 'environment']}>
+              <Accordion type="single" collapsible defaultValue="mission">
                 <AccordionItem value="mission">
                   <AccordionTrigger>Mission basics</AccordionTrigger>
                   <AccordionContent>
-                    <div className="flex flex-col gap-5">
-                      <div className="section-shell space-y-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="section-shell space-y-3">
                         <div>
                           <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Simulation</h4>
                           <p className="text-sm text-slate-600">Define the mission horizon and output cadence.</p>
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                           <NumberField
                             id="simulation-duration"
                             label="Duration [s]"
@@ -1107,6 +1597,8 @@ export function SimulationPanel({ onResult }: Props) {
                             step="1"
                             min={1}
                             onChange={(value) => updateSimulation('duration_s', value)}
+                            hasError={issuesSet.has('simulation.duration_s')}
+                            registerRef={makeFieldRef('simulation.duration_s')}
                           />
                           <NumberField
                             id="simulation-output-step"
@@ -1115,6 +1607,8 @@ export function SimulationPanel({ onResult }: Props) {
                             step="0.1"
                             min={0.01}
                             onChange={(value) => updateSimulation('output_step_s', value)}
+                            hasError={issuesSet.has('simulation.output_step_s')}
+                            registerRef={makeFieldRef('simulation.output_step_s')}
                           />
                           {showVariations && (
                             <NumberField
@@ -1125,17 +1619,19 @@ export function SimulationPanel({ onResult }: Props) {
                               min={-100}
                               max={100}
                               onChange={(value) => updateSimulation('air_density_percent', value)}
+                              hasError={issuesSet.has('simulation.air_density_percent')}
+                              registerRef={makeFieldRef('simulation.air_density_percent')}
                             />
                           )}
                         </div>
                       </div>
 
-                      <div className="section-shell space-y-5">
+                      <div className="section-shell space-y-3">
                         <div>
                           <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Launch site</h4>
                           <p className="text-sm text-slate-600">Set geodetic coordinates, altitude, and initial velocity.</p>
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                           <NumberField
                             id="launch-latitude"
                             label="Latitude [deg]"
@@ -1144,6 +1640,8 @@ export function SimulationPanel({ onResult }: Props) {
                             min={-90}
                             max={90}
                             onChange={(value) => updateLaunch('latitude_deg', value)}
+                            hasError={issuesSet.has('launch.latitude_deg')}
+                            registerRef={makeFieldRef('launch.latitude_deg')}
                           />
                           <NumberField
                             id="launch-longitude"
@@ -1153,6 +1651,8 @@ export function SimulationPanel({ onResult }: Props) {
                             min={-180}
                             max={180}
                             onChange={(value) => updateLaunch('longitude_deg', value)}
+                            hasError={issuesSet.has('launch.longitude_deg')}
+                            registerRef={makeFieldRef('launch.longitude_deg')}
                           />
                           <NumberField
                             id="launch-altitude"
@@ -1160,18 +1660,22 @@ export function SimulationPanel({ onResult }: Props) {
                             value={config.launch.altitude_m}
                             step="1"
                             onChange={(value) => updateLaunch('altitude_m', value)}
+                            hasError={issuesSet.has('launch.altitude_m')}
+                            registerRef={makeFieldRef('launch.altitude_m')}
                           />
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Velocity NED [m/s]</h5>
-                          <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="grid gap-2.5 sm:grid-cols-3">
                             <NumberField
                               id="launch-vel-n"
                               label="North"
                               value={config.launch.velocity_ned_mps[0]}
                               step="0.1"
                               onChange={(value) => setVelocityComponent(0, value)}
+                              hasError={issuesSet.has('launch.velocity_ned_mps')}
+                              registerRef={makeFieldRef('launch.velocity_ned_mps')}
                             />
                             <NumberField
                               id="launch-vel-e"
@@ -1179,6 +1683,7 @@ export function SimulationPanel({ onResult }: Props) {
                               value={config.launch.velocity_ned_mps[1]}
                               step="0.1"
                               onChange={(value) => setVelocityComponent(1, value)}
+                              hasError={issuesSet.has('launch.velocity_ned_mps')}
                             />
                             <NumberField
                               id="launch-vel-d"
@@ -1186,66 +1691,50 @@ export function SimulationPanel({ onResult }: Props) {
                               value={config.launch.velocity_ned_mps[2]}
                               step="0.1"
                               onChange={(value) => setVelocityComponent(2, value)}
+                              hasError={issuesSet.has('launch.velocity_ned_mps')}
                             />
                           </div>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Launch time (UTC)</h5>
-                          <div className="grid gap-3 sm:grid-cols-3 md:grid-cols-6">
-                            <NumberField
-                              id="launch-year"
-                              label="Year"
-                              value={config.launch.datetime_utc.year}
-                              step="1"
-                              onChange={(value) => updateDateField('year', value)}
-                            />
-                            <NumberField
-                              id="launch-month"
-                              label="Month"
-                              value={config.launch.datetime_utc.month}
-                              step="1"
-                              min={1}
-                              max={12}
-                              onChange={(value) => updateDateField('month', value)}
-                            />
-                            <NumberField
-                              id="launch-day"
-                              label="Day"
-                              value={config.launch.datetime_utc.day}
-                              step="1"
-                              min={1}
-                              max={31}
-                              onChange={(value) => updateDateField('day', value)}
-                            />
-                            <NumberField
-                              id="launch-hour"
-                              label="Hour"
-                              value={config.launch.datetime_utc.hour}
-                              step="1"
-                              min={0}
-                              max={23}
-                              onChange={(value) => updateDateField('hour', value)}
-                            />
-                            <NumberField
-                              id="launch-minute"
-                              label="Minute"
-                              value={config.launch.datetime_utc.minute}
-                              step="1"
-                              min={0}
-                              max={59}
-                              onChange={(value) => updateDateField('minute', value)}
-                            />
-                            <NumberField
-                              id="launch-second"
-                              label="Second"
-                              value={config.launch.datetime_utc.second}
-                              step="1"
-                              min={0}
-                              max={59}
-                              onChange={(value) => updateDateField('second', value)}
-                            />
+                          <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3">
+                            <div className="space-y-2">
+                              <Label htmlFor="launch-date" className={cn(launchDateHasError && 'text-rose-600')}>
+                                Date
+                              </Label>
+                              <Input
+                                id="launch-date"
+                                type="date"
+                                value={launchDateValue}
+                                onChange={(event) => handleLaunchDateChange('date', event.target.value)}
+                                aria-invalid={launchDateHasError || undefined}
+                                ref={makeFieldRef('launch.datetime_utc')}
+                                className={cn(
+                                  launchDateHasError && 'border-rose-300 bg-rose-50 text-rose-700 focus-visible:ring-rose-300 focus-visible:ring-offset-2',
+                                )}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="launch-time" className={cn(launchDateHasError && 'text-rose-600')}>
+                                Time
+                              </Label>
+                              <Input
+                                id="launch-time"
+                                type="time"
+                                step="1"
+                                value={launchTimeValue}
+                                onChange={(event) => handleLaunchDateChange('time', event.target.value)}
+                                aria-invalid={launchDateHasError || undefined}
+                                className={cn(
+                                  launchDateHasError && 'border-rose-300 bg-rose-50 text-rose-700 focus-visible:ring-rose-300 focus-visible:ring-offset-2',
+                                )}
+                              />
+                            </div>
                           </div>
+                          <p className="text-xs text-slate-500">
+                            Values are interpreted as UTC. Seconds precision is supported.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -1255,8 +1744,8 @@ export function SimulationPanel({ onResult }: Props) {
                 <AccordionItem value="stages">
                   <AccordionTrigger>Vehicle stages &amp; propulsion</AccordionTrigger>
                   <AccordionContent>
-                    <div className="flex flex-col gap-5">
-                      <div className="section-shell flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-3">
+                      <div className="section-shell flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Stage count</h4>
                           <p className="text-sm text-slate-600">Simulate up to {MAX_STAGE_COUNT} stages.</p>
@@ -1280,222 +1769,280 @@ export function SimulationPanel({ onResult }: Props) {
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-4">
-                        {stages.map((stageData, idx) => {
-                          const stagePrefix = `stage-${idx}`
-                          const thrustToggleId = `${stagePrefix}-thrust-profile-toggle`
-                          const ispToggleId = `${stagePrefix}-isp-profile-toggle`
-                          return (
-                            <div key={stagePrefix} className="section-shell space-y-6">
-                              <div className="flex flex-wrap items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                  <Badge className="bg-slate-900 text-white">Stage {idx + 1}</Badge>
-                                  <span className="text-sm text-slate-600">Configure mass, guidance, and propulsion parameters.</span>
-                                </div>
-                              </div>
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {stages.map((stage, idx) => {
+                            const stageId = `stage-${idx}`
+                            const isOpen = openStageIds.includes(stageId)
+                            const burnStart = Number.isFinite(stage.burn_start_s) ? stage.burn_start_s.toFixed(0) : '—'
+                            const burnEnd = Number.isFinite(stage.burn_end_s) ? stage.burn_end_s.toFixed(0) : '—'
+                            const accent = stageAccentPalette[idx % stageAccentPalette.length]
+                            return (
+                              <button
+                                key={`stage-chip-${stageId}`}
+                                type="button"
+                                onClick={() => toggleStageSection(stageId)}
+                                className={cn(
+                                  'flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition',
+                                  isOpen
+                                    ? 'bg-white shadow-sm'
+                                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-brand-700',
+                                )}
+                                style={isOpen ? { borderColor: accent, color: accent } : undefined}
+                              >
+                                <span className="font-semibold">Stage {idx + 1}</span>
+                                <span className="text-[10px] text-slate-500">Burn {burnStart}→{burnEnd}s</span>
+                              </button>
+                            )
+                          })}
+                        </div>
 
-                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                                <NumberField
-                                  id={`${stagePrefix}-mass`}
-                                  label="Initial mass [kg]"
-                                  value={stageData.mass_initial_kg}
-                                  step="1"
-                                  min={0}
-                                  onChange={(value) => updateStage('mass_initial_kg', value, idx)}
-                                />
-                                <SelectField
-                                  id={`${stagePrefix}-power-mode`}
-                                  label="Power flight mode"
-                                  value={stageData.power_mode}
-                                  options={POWER_MODE_OPTIONS}
-                                  onChange={(value) => updateStage('power_mode', value as ClientStageConfig['power_mode'], idx)}
-                                />
-                                <SelectField
-                                  id={`${stagePrefix}-free-mode`}
-                                  label="Free flight mode"
-                                  value={stageData.free_mode}
-                                  options={FREE_MODE_OPTIONS}
-                                  onChange={(value) => updateStage('free_mode', value as ClientStageConfig['free_mode'], idx)}
-                                />
-                              </div>
-
-                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                                <NumberField
-                                  id={`${stagePrefix}-burn-start`}
-                                  label="Burn start [s]"
-                                  value={stageData.burn_start_s}
-                                  step="0.1"
-                                  onChange={(value) => updateStage('burn_start_s', value, idx)}
-                                />
-                                <NumberField
-                                  id={`${stagePrefix}-burn-end`}
-                                  label="Burn end [s]"
-                                  value={stageData.burn_end_s}
-                                  step="0.1"
-                                  onChange={(value) => updateStage('burn_end_s', value, idx)}
-                                />
-                                <NumberField
-                                  id={`${stagePrefix}-forced-cutoff`}
-                                  label="Forced cutoff [s]"
-                                  value={stageData.forced_cutoff_s}
-                                  step="0.1"
-                                  onChange={(value) => updateStage('forced_cutoff_s', value, idx)}
-                                />
-                                <NumberField
-                                  id={`${stagePrefix}-separation-time`}
-                                  label="Separation time [s]"
-                                  value={stageData.separation_time_s}
-                                  step="0.1"
-                                  onChange={(value) => updateStage('separation_time_s', value, idx)}
-                                />
-                              </div>
-
-                              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                <NumberField
-                                  id={`${stagePrefix}-throat-diameter`}
-                                  label="Throat diameter [m]"
-                                  value={stageData.throat_diameter_m}
-                                  step="0.001"
-                                  onChange={(value) => updateStage('throat_diameter_m', value, idx)}
-                                />
-                                <NumberField
-                                  id={`${stagePrefix}-nozzle-expansion`}
-                                  label="Nozzle expansion ratio"
-                                  value={stageData.nozzle_expansion_ratio}
-                                  step="0.1"
-                                  onChange={(value) => updateStage('nozzle_expansion_ratio', value, idx)}
-                                />
-                                <NumberField
-                                  id={`${stagePrefix}-nozzle-exit-pressure`}
-                                  label="Nozzle exit pressure [Pa]"
-                                  value={stageData.nozzle_exit_pressure_pa}
-                                  step="10"
-                                  onChange={(value) => updateStage('nozzle_exit_pressure_pa', value, idx)}
-                                />
-                              </div>
-
-                              <div className="space-y-4 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-inner">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div>
-                                    <h5 className="text-sm font-semibold text-slate-800">Thrust curve</h5>
-                                    <p className="text-xs text-slate-500">Provide constant vacuum thrust or import a CSV time-series.</p>
+                        <Accordion
+                          type="multiple"
+                          value={openStageIds}
+                          onValueChange={setOpenStageIds}
+                          className="flex flex-col gap-3"
+                        >
+                          {stages.map((stageData, idx) => {
+                            const stagePrefix = `stage-${idx}`
+                            const thrustToggleId = `${stagePrefix}-thrust-profile-toggle`
+                            const ispToggleId = `${stagePrefix}-isp-profile-toggle`
+                            const useThrustProfileStage = stageData.thrust_profile.length > 0
+                            const useIspProfileStage = stageData.isp_profile.length > 0
+                            const stageFieldKey = (field: string) =>
+                              idx === 0 ? `stage.${field}` : `stage[${idx + 1}].${field}`
+                            const stageHasError = (field: string) => issuesSet.has(stageFieldKey(field))
+                            const stageMass = Number.isFinite(stageData.mass_initial_kg)
+                              ? `${stageData.mass_initial_kg.toFixed(0)} kg`
+                              : '—'
+                            return (
+                              <AccordionItem
+                                key={stagePrefix}
+                                value={stagePrefix}
+                                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm shadow-slate-200/60"
+                              >
+                                <AccordionTrigger className="px-4 py-2.5 text-left">
+                                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                                    <div className="flex items-center gap-3">
+                                      <Badge className="bg-slate-900 text-white">Stage {idx + 1}</Badge>
+                                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Mass {stageMass}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs text-slate-500">Tap to {openStageIds.includes(stagePrefix) ? 'collapse' : 'expand'}</span>
                                   </div>
-                                  {idx === 0 && (
-                                    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
-                                      <Switch
-                                        id={thrustToggleId}
-                                        checked={useThrustProfile}
-                                        onCheckedChange={toggleThrustProfile}
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                  <div className="space-y-4 px-4 pb-4">
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                      <NumberField
+                                        id={`${stagePrefix}-mass`}
+                                        label="Initial mass [kg]"
+                                        value={stageData.mass_initial_kg}
+                                        step="1"
+                                        min={0}
+                                        onChange={(value) => updateStage('mass_initial_kg', value, idx)}
+                                        hasError={stageHasError('mass_initial_kg')}
+                                        registerRef={makeFieldRef(stageFieldKey('mass_initial_kg'))}
+                                      />
+                                      <SelectField
+                                        id={`${stagePrefix}-power-mode`}
+                                        label="Power flight mode"
+                                        value={stageData.power_mode}
+                                        options={POWER_MODE_OPTIONS}
+                                        onChange={(value) => updateStage('power_mode', value as ClientStageConfig['power_mode'], idx)}
+                                        hasError={stageHasError('power_mode')}
+                                        registerRef={makeFieldRef(stageFieldKey('power_mode'))}
+                                      />
+                                      <SelectField
+                                        id={`${stagePrefix}-free-mode`}
+                                        label="Free flight mode"
+                                        value={stageData.free_mode}
+                                        options={FREE_MODE_OPTIONS}
+                                        onChange={(value) => updateStage('free_mode', value as ClientStageConfig['free_mode'], idx)}
+                                        hasError={stageHasError('free_mode')}
+                                        registerRef={makeFieldRef(stageFieldKey('free_mode'))}
                                       />
                                     </div>
-                                  )}
-                                </div>
 
-                                {idx === 0 ? (
-                                  useThrustProfile ? (
-                                    <EditableTable<ClientTimeSample>
-                                      title="Thrust profile (time-series)"
-                                      columns={[
-                                        { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
-                                        { key: 'value', label: 'Thrust [N]', step: '10' },
-                                      ]}
-                                      rows={stageData.thrust_profile}
-                                      onChange={(rows) => updateStage('thrust_profile', rows, idx)}
-                                      addLabel="Add thrust sample"
-                                    />
-                                  ) : (
-                                    <NumberField
-                                      id={`${stagePrefix}-thrust-constant`}
-                                      label="Const thrust vac [N]"
-                                      value={stageData.thrust_constant}
-                                      step="10"
-                                      onChange={(value) => updateStage('thrust_constant', value, idx)}
-                                    />
-                                  )
-                                ) : (
-                                  <NumberField
-                                    id={`${stagePrefix}-thrust-constant`}
-                                    label="Const thrust vac [N]"
-                                    value={stageData.thrust_constant}
-                                    step="10"
-                                    onChange={(value) => updateStage('thrust_constant', value, idx)}
-                                  />
-                                )}
-
-                                {showVariations && (
-                                  <NumberField
-                                    id={`${stagePrefix}-thrust-multiplier`}
-                                    label="Thrust multiplier"
-                                    value={stageData.thrust_multiplier}
-                                    step="0.01"
-                                    onChange={(value) => updateStage('thrust_multiplier', value, idx)}
-                                  />
-                                )}
-                              </div>
-
-                              <div className="space-y-4 rounded-lg border border-slate-200 bg-white/95 p-4 shadow-inner">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div>
-                                    <h5 className="text-sm font-semibold text-slate-800">Specific impulse</h5>
-                                    <p className="text-xs text-slate-500">Set a constant vacuum Isp or provide a profile.</p>
-                                  </div>
-                                  {idx === 0 && (
-                                    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
-                                      <Switch
-                                        id={ispToggleId}
-                                        checked={useIspProfile}
-                                        onCheckedChange={toggleIspProfile}
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                      <NumberField
+                                        id={`${stagePrefix}-burn-start`}
+                                        label="Burn start [s]"
+                                        value={stageData.burn_start_s}
+                                        step="0.1"
+                                        onChange={(value) => updateStage('burn_start_s', value, idx)}
+                                        hasError={stageHasError('burn_start_s')}
+                                        registerRef={makeFieldRef(stageFieldKey('burn_start_s'))}
+                                      />
+                                      <NumberField
+                                        id={`${stagePrefix}-burn-end`}
+                                        label="Burn end [s]"
+                                        value={stageData.burn_end_s}
+                                        step="0.1"
+                                        onChange={(value) => updateStage('burn_end_s', value, idx)}
+                                        hasError={stageHasError('burn_end_s')}
+                                        registerRef={makeFieldRef(stageFieldKey('burn_end_s'))}
+                                      />
+                                      <NumberField
+                                        id={`${stagePrefix}-forced-cutoff`}
+                                        label="Forced cutoff [s]"
+                                        value={stageData.forced_cutoff_s}
+                                        step="0.1"
+                                        onChange={(value) => updateStage('forced_cutoff_s', value, idx)}
+                                        hasError={stageHasError('forced_cutoff_s')}
+                                        registerRef={makeFieldRef(stageFieldKey('forced_cutoff_s'))}
+                                      />
+                                      <NumberField
+                                        id={`${stagePrefix}-separation-time`}
+                                        label="Separation time [s]"
+                                        value={stageData.separation_time_s}
+                                        step="0.1"
+                                        onChange={(value) => updateStage('separation_time_s', value, idx)}
+                                        hasError={stageHasError('separation_time_s')}
+                                        registerRef={makeFieldRef(stageFieldKey('separation_time_s'))}
                                       />
                                     </div>
-                                  )}
-                                </div>
 
-                                {idx === 0 ? (
-                                  useIspProfile ? (
-                                    <EditableTable<ClientTimeSample>
-                                      title="Isp profile (time-series)"
-                                      columns={[
-                                        { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
-                                        { key: 'value', label: 'Isp [s]', step: '0.1' },
-                                      ]}
-                                      rows={stageData.isp_profile}
-                                      onChange={(rows) => updateStage('isp_profile', rows, idx)}
-                                      addLabel="Add Isp sample"
-                                    />
-                                  ) : (
-                                    <NumberField
-                                      id={`${stagePrefix}-isp-constant`}
-                                      label="Const Isp vac [s]"
-                                      value={stageData.isp_constant}
-                                      step="0.1"
-                                      onChange={(value) => updateStage('isp_constant', value, idx)}
-                                    />
-                                  )
-                                ) : (
-                                  <NumberField
-                                    id={`${stagePrefix}-isp-constant`}
-                                    label="Const Isp vac [s]"
-                                    value={stageData.isp_constant}
-                                    step="0.1"
-                                    onChange={(value) => updateStage('isp_constant', value, idx)}
-                                  />
-                                )}
+                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                      <NumberField
+                                        id={`${stagePrefix}-throat-diameter`}
+                                        label="Throat diameter [m]"
+                                        value={stageData.throat_diameter_m}
+                                        step="0.001"
+                                        onChange={(value) => updateStage('throat_diameter_m', value, idx)}
+                                        hasError={stageHasError('throat_diameter_m')}
+                                        registerRef={makeFieldRef(stageFieldKey('throat_diameter_m'))}
+                                      />
+                                      <NumberField
+                                        id={`${stagePrefix}-nozzle-expansion`}
+                                        label="Nozzle expansion ratio"
+                                        value={stageData.nozzle_expansion_ratio}
+                                        step="0.1"
+                                        onChange={(value) => updateStage('nozzle_expansion_ratio', value, idx)}
+                                        hasError={stageHasError('nozzle_expansion_ratio')}
+                                        registerRef={makeFieldRef(stageFieldKey('nozzle_expansion_ratio'))}
+                                      />
+                                      <NumberField
+                                        id={`${stagePrefix}-nozzle-exit-pressure`}
+                                        label="Nozzle exit pressure [Pa]"
+                                        value={stageData.nozzle_exit_pressure_pa}
+                                        step="10"
+                                        onChange={(value) => updateStage('nozzle_exit_pressure_pa', value, idx)}
+                                        hasError={stageHasError('nozzle_exit_pressure_pa')}
+                                        registerRef={makeFieldRef(stageFieldKey('nozzle_exit_pressure_pa'))}
+                                      />
+                                    </div>
 
-                                {showVariations && (
-                                  <NumberField
-                                    id={`${stagePrefix}-isp-multiplier`}
-                                    label="Isp multiplier"
-                                    value={stageData.isp_multiplier}
-                                    step="0.01"
-                                    onChange={(value) => updateStage('isp_multiplier', value, idx)}
-                                  />
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
+                                    <div className="space-y-3 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-inner">
+                                      <div className="flex flex-wrap items-center justify-between gap-2.5">
+                                        <div>
+                                          <h5 className="text-sm font-semibold text-slate-800">Thrust curve</h5>
+                                          <p className="text-xs text-slate-500">Provide constant vacuum thrust or import a CSV time-series.</p>
+                                        </div>
+                                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+                                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
+                                          <Switch
+                                            id={thrustToggleId}
+                                            checked={useThrustProfileStage}
+                                            onCheckedChange={(checked) => toggleStageThrustProfile(idx, checked)}
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {useThrustProfileStage ? (
+                                        <EditableTable<ClientTimeSample>
+                                          title="Thrust profile (time-series)"
+                                          columns={[
+                                            { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
+                                            { key: 'value', label: 'Thrust [N]', step: '10' },
+                                          ]}
+                                          rows={stageData.thrust_profile}
+                                          onChange={(rows) => updateStage('thrust_profile', rows, idx)}
+                                          addLabel="Add thrust sample"
+                                        />
+                                      ) : (
+                                        <NumberField
+                                          id={`${stagePrefix}-thrust-constant`}
+                                          label="Const thrust vac [N]"
+                                          value={stageData.thrust_constant}
+                                          step="10"
+                                          onChange={(value) => updateStage('thrust_constant', value, idx)}
+                                          hasError={stageHasError('thrust_constant')}
+                                          registerRef={makeFieldRef(stageFieldKey('thrust_constant'))}
+                                        />
+                                      )}
+
+                                      {showVariations && (
+                                        <NumberField
+                                          id={`${stagePrefix}-thrust-multiplier`}
+                                          label="Thrust multiplier"
+                                          value={stageData.thrust_multiplier}
+                                          step="0.01"
+                                          onChange={(value) => updateStage('thrust_multiplier', value, idx)}
+                                          hasError={stageHasError('thrust_multiplier')}
+                                          registerRef={makeFieldRef(stageFieldKey('thrust_multiplier'))}
+                                        />
+                                      )}
+                                    </div>
+
+                                    <div className="space-y-3 rounded-lg border border-slate-200 bg-white/95 p-3 shadow-inner">
+                                      <div className="flex flex-wrap items-center justify-between gap-2.5">
+                                        <div>
+                                          <h5 className="text-sm font-semibold text-slate-800">Specific impulse</h5>
+                                          <p className="text-xs text-slate-500">Set a constant vacuum Isp or provide a profile.</p>
+                                        </div>
+                                        <div className="flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 shadow-sm">
+                                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Profile</span>
+                                          <Switch
+                                            id={ispToggleId}
+                                            checked={useIspProfileStage}
+                                            onCheckedChange={(checked) => toggleStageIspProfile(idx, checked)}
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {useIspProfileStage ? (
+                                        <EditableTable<ClientTimeSample>
+                                          title="Isp profile (time-series)"
+                                          columns={[
+                                            { key: 'time', label: 'Time [s]', step: '0.1', min: 0 },
+                                            { key: 'value', label: 'Isp [s]', step: '0.1' },
+                                          ]}
+                                          rows={stageData.isp_profile}
+                                          onChange={(rows) => updateStage('isp_profile', rows, idx)}
+                                          addLabel="Add Isp sample"
+                                        />
+                                      ) : (
+                                        <NumberField
+                                          id={`${stagePrefix}-isp-constant`}
+                                          label="Const Isp vac [s]"
+                                          value={stageData.isp_constant}
+                                          step="0.1"
+                                          onChange={(value) => updateStage('isp_constant', value, idx)}
+                                          hasError={stageHasError('isp_constant')}
+                                          registerRef={makeFieldRef(stageFieldKey('isp_constant'))}
+                                        />
+                                      )}
+
+                                      {showVariations && (
+                                        <NumberField
+                                          id={`${stagePrefix}-isp-multiplier`}
+                                          label="Isp multiplier"
+                                          value={stageData.isp_multiplier}
+                                          step="0.01"
+                                          onChange={(value) => updateStage('isp_multiplier', value, idx)}
+                                          hasError={stageHasError('isp_multiplier')}
+                                          registerRef={makeFieldRef(stageFieldKey('isp_multiplier'))}
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            )
+                          })}
+                        </Accordion>
                       </div>
                     </div>
                   </AccordionContent>
@@ -1504,19 +2051,21 @@ export function SimulationPanel({ onResult }: Props) {
                 <AccordionItem value="environment">
                   <AccordionTrigger>Environment &amp; guidance</AccordionTrigger>
                   <AccordionContent>
-                    <div className="flex flex-col gap-5">
-                      <div className="section-shell space-y-4">
+                    <div className="flex flex-col gap-3">
+                      <div className="section-shell space-y-3">
                         <div className="flex flex-col gap-2">
                           <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Aerodynamics</h4>
                           <p className="text-sm text-slate-600">Adjust reference geometry and optional Mach profiles.</p>
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                           <NumberField
                             id="aero-body-diameter"
                             label="Body diameter [m]"
                             value={config.aerodynamics.body_diameter_m}
                             step="0.01"
                             onChange={(value) => updateAerodynamics('body_diameter_m', value)}
+                            hasError={issuesSet.has('aerodynamics.body_diameter_m')}
+                            registerRef={makeFieldRef('aerodynamics.body_diameter_m')}
                           />
                           <NumberField
                             id="aero-ballistic"
@@ -1524,6 +2073,8 @@ export function SimulationPanel({ onResult }: Props) {
                             value={config.aerodynamics.ballistic_coefficient}
                             step="0.1"
                             onChange={(value) => updateAerodynamics('ballistic_coefficient', value)}
+                            hasError={issuesSet.has('aerodynamics.ballistic_coefficient')}
+                            registerRef={makeFieldRef('aerodynamics.ballistic_coefficient')}
                           />
                           <NumberField
                             id="aero-cn-constant"
@@ -1531,28 +2082,40 @@ export function SimulationPanel({ onResult }: Props) {
                             value={config.aerodynamics.cn_constant}
                             step="0.01"
                             onChange={(value) => updateAerodynamics('cn_constant', value)}
+                            hasError={issuesSet.has('aerodynamics.cn_constant')}
+                            registerRef={makeFieldRef('aerodynamics.cn_constant')}
                           />
-                          <NumberField
-                            id="aero-cn-multiplier"
-                            label="CNa multiplier"
-                            value={config.aerodynamics.cn_multiplier}
-                            step="0.01"
-                            onChange={(value) => updateAerodynamics('cn_multiplier', value)}
-                          />
+                          {showVariations && (
+                            <NumberField
+                              id="aero-cn-multiplier"
+                              label="CNa multiplier"
+                              value={config.aerodynamics.cn_multiplier}
+                              step="0.01"
+                              onChange={(value) => updateAerodynamics('cn_multiplier', value)}
+                              hasError={issuesSet.has('aerodynamics.cn_multiplier')}
+                              registerRef={makeFieldRef('aerodynamics.cn_multiplier')}
+                            />
+                          )}
                           <NumberField
                             id="aero-ca-constant"
                             label="Axial force coefficient (CA)"
                             value={config.aerodynamics.ca_constant}
                             step="0.01"
                             onChange={(value) => updateAerodynamics('ca_constant', value)}
+                            hasError={issuesSet.has('aerodynamics.ca_constant')}
+                            registerRef={makeFieldRef('aerodynamics.ca_constant')}
                           />
-                          <NumberField
-                            id="aero-ca-multiplier"
-                            label="CA multiplier"
-                            value={config.aerodynamics.ca_multiplier}
-                            step="0.01"
-                            onChange={(value) => updateAerodynamics('ca_multiplier', value)}
-                          />
+                          {showVariations && (
+                            <NumberField
+                              id="aero-ca-multiplier"
+                              label="CA multiplier"
+                              value={config.aerodynamics.ca_multiplier}
+                              step="0.01"
+                              onChange={(value) => updateAerodynamics('ca_multiplier', value)}
+                              hasError={issuesSet.has('aerodynamics.ca_multiplier')}
+                              registerRef={makeFieldRef('aerodynamics.ca_multiplier')}
+                            />
+                          )}
                         </div>
                         <div className="grid gap-3 md:grid-cols-2">
                           <SwitchField
@@ -1570,7 +2133,7 @@ export function SimulationPanel({ onResult }: Props) {
                             onCheckedChange={toggleCaProfile}
                           />
                         </div>
-                        <div className="grid gap-4">
+                        <div className="grid gap-3">
                           {useCnProfile && (
                             <EditableTable<ClientMachSample>
                               title="CNa profile"
@@ -1598,18 +2161,20 @@ export function SimulationPanel({ onResult }: Props) {
                         </div>
                       </div>
 
-                      <div className="section-shell space-y-4">
+                      <div className="section-shell space-y-3">
                         <div>
                           <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Attitude guidance</h4>
                           <p className="text-sm text-slate-600">Set default pointing or provide a trajectory profile.</p>
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
                           <NumberField
                             id="attitude-elevation"
                             label="Elevation [deg]"
                             value={config.attitude.elevation_deg}
                             step="0.1"
                             onChange={(value) => updateAttitude('elevation_deg', value)}
+                            hasError={issuesSet.has('attitude.elevation_deg')}
+                            registerRef={makeFieldRef('attitude.elevation_deg')}
                           />
                           <NumberField
                             id="attitude-azimuth"
@@ -1617,45 +2182,66 @@ export function SimulationPanel({ onResult }: Props) {
                             value={config.attitude.azimuth_deg}
                             step="0.1"
                             onChange={(value) => updateAttitude('azimuth_deg', value)}
+                            hasError={issuesSet.has('attitude.azimuth_deg')}
+                            registerRef={makeFieldRef('attitude.azimuth_deg')}
                           />
-                          <NumberField
-                            id="attitude-pitch"
-                            label="Pitch offset [deg]"
-                            value={config.attitude.pitch_offset_deg}
-                            step="0.1"
-                            onChange={(value) => updateAttitude('pitch_offset_deg', value)}
-                          />
-                          <NumberField
-                            id="attitude-yaw"
-                            label="Yaw offset [deg]"
-                            value={config.attitude.yaw_offset_deg}
-                            step="0.1"
-                            onChange={(value) => updateAttitude('yaw_offset_deg', value)}
-                          />
-                          <NumberField
-                            id="attitude-roll"
-                            label="Roll offset [deg]"
-                            value={config.attitude.roll_offset_deg}
-                            step="0.1"
-                            onChange={(value) => updateAttitude('roll_offset_deg', value)}
-                          />
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          {(['x', 'y', 'z'] as const).map((axis, axisIdx) => (
+                          {showVariations && (
                             <NumberField
-                              key={`gyro-${axis}`}
-                              id={`gyro-${axis}`}
-                              label={`Gyro bias ${axis.toUpperCase()} [deg/h]`}
-                              value={config.attitude.gyro_bias_deg_h[axisIdx]}
-                              step="0.01"
-                              onChange={(value) => {
-                                const next: [number, number, number] = [...config.attitude.gyro_bias_deg_h] as [number, number, number]
-                                next[axisIdx] = value
-                                updateAttitude('gyro_bias_deg_h', next)
-                              }}
+                              id="attitude-pitch"
+                              label="Pitch offset [deg]"
+                              value={config.attitude.pitch_offset_deg}
+                              step="0.1"
+                              onChange={(value) => updateAttitude('pitch_offset_deg', value)}
+                              hasError={issuesSet.has('attitude.pitch_offset_deg')}
+                              registerRef={makeFieldRef('attitude.pitch_offset_deg')}
                             />
-                          ))}
+                          )}
+                          {showVariations && (
+                            <NumberField
+                              id="attitude-yaw"
+                              label="Yaw offset [deg]"
+                              value={config.attitude.yaw_offset_deg}
+                              step="0.1"
+                              onChange={(value) => updateAttitude('yaw_offset_deg', value)}
+                              hasError={issuesSet.has('attitude.yaw_offset_deg')}
+                              registerRef={makeFieldRef('attitude.yaw_offset_deg')}
+                            />
+                          )}
+                          {showVariations && (
+                            <NumberField
+                              id="attitude-roll"
+                              label="Roll offset [deg]"
+                              value={config.attitude.roll_offset_deg}
+                              step="0.1"
+                              onChange={(value) => updateAttitude('roll_offset_deg', value)}
+                              hasError={issuesSet.has('attitude.roll_offset_deg')}
+                              registerRef={makeFieldRef('attitude.roll_offset_deg')}
+                            />
+                          )}
                         </div>
+                        {showVariations && (
+                          <div className="grid gap-3 sm:grid-cols-3">
+                            {(['x', 'y', 'z'] as const).map((axis, axisIdx) => {
+                              const biasKey = `attitude.gyro_bias_deg_h[${axisIdx}]`
+                              return (
+                                <NumberField
+                                  key={`gyro-${axis}`}
+                                  id={`gyro-${axis}`}
+                                  label={`Gyro bias ${axis.toUpperCase()} [deg/h]`}
+                                  value={config.attitude.gyro_bias_deg_h[axisIdx]}
+                                  step="0.01"
+                                  onChange={(value) => {
+                                    const next: [number, number, number] = [...config.attitude.gyro_bias_deg_h] as [number, number, number]
+                                    next[axisIdx] = value
+                                    updateAttitude('gyro_bias_deg_h', next)
+                                  }}
+                                  hasError={issuesSet.has(biasKey)}
+                                  registerRef={makeFieldRef(biasKey)}
+                                />
+                              )
+                            })}
+                          </div>
+                        )}
                         <SwitchField
                           id="attitude-profile-toggle"
                           label="Use attitude profile"
@@ -1678,7 +2264,7 @@ export function SimulationPanel({ onResult }: Props) {
                         )}
                       </div>
 
-                      <div className="section-shell space-y-4">
+                      <div className="section-shell space-y-3">
                         <div>
                           <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Wind</h4>
                           <p className="text-sm text-slate-600">Select a constant wind vector or altitude profile.</p>
@@ -1691,7 +2277,7 @@ export function SimulationPanel({ onResult }: Props) {
                           onCheckedChange={toggleWindProfile}
                         />
                         {!useWindProfile && (
-                          <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="grid gap-3 sm:grid-cols-2">
                             <NumberField
                               id="wind-speed"
                               label="Constant wind speed [m/s]"
@@ -1699,6 +2285,8 @@ export function SimulationPanel({ onResult }: Props) {
                               step="0.1"
                               min={0}
                               onChange={(value) => updateWind('speed_mps', value)}
+                              hasError={issuesSet.has('wind.speed_mps')}
+                              registerRef={makeFieldRef('wind.speed_mps')}
                             />
                             <NumberField
                               id="wind-direction"
@@ -1708,6 +2296,8 @@ export function SimulationPanel({ onResult }: Props) {
                               min={0}
                               max={360}
                               onChange={(value) => updateWind('direction_deg', value)}
+                              hasError={issuesSet.has('wind.direction_deg')}
+                              registerRef={makeFieldRef('wind.direction_deg')}
                             />
                           </div>
                         )}
@@ -1733,8 +2323,27 @@ export function SimulationPanel({ onResult }: Props) {
 
             <TabsContent value="json">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 shadow-inner">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <h4 className="text-sm font-semibold text-slate-700">{jsonSummaryLabel}</h4>
+                  {jsonMessage && <span className="text-xs text-slate-500">{jsonMessage}</span>}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={handleCopyJson}>
+                    Copy JSON
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={handleDownloadJson}>
+                    Download JSON
+                  </Button>
+                  <Button type="button" size="sm" onClick={handleTriggerImport}>
+                    Import JSON
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={handleImportJson}
+                  />
                 </div>
                 <pre className="mt-4 max-h-[360px] overflow-auto rounded-xl bg-slate-950/95 p-4 text-xs leading-relaxed text-slate-100 shadow-inner">
                   {jsonPreview}

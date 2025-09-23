@@ -35,10 +35,10 @@
   }
 
   .section-shell {
-    @apply rounded-xl border border-slate-200/80 bg-white/95 p-5 shadow-sm;
+    @apply rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-sm;
   }
 
   .field-grid {
-    @apply grid gap-4 sm:grid-cols-2 lg:grid-cols-3;
+    @apply grid gap-3 sm:grid-cols-2 lg:grid-cols-3;
   }
 }

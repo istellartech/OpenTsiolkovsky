@@ -17,10 +17,7 @@ export default function App() {
         <header className="space-y-4">
           <Badge className="bg-brand/15 text-brand-700">OpenTsiolkovsky</Badge>
           <div className="max-w-2xl space-y-3">
-            <h1>Mission Designer Console</h1>
-            <p className="text-sm text-slate-600">
-              Configure launch conditions, iterate on vehicle stages, and visualize trajectories across the web API and in-browser WASM simulator.
-            </p>
+            <h1>OpenTsiolkovsky</h1>
           </div>
         </header>
 

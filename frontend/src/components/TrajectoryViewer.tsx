@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { SimulationState } from '../lib/types'
@@ -8,6 +8,38 @@ import { eciToLatLon } from '../lib/geo'
 export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const infoRef = useRef<HTMLDivElement>(null)
+  const [isFullWidth, setIsFullWidth] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const fullWidthRef = useRef(isFullWidth)
+  const fullscreenRef = useRef(isFullscreen)
+  const applySizeRef = useRef<(() => void) | null>(null)
+
+  const handleToggleFullWidth = () => {
+    setIsFullWidth((prev) => !prev)
+  }
+
+  const handleToggleFullscreen = () => {
+    if (typeof document === 'undefined') return
+    const container = mountRef.current
+    if (!container) return
+    if (document.fullscreenElement === container) {
+      document.exitFullscreen?.()
+    } else {
+      container.requestFullscreen?.().catch(() => {
+        /* swallow */
+      })
+    }
+  }
+
+  useEffect(() => {
+    fullWidthRef.current = isFullWidth
+    applySizeRef.current?.()
+  }, [isFullWidth])
+
+  useEffect(() => {
+    fullscreenRef.current = isFullscreen
+    applySizeRef.current?.()
+  }, [isFullscreen])
 
   useEffect(() => {
     if (infoRef.current && (!data || data.length === 0)) {
@@ -16,9 +48,6 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
     if (!mountRef.current || !data || data.length === 0) return
 
     const container = mountRef.current
-    container.style.width = '100%'
-    container.style.maxWidth = '100%'
-    container.style.margin = '0 auto'
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x020617)
     const cameraFar = 1_000_000
@@ -29,30 +58,66 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
     }
     container.appendChild(renderer.domElement)
 
-    const ensureWidth = () => {
+    const getParentWidth = () => {
       const parentWidth = container.parentElement?.getBoundingClientRect().width ?? 0
       const selfWidth = container.getBoundingClientRect().width
-      const fallback = Math.min(window.innerWidth - 48, 720)
-      const available = parentWidth > 0 ? parentWidth : selfWidth > 0 ? selfWidth : fallback
-      const width = Math.max(360, Math.min(available * 0.5, 480, fallback * 0.7))
-      return width
+      if (parentWidth > 0) return parentWidth
+      if (selfWidth > 0) return selfWidth
+      if (typeof window !== 'undefined') {
+        return Math.max(360, window.innerWidth - 48)
+      }
+      return 480
     }
 
     const applySize = () => {
-      const width = ensureWidth()
-      const desired = Math.round(width * 0.6)
-      const height = Math.max(320, Math.min(desired, 420))
+      const fullscreen = fullscreenRef.current
+      const fullWidth = fullWidthRef.current
+      let width: number
+      let height: number
+      if (fullscreen && typeof window !== 'undefined') {
+        width = window.innerWidth
+        height = window.innerHeight
+      } else {
+        const available = getParentWidth()
+        if (fullWidth) {
+          width = Math.max(360, available)
+          height = Math.max(340, Math.min(width * 0.6, 560))
+        } else {
+          width = Math.min(Math.max(360, available * 0.6), 520)
+          height = Math.max(320, Math.min(width * 0.65, 460))
+        }
+      }
+
       renderer.setSize(width, height, false)
-      container.style.width = `${width}px`
-      container.style.maxWidth = `${width}px`
-      container.style.height = `${height}px`
+      if (fullscreen) {
+        container.style.width = '100%'
+        container.style.maxWidth = '100%'
+      } else if (fullWidth) {
+        container.style.width = '100%'
+        container.style.maxWidth = '100%'
+      } else {
+        container.style.width = `${Math.round(width)}px`
+        container.style.maxWidth = `${Math.round(width)}px`
+      }
+      container.style.height = `${Math.round(height)}px`
+      container.style.margin = fullWidth || fullscreen ? '0' : '0 auto'
       camera.aspect = width / height
       camera.updateProjectionMatrix()
     }
 
+    applySizeRef.current = applySize
+
     applySize()
     if (!(typeof ResizeObserver !== 'undefined')) {
       requestAnimationFrame(applySize)
+    }
+
+    const handleFullscreenChange = () => {
+      if (typeof document === 'undefined') return
+      const active = document.fullscreenElement === container
+      fullscreenRef.current = active
+      setIsFullscreen(active)
+      applySize()
     }
 
     let resizeObserver: ResizeObserver | null = null
@@ -61,6 +126,9 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
       resizeObserver.observe(container)
     } else if (typeof window !== 'undefined') {
       window.addEventListener('resize', applySize)
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('fullscreenchange', handleFullscreenChange)
     }
 
     const controls = new OrbitControls(camera, renderer.domElement)
@@ -186,6 +254,9 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
       } else if (typeof window !== 'undefined') {
         window.removeEventListener('resize', applySize)
       }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('fullscreenchange', handleFullscreenChange)
+      }
       try {
         container.style.height = ''
         container.style.width = ''
@@ -215,12 +286,29 @@ export function TrajectoryViewer({ data }: { data: SimulationState[] }) {
       disposeLatLonGrid(grid)
       atmosphereGeom.dispose()
       atmosphereMat.dispose()
+      applySizeRef.current = null
     }
   }, [data])
 
   return (
     <div className="relative w-full min-h-[220px] max-h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-950/95 shadow-soft">
       <div ref={mountRef} className="h-full w-full" />
+      <div className="pointer-events-none absolute top-3 right-3 flex gap-2">
+        <button
+          type="button"
+          onClick={handleToggleFullWidth}
+          className="pointer-events-auto rounded-md border border-white/30 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-100 shadow-sm transition hover:border-white/60 hover:bg-slate-900/90"
+        >
+          {isFullWidth ? 'Default width' : 'Full width'}
+        </button>
+        <button
+          type="button"
+          onClick={handleToggleFullscreen}
+          className="pointer-events-auto rounded-md border border-white/30 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-100 shadow-sm transition hover:border-white/60 hover:bg-slate-900/90"
+        >
+          {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+        </button>
+      </div>
       <div
         ref={infoRef}
         className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/10 px-3 py-1 text-[11px] font-mono text-slate-100 shadow-inner backdrop-blur-sm"
