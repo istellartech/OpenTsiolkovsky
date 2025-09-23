@@ -337,32 +337,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
-name = "openTsiolkovsky-cli"
+name = "openTsiolkovsky"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "clap",
  "console_error_panic_hook",
  "csv",
  "js-sys",
- "openTsiolkovsky-core",
- "serde-wasm-bindgen",
- "serde_json",
- "thiserror",
- "wasm-bindgen",
- "web-sys",
-]
-
-[[package]]
-name = "openTsiolkovsky-core"
-version = "0.1.0"
-dependencies = [
- "approx",
- "csv",
  "nalgebra",
  "serde",
+ "serde-wasm-bindgen",
  "serde_json",
  "tempfile",
  "thiserror",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]

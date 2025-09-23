@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
-CRATE_DIR="$REPO_ROOT/rust/crates/cli"
+CRATE_DIR="$REPO_ROOT/rust"
 OUT_DIR="$REPO_ROOT/frontend/src/wasm"
 
 # Check wasm-pack

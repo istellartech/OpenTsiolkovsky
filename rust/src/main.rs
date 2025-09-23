@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use clap::Parser;
-use openTsiolkovsky_core::{
+use openTsiolkovsky::{
     io::{create_rocket_from_config, save_summary_json, save_trajectory_csv, IoError},
     simulator::{SimError, Simulator},
 };
@@ -119,7 +119,7 @@ fn main() -> Result<()> {
 use csv::Writer;
 /// Write C++-compatible CSV using telemetry captured by simulator
 fn save_cpp_telemetry(
-    rows: &[openTsiolkovsky_core::simulator::CsvCppRow],
+    rows: &[openTsiolkovsky::simulator::CsvCppRow],
     path: &str,
 ) -> std::result::Result<(), IoError> {
     let mut w = Writer::from_path(path)?;

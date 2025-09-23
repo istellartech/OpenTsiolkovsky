@@ -1,4 +1,4 @@
-use openTsiolkovsky_core::{
+use crate::{
     rocket::{ClientConfig, Rocket, RocketConfig},
     Simulator,
 };

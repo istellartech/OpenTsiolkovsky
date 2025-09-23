@@ -1,6 +1,6 @@
 // WASM loader utilities for OpenTsiolkovsky (optional client-side execution)
 // This expects `scripts/wasm_build.sh` to have emitted artifacts into
-// `frontend/src/wasm` with out-name `openTsiolkovsky_cli`.
+// `frontend/src/wasm` with out-name `openTsiolkovsky`.
 
 import type { ClientConfig, ClientStageConfig, SimulationState } from './types'
 
@@ -233,7 +233,7 @@ export function initWasm(): Promise<any> {
   if (!modPromise) {
     // Use Vite's glob import to optionally load the wasm-pack output if present.
     // This avoids build-time resolution errors when the WASM bundle has not been generated yet.
-    const candidates = import.meta.glob('../wasm/openTsiolkovsky_cli.{js,ts}') as Record<string, () => Promise<any>>
+    const candidates = import.meta.glob('../wasm/openTsiolkovsky.{js,ts}') as Record<string, () => Promise<any>>
     const keys = Object.keys(candidates)
     if (keys.length === 0) {
       modPromise = Promise.reject(new Error('WASM bundle not found. Run: bash scripts/wasm_build.sh'))
