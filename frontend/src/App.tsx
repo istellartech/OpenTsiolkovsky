@@ -48,19 +48,22 @@ export default function App() {
                 <CardDescription>Download simulation results in various formats.</CardDescription>
               </CardHeader>
               <CardContent className="bg-slate-50/60">
-                {result ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-slate-600">Export trajectory data for external analysis and visualization.</p>
-                    <Button
-                      onClick={() => downloadKML({ trajectory: result.trajectory, config: result.config })}
-                      className="w-full"
-                    >
-                      Download KML
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="py-8 text-sm text-slate-500">Run a simulation to enable exports.</div>
-                )}
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-600">Export trajectory data for external analysis and visualization.</p>
+                  <Button
+                    onClick={() => {
+                      if (!result || result.trajectory.length === 0) return
+                      downloadKML({ trajectory: result.trajectory, config: result.config })
+                    }}
+                    className="w-full"
+                    disabled={!result || result.trajectory.length === 0}
+                  >
+                    Download KML
+                  </Button>
+                  {!result && (
+                    <div className="text-xs text-slate-500">Run a simulation to enable exports.</div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
