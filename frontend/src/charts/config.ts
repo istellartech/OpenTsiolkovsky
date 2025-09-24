@@ -157,7 +157,7 @@ export function createVelocityChart(
   stageBands: StageBand[],
   markers: EventMarker[]
 ): ChartConfiguration {
-  const datasetPoints = extendSeriesFallback(
+  const totalVelPoints = extendSeriesFallback(
     buildNumericSeries(
       data,
       (state) => state.time,
@@ -166,26 +166,93 @@ export function createVelocityChart(
     { x: 0, y: 0 },
   )
 
+  // Vertical velocity (up is positive)
+  const verticalVelPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => {
+        if (state.velocity_ned) {
+          const vel_ned = typeof state.velocity_ned === 'object' && 'z' in state.velocity_ned
+            ? state.velocity_ned.z
+            : Array.isArray(state.velocity_ned) ? state.velocity_ned[2] : 0;
+          return -vel_ned; // NED Z is down, so negate for upward positive
+        }
+        return 0;
+      },
+    ),
+    { x: 0, y: 0 },
+  )
+
+  // Horizontal velocity (North-East magnitude)
+  const horizontalVelPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => {
+        if (state.velocity_ned) {
+          const vel_ned = typeof state.velocity_ned === 'object' && 'x' in state.velocity_ned
+            ? { x: state.velocity_ned.x, y: state.velocity_ned.y }
+            : Array.isArray(state.velocity_ned)
+            ? { x: state.velocity_ned[0], y: state.velocity_ned[1] }
+            : { x: 0, y: 0 };
+          return Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y);
+        }
+        return 0;
+      },
+    ),
+    { x: 0, y: 0 },
+  )
+
   return {
     type: 'line',
     data: {
-      datasets: [{
-        label: 'Velocity',
-        data: datasetPoints,
-        borderColor: '#dc2626',
-        backgroundColor: 'rgba(220, 38, 38, 0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.1,
-        fill: 'origin',
-        parsing: false,
-        spanGaps: true,
-      }]
+      datasets: [
+        {
+          label: 'Total Velocity',
+          data: totalVelPoints,
+          borderColor: '#dc2626',
+          backgroundColor: 'rgba(220, 38, 38, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: 'Vertical Velocity',
+          data: verticalVelPoints,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: 'Horizontal Velocity',
+          data: horizontalVelPoints,
+          borderColor: '#059669',
+          backgroundColor: 'rgba(5, 150, 105, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: createPluginOptions(stageBands, markers) as any,
+      plugins: {
+        ...createPluginOptions(stageBands, markers),
+        legend: { display: true, position: 'top' }
+      } as any,
       scales: {
         x: {
           type: 'linear',
@@ -208,7 +275,7 @@ export function createMachChart(
   stageBands: StageBand[],
   markers: EventMarker[]
 ): ChartConfiguration {
-  const datasetPoints = extendSeriesFallback(
+  const altitudeMachPoints = extendSeriesFallback(
     buildNumericSeries(
       data,
       (state) => state.time,
@@ -217,26 +284,53 @@ export function createMachChart(
     { x: 0, y: 0 },
   )
 
+  const seaLevelMachPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.sea_level_mach ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
   return {
     type: 'line',
     data: {
-      datasets: [{
-        label: 'Mach Number',
-        data: datasetPoints,
-        borderColor: '#7c3aed',
-        backgroundColor: 'rgba(124, 58, 237, 0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.1,
-        fill: 'origin',
-        parsing: false,
-        spanGaps: true,
-      }]
+      datasets: [
+        {
+          label: 'Mach Number (Altitude)',
+          data: altitudeMachPoints,
+          borderColor: '#7c3aed',
+          backgroundColor: 'rgba(124, 58, 237, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: 'Mach Number (Sea Level)',
+          data: seaLevelMachPoints,
+          borderColor: '#ea580c',
+          backgroundColor: 'rgba(234, 88, 12, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+          borderDash: [5, 5],
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: createPluginOptions(stageBands, markers) as any,
+      plugins: {
+        ...createPluginOptions(stageBands, markers),
+        legend: { display: true, position: 'top' }
+      } as any,
       scales: {
         x: {
           type: 'linear',
@@ -259,7 +353,7 @@ export function createThrustChart(
   stageBands: StageBand[],
   markers: EventMarker[]
 ): ChartConfiguration {
-  const datasetPoints = extendSeriesFallback(
+  const thrustPoints = extendSeriesFallback(
     buildNumericSeries(
       data,
       (state) => state.time,
@@ -268,14 +362,91 @@ export function createThrustChart(
     { x: 0, y: 0 },
   )
 
+  const dragPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => (state.drag_force ?? 0) / 1000,
+    ),
+    { x: 0, y: 0 },
+  )
+
+  return {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Thrust',
+          data: thrustPoints,
+          borderColor: '#ea580c',
+          backgroundColor: 'rgba(234, 88, 12, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: 'Drag Force',
+          data: dragPoints,
+          borderColor: '#dc2626',
+          backgroundColor: 'rgba(220, 38, 38, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        ...createPluginOptions(stageBands, markers),
+        legend: { display: true, position: 'top' }
+      } as any,
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Time (s)' },
+          grid: { color: '#f1f5f9' }
+        },
+        y: {
+          type: 'linear',
+          title: { display: true, text: 'Force (kN)' },
+          grid: { color: '#f1f5f9' },
+          beginAtZero: true
+        }
+      }
+    }
+  }
+}
+
+export function createAccelerationChart(
+  data: SimulationState[],
+  stageBands: StageBand[],
+  markers: EventMarker[]
+): ChartConfiguration {
+  const datasetPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => (state.acceleration_magnitude ?? 0) / 9.80665, // Convert to G
+    ),
+    { x: 0, y: 0 },
+  )
+
   return {
     type: 'line',
     data: {
       datasets: [{
-        label: 'Thrust',
+        label: 'Acceleration',
         data: datasetPoints,
-        borderColor: '#ea580c',
-        backgroundColor: 'rgba(234, 88, 12, 0.1)',
+        borderColor: '#f59e0b',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
         borderWidth: 2,
         pointRadius: 0,
         tension: 0.1,
@@ -296,9 +467,157 @@ export function createThrustChart(
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'Thrust (kN)' },
+          title: { display: true, text: 'Acceleration (G)' },
           grid: { color: '#f1f5f9' },
           beginAtZero: true
+        }
+      }
+    }
+  }
+}
+
+export function createDynamicPressureChart(
+  data: SimulationState[],
+  stageBands: StageBand[],
+  markers: EventMarker[]
+): ChartConfiguration {
+  const datasetPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => (state.dynamic_pressure ?? 0) / 1000, // Convert to kPa
+    ),
+    { x: 0, y: 0 },
+  )
+
+  return {
+    type: 'line',
+    data: {
+      datasets: [{
+        label: 'Dynamic Pressure',
+        data: datasetPoints,
+        borderColor: '#8b5cf6',
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.1,
+        fill: 'origin',
+        parsing: false,
+        spanGaps: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: createPluginOptions(stageBands, markers) as any,
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Time (s)' },
+          grid: { color: '#f1f5f9' }
+        },
+        y: {
+          type: 'linear',
+          title: { display: true, text: 'Dynamic Pressure (kPa)' },
+          grid: { color: '#f1f5f9' },
+          beginAtZero: true
+        }
+      }
+    }
+  }
+}
+
+export function createAttitudeChart(
+  data: SimulationState[],
+  stageBands: StageBand[],
+  markers: EventMarker[]
+): ChartConfiguration {
+  const azimuthPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.attitude_azimuth ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
+  const elevationPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.attitude_elevation ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
+  const aoaPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.angle_of_attack ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
+  return {
+    type: 'line',
+    data: {
+      datasets: [
+        {
+          label: 'Azimuth',
+          data: azimuthPoints,
+          borderColor: '#10b981',
+          backgroundColor: 'rgba(16, 185, 129, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: 'Elevation',
+          data: elevationPoints,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: 'Angle of Attack',
+          data: aoaPoints,
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        ...createPluginOptions(stageBands, markers),
+        legend: { display: true, position: 'top' }
+      } as any,
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Time (s)' },
+          grid: { color: '#f1f5f9' }
+        },
+        y: {
+          type: 'linear',
+          title: { display: true, text: 'Angle (deg)' },
+          grid: { color: '#f1f5f9' }
         }
       }
     }

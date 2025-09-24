@@ -4,6 +4,7 @@ import { computeDownrangeKm, eciToLatLon } from '../lib/geo'
 import { vec3ToObject } from '../lib/types'
 import type { EventMarker, StageBand, StageSummary } from '../charts/config'
 import { stagePalette } from '../charts/config'
+import { sanitizeLandingPhaseNoise } from '../utils/denoise'
 
 interface StagePlan {
   index: number
@@ -64,11 +65,13 @@ export function useChartData(data: SimulationState[], stagePlanConfig?: ClientCo
       }
     })
 
+    const displayData = sanitizeLandingPhaseNoise(processedData)
+
     // Build stage plans
     const stagePlans = buildStagePlans(stagePlanConfig)
 
     // Generate stage summaries
-    const stageSummaries = generateStageSummaries(processedData, stagePlans)
+    const stageSummaries = generateStageSummaries(displayData, stagePlans)
 
     // Create stage bands and markers
     const stageBands = createStageBands(stageSummaries)
@@ -76,18 +79,20 @@ export function useChartData(data: SimulationState[], stagePlanConfig?: ClientCo
 
     console.log('useChartData: Final result', {
       processedDataLength: processedData.length,
+      displayDataLength: displayData.length,
       stageSummariesLength: stageSummaries.length,
       stageBandsLength: stageBands.length,
       eventMarkersLength: eventMarkers.length,
-      firstChartPoint: processedData[0] ? {
-        time: processedData[0].time,
-        altitude: processedData[0].altitude,
-        velocity_magnitude: processedData[0].velocity_magnitude
+      firstChartPoint: displayData[0] ? {
+        time: displayData[0].time,
+        altitude: displayData[0].altitude,
+        velocity_magnitude: displayData[0].velocity_magnitude
       } : 'no data'
     })
 
     return {
-      data: processedData,
+      data: displayData,
+      rawData: processedData,
       stageSummaries,
       stageBands,
       eventMarkers,

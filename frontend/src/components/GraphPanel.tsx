@@ -9,6 +9,9 @@ import {
   createVelocityChart,
   createMachChart,
   createThrustChart,
+  createAccelerationChart,
+  createDynamicPressureChart,
+  createAttitudeChart,
   createTrajectoryChart
 } from '../charts/config'
 import type { SimulationState, ClientConfig } from '../lib/types'
@@ -94,31 +97,31 @@ export function GraphPanel({ data, stagePlanConfig }: GraphPanelProps) {
     )
   }
 
-  const { data: processedData, stageSummaries, stageBands, eventMarkers } = chartData
+  const { data: displayData, stageSummaries, stageBands, eventMarkers } = chartData
 
   // Summary cards
   const overallSummary = [
     {
       key: 'max-altitude',
       label: 'Max Altitude',
-      value: formatValue(Math.max(...processedData.map(d => d.altitude || 0)) / 1000, 'km'),
-      detail: `at t = ${formatValue(processedData.find(d => d.altitude === Math.max(...processedData.map(s => s.altitude || 0)))?.time || 0, 's')}`
+      value: formatValue(Math.max(...displayData.map(d => d.altitude || 0)) / 1000, 'km'),
+      detail: `at t = ${formatValue(displayData.find(d => d.altitude === Math.max(...displayData.map(s => s.altitude || 0)))?.time || 0, 's')}`
     },
     {
       key: 'max-velocity',
       label: 'Max Velocity',
-      value: formatValue(Math.max(...processedData.map(d => d.velocity_magnitude || 0)), 'm/s'),
-      detail: `Mach ${formatValue(Math.max(...processedData.map(d => d.mach_number || 0)), '')}`
+      value: formatValue(Math.max(...displayData.map(d => d.velocity_magnitude || 0)), 'm/s'),
+      detail: `Mach ${formatValue(Math.max(...displayData.map(d => d.mach_number || 0)), '')}`
     },
     {
       key: 'final-downrange',
       label: 'Final Downrange',
-      value: formatValue(processedData[processedData.length - 1]?.downrange_km || 0, 'km')
+      value: formatValue(displayData[displayData.length - 1]?.downrange_km || 0, 'km')
     },
     {
       key: 'flight-time',
       label: 'Flight Time',
-      value: formatValue(processedData[processedData.length - 1]?.time || 0, 's')
+      value: formatValue(displayData[displayData.length - 1]?.time || 0, 's')
     }
   ]
 
@@ -144,15 +147,23 @@ export function GraphPanel({ data, stagePlanConfig }: GraphPanelProps) {
       </div>
 
       {/* Main Charts */}
-      <div className="grid gap-6 xl:grid-cols-2">
-        <ChartCard config={createAltitudeChart(processedData, stageBands, eventMarkers)} />
-        <ChartCard config={createVelocityChart(processedData, stageBands, eventMarkers)} />
-        <ChartCard config={createMachChart(processedData, stageBands, eventMarkers)} />
-        <ChartCard config={createThrustChart(processedData, stageBands, eventMarkers)} />
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <ChartCard config={createAltitudeChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard config={createVelocityChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard config={createMachChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard config={createThrustChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard config={createAccelerationChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard config={createDynamicPressureChart(displayData, stageBands, eventMarkers)} />
+      </div>
+
+      {/* Secondary Charts */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard config={createAttitudeChart(displayData, stageBands, eventMarkers)} />
+        <div></div> {/* Empty space for better layout */}
       </div>
 
       {/* Trajectory Chart */}
-      <ChartCard config={createTrajectoryChart(processedData)} height={400} />
+      <ChartCard config={createTrajectoryChart(displayData)} height={400} />
 
       {/* Stage Details */}
       {stageSummaries.length > 0 && (

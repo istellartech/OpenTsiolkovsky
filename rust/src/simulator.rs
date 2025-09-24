@@ -22,6 +22,13 @@ pub struct SimulationState {
     pub dynamic_pressure: f64,   // Dynamic pressure [Pa]
     pub thrust: f64,             // Current thrust [N]
     pub drag_force: f64,         // Current drag force [N]
+    // New fields for enhanced visualization
+    pub velocity_ned: Vector3<f64>, // NED velocity components [m/s]
+    pub sea_level_mach: f64,        // Mach number based on sea level sound speed
+    pub acceleration_magnitude: f64, // Total acceleration magnitude [m/s²]
+    pub angle_of_attack: f64,        // Attack of angle [deg]
+    pub attitude_azimuth: f64,       // Attitude azimuth [deg]
+    pub attitude_elevation: f64,     // Attitude elevation [deg]
 }
 
 /// C++-compatible CSV row telemetry
@@ -192,6 +199,13 @@ impl Simulator {
             dynamic_pressure: 0.0,
             thrust: 0.0,
             drag_force: 0.0,
+            // Initialize new fields
+            velocity_ned: vel_ned,
+            sea_level_mach: 0.0,
+            acceleration_magnitude: 0.0,
+            angle_of_attack: 0.0,
+            attitude_azimuth: 0.0,
+            attitude_elevation: 0.0,
         };
         state.mass =
             stage_runtime.get(0).map(|rt| rt.stack_mass).unwrap_or(current_stage_cfg.mass_initial);
@@ -362,6 +376,55 @@ impl Simulator {
         let reference_area = std::f64::consts::PI * (body_diameter / 2.0).powi(2);
         self.state.drag_force = ca * self.state.dynamic_pressure * reference_area;
         self.last_drag_magnitude = self.state.drag_force;
+
+        // Update new fields for enhanced visualization
+        self.state.velocity_ned = vel_ned;
+
+        // Sea level Mach number (using constant sea level sound speed = 340.3 m/s)
+        const SEA_LEVEL_SOUND_SPEED: f64 = 340.3;
+        self.state.sea_level_mach = vel_air_mag / SEA_LEVEL_SOUND_SPEED;
+
+        // Acceleration magnitude - compute from current forces
+        let gravity_acc = self.gravity.gravity_eci(&self.state.position);
+        let mut total_acc = gravity_acc;
+
+        // Add thrust acceleration if active
+        if self.state.thrust > 0.0 && self.state.mass > 0.0 {
+            let (thrust_force, _) = self.compute_thrust_force(t, &self.state.position, &self.state.velocity);
+            total_acc += thrust_force / self.state.mass;
+        }
+
+        // Add aerodynamic acceleration
+        if vel_air_mag > 0.1 && self.state.mass > 0.0 {
+            let aero_force = self.compute_aerodynamic_forces(&self.state.position, &self.state.velocity, t, self.state.mach_number, self.state.mass);
+            total_acc += aero_force / self.state.mass;
+        }
+
+        self.state.acceleration_magnitude = total_acc.magnitude();
+
+        // Attitude angles
+        let (azimuth_deg, elevation_deg) = self.rocket.attitude_at_time(t);
+        self.state.attitude_azimuth = azimuth_deg;
+        self.state.attitude_elevation = elevation_deg;
+
+        // Angle of attack
+        if vel_air_mag > 0.1 {
+            let dcm_ned_to_body = CoordinateTransform::dcm_ned_to_body(
+                deg2rad(azimuth_deg),
+                deg2rad(elevation_deg),
+                None
+            );
+            let vel_air_body = CoordinateTransform::vel_air_body_frame(
+                &dcm_ned_to_body,
+                &vel_ned,
+                &wind_ned,
+            );
+            let angles = CoordinateTransform::angle_of_attack(&vel_air_body);
+            // Use the total angle of attack (gamma)
+            self.state.angle_of_attack = angles.z.to_degrees();
+        } else {
+            self.state.angle_of_attack = 0.0;
+        }
     }
 
     /// System dynamics function
