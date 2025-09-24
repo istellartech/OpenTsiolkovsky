@@ -45,6 +45,27 @@ function getMaxBeforeCutoff(
   return values.length > 0 ? Math.max(...values) : 0;
 }
 
+/**
+ * Calculate minimum value from data before engine cutoff (thrust becomes zero)
+ * This is useful for setting appropriate chart scales that exclude post-cutoff noise
+ * Unlike getMaxBeforeCutoff, this allows negative values for velocity charts
+ */
+function getMinBeforeCutoff(
+  data: SimulationState[],
+  valueSelector: (state: SimulationState) => number
+): number {
+  // Find the first point where thrust becomes zero or very small
+  const cutoffIndex = data.findIndex(state => (state.thrust ?? 0) <= 1); // 1N threshold for numerical stability
+
+  // Use data up to cutoff, or all data if no cutoff found
+  const activeData = cutoffIndex > 0 ? data.slice(0, cutoffIndex) : data;
+
+  // Extract values and filter out only invalid numbers (allow negative values)
+  const values = activeData.map(valueSelector).filter(v => Number.isFinite(v));
+
+  return values.length > 0 ? Math.min(...values) : 0;
+}
+
 function createPluginOptions(stageBands: StageBand[], markers: EventMarker[]) {
   return {
     legend: { display: false },
@@ -243,6 +264,44 @@ export function createVelocityChart(
     { x: 0, y: 0 },
   )
 
+  // Calculate max velocity before engine cutoff
+  const maxTotalVel = getMaxBeforeCutoff(data, (state) => {
+    if (state.velocity_ned) {
+      const vel_ned = vec3ToObject(state.velocity_ned);
+      return Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y + vel_ned.z * vel_ned.z);
+    }
+    return state.velocity_magnitude ?? 0;
+  })
+  const maxVerticalVel = getMaxBeforeCutoff(data, (state) => {
+    if (state.velocity_ned) {
+      const vel_ned = vec3ToObject(state.velocity_ned);
+      return Math.abs(-vel_ned.z); // Take absolute value for max scale calculation
+    }
+    return 0;
+  })
+  const maxHorizontalVel = getMaxBeforeCutoff(data, (state) => {
+    if (state.velocity_ned) {
+      const vel_ned = vec3ToObject(state.velocity_ned);
+      return Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y);
+    }
+    return 0;
+  })
+
+  // Calculate min velocity before engine cutoff (important for vertical velocity which can be negative)
+  const minVerticalVel = getMinBeforeCutoff(data, (state) => {
+    if (state.velocity_ned) {
+      const vel_ned = vec3ToObject(state.velocity_ned);
+      return -vel_ned.z; // NED Z is down, so negate for upward positive
+    }
+    return 0;
+  })
+
+  const maxVelocity = Math.max(maxTotalVel, maxVerticalVel, maxHorizontalVel)
+  const maxScale = maxVelocity > 0 ? maxVelocity * 1.1 : 1000 // 10% margin or default 1000m/s
+
+  // Set minimum scale to either 0 or the minimum velocity (whichever is lower)
+  const minScale = Math.min(0, minVerticalVel * 1.1) // 10% margin for negative values
+
   return {
     type: 'line',
     data: {
@@ -302,7 +361,9 @@ export function createVelocityChart(
           type: 'linear',
           title: { display: true, text: 'Velocity (m/s)' },
           grid: { color: '#f1f5f9' },
-          beginAtZero: true
+          beginAtZero: minScale >= 0, // Only begin at zero if minimum is not negative
+          min: minScale,
+          max: maxScale
         }
       }
     }
@@ -331,6 +392,12 @@ export function createMachChart(
     ),
     { x: 0, y: 0 },
   )
+
+  // Calculate max Mach number before engine cutoff
+  const maxAltitudeMach = getMaxBeforeCutoff(data, (state) => state.mach_number ?? 0)
+  const maxSeaLevelMach = getMaxBeforeCutoff(data, (state) => state.sea_level_mach ?? 0)
+  const maxMach = Math.max(maxAltitudeMach, maxSeaLevelMach)
+  const maxScale = maxMach > 0 ? maxMach * 1.1 : 5 // 10% margin or default Mach 5
 
   return {
     type: 'line',
@@ -380,7 +447,8 @@ export function createMachChart(
           type: 'linear',
           title: { display: true, text: 'Mach Number' },
           grid: { color: '#f1f5f9' },
-          beginAtZero: true
+          beginAtZero: true,
+          max: maxScale
         }
       }
     }
@@ -622,6 +690,15 @@ export function createAttitudeChart(
     { x: 0, y: 0 },
   )
 
+  const sideslipPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.sideslip_angle ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
   return {
     type: 'line',
     data: {
@@ -661,6 +738,19 @@ export function createAttitudeChart(
           fill: false,
           parsing: false,
           spanGaps: true,
+        },
+        {
+          label: 'Sideslip Angle',
+          data: sideslipPoints,
+          borderColor: '#e11d48',
+          backgroundColor: 'rgba(225, 29, 72, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+          borderDash: [3, 3],
         }
       ]
     },

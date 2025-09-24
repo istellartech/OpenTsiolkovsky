@@ -19,6 +19,7 @@ export type SimulationState = {
   sea_level_mach?: number  // Mach number based on sea level sound speed
   acceleration_magnitude?: number  // Total acceleration magnitude [m/s²]
   angle_of_attack?: number  // Attack of angle [deg]
+  sideslip_angle?: number   // Sideslip angle [deg]
   attitude_azimuth?: number  // Attitude azimuth [deg]
   attitude_elevation?: number  // Attitude elevation [deg]
 }

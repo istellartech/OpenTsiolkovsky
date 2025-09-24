@@ -27,6 +27,7 @@ pub struct SimulationState {
     pub sea_level_mach: f64,        // Mach number based on sea level sound speed
     pub acceleration_magnitude: f64, // Total acceleration magnitude [m/s²]
     pub angle_of_attack: f64,        // Attack of angle [deg]
+    pub sideslip_angle: f64,         // Sideslip angle [deg]
     pub attitude_azimuth: f64,       // Attitude azimuth [deg]
     pub attitude_elevation: f64,     // Attitude elevation [deg]
 }
@@ -204,6 +205,7 @@ impl Simulator {
             sea_level_mach: 0.0,
             acceleration_magnitude: 0.0,
             angle_of_attack: 0.0,
+            sideslip_angle: 0.0,
             attitude_azimuth: 0.0,
             attitude_elevation: 0.0,
         };
@@ -420,10 +422,12 @@ impl Simulator {
                 &wind_ned,
             );
             let angles = CoordinateTransform::angle_of_attack(&vel_air_body);
-            // Use the total angle of attack (gamma)
-            self.state.angle_of_attack = angles.z.to_degrees();
+            // Use the angle of attack (alpha) and sideslip angle (beta)
+            self.state.angle_of_attack = angles.x.to_degrees();
+            self.state.sideslip_angle = angles.y.to_degrees();
         } else {
             self.state.angle_of_attack = 0.0;
+            self.state.sideslip_angle = 0.0;
         }
     }
 
