@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Chart, type ChartConfiguration } from 'chart.js/auto'
+import { Download, PackageOpen, MapPin } from 'lucide-react'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion'
 import { Badge } from './ui/badge'
+import { Button } from './ui/button'
 import { useChartData, formatValue } from '../hooks/useChartData'
 import { eventMarkerPlugin } from '../charts/plugins'
 import {
@@ -14,53 +16,138 @@ import {
   createAttitudeChart,
   createTrajectoryChart
 } from '../charts/config'
+import { downloadChartAsImage, getChartFilename, downloadAllChartsAsZip } from '../lib/chartUtils'
+import { downloadKML } from '../lib/kmlGenerator'
 import type { SimulationState, ClientConfig } from '../lib/types'
 
 Chart.register(eventMarkerPlugin)
 
 interface ChartCardProps {
   config: ChartConfiguration
+  title: string
   height?: number
 }
 
-function ChartCard({ config, height = 260 }: ChartCardProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const chartRef = useRef<Chart | null>(null)
+export interface ChartCardHandle {
+  getChart: () => Chart | null
+  getTitle: () => string
+}
 
-  useEffect(() => {
-    if (!canvasRef.current) return
+const ChartCard = forwardRef<ChartCardHandle, ChartCardProps>(
+  ({ config, title, height = 260 }, ref) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null)
+    const chartRef = useRef<Chart | null>(null)
 
-    // Destroy existing chart
-    if (chartRef.current) {
-      chartRef.current.destroy()
-      chartRef.current = null
-    }
+    useImperativeHandle(ref, () => ({
+      getChart: () => chartRef.current,
+      getTitle: () => title,
+    }))
 
-    // Create new chart
-    chartRef.current = new Chart(canvasRef.current, config)
+    useEffect(() => {
+      if (!canvasRef.current) return
 
-    return () => {
+      // Destroy existing chart
       if (chartRef.current) {
         chartRef.current.destroy()
         chartRef.current = null
       }
-    }
-  }, [config])
 
-  return (
-    <div className="rounded-lg border border-slate-200/80 bg-white p-4">
-      <canvas ref={canvasRef} style={{ height }} />
-    </div>
-  )
-}
+      // Create new chart
+      chartRef.current = new Chart(canvasRef.current, config)
+
+      return () => {
+        if (chartRef.current) {
+          chartRef.current.destroy()
+          chartRef.current = null
+        }
+      }
+    }, [config])
+
+    const handleDownload = () => {
+      if (chartRef.current) {
+        const filename = getChartFilename(title)
+        downloadChartAsImage(chartRef.current, filename)
+      }
+    }
+
+    return (
+      <div className="rounded-lg border border-slate-200/80 bg-white p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-medium text-slate-700">{title}</h3>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDownload}
+            className="h-7 w-7 p-0"
+            title="Download chart as PNG"
+          >
+            <Download className="h-3 w-3" />
+          </Button>
+        </div>
+        <div style={{ height: `${height}px`, position: 'relative' }}>
+          <canvas ref={canvasRef} />
+        </div>
+      </div>
+    )
+  }
+)
 
 interface GraphPanelProps {
   data: SimulationState[]
   stagePlanConfig?: ClientConfig
+  result?: { trajectory: SimulationState[]; config: ClientConfig }
 }
 
-export function GraphPanel({ data, stagePlanConfig }: GraphPanelProps) {
+export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
   const chartData = useChartData(data, stagePlanConfig)
+
+  // Chart refs for bulk download
+  const altitudeChartRef = useRef<ChartCardHandle>(null)
+  const velocityChartRef = useRef<ChartCardHandle>(null)
+  const machChartRef = useRef<ChartCardHandle>(null)
+  const thrustChartRef = useRef<ChartCardHandle>(null)
+  const accelerationChartRef = useRef<ChartCardHandle>(null)
+  const dynamicPressureChartRef = useRef<ChartCardHandle>(null)
+  const attitudeChartRef = useRef<ChartCardHandle>(null)
+  const trajectoryChartRef = useRef<ChartCardHandle>(null)
+
+  const handleDownloadAllCharts = async () => {
+    const chartRefs = [
+      altitudeChartRef,
+      velocityChartRef,
+      machChartRef,
+      thrustChartRef,
+      accelerationChartRef,
+      dynamicPressureChartRef,
+      attitudeChartRef,
+      trajectoryChartRef,
+    ]
+
+    const charts = chartRefs
+      .map(ref => ref.current)
+      .filter((chartHandle): chartHandle is ChartCardHandle => chartHandle !== null)
+      .map(chartHandle => ({
+        chart: chartHandle.getChart(),
+        title: chartHandle.getTitle(),
+      }))
+      .filter((item): item is { chart: Chart; title: string } => item.chart !== null)
+
+    if (charts.length === 0) {
+      console.warn('No charts available for download')
+      return
+    }
+
+    const rocketName = stagePlanConfig?.name || 'rocket'
+    await downloadAllChartsAsZip(charts, rocketName)
+  }
+
+  const handleDownloadKML = () => {
+    if (!result || result.trajectory.length === 0) {
+      console.warn('No trajectory data available for KML download')
+      return
+    }
+    downloadKML({ trajectory: result.trajectory, config: result.config })
+  }
 
   // Enhanced data validation
   if (!data || data.length === 0) {
@@ -127,6 +214,27 @@ export function GraphPanel({ data, stagePlanConfig }: GraphPanelProps) {
 
   return (
     <div className="space-y-6">
+      {/* Download Buttons */}
+      <div className="flex justify-end gap-2">
+        <Button
+          onClick={handleDownloadAllCharts}
+          className="flex items-center gap-2"
+          variant="outline"
+        >
+          <PackageOpen className="h-4 w-4" />
+          すべてのグラフをダウンロード
+        </Button>
+        <Button
+          onClick={handleDownloadKML}
+          className="flex items-center gap-2"
+          variant="outline"
+          disabled={!result || result.trajectory.length === 0}
+        >
+          <MapPin className="h-4 w-4" />
+          KMLをダウンロード
+        </Button>
+      </div>
+
       {/* Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {overallSummary.map((card) => (
@@ -148,22 +256,22 @@ export function GraphPanel({ data, stagePlanConfig }: GraphPanelProps) {
 
       {/* Main Charts */}
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <ChartCard config={createAltitudeChart(displayData, stageBands, eventMarkers)} />
-        <ChartCard config={createVelocityChart(displayData, stageBands, eventMarkers)} />
-        <ChartCard config={createMachChart(displayData, stageBands, eventMarkers)} />
-        <ChartCard config={createThrustChart(displayData, stageBands, eventMarkers)} />
-        <ChartCard config={createAccelerationChart(displayData, stageBands, eventMarkers)} />
-        <ChartCard config={createDynamicPressureChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={altitudeChartRef} title="Altitude" config={createAltitudeChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={velocityChartRef} title="Velocity" config={createVelocityChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={machChartRef} title="Mach Number" config={createMachChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={thrustChartRef} title="Thrust & Drag" config={createThrustChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={accelerationChartRef} title="Acceleration" config={createAccelerationChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={dynamicPressureChartRef} title="Dynamic Pressure" config={createDynamicPressureChart(displayData, stageBands, eventMarkers)} />
       </div>
 
       {/* Secondary Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartCard config={createAttitudeChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={attitudeChartRef} title="Attitude" config={createAttitudeChart(displayData, stageBands, eventMarkers)} />
         <div></div> {/* Empty space for better layout */}
       </div>
 
       {/* Trajectory Chart */}
-      <ChartCard config={createTrajectoryChart(displayData)} height={400} />
+      <ChartCard ref={trajectoryChartRef} title="Trajectory" config={createTrajectoryChart(displayData)} height={400} />
 
       {/* Stage Details */}
       {stageSummaries.length > 0 && (

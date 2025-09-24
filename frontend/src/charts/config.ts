@@ -1,5 +1,6 @@
 import type { ChartConfiguration } from 'chart.js'
 import type { SimulationState } from '../lib/types'
+import { vec3ToObject } from '../lib/types'
 
 type XYPoint = { x: number; y: number }
 
@@ -22,6 +23,26 @@ function buildNumericSeries(
 
 function extendSeriesFallback(series: XYPoint[], fallback: XYPoint): XYPoint[] {
   return series.length > 0 ? series : [fallback]
+}
+
+/**
+ * Calculate maximum value from data before engine cutoff (thrust becomes zero)
+ * This is useful for setting appropriate chart scales that exclude post-cutoff noise
+ */
+function getMaxBeforeCutoff(
+  data: SimulationState[],
+  valueSelector: (state: SimulationState) => number
+): number {
+  // Find the first point where thrust becomes zero or very small
+  const cutoffIndex = data.findIndex(state => (state.thrust ?? 0) <= 1); // 1N threshold for numerical stability
+
+  // Use data up to cutoff, or all data if no cutoff found
+  const activeData = cutoffIndex > 0 ? data.slice(0, cutoffIndex) : data;
+
+  // Extract values and filter out invalid numbers
+  const values = activeData.map(valueSelector).filter(v => Number.isFinite(v) && v > 0);
+
+  return values.length > 0 ? Math.max(...values) : 0;
 }
 
 function createPluginOptions(stageBands: StageBand[], markers: EventMarker[]) {
@@ -161,7 +182,26 @@ export function createVelocityChart(
     buildNumericSeries(
       data,
       (state) => state.time,
-      (state) => state.velocity_magnitude ?? 0,
+      (state) => {
+        if (state.velocity_ned) {
+          const vel_ned = vec3ToObject(state.velocity_ned);
+          const totalVel = Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y + vel_ned.z * vel_ned.z);
+
+          // Debug logging to compare backend vs calculated values
+          if (state.time < 10) { // Only log first 10 seconds to avoid spam
+            const backendVel = state.velocity_magnitude ?? 0;
+            const diff = Math.abs(backendVel - totalVel);
+            console.log(`t=${state.time}s: backend_magnitude=${backendVel}, calculated_total=${totalVel.toFixed(2)}, difference=${diff.toFixed(2)}`);
+            if (diff > 10) { // Warn if difference is significant
+              console.warn(`Large velocity difference detected at t=${state.time}s`);
+            }
+          }
+
+          return totalVel;
+        }
+        // Fallback to backend value if velocity_ned is not available
+        return state.velocity_magnitude ?? 0;
+      },
     ),
     { x: 0, y: 0 },
   )
@@ -173,10 +213,8 @@ export function createVelocityChart(
       (state) => state.time,
       (state) => {
         if (state.velocity_ned) {
-          const vel_ned = typeof state.velocity_ned === 'object' && 'z' in state.velocity_ned
-            ? state.velocity_ned.z
-            : Array.isArray(state.velocity_ned) ? state.velocity_ned[2] : 0;
-          return -vel_ned; // NED Z is down, so negate for upward positive
+          const vel_ned = vec3ToObject(state.velocity_ned);
+          return -vel_ned.z; // NED Z is down, so negate for upward positive
         }
         return 0;
       },
@@ -191,12 +229,13 @@ export function createVelocityChart(
       (state) => state.time,
       (state) => {
         if (state.velocity_ned) {
-          const vel_ned = typeof state.velocity_ned === 'object' && 'x' in state.velocity_ned
-            ? { x: state.velocity_ned.x, y: state.velocity_ned.y }
-            : Array.isArray(state.velocity_ned)
-            ? { x: state.velocity_ned[0], y: state.velocity_ned[1] }
-            : { x: 0, y: 0 };
-          return Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y);
+          const vel_ned = vec3ToObject(state.velocity_ned);
+          const horizontalSpeed = Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y);
+          // Debug logging - remove after testing
+          if (state.time < 10) { // Only log first 10 seconds to avoid spam
+            console.log(`t=${state.time}s: velocity_ned=`, state.velocity_ned, 'horizontal=', horizontalSpeed);
+          }
+          return horizontalSpeed;
         }
         return 0;
       },
@@ -371,6 +410,12 @@ export function createThrustChart(
     { x: 0, y: 0 },
   )
 
+  // Calculate max force (thrust or drag) before engine cutoff
+  const maxThrust = getMaxBeforeCutoff(data, (state) => (state.thrust ?? 0) / 1000)
+  const maxDrag = getMaxBeforeCutoff(data, (state) => (state.drag_force ?? 0) / 1000)
+  const maxForce = Math.max(maxThrust, maxDrag)
+  const maxScale = maxForce > 0 ? maxForce * 1.1 : 1000 // 10% margin or default 1000kN
+
   return {
     type: 'line',
     data: {
@@ -418,7 +463,8 @@ export function createThrustChart(
           type: 'linear',
           title: { display: true, text: 'Force (kN)' },
           grid: { color: '#f1f5f9' },
-          beginAtZero: true
+          beginAtZero: true,
+          max: maxScale
         }
       }
     }
@@ -438,6 +484,10 @@ export function createAccelerationChart(
     ),
     { x: 0, y: 0 },
   )
+
+  // Calculate max acceleration before engine cutoff
+  const maxAcceleration = getMaxBeforeCutoff(data, (state) => (state.acceleration_magnitude ?? 0) / 9.80665)
+  const maxScale = maxAcceleration > 0 ? maxAcceleration * 1.1 : 10 // 10% margin or default 10G
 
   return {
     type: 'line',
@@ -469,7 +519,8 @@ export function createAccelerationChart(
           type: 'linear',
           title: { display: true, text: 'Acceleration (G)' },
           grid: { color: '#f1f5f9' },
-          beginAtZero: true
+          beginAtZero: true,
+          max: maxScale
         }
       }
     }
@@ -489,6 +540,10 @@ export function createDynamicPressureChart(
     ),
     { x: 0, y: 0 },
   )
+
+  // Calculate max dynamic pressure before engine cutoff
+  const maxPressure = getMaxBeforeCutoff(data, (state) => (state.dynamic_pressure ?? 0) / 1000)
+  const maxScale = maxPressure > 0 ? maxPressure * 1.1 : 50 // 10% margin or default 50kPa
 
   return {
     type: 'line',
@@ -520,7 +575,8 @@ export function createDynamicPressureChart(
           type: 'linear',
           title: { display: true, text: 'Dynamic Pressure (kPa)' },
           grid: { color: '#f1f5f9' },
-          beginAtZero: true
+          beginAtZero: true,
+          max: maxScale
         }
       }
     }
@@ -554,7 +610,14 @@ export function createAttitudeChart(
     buildNumericSeries(
       data,
       (state) => state.time,
-      (state) => state.angle_of_attack ?? 0,
+      (state) => {
+        const aoa = state.angle_of_attack ?? 0;
+        // Debug logging - remove after testing
+        if (state.time < 10) { // Only log first 10 seconds to avoid spam
+          console.log(`t=${state.time}s: angle_of_attack=`, state.angle_of_attack, 'aoa=', aoa);
+        }
+        return aoa;
+      },
     ),
     { x: 0, y: 0 },
   )

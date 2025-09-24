@@ -28,42 +28,17 @@ export default function App() {
           <div className="flex flex-col gap-8">
             <Card className="panel-card">
               <CardHeader className="border-b border-slate-200/80 bg-white/60">
-                <CardTitle>Graphs</CardTitle>
+                <CardTitle>Output</CardTitle>
                 <CardDescription>Results are grouped by stages and key metrics for quick comparison.</CardDescription>
               </CardHeader>
               <CardContent>
                 {result ? (
                   <Suspense fallback={<div className="py-12 text-sm text-slate-500">Loading analysis…</div>}>
-                    <GraphPanel data={result.trajectory} stagePlanConfig={result.config} />
+                    <GraphPanel data={result.trajectory} stagePlanConfig={result.config} result={result} />
                   </Suspense>
                 ) : (
                   <div className="py-8 text-sm text-slate-500">Run a simulation to unlock charts and summaries.</div>
                 )}
-              </CardContent>
-            </Card>
-
-            <Card className="panel-card">
-              <CardHeader className="border-b border-slate-200/80 bg-white/60">
-                <CardTitle>Export</CardTitle>
-                <CardDescription>Download simulation results in various formats.</CardDescription>
-              </CardHeader>
-              <CardContent className="bg-slate-50/60">
-                <div className="space-y-3">
-                  <p className="text-sm text-slate-600">Export trajectory data for external analysis and visualization.</p>
-                  <Button
-                    onClick={() => {
-                      if (!result || result.trajectory.length === 0) return
-                      downloadKML({ trajectory: result.trajectory, config: result.config })
-                    }}
-                    className="w-full"
-                    disabled={!result || result.trajectory.length === 0}
-                  >
-                    Download KML
-                  </Button>
-                  {!result && (
-                    <div className="text-xs text-slate-500">Run a simulation to enable exports.</div>
-                  )}
-                </div>
               </CardContent>
             </Card>
           </div>

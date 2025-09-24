@@ -4,7 +4,6 @@ import { computeDownrangeKm, eciToLatLon } from '../lib/geo'
 import { vec3ToObject } from '../lib/types'
 import type { EventMarker, StageBand, StageSummary } from '../charts/config'
 import { stagePalette } from '../charts/config'
-import { sanitizeLandingPhaseNoise } from '../utils/denoise'
 
 interface StagePlan {
   index: number
@@ -65,7 +64,7 @@ export function useChartData(data: SimulationState[], stagePlanConfig?: ClientCo
       }
     })
 
-    const displayData = sanitizeLandingPhaseNoise(processedData)
+    const displayData = processedData
 
     // Build stage plans
     const stagePlans = buildStagePlans(stagePlanConfig)
