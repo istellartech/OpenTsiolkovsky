@@ -61,9 +61,12 @@ pub mod atmosphere {
         /// # Returns
         /// Atmospheric conditions (temperature, pressure, density, speed of sound)
         pub fn conditions(&self, altitude: f64) -> AtmosphericConditions {
-            let layer_index = self.determine_layer(altitude);
+            // Handle negative altitude (below sea level) by using sea level conditions
+            let effective_altitude = if altitude < 0.0 { 0.0 } else { altitude };
 
-            let h = altitude;
+            let layer_index = self.determine_layer(effective_altitude);
+
+            let h = effective_altitude;
             let h_base = self.height_layers[layer_index];
             let t_base = self.base_temperatures[layer_index];
             let p_base = self.base_pressures[layer_index];

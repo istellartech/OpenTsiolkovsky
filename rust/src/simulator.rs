@@ -294,6 +294,20 @@ impl Simulator {
         self.state.mass = new_state[0];
         self.state.position = Vector3::new(new_state[1], new_state[2], new_state[3]);
         self.state.velocity = Vector3::new(new_state[4], new_state[5], new_state[6]);
+
+        // Check for ground contact and constrain position/velocity
+        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&self.state.position, self.state.time);
+        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
+        if pos_llh.z < 0.0 && self.state.velocity.dot(&self.state.position.normalize()) < 0.0 {
+            // Rocket has hit the ground and is descending, set altitude to 0 and stop motion
+            let ground_llh = Vector3::new(pos_llh.x, pos_llh.y, 0.0);
+            let ground_ecef = CoordinateTransform::pos_llh_to_ecef(&ground_llh);
+            // Convert back to ECI using inverse transformation
+            let dcm_ecef_to_eci = CoordinateTransform::dcm_eci_to_ecef(self.state.time).transpose();
+            self.state.position = dcm_ecef_to_eci * ground_ecef;
+            self.state.velocity = Vector3::zeros();
+        }
+
         self.update_stage_index();
         self.update_derived_quantities();
     }
@@ -363,6 +377,16 @@ impl Simulator {
         let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&position, t);
         let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
         let altitude = pos_llh.z;
+
+        // Check if rocket has hit the ground (negative altitude) and is descending
+        if altitude <= 0.0 && velocity.dot(&position.normalize()) < 0.0 {
+            // Stop all dynamics when rocket hits ground and is moving toward Earth
+            return vec![
+                0.0,        // dmass/dt = 0 (no more propellant consumption)
+                0.0, 0.0, 0.0,  // dpos/dt = 0 (stop moving)
+                0.0, 0.0, 0.0,  // dvel/dt = 0 (no acceleration)
+            ];
+        }
 
         // Atmospheric conditions
         let atm_conditions = self.atmosphere.conditions(altitude);
@@ -828,6 +852,31 @@ mod tests {
         assert!(trajectory.iter().any(|state| state.stage >= 2));
         let final_stage = trajectory.last().unwrap().stage;
         assert!(final_stage >= 2);
+    }
+
+    #[test]
+    fn test_ground_impact_handling() {
+        let mut config = create_test_config();
+        config.calculate_condition.end_time = 30.0;
+        config.stages[0].thrust.const_thrust_vac = 50_000.0; // Lower thrust for ballistic trajectory
+        config.stages[0].thrust.burn_end_time = 2.0;
+        config.stages[0].thrust.forced_cutoff_time = 2.0;
+
+        let rocket = Rocket::new(config.clone());
+        let mut simulator = Simulator::new(rocket).unwrap();
+        let trajectory = simulator.run();
+
+        // Check that simulation stops when altitude goes to zero or negative
+        let final_state = trajectory.last().unwrap();
+        assert!(final_state.altitude <= 1.0); // Should be at or very close to ground
+
+        // Check that there are no states with negative altitude
+        let negative_altitudes: Vec<_> = trajectory.iter()
+            .filter(|state| state.altitude < -1.0) // Allow small numerical errors
+            .collect();
+        assert!(negative_altitudes.is_empty(),
+            "Found {} states with significantly negative altitude",
+            negative_altitudes.len());
     }
 
     #[test]
