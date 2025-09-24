@@ -3,6 +3,7 @@ export type Vec3Json = { x: number, y: number, z: number } | [number, number, nu
 export type SimulationState = {
   time: number
   position: Vec3Json
+  position_eci?: Vec3Json  // For compatibility with older data formats
   velocity: Vec3Json
   mass: number
   stage: number
@@ -12,21 +13,27 @@ export type SimulationState = {
   dynamic_pressure: number
   thrust: number
   drag_force: number
+  downrange_km?: number
 }
 
 export function vec3ToObject(vec: Vec3Json): { x: number, y: number, z: number } {
+  if (!vec) {
+    return { x: 0, y: 0, z: 0 }
+  }
+
   if (Array.isArray(vec)) {
-    const [x, y, z] = vec
+    const [x = 0, y = 0, z = 0] = vec
     return {
       x: Number(x),
       y: Number(y),
       z: Number(z),
     }
   }
+
   return {
-    x: Number(vec.x),
-    y: Number(vec.y),
-    z: Number(vec.z),
+    x: Number(vec?.x || 0),
+    y: Number(vec?.y || 0),
+    z: Number(vec?.z || 0),
   }
 }
 
@@ -87,18 +94,23 @@ export type ClientConfig = {
 export type ClientStageConfig = {
   power_mode: number
   free_mode: number
+  stage_num?: number
   mass_initial_kg: number
+  mass_dry_kg: number
   burn_start_s: number
   burn_end_s: number
   forced_cutoff_s: number
   separation_time_s: number
+  coast_time_s: number
   throat_diameter_m: number
   nozzle_expansion_ratio: number
   nozzle_exit_pressure_pa: number
   thrust_constant: number
   thrust_multiplier: number
-  thrust_profile: ClientTimeSample[]
+  thrust_profile?: ClientTimeSample[]
   isp_constant: number
   isp_multiplier: number
-  isp_profile: ClientTimeSample[]
+  isp_profile?: ClientTimeSample[]
+  cg_position_m: [number, number, number]
+  rotational_inertia_kgm2: [number, number, number]
 }

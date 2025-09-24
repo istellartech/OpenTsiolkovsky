@@ -48,6 +48,14 @@ if (len(sys.argv) != 1):
 else:
     input_json = "param_sample_01.json"
 
+input_json = os.path.abspath(input_json)
+input_base = os.path.dirname(input_json)
+if input_base == "":
+    input_base = os.getcwd()
+output_dir = os.path.join(input_base, "output")
+if not os.path.isdir(output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+
 # ==== Read input file ====
 with open(input_json, 'r') as f:
     json_dict = json.load(f)
@@ -64,9 +72,26 @@ C = d3["Category10"][10]
 # ==== Plot each stages ====
 for stage_str in ['1', '2', '3']:
     st = stage_str + ' stage: ' # stage string for title
-    file_name = "output/" + rocket_name + "_dynamics_" + stage_str + ".csv"
+    file_name = os.path.join(output_dir, rocket_name + "_dynamics_" + stage_str + ".csv")
     if not os.path.exists(file_name): continue
     df1 = pd.read_csv(file_name, index_col=False)
+
+    # Ensure numeric columns for proper continuous axes when rendering with Bokeh
+    for col in df1.columns:
+        df1[col] = pd.to_numeric(df1[col], errors='coerce')
+
+    df1 = df1.dropna(subset=["time(s)"])
+    if df1.empty:
+        continue
+
+    df1 = df1.sort_values("time(s)").reset_index(drop=True)
+
+    time_array = df1["time(s)"].to_numpy(dtype=float)
+    time_min = float(np.nanmin(time_array))
+    time_max = float(np.nanmax(time_array))
+
+    if not np.isfinite(time_min) or not np.isfinite(time_max) or time_max <= time_min:
+        continue
     # ==== 燃焼終了 or 遠地点までのプロットの場合コメントオンオフ ====
     time_burnout = df1[df1["thrust(N)"] == 0]["time(s)"][1:].min()
     time_apogee = df1[df1["altitude(m)"] == df1["altitude(m)"].max()]["time(s)"]
@@ -77,7 +102,7 @@ for stage_str in ['1', '2', '3']:
     # df1 = df1[df1["time(s)"] < float(time_apogee)]
     # ==== 燃焼終了 or 遠地点までのプロットの場合コメントオンオフ ====
 
-    xr1 = Range1d(start=0, end=df1["time(s)"].max())
+    xr1 = Range1d(start=time_min, end=time_max)
 
     p_mass = figure(title=st+"質量", x_axis_label="時刻 [sec]", y_axis_label="質量 [kg]",
             x_range=xr1, **PLOT_OPTIONS)
@@ -254,7 +279,7 @@ for stage_str in ['1', '2', '3']:
         script3, div3 = components(plots)
 
 # ==== Output HTML ====
-filename = "output/" + rocket_name + "_output.html"
+filename = os.path.join(output_dir, rocket_name + "_output.html")
 
 template = Template('''<!DOCTYPE html>
 <html lang="en">

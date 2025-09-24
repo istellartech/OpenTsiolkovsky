@@ -1,3 +1,5 @@
+import { vec3ToObject } from './types'
+
 const EARTH_RADIUS_KM = 6371
 
 export type LatLonAlt = {
@@ -6,15 +8,14 @@ export type LatLonAlt = {
   altKm: number
 }
 
-export function eciToLatLon(pos: { x: number; y: number; z: number }): LatLonAlt {
+export function eciToLatLon(pos: { x: number; y: number; z: number }, time?: number): { latitude: number; longitude: number } {
   const rad2deg = 180 / Math.PI
   const xy = Math.sqrt(pos.x * pos.x + pos.y * pos.y)
-  const r = Math.sqrt(xy * xy + pos.z * pos.z)
   const lat = Math.atan2(pos.z, xy) * rad2deg
   let lon = Math.atan2(pos.y, pos.x) * rad2deg
   if (lon > 180) lon -= 360
   if (lon < -180) lon += 360
-  return { lat, lon, altKm: r / 1000 - EARTH_RADIUS_KM }
+  return { latitude: lat, longitude: lon }
 }
 
 export function haversineDistanceKm(
@@ -34,8 +35,22 @@ export function haversineDistanceKm(
   return EARTH_RADIUS_KM * c
 }
 
-export function computeDownrangeKm(points: LatLonAlt[]): number[] {
-  if (points.length === 0) return []
+export function computeDownrangeKm(lat: number, lon: number, baseState: any): number {
+  if (!baseState) return 0
+
+  try {
+    // Use position_eci if available, otherwise fall back to position
+    const basePos = vec3ToObject(baseState.position_eci || baseState.position)
+    const baseLoc = eciToLatLon(basePos, baseState.time || 0)
+    return haversineDistanceKm(baseLoc.latitude, baseLoc.longitude, lat, lon)
+  } catch (error) {
+    console.warn('Error computing downrange:', error)
+    return 0
+  }
+}
+
+export function computeDownrangeKmArray(points: LatLonAlt[]): number[] {
+  if (!points || points.length === 0) return []
   const { lat: baseLat, lon: baseLon } = points[0]
   return points.map((p) => haversineDistanceKm(baseLat, baseLon, p.lat, p.lon))
 }

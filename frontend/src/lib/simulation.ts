@@ -9,10 +9,12 @@ function fallbackStage(): ClientStageConfig {
     power_mode: 0,
     free_mode: 2,
     mass_initial_kg: 1000,
+    mass_dry_kg: 100,
     burn_start_s: 0,
     burn_end_s: 30,
     forced_cutoff_s: 30,
     separation_time_s: 30,
+    coast_time_s: 0,
     throat_diameter_m: 0.1,
     nozzle_expansion_ratio: 5,
     nozzle_exit_pressure_pa: 101300,
@@ -22,6 +24,8 @@ function fallbackStage(): ClientStageConfig {
     isp_constant: 200,
     isp_multiplier: 1,
     isp_profile: [],
+    cg_position_m: [0, 0, 0],
+    rotational_inertia_kgm2: [0, 0, 0],
   }
 }
 
@@ -256,7 +260,32 @@ export async function runSimulation(config: ClientConfig): Promise<SimulationSta
   try {
     const sim = new mod.WasmSimulator(JSON.stringify(config))
     const json = await sim.run()
-    return JSON.parse(json) as SimulationState[]
+    const result = JSON.parse(json) as SimulationState[]
+
+    // Detailed validation and logging
+    console.log('WASM simulation result details:', {
+      count: result.length,
+      configDuration: config.simulation.duration_s,
+      configOutputStep: config.simulation.output_step_s,
+      expectedPoints: Math.ceil(config.simulation.duration_s / config.simulation.output_step_s),
+      firstPoint: result[0],
+      lastPoint: result[result.length - 1],
+      sampleFields: Object.keys(result[0] || {}),
+      timeRange: result.length > 1 ? `${result[0]?.time} to ${result[result.length - 1]?.time}` : 'single point',
+      altitudeRange: result.length > 1 ? `${result[0]?.altitude} to ${Math.max(...result.map(r => r.altitude || 0))}` : 'single altitude',
+      hasValidData: result.length > 1 && result.every(r => typeof r.time === 'number' && typeof r.altitude === 'number')
+    })
+
+    // Validate data quality
+    if (result.length < 2) {
+      console.error('❌ Simulation returned insufficient data points:', result.length)
+    } else if (result.length < config.simulation.duration_s / config.simulation.output_step_s * 0.5) {
+      console.warn('⚠️ Simulation may have terminated early. Expected ~' + Math.ceil(config.simulation.duration_s / config.simulation.output_step_s) + ' points, got ' + result.length)
+    } else {
+      console.log('✅ Simulation completed successfully with', result.length, 'data points')
+    }
+
+    return result
   } catch (err: any) {
     const message = typeof err?.message === 'string' ? err.message : String(err)
     const needsLegacyFallback =
@@ -266,10 +295,36 @@ export async function runSimulation(config: ClientConfig): Promise<SimulationSta
       throw err
     }
 
+    console.log('Falling back to legacy config format')
     const legacyPayload = toLegacyRocketConfig(config)
     const sim = new mod.WasmSimulator(JSON.stringify(legacyPayload))
     const json = await sim.run()
-    return JSON.parse(json) as SimulationState[]
+    const result = JSON.parse(json) as SimulationState[]
+
+    // Detailed validation and logging for legacy format
+    console.log('Legacy WASM simulation result details:', {
+      count: result.length,
+      configDuration: config.simulation.duration_s,
+      configOutputStep: config.simulation.output_step_s,
+      expectedPoints: Math.ceil(config.simulation.duration_s / config.simulation.output_step_s),
+      firstPoint: result[0],
+      lastPoint: result[result.length - 1],
+      sampleFields: Object.keys(result[0] || {}),
+      timeRange: result.length > 1 ? `${result[0]?.time} to ${result[result.length - 1]?.time}` : 'single point',
+      altitudeRange: result.length > 1 ? `${result[0]?.altitude} to ${Math.max(...result.map(r => r.altitude || 0))}` : 'single altitude',
+      hasValidData: result.length > 1 && result.every(r => typeof r.time === 'number' && typeof r.altitude === 'number')
+    })
+
+    // Validate data quality for legacy format
+    if (result.length < 2) {
+      console.error('❌ Legacy simulation returned insufficient data points:', result.length)
+    } else if (result.length < config.simulation.duration_s / config.simulation.output_step_s * 0.5) {
+      console.warn('⚠️ Legacy simulation may have terminated early. Expected ~' + Math.ceil(config.simulation.duration_s / config.simulation.output_step_s) + ' points, got ' + result.length)
+    } else {
+      console.log('✅ Legacy simulation completed successfully with', result.length, 'data points')
+    }
+
+    return result
   }
 }
 

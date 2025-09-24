@@ -20,10 +20,27 @@
   - 固定ポートにしたい場合は `OT_WEB_PORT=3002 cargo run -p openTsiolkovsky-web`
   - エンドポイント仕様: `docs/api/web_api.md`
 
-## フロントエンド（Vite + React, bun）
+## フロントエンド（Vite + React + TypeScript, bun）
+
+### 技術スタック
+- **フレームワーク**: React 18 + TypeScript + Vite
+- **UI**: Tailwind CSS v4 + Radix UI コンポーネント
+- **3D可視化**: Three.js（軌道表示）
+- **チャート**: Chart.js（性能グラフ）
+- **アイコン**: Lucide React
+
+### 主要機能
+- **シミュレーション設定**: 段階的ロケット設定、環境パラメータ、出力設定
+- **リアルタイム可視化**:
+  - インタラクティブな3D軌道ビューアー（フルスクリーン対応）
+  - 高度・速度・質量等のパフォーマンスグラフ
+- **データエクスポート**: KMLファイルでの軌道データ出力
+- **実行モード**: サーバーAPI経由またはブラウザWASM実行
+
+### 開発・起動手順
 - 依存インストール: `cd frontend && bun install`
-- 起動: `bun run dev`（http://localhost:5173）
-- ビルド: `bun run build`
+- 開発サーバー起動: `bun run dev`（http://localhost:5173）
+- プロダクションビルド: `bun run build`
 - プレビュー: `bun run preview`
 - 備考: Viteは `/api` を `http://localhost:3001` へプロキシします（`frontend/vite.config.ts`）。
 
@@ -53,9 +70,10 @@ bash scripts/wasm_build.sh
 WASM 実行モードを選ぶと、実行時に「WASM bundle not found. Run: bash scripts/wasm_build.sh」というエラーを表示します。
 
 ### 3) フロントエンドでの利用
-- 画面上部の「Execution mode」で `Browser (WASM)` を選択
-- 「Run from JSON」に C++互換キーのRocketConfig JSONを貼り付けて実行
-  - 例のキー名は `rust/crates/core/src/rocket/mod.rs` の `serde(rename = ...)` を参照
+- フロントエンドのシミュレーション設定パネルで各種パラメータを設定
+- 「Execution mode」で `Browser (WASM)` を選択可能
+- フォームからの入力またはJSONによる設定が可能
+  - JSONキー名は `rust/crates/core/src/rocket/mod.rs` の `serde(rename = ...)` を参照
 
 内部的には `frontend/src/lib/wasm.ts` が `frontend/src/wasm/openTsiolkovsky_cli` を動的importし、`WasmSimulator` を用いてJSON入出力を行います。
 
