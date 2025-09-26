@@ -14,11 +14,6 @@
       "RUSTUP_HOME": "/vercel/.rustup"
     }
   },
-  "functions": {
-    "frontend/dist/**": {
-      "includeFiles": "frontend/dist/**"
-    }
-  },
   "routes": [
     {
       "src": "/(.*)",
