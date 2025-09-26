@@ -3,8 +3,8 @@ use openTsiolkovsky::{io::create_rocket_from_config, simulator::Simulator};
 #[test]
 fn run_sample_param_trajectory() {
     // Use sample JSON from repo bin/
-    let param_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../bin/param_sample_01.json");
+    let param_path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bin/param_sample_01.json");
     assert!(param_path.exists(), "sample param file not found: {:?}", param_path);
 
     let rocket = create_rocket_from_config(&param_path).expect("load config");

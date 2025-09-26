@@ -154,7 +154,18 @@ pub fn parse_cn_surface_from_str(content: &str) -> Result<SurfaceData2D> {
 
     // Ensure ascending x as well
     let mut idx: Vec<usize> = (0..x.len()).collect();
-    idx.sort_by(|&i, &j| x[i].partial_cmp(&x[j]).unwrap());
+    idx.sort_by(|&i, &j| {
+        x[i].partial_cmp(&x[j]).unwrap_or_else(|| {
+            // Handle NaN values by putting them at the end
+            if x[i].is_nan() && x[j].is_nan() {
+                std::cmp::Ordering::Equal
+            } else if x[i].is_nan() {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Less
+            }
+        })
+    });
     let x_sorted: Vec<f64> = idx.iter().map(|&i| x[i]).collect();
     let z_sorted: Vec<Vec<f64>> = idx.iter().map(|&i| z[i].clone()).collect();
 
@@ -329,15 +340,26 @@ pub fn save_summary_json<P: AsRef<Path>>(
         )));
     }
 
-    let max_altitude_state =
-        trajectory.iter().max_by(|a, b| a.altitude.partial_cmp(&b.altitude).unwrap()).unwrap();
+    let max_altitude_state = trajectory
+        .iter()
+        .filter(|s| !s.altitude.is_nan())
+        .max_by(|a, b| a.altitude.partial_cmp(&b.altitude).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap();
     let max_velocity_state = trajectory
         .iter()
-        .max_by(|a, b| a.velocity_magnitude.partial_cmp(&b.velocity_magnitude).unwrap())
+        .filter(|s| !s.velocity_magnitude.is_nan())
+        .max_by(|a, b| {
+            a.velocity_magnitude
+                .partial_cmp(&b.velocity_magnitude)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .unwrap();
     let max_mach_state = trajectory
         .iter()
-        .max_by(|a, b| a.mach_number.partial_cmp(&b.mach_number).unwrap())
+        .filter(|s| !s.mach_number.is_nan())
+        .max_by(|a, b| {
+            a.mach_number.partial_cmp(&b.mach_number).unwrap_or(std::cmp::Ordering::Equal)
+        })
         .unwrap();
     let final_state = trajectory.last().unwrap();
 

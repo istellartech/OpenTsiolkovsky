@@ -23,8 +23,8 @@ pub struct SimulationState {
     pub thrust: f64,             // Current thrust [N]
     pub drag_force: f64,         // Current drag force [N]
     // New fields for enhanced visualization
-    pub velocity_ned: Vector3<f64>, // NED velocity components [m/s]
-    pub sea_level_mach: f64,        // Mach number based on sea level sound speed
+    pub velocity_ned: Vector3<f64>,  // NED velocity components [m/s]
+    pub sea_level_mach: f64,         // Mach number based on sea level sound speed
     pub acceleration_magnitude: f64, // Total acceleration magnitude [m/s²]
     pub angle_of_attack: f64,        // Attack of angle [deg]
     pub sideslip_angle: f64,         // Sideslip angle [deg]
@@ -97,7 +97,7 @@ fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRunti
         stack_mass[idx] = cumulative;
     }
 
-    for idx in 0..rocket.stage_count() {
+    for (idx, &mass) in stack_mass.iter().enumerate().take(rocket.stage_count()) {
         let stage_cfg = rocket.stage_config(idx);
         let burn_start = start_time + stage_cfg.thrust.burn_start_time;
         let burn_end = start_time + stage_cfg.thrust.burn_end_time;
@@ -122,7 +122,7 @@ fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRunti
             burn_end: burn_end.min(separation_time),
             forced_cutoff: forced_cutoff.min(separation_time),
             separation_time,
-            stack_mass: stack_mass[idx],
+            stack_mass: mass,
         });
 
         start_time = separation_time;
@@ -210,7 +210,7 @@ impl Simulator {
             attitude_elevation: 0.0,
         };
         state.mass =
-            stage_runtime.get(0).map(|rt| rt.stack_mass).unwrap_or(current_stage_cfg.mass_initial);
+            stage_runtime.first().map(|rt| rt.stack_mass).unwrap_or(current_stage_cfg.mass_initial);
 
         Ok(Simulator {
             config,
@@ -392,13 +392,20 @@ impl Simulator {
 
         // Add thrust acceleration if active
         if self.state.thrust > 0.0 && self.state.mass > 0.0 {
-            let (thrust_force, _) = self.compute_thrust_force(t, &self.state.position, &self.state.velocity);
+            let (thrust_force, _) =
+                self.compute_thrust_force(t, &self.state.position, &self.state.velocity);
             total_acc += thrust_force / self.state.mass;
         }
 
         // Add aerodynamic acceleration
         if vel_air_mag > 0.1 && self.state.mass > 0.0 {
-            let aero_force = self.compute_aerodynamic_forces(&self.state.position, &self.state.velocity, t, self.state.mach_number, self.state.mass);
+            let aero_force = self.compute_aerodynamic_forces(
+                &self.state.position,
+                &self.state.velocity,
+                t,
+                self.state.mach_number,
+                self.state.mass,
+            );
             total_acc += aero_force / self.state.mass;
         }
 
@@ -414,13 +421,10 @@ impl Simulator {
             let dcm_ned_to_body = CoordinateTransform::dcm_ned_to_body(
                 deg2rad(azimuth_deg),
                 deg2rad(elevation_deg),
-                None
+                None,
             );
-            let vel_air_body = CoordinateTransform::vel_air_body_frame(
-                &dcm_ned_to_body,
-                &vel_ned,
-                &wind_ned,
-            );
+            let vel_air_body =
+                CoordinateTransform::vel_air_body_frame(&dcm_ned_to_body, &vel_ned, &wind_ned);
             let angles = CoordinateTransform::angle_of_attack(&vel_air_body);
             // Use the angle of attack (alpha) and sideslip angle (beta)
             self.state.angle_of_attack = angles.x.to_degrees();
@@ -449,9 +453,9 @@ impl Simulator {
         if altitude <= 0.0 && velocity.dot(&position.normalize()) < 0.0 {
             // Stop all dynamics when rocket hits ground and is moving toward Earth
             return vec![
-                0.0,        // dmass/dt = 0 (no more propellant consumption)
-                0.0, 0.0, 0.0,  // dpos/dt = 0 (stop moving)
-                0.0, 0.0, 0.0,  // dvel/dt = 0 (no acceleration)
+                0.0, // dmass/dt = 0 (no more propellant consumption)
+                0.0, 0.0, 0.0, // dpos/dt = 0 (stop moving)
+                0.0, 0.0, 0.0, // dvel/dt = 0 (no acceleration)
             ];
         }
 
@@ -938,12 +942,15 @@ mod tests {
         assert!(final_state.altitude <= 1.0); // Should be at or very close to ground
 
         // Check that there are no states with negative altitude
-        let negative_altitudes: Vec<_> = trajectory.iter()
+        let negative_altitudes: Vec<_> = trajectory
+            .iter()
             .filter(|state| state.altitude < -1.0) // Allow small numerical errors
             .collect();
-        assert!(negative_altitudes.is_empty(),
+        assert!(
+            negative_altitudes.is_empty(),
             "Found {} states with significantly negative altitude",
-            negative_altitudes.len());
+            negative_altitudes.len()
+        );
     }
 
     #[test]

@@ -70,7 +70,9 @@ fn main() -> Result<()> {
 
             // Find max altitude
             if let Some(max_alt_state) =
-                trajectory.iter().max_by(|a, b| a.altitude.partial_cmp(&b.altitude).unwrap())
+                trajectory.iter().filter(|s| !s.altitude.is_nan()).max_by(|a, b| {
+                    a.altitude.partial_cmp(&b.altitude).unwrap_or(std::cmp::Ordering::Equal)
+                })
             {
                 println!(
                     "  Max altitude: {:.1} m at {:.1} s",
@@ -79,9 +81,12 @@ fn main() -> Result<()> {
             }
 
             // Find max velocity
-            if let Some(max_vel_state) = trajectory
-                .iter()
-                .max_by(|a, b| a.velocity_magnitude.partial_cmp(&b.velocity_magnitude).unwrap())
+            if let Some(max_vel_state) =
+                trajectory.iter().filter(|s| !s.velocity_magnitude.is_nan()).max_by(|a, b| {
+                    a.velocity_magnitude
+                        .partial_cmp(&b.velocity_magnitude)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
             {
                 println!(
                     "  Max velocity: {:.1} m/s at {:.1} s",
