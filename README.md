@@ -1,21 +1,21 @@
-# OpenTsiolkovsky   [![Build Status](https://travis-ci.org/istellartech/OpenTsiolkovsky.svg?branch=master)](https://travis-ci.org/istellartech/OpenTsiolkovsky)
+# OpenTsiolkovsky   [![CI](https://github.com/istellartech/OpenTsiolkovsky/workflows/ci/badge.svg)](https://github.com/istellartech/OpenTsiolkovsky/actions)
 
-![OpenTsiolkovsky](doc/OpenTsiolkovsky_Logo_small.png)
+![OpenTsiolkovsky](docs/OpenTsiolkovsky_Logo_small.png)
 
-OpenTsiolkovsky is a modern rocket flight simulator with both command-line and web interfaces.
+OpenTsiolkovsky is a modern rocket flight simulator with command-line and web interfaces, implemented primarily in Rust with a legacy C++ reference implementation.
 
 ## Key Features
 
 * **Rocket Simulation**: Three-degree-of-freedom and six-degree-of-freedom flight simulation with attitude control (TVC)
 * **Multi-Platform**:
-  - Rust-based core simulation engine
-  - Command-line interface (CLI)
-  - Web API server for integration
-  - Modern React/TypeScript web frontend
-  - WASM support for browser-based simulation
+  - **Rust implementation**: Main simulation engine with CLI and WASM support
+  - **Command-line interface (CLI)**: Fast native execution
+  - **Modern React/TypeScript web frontend**: Interactive visualization
+  - **WASM support**: Browser-based simulation
+  - **Legacy C++ implementation**: Reference implementation in `legacy_cpp/`
 * **Multi-Stage Support**: Supports up to three rocket stages
 * **Trajectory Analysis**: Sub-orbital and low Earth orbit trajectories
-* **Data Export**: KML export for visualization in mapping tools
+* **Data Export**: CSV and JSON output formats
 * **Real-time Visualization**: Interactive 3D trajectory viewer and performance graphs
 
 ## Quick Start
@@ -25,31 +25,51 @@ OpenTsiolkovsky is a modern rocket flight simulator with both command-line and w
 - Bun v1+ (https://bun.sh/)
 - Optional: wasm-pack for WASM builds
 
-### Running the Web Interface
-1. Build and start the API server:
-   ```bash
-   cargo run -p openTsiolkovsky-web
-   ```
-
-2. Start the frontend (in a new terminal):
-   ```bash
-   cd frontend
-   bun install
-   bun run dev
-   ```
-
-3. Open http://localhost:5173 in your browser
-
 ### Command Line Usage
 ```bash
-cargo run -p openTsiolkovsky-cli -- --config bin/param_sample_01.json --verbose
+# Build and run the Rust CLI
+cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --verbose
+
+# Or build release version
+cargo build --release
+./target/release/openTsiolkovsky-cli --config examples/param_sample_01.json --output my_result
+```
+
+### Frontend Development
+```bash
+cd frontend
+bun install
+bun run dev
+# Open http://localhost:5173 in your browser
+```
+
+### WASM Build
+```bash
+# Install wasm-pack if not already installed
+# cargo install wasm-pack
+
+# Build WASM package for frontend
+./scripts/wasm_build.sh
+```
+
+## Project Structure
+```
+OpenTsiolkovsky/
+├── src/              # Main Rust implementation
+├── tests/            # Rust integration tests
+├── examples/         # Configuration files and sample data
+├── frontend/         # React/TypeScript web interface
+├── legacy_cpp/       # Legacy C++ implementation (reference)
+├── scripts/          # Build scripts (WASM, etc.)
+└── docs/             # Documentation
 ```
 
 ## Documentation
-- [Complete Setup Guide](docs/README.md)
-- [Frontend Development](docs/README.rust_frontend.md)
-- [Web API Reference](docs/api/web_api.md)
-- [WASM Build Guide](docs/wasm_build.md)
+- [Quick Start](docs/quick-start.md)
+- [Development guide](docs/development.md)
+- [WASM build](docs/wasm.md)
+- [Configuration file](docs/configuration.md)
+- [Legacy C++ Implementation](legacy_cpp/)
 
 Read more about it on the [Wiki](https://github.com/istellartech/OpenTsiolkovsky/wiki)
 

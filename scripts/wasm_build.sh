@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
-CRATE_DIR="$REPO_ROOT/rust"
+CRATE_DIR="$REPO_ROOT"
 OUT_DIR="$REPO_ROOT/frontend/src/wasm"
 
 # Check wasm-pack
@@ -29,14 +29,14 @@ wasm-pack build "$CRATE_DIR" \
   --target web \
   --features wasm
 
-PKG_DIR="$CRATE_DIR/pkg"
+PKG_DIR="$REPO_ROOT/pkg"
 if [ ! -d "$PKG_DIR" ]; then
   echo "[ERROR] wasm-pack did not produce expected pkg/ directory" >&2
   exit 1
 fi
 
 rm -rf "$OUT_DIR"
-mkdir -p "$OUT_DIR"
-cp -R "$PKG_DIR"/. "$OUT_DIR"/
+mkdir -p "$(dirname "$OUT_DIR")"
+mv "$PKG_DIR" "$OUT_DIR"
 
-echo "[WASM] Done. Output copied to $OUT_DIR"
+echo "[WASM] Done. Output moved to $OUT_DIR"

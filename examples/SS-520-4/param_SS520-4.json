@@ -1,0 +1,215 @@
+{
+	"name(str)": "SS520",
+	"calculate condition": {
+		"end time[s]": 10000,
+		"time step for output[s]": 0.2,
+		"air density variation file exist?(bool)": false,
+		"air density variation file name(str)": "",
+		"variation ratio of air density[%](-100to100, default=0)": 0.0
+	},
+	"launch": {
+		"position LLH[deg,deg,m]": [31.251808, 131.078999, 267.0],
+		"velocity NED[m/s]": [0.0, 0.0, 0.0],
+		"time(UTC)[y,m,d,h,min,sec]": [2016,1,1,12,0,0]
+	},
+	"stage1": {
+		"power flight mode(int)": 0,
+		"free flight mode(int)": 2,
+		"mass initial[kg]": 2200.0,
+		"thrust": {
+			"Isp vac file exist?(bool)": false,
+			"Isp vac file name(str)": "",
+			"Isp coefficient[-]": 1.0,
+			"const Isp vac[s]": 190.0,
+			"thrust vac file exist?(bool)": true,
+			"thrust vac file name(str)": "SS520-4-1_thrust.csv",
+			"thrust coefficient[-]": 1.0,
+			"const thrust vac[N]": 25000,
+			"burn start time(time of each stage)[s]": 0.0,
+			"burn end time(time of each stage)[s]": 33.0,
+			"forced cutoff time(time of each stage)[s]": 33.0,
+			"throat diameter[m]": 0.1768,
+			"nozzle expansion ratio[-]": 8,
+			"nozzle exhaust pressure[Pa]": 101300
+		},
+		"aero": {
+			"body diameter[m]": 0.52,
+			"normal coefficient file exist?(bool)": false,
+			"normal coefficient file name(str)": "",
+			"normal multiplier[-]": 1.0,
+			"const normal coefficient[-]": 0.2,
+			"axial coefficient file exist?(bool)": true,
+			"axial coefficient file name(str)": "SS520-4-1_CD.csv",
+			"axial multiplier[-]": 1.0,
+			"const axial coefficient[-]": 0.5,
+			"ballistic coefficient(ballistic flight mode)[kg/m2]": 100
+		},
+		"attitude": {
+			"attitude file exist?(bool)": true,
+			"attitude file name(str)": "SS520-4-1_attitude.csv",
+			"const elevation[deg]": 75.0,
+			"const azimuth[deg]": 120,
+			"pitch offset[deg]": 0.0,
+			"yaw offset[deg]": 0.0,
+			"roll offset[deg]": 0.0,
+			"gyro bias x[deg/h]": 0.0,
+			"gyro bias y[deg/h]": 0.0,
+			"gyro bias z[deg/h]": 0.0
+		},
+		"dumping product": {
+			"dumping product exist?(bool)": false,
+			"dumping product separation time[s]": 0,
+			"dumping product mass[kg]": 0,
+			"dumping product ballistic coefficient[kg/m2]": 0,
+			"additional speed at dumping NED[m/s,m/s,m/s]": [0.0, 0.0, 0.0]
+		},
+		"attitude neutrality(3DoF)": {
+			"considering neutrality?(bool)": false,
+			"CG, Controller position file(str)": "",
+			"CP file(str)": ""
+		},
+		"6DoF": {
+			"CG,CP,Controller position file(str)": "",
+			"moment of inertia file name(str)": ""
+		},
+		"stage": {
+			"following stage exist?(bool)": true,
+			"separation time[s]": 31.7
+		}
+	},
+	"stage2": {
+		"power flight mode(int)": 0,
+		"free flight mode(int)": 2,
+		"mass initial[kg]": 510.0,
+		"thrust": {
+			"Isp vac file exist?(bool)": false,
+			"Isp vac file name(str)": "",
+			"Isp coefficient[-]": 1.0,
+			"const Isp vac[s]": 264.8,
+			"thrust vac file exist?(bool)": true,
+			"thrust vac file name(str)": "SS520-4-2_thrust.csv",
+			"thrust coefficient[-]": 1.0,
+			"const thrust vac[N]": 35000,
+			"burn start time(time of each stage)[s]": 138.3,
+			"burn end time(time of each stage)[s]": 161.7,
+			"forced cutoff time(time of each stage)[s]": 161.7,
+			"throat diameter[m]": 0.1,
+			"nozzle expansion ratio[-]": 10,
+			"nozzle exhaust pressure[Pa]": 0
+		},
+		"aero": {
+			"body diameter[m]": 0.1,
+			"normal coefficient file exist?(bool)": false,
+			"normal coefficient file name(str)": "",
+			"normal multiplier[-]": 1.0,
+			"const normal coefficient[-]": 0.2,
+			"axial coefficient file exist?(bool)": false,
+			"axial coefficient file name(str)": "",
+			"axial multiplier[-]": 1.0,
+			"const axial coefficient[-]": 0.2,
+			"ballistic coefficient(ballistic flight mode)[kg/m2]": 100
+		},
+		"attitude": {
+			"attitude file exist?(bool)": false,
+			"attitude file name(str)": "",
+			"const elevation[deg]": 0.0,
+			"const azimuth[deg]": 99,
+			"pitch offset[deg]": 0.0,
+			"yaw offset[deg]": 0.0,
+			"roll offset[deg]": 0.0,
+			"gyro bias x[deg/h]": 0.0,
+			"gyro bias y[deg/h]": 0.0,
+			"gyro bias z[deg/h]": 0.0
+		},
+		"dumping product": {
+			"dumping product exist?(bool)": false,
+			"dumping product separation time[s]": 0,
+			"dumping product mass[kg]": 0,
+			"dumping product ballistic coefficient[kg/m2]": 0,
+			"additional speed at dumping NED[m/s,m/s,m/s]": [0.0, 0.0, 0.0]
+		},
+		"attitude neutrality(3DoF)": {
+			"considering neutrality?(bool)": false,
+			"CG, Controller position file(str)": "",
+			"CP file(str)": ""
+		},
+		"6DoF": {
+			"CG,CP,Controller position file(str)": "",
+			"moment of inertia file name(str)": ""
+		},
+		"stage": {
+			"following stage exist?(bool)": true,
+			"separation time[s]": 228
+		}
+	},
+	"stage3": {
+		"power flight mode(int)": 0,
+		"free flight mode(int)": 2,
+		"mass initial[kg]": 86.0,
+		"thrust": {
+			"Isp vac file exist?(bool)": false,
+			"Isp vac file name(str)": "",
+			"Isp coefficient[-]": 1.0,
+			"const Isp vac[s]": 264.8,
+			"thrust vac file exist?(bool)": true,
+			"thrust vac file name(str)": "SS520-4-3_thrust.csv",
+			"thrust coefficient[-]": 1.0,
+			"const thrust vac[N]": 8000,
+			"burn start time(time of each stage)[s]": 0.0,
+			"burn end time(time of each stage)[s]": 25.6,
+			"forced cutoff time(time of each stage)[s]": 25.6,
+			"throat diameter[m]": 0.05,
+			"nozzle expansion ratio[-]": 10,
+			"nozzle exhaust pressure[Pa]": 0
+		},
+		"aero": {
+			"body diameter[m]": 0.1,
+			"normal coefficient file exist?(bool)": false,
+			"normal coefficient file name(str)": "",
+			"normal multiplier[-]": 1.0,
+			"const normal coefficient[-]": 0.2,
+			"axial coefficient file exist?(bool)": false,
+			"axial coefficient file name(str)": "",
+			"axial multiplier[-]": 1.0,
+			"const axial coefficient[-]": 0.2,
+			"ballistic coefficient(ballistic flight mode)[kg/m2]": 100
+		},
+		"attitude": {
+			"attitude file exist?(bool)": false,
+			"attitude file name(str)": "",
+			"const elevation[deg]": 0.0,
+			"const azimuth[deg]": 99,
+			"pitch offset[deg]": 0.0,
+			"yaw offset[deg]": 0.0,
+			"roll offset[deg]": 0.0,
+			"gyro bias x[deg/h]": 0.0,
+			"gyro bias y[deg/h]": 0.0,
+			"gyro bias z[deg/h]": 0.0
+		},
+		"dumping product": {
+			"dumping product exist?(bool)": false,
+			"dumping product separation time[s]": 0,
+			"dumping product mass[kg]": 0,
+			"dumping product ballistic coefficient[kg/m2]": 0,
+			"additional speed at dumping NED[m/s,m/s,m/s]": [0.0, 0.0, 0.0]
+		},
+		"attitude neutrality(3DoF)": {
+			"considering neutrality?(bool)": false,
+			"CG, Controller position file(str)": "",
+			"CP file(str)": ""
+		},
+		"6DoF": {
+			"CG,CP,Controller position file(str)": "",
+			"moment of inertia file name(str)": ""
+		},
+		"stage": {
+			"following stage exist?(bool)": false,
+			"separation time[s]": 1e6
+		}
+	},
+	"wind": {
+		"wind file exist?(bool)": false,
+		"wind file name(str)": "",
+		"const wind[m/s,deg]": [0.0, 0.0]
+	}
+}

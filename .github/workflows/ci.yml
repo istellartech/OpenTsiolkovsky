@@ -9,14 +9,8 @@ on:
 jobs:
   rust:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -26,25 +20,30 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            rust/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
       - name: Build
-        run: cargo build --workspace --locked
+        run: cargo build --locked
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
       - name: fmt
         run: cargo fmt --all -- --check
       - name: Test
-        run: cargo test --workspace --locked
+        run: cargo test --locked
 
-  cpp:
+  legacy_cpp:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: legacy_cpp
     steps:
       - uses: actions/checkout@v4
-      - name: Build C++
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libboost-dev
+      - name: Build legacy C++
         run: |
           make
-          ./bin/OpenTsiolkovsky bin/param_sample_01.json || true
+          ./bin/OpenTsiolkovsky ../examples/param_sample_01.json || true
 
   frontend:
     runs-on: ubuntu-latest
@@ -53,13 +52,13 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v1
         with:
-          node-version: 18
-          cache: 'npm'
-          cache-dependency-path: frontend/package.json
-      - name: Install
-        run: npm ci
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install
+      - name: Type check
+        run: bunx tsc --noEmit
       - name: Build
-        run: npm run build
+        run: bun run build
 
