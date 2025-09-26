@@ -1,0 +1,51 @@
+# Vercel ignore file for OpenTsiolkovsky
+# Exclude unnecessary files from deployment
+
+# Rust build artifacts
+target/
+Cargo.lock
+**/*.pdb
+
+# Legacy C++ (not needed for frontend deployment)
+legacy_cpp/
+
+# Development and testing files
+test_*
+*_test.*
+examples/
+docs/
+scripts/wasm_build.sh
+
+# Git and development tools
+.git/
+.github/
+.vscode/
+.serena/
+.claude/
+.DS_Store
+**/.DS_Store
+
+# Build artifacts that will be regenerated
+pkg/
+frontend/src/wasm/
+
+# Documentation
+*.md
+README.*
+LICENSE
+
+# Secret and temporary files
+secret_*
+temp.*
+*.tmp
+*.log
+
+# IDE files
+*.swp
+*.swo
+*~
+.idea/
+
+# OS files
+Thumbs.db
+ehthumbs.db

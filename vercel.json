@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "buildCommand": "bash scripts/vercel-build.sh",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "cd frontend && bun install",
+  "devCommand": "cd frontend && bun run dev",
+  "env": {
+    "NODE_VERSION": "18"
+  },
+  "build": {
+    "env": {
+      "CARGO_HOME": "/vercel/.cargo",
+      "RUSTUP_HOME": "/vercel/.rustup"
+    }
+  },
+  "functions": {
+    "frontend/dist/**": {
+      "includeFiles": "frontend/dist/**"
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

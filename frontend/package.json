@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build:wasm": "bash ../scripts/wasm_build.sh",
+    "build": "npm run build:wasm && tsc --noEmit && vite build",
+    "vercel-build": "npm run build",
     "preview": "vite preview"
   },
   "devDependencies": {
