@@ -8,17 +8,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          three: ['three'],
           chartjs: ['chart.js']
         }
       }
-    }
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': 'http://localhost:3001',
-      '/healthz': 'http://localhost:3001'
     }
   }
 })
