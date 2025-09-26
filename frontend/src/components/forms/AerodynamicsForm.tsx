@@ -1,6 +1,5 @@
-import { NumberField, SwitchField } from '../shared/FormFields'
-import { EditableTable, type Column } from '../shared/EditableTable'
-import type { ClientConfig, ClientMachSample } from '../../lib/types'
+import { NumberField, SwitchField, EditableTable, type Column } from '../shared'
+import type { ClientConfig, ClientMachSample } from '../../lib/simulation'
 
 interface AerodynamicsFormProps {
   config: ClientConfig

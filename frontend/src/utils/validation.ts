@@ -1,4 +1,4 @@
-import type { ClientConfig } from '../lib/types'
+import type { ClientConfig } from '../lib/simulation'
 import { createDefaultStage } from '../config/defaults'
 import { POWER_MODE_OPTIONS, FREE_MODE_OPTIONS } from '../config/defaults'
 

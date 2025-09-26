@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import { Button } from '../ui/button'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion'
-import { NumberField, SelectField, SwitchField } from '../shared/FormFields'
-import { EditableTable, type Column } from '../shared/EditableTable'
+import { Button, Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui'
+import { NumberField, SelectField, SwitchField, EditableTable, type Column } from '../shared'
 import { MAX_STAGE_COUNT, POWER_MODE_OPTIONS, FREE_MODE_OPTIONS, createDefaultStage, cloneStage } from '../../config/defaults'
-import type { ClientConfig, ClientStageConfig, ClientTimeSample } from '../../lib/types'
+import type { ClientConfig, ClientStageConfig, ClientTimeSample } from '../../lib/simulation'
 
 function detectHasVariations(config: ClientConfig): boolean {
   return config.stages?.some(stage =>

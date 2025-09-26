@@ -1,5 +1,5 @@
-import { NumberField } from '../shared/FormFields'
-import type { ClientConfig } from '../../lib/types'
+import { NumberField } from '../shared'
+import type { ClientConfig } from '../../lib/simulation'
 
 const pad2 = (value: number) => value.toString().padStart(2, '0')
 

@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
-import type { SimulationState, ClientConfig } from '../lib/types'
-import { computeDownrangeKm, eciToLatLon } from '../lib/geo'
-import { vec3ToObject } from '../lib/types'
-import type { EventMarker, StageBand, StageSummary } from '../charts/config'
-import { stagePalette } from '../charts/config'
+import type { SimulationState, ClientConfig } from '../lib/simulation'
+import { computeDownrangeKm, eciToLatLon } from '../lib/utils'
+import { vec3ToObject } from '../lib/simulation'
+import type { EventMarker, StageBand, StageSummary } from '../lib/charts'
+import { stagePalette } from '../lib/charts'
 
 interface StagePlan {
   index: number

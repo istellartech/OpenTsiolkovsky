@@ -1,8 +1,5 @@
-import { Button } from './ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
-import { Badge } from './ui/badge'
-import { SwitchField } from './shared/FormFields'
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Tabs, TabsContent, TabsList, TabsTrigger, Badge } from './ui'
+import { SwitchField } from './shared'
 import { useSimulation } from '../hooks/useSimulation'
 import { PRESET_OPTIONS } from '../config/defaults'
 import { VALIDATION_ERROR_MESSAGE } from '../utils/validation'
@@ -10,7 +7,7 @@ import { LaunchForm } from './forms/LaunchForm'
 import { StageForm } from './forms/StageForm'
 import { AerodynamicsForm } from './forms/AerodynamicsForm'
 import { WindForm } from './forms/WindForm'
-import type { ClientConfig, SimulationState } from '../lib/types'
+import type { ClientConfig, SimulationState } from '../lib/simulation'
 
 interface Props {
   onResult: (trajectory: SimulationState[], config: ClientConfig) => void

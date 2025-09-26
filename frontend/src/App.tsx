@@ -1,9 +1,8 @@
 import { lazy, Suspense, useState } from 'react'
-import type { ClientConfig, SimulationState } from './lib/types'
+import type { ClientConfig, SimulationState } from './lib/simulation'
 import { SimulationPanel } from './components/SimulationPanel'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './components/ui/card'
-import { Button } from './components/ui/button'
-import { downloadKML } from './lib/kmlGenerator'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from './components/ui'
+import { downloadKML } from './lib/utils'
 
 const GraphPanel = lazy(() => import('./components/GraphPanel').then((m) => ({ default: m.GraphPanel })))
 

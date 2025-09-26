@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
 import type React from 'react'
-import type { ClientConfig, SimulationState } from '../lib/types'
+import type { ClientConfig, SimulationState } from '../lib/simulation'
 import { runSimulation } from '../lib/simulation'
 import { createDefaultConfig } from '../config/defaults'
 import { validateConfig, type ValidationIssue } from '../utils/validation'

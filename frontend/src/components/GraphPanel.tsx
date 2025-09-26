@@ -1,12 +1,10 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Chart, type ChartConfiguration } from 'chart.js/auto'
 import { Download, PackageOpen, MapPin } from 'lucide-react'
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion'
-import { Badge } from './ui/badge'
-import { Button } from './ui/button'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Badge, Button } from './ui'
 import { useChartData, formatValue } from '../hooks/useChartData'
-import { eventMarkerPlugin } from '../charts/plugins'
 import {
+  eventMarkerPlugin,
   createAltitudeChart,
   createVelocityChart,
   createMachChart,
@@ -15,10 +13,10 @@ import {
   createDynamicPressureChart,
   createAttitudeChart,
   createTrajectoryChart
-} from '../charts/config'
-import { downloadChartAsImage, getChartFilename, downloadAllChartsAsZip } from '../lib/chartUtils'
-import { downloadKML } from '../lib/kmlGenerator'
-import type { SimulationState, ClientConfig } from '../lib/types'
+} from '../lib/charts'
+import { downloadChartAsImage, getChartFilename, downloadAllChartsAsZip } from '../lib/charts'
+import { downloadKML } from '../lib/utils'
+import type { SimulationState, ClientConfig } from '../lib/simulation'
 
 Chart.register(eventMarkerPlugin)
 

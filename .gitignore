@@ -180,3 +180,6 @@ frontend/src/wasm/
 # OS generated files
 Thumbs.db
 ehthumbs.db
+
+# user define
+secret_*

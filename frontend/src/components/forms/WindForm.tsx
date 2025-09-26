@@ -1,6 +1,5 @@
-import { NumberField, SwitchField } from '../shared/FormFields'
-import { EditableTable, type Column } from '../shared/EditableTable'
-import type { ClientConfig, ClientAttitudeSample, ClientWindSample } from '../../lib/types'
+import { NumberField, SwitchField, EditableTable, type Column } from '../shared'
+import type { ClientConfig, ClientAttitudeSample, ClientWindSample } from '../../lib/simulation'
 
 interface WindFormProps {
   config: ClientConfig

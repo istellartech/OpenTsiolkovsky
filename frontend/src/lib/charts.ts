@@ -1,7 +1,100 @@
-import type { ChartConfiguration } from 'chart.js'
-import type { SimulationState } from '../lib/types'
-import { vec3ToObject } from '../lib/types'
+import type { Plugin, ChartConfiguration, Chart } from 'chart.js'
+import JSZip from 'jszip'
+import type { SimulationState } from './simulation'
+import { vec3ToObject } from './simulation'
 
+// Chart Plugin
+export interface EventMarker {
+  time: number
+  label: string
+  color: string
+  dashed?: boolean
+}
+
+export interface StageBand {
+  start: number
+  end: number
+  color: string
+  label: string
+  labelColor: string
+}
+
+export const eventMarkerPlugin: Plugin = {
+  id: 'eventMarkers',
+  beforeDraw(chart) {
+    const opts = (chart.options.plugins as any)?.eventMarkers as {
+      stageBands?: StageBand[]
+    } | undefined
+    if (!opts?.stageBands || opts.stageBands.length === 0) return
+    const xScale = chart.scales.x as any
+    if (!xScale) return
+    const { top, bottom, left, right } = chart.chartArea
+    const ctx = chart.ctx
+    ctx.save()
+    opts.stageBands.forEach((band) => {
+      const start = Math.max(band.start, xScale.min)
+      const end = Math.min(band.end, xScale.max)
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return
+      }
+      const xStart = xScale.getPixelForValue(start)
+      const xEnd = xScale.getPixelForValue(end)
+      if (!Number.isFinite(xStart) || !Number.isFinite(xEnd)) {
+        return
+      }
+      ctx.fillStyle = band.color
+      ctx.fillRect(xStart, top, xEnd - xStart, bottom - top)
+      if (band.label) {
+        const labelX = Math.min(Math.max(xStart + 6, left + 4), right - 24)
+        ctx.fillStyle = band.labelColor
+        ctx.font = '10px "Helvetica Neue", Arial, sans-serif'
+        ctx.textBaseline = 'top'
+        ctx.textAlign = 'left'
+        ctx.fillText(band.label, labelX, top + 4)
+      }
+    })
+    ctx.restore()
+  },
+  afterDraw(chart) {
+    const opts = (chart.options.plugins as any)?.eventMarkers as {
+      markers?: EventMarker[]
+    } | undefined
+    if (!opts?.markers || opts.markers.length === 0) return
+    const xScale = chart.scales.x as any
+    if (!xScale) return
+    const { top, bottom } = chart.chartArea
+    const ctx = chart.ctx
+    opts.markers.forEach((marker, idx) => {
+      if (!Number.isFinite(marker.time)) return
+      if (marker.time < xScale.min || marker.time > xScale.max) return
+      const x = xScale.getPixelForValue(marker.time)
+      if (!Number.isFinite(x)) return
+      ctx.save()
+      ctx.strokeStyle = marker.color
+      ctx.lineWidth = 1
+      if (marker.dashed) {
+        ctx.setLineDash([4, 4])
+      } else {
+        ctx.setLineDash([])
+      }
+      ctx.beginPath()
+      ctx.moveTo(x, top)
+      ctx.lineTo(x, bottom)
+      ctx.stroke()
+      if (marker.label) {
+        ctx.fillStyle = marker.color
+        ctx.font = '9px "Helvetica Neue", Arial, sans-serif'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'bottom'
+        const labelY = top - 2
+        ctx.fillText(marker.label, x, labelY)
+      }
+      ctx.restore()
+    })
+  },
+}
+
+// Chart Configuration Utilities
 type XYPoint = { x: number; y: number }
 
 function buildNumericSeries(
@@ -25,44 +118,23 @@ function extendSeriesFallback(series: XYPoint[], fallback: XYPoint): XYPoint[] {
   return series.length > 0 ? series : [fallback]
 }
 
-/**
- * Calculate maximum value from data before engine cutoff (thrust becomes zero)
- * This is useful for setting appropriate chart scales that exclude post-cutoff noise
- */
 function getMaxBeforeCutoff(
   data: SimulationState[],
   valueSelector: (state: SimulationState) => number
 ): number {
-  // Find the first point where thrust becomes zero or very small
-  const cutoffIndex = data.findIndex(state => (state.thrust ?? 0) <= 1); // 1N threshold for numerical stability
-
-  // Use data up to cutoff, or all data if no cutoff found
+  const cutoffIndex = data.findIndex(state => (state.thrust ?? 0) <= 1);
   const activeData = cutoffIndex > 0 ? data.slice(0, cutoffIndex) : data;
-
-  // Extract values and filter out invalid numbers
   const values = activeData.map(valueSelector).filter(v => Number.isFinite(v) && v > 0);
-
   return values.length > 0 ? Math.max(...values) : 0;
 }
 
-/**
- * Calculate minimum value from data before engine cutoff (thrust becomes zero)
- * This is useful for setting appropriate chart scales that exclude post-cutoff noise
- * Unlike getMaxBeforeCutoff, this allows negative values for velocity charts
- */
 function getMinBeforeCutoff(
   data: SimulationState[],
   valueSelector: (state: SimulationState) => number
 ): number {
-  // Find the first point where thrust becomes zero or very small
-  const cutoffIndex = data.findIndex(state => (state.thrust ?? 0) <= 1); // 1N threshold for numerical stability
-
-  // Use data up to cutoff, or all data if no cutoff found
+  const cutoffIndex = data.findIndex(state => (state.thrust ?? 0) <= 1);
   const activeData = cutoffIndex > 0 ? data.slice(0, cutoffIndex) : data;
-
-  // Extract values and filter out only invalid numbers (allow negative values)
   const values = activeData.map(valueSelector).filter(v => Number.isFinite(v));
-
   return values.length > 0 ? Math.min(...values) : 0;
 }
 
@@ -71,21 +143,6 @@ function createPluginOptions(stageBands: StageBand[], markers: EventMarker[]) {
     legend: { display: false },
     eventMarkers: { stageBands, markers },
   } as Record<string, unknown>
-}
-
-export interface EventMarker {
-  time: number
-  label: string
-  color: string
-  dashed?: boolean
-}
-
-export interface StageBand {
-  start: number
-  end: number
-  color: string
-  label: string
-  labelColor: string
 }
 
 export interface StageSummary {
@@ -136,21 +193,6 @@ export function createAltitudeChart(
         max: Math.max(...numericPoints.map((p) => p.y)),
       }
     : null
-
-  console.log('createAltitudeChart: Chart data analysis', {
-    totalInputPoints: data.length,
-    usablePoints: numericPoints.length,
-    timeRange: timeRange ?? 'auto',
-    altitudeRange: altitudeRange ?? 'auto',
-    firstPoint: datasetPoints[0],
-    lastPoint: datasetPoints[datasetPoints.length - 1],
-    sampleRawData: data.slice(0, 3).map((d) => ({ time: d.time, altitude: d.altitude })),
-    sampleChartData: datasetPoints.slice(0, 5),
-  })
-
-  if (!hasUsableRange) {
-    console.error('❌ createAltitudeChart: Insufficient valid data points for altitude chart:', numericPoints.length)
-  }
 
   const paddedAltitudeMax = altitudeRange && altitudeRange.max > 0 ? altitudeRange.max * 1.1 : undefined
 
@@ -825,5 +867,111 @@ export function createTrajectoryChart(
         }
       }
     }
+  }
+}
+
+// Chart Utilities
+export function downloadChartAsImage(chart: Chart, filename?: string): void {
+  if (!chart || !chart.canvas) {
+    console.error('Invalid chart instance or canvas not available')
+    return
+  }
+
+  try {
+    const canvas = chart.canvas
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        console.error('Failed to create blob from canvas')
+        return
+      }
+
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+
+      const timestamp = new Date().toISOString().split('T')[0]
+      const defaultFilename = `chart-${timestamp}`
+      const finalFilename = `${filename || defaultFilename}.png`
+
+      link.href = url
+      link.download = finalFilename
+
+      document.body.appendChild(link)
+      link.click()
+
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    }, 'image/png')
+  } catch (error) {
+    console.error('Error downloading chart:', error)
+  }
+}
+
+export function getChartFilename(chartTitle: string): string {
+  return chartTitle
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+export async function downloadAllChartsAsZip(
+  charts: Array<{ chart: Chart; title: string }>,
+  rocketName?: string
+): Promise<void> {
+  try {
+    const zip = new JSZip()
+
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-')
+
+    const sanitizedRocketName = rocketName
+      ? rocketName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
+      : 'rocket'
+
+    const zipFilename = `${sanitizedRocketName}-graphs-${dateStr}-${timeStr}.zip`
+
+    const promises = charts.map(({ chart, title }) => {
+      return new Promise<void>((resolve, reject) => {
+        if (!chart || !chart.canvas) {
+          console.warn(`Skipping chart "${title}": Invalid chart instance`)
+          resolve()
+          return
+        }
+
+        const filename = `${getChartFilename(title)}.png`
+
+        chart.canvas.toBlob((blob) => {
+          if (!blob) {
+            console.warn(`Failed to create blob for chart "${title}"`)
+            resolve()
+            return
+          }
+
+          zip.file(filename, blob)
+          resolve()
+        }, 'image/png')
+      })
+    })
+
+    await Promise.all(promises)
+
+    const content = await zip.generateAsync({ type: 'blob' })
+
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(content)
+
+    link.href = url
+    link.download = zipFilename
+
+    document.body.appendChild(link)
+    link.click()
+
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+  } catch (error) {
+    console.error('Error creating ZIP file:', error)
   }
 }

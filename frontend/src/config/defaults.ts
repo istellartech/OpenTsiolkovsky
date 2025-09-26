@@ -1,4 +1,4 @@
-import type { ClientConfig, ClientStageConfig } from '../lib/types'
+import type { ClientConfig, ClientStageConfig } from '../lib/simulation'
 
 export const POWER_MODE_OPTIONS = [
   { value: 0, label: '0: 3DoF（標準）' },
