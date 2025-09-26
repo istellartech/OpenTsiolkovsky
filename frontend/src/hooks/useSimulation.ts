@@ -5,7 +5,7 @@ import { runSimulation } from '../lib/simulation'
 import { createDefaultConfig } from '../config/defaults'
 import { validateConfig, isValidClientConfig, type ValidationIssue } from '../utils/validation'
 
-export function useSimulation(onResult: (trajectory: SimulationState[], config: ClientConfig) => void) {
+export function useSimulation(onResult: (trajectory: SimulationState[], config: ClientConfig, executionTime: number) => void) {
   const [config, setConfig] = useState<ClientConfig>(() => createDefaultConfig())
   const [useCnProfile, setUseCnProfile] = useState(() => config.aerodynamics.cn_profile.length > 0)
   const [useCaProfile, setUseCaProfile] = useState(() => config.aerodynamics.ca_profile.length > 0)
@@ -13,6 +13,8 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
   const [useWindProfile, setUseWindProfile] = useState(() => config.wind.profile.length > 0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [executionTime, setExecutionTime] = useState<number | null>(null)
   const [showVariations, setShowVariations] = useState(false)
   const [selectedPresetId, setSelectedPresetId] = useState<string>('sample')
   const [openStageIds, setOpenStageIds] = useState<string[]>(['stage-0'])
@@ -42,13 +44,24 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
 
     setLoading(true)
     setError(null)
+    setIsCompleted(false)
+    setExecutionTime(null)
+
+    const startTime = performance.now()
 
     try {
       const result = await runSimulation(config)
-      onResult(result, config)
+      const endTime = performance.now()
+      const duration = Math.round(endTime - startTime)
+
+      setExecutionTime(duration)
+      setIsCompleted(true)
+      onResult(result, config, duration)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown simulation error occurred'
       setError(errorMessage)
+      setIsCompleted(false)
+      setExecutionTime(null)
     } finally {
       setLoading(false)
     }
@@ -144,6 +157,8 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
     setUseWindProfile,
     loading,
     error,
+    isCompleted,
+    executionTime,
     showVariations,
     setShowVariations,
     selectedPresetId,

@@ -1,13 +1,12 @@
 import { lazy, Suspense, useState } from 'react'
 import type { ClientConfig, SimulationState } from './lib/simulation'
 import { SimulationPanel } from './components/SimulationPanel'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button } from './components/ui'
-import { downloadKML } from './lib/utils'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './components/ui'
 
 const GraphPanel = lazy(() => import('./components/GraphPanel').then((m) => ({ default: m.GraphPanel })))
 
 export default function App() {
-  const [result, setResult] = useState<{ trajectory: SimulationState[]; config: ClientConfig } | null>(null)
+  const [result, setResult] = useState<{ trajectory: SimulationState[]; config: ClientConfig; executionTime?: number } | null>(null)
 
   return (
     <div className="relative min-h-screen bg-white">
@@ -21,14 +20,23 @@ export default function App() {
 
         <div className="grid gap-8 xl:grid-cols-[minmax(0,420px)_1fr]">
           <SimulationPanel
-            onResult={(trajectory: SimulationState[], config: ClientConfig) => setResult({ trajectory, config })}
+            onResult={(trajectory: SimulationState[], config: ClientConfig, executionTime: number) => setResult({ trajectory, config, executionTime })}
           />
 
           <div className="flex flex-col gap-8">
             <Card className="panel-card">
               <CardHeader className="border-b border-slate-200/80 bg-white/60">
-                <CardTitle>出力</CardTitle>
-                <CardDescription>結果はステージ別に整理され、主要指標を比較できます。</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>出力</CardTitle>
+                    <CardDescription>結果はステージ別に整理され、主要指標を比較できます。</CardDescription>
+                  </div>
+                  {result?.executionTime && (
+                    <div className="text-sm text-slate-600">
+                      <strong>計算時間:</strong> {result.executionTime}ms
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 {result ? (

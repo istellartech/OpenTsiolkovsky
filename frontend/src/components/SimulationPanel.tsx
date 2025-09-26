@@ -10,7 +10,7 @@ import { WindForm } from './forms/WindForm'
 import type { ClientConfig, SimulationState } from '../lib/simulation'
 
 interface Props {
-  onResult: (trajectory: SimulationState[], config: ClientConfig) => void
+  onResult: (trajectory: SimulationState[], config: ClientConfig, executionTime: number) => void
 }
 
 export function SimulationPanel({ onResult }: Props) {
@@ -27,6 +27,8 @@ export function SimulationPanel({ onResult }: Props) {
     setUseWindProfile,
     loading,
     error,
+    isCompleted,
+    executionTime,
     showVariations,
     setShowVariations,
     selectedPresetId,
