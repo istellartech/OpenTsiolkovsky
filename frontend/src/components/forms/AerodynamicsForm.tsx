@@ -88,7 +88,7 @@ export function AerodynamicsForm({
             <div className="field-grid">
               <NumberField
                 id="cn-constant"
-                label="定CN"
+                label="固定CN値"
                 value={config.aerodynamics.cn_constant}
                 onChange={(value) => updateAerodynamics({ cn_constant: value })}
                 hasError={issuesSet.has('aerodynamics.cn_constant')}
@@ -138,7 +138,7 @@ export function AerodynamicsForm({
             <div className="field-grid">
               <NumberField
                 id="ca-constant"
-                label="定CA"
+                label="固定CA値"
                 value={config.aerodynamics.ca_constant}
                 onChange={(value) => updateAerodynamics({ ca_constant: value })}
                 hasError={issuesSet.has('aerodynamics.ca_constant')}

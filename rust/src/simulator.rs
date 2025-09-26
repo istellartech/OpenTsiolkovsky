@@ -1,8 +1,8 @@
-use crate::math::{constants::G0, deg2rad, integrator::DormandPrince54};
+use crate::math::{constants::G0, deg2rad, integrator::DormandPrince54, RungeKutta4};
 use crate::physics::{
     atmosphere::AtmosphereModel, coordinates::CoordinateTransform, gravity::GravityModel,
 };
-use crate::rocket::{Rocket, RocketConfig};
+use crate::rocket::{IntegratorMethod, Rocket, RocketConfig};
 /// Main simulation engine
 ///
 /// This module will contain the core simulation logic
@@ -26,6 +26,8 @@ pub struct SimulationState {
     pub velocity_ned: Vector3<f64>,  // NED velocity components [m/s]
     pub sea_level_mach: f64,         // Mach number based on sea level sound speed
     pub acceleration_magnitude: f64, // Total acceleration magnitude [m/s²]
+    pub acc_eci: Vector3<f64>,       // ECI acceleration components [m/s²]
+    pub acc_body: Vector3<f64>,      // Body-frame acceleration components [m/s²]
     pub angle_of_attack: f64,        // Attack of angle [deg]
     pub sideslip_angle: f64,         // Sideslip angle [deg]
     pub attitude_azimuth: f64,       // Attitude azimuth [deg]
@@ -85,6 +87,12 @@ struct StageRuntime {
     stack_mass: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum IntegrationMode {
+    Rk4 { step: f64 },
+    Rk45 { solver: DormandPrince54 },
+}
+
 fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRuntime> {
     let mut stages = Vec::new();
     let mut start_time = 0.0;
@@ -137,7 +145,6 @@ pub struct Simulator {
     pub rocket: Rocket,
     pub atmosphere: AtmosphereModel,
     pub gravity: GravityModel,
-    pub integrator: DormandPrince54,
     pub state: SimulationState,
     pub trajectory: Vec<SimulationState>,
     stage_runtime: Vec<StageRuntime>,
@@ -147,6 +154,7 @@ pub struct Simulator {
     last_thrust_magnitude: f64,
     last_drag_magnitude: f64,
     pub telemetry_cpp: Vec<CsvCppRow>,
+    integration: IntegrationMode,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -167,7 +175,25 @@ impl Simulator {
         let config = rocket.config.clone();
         let atmosphere = AtmosphereModel::new();
         let gravity = GravityModel::new();
-        let integrator = DormandPrince54::new(1.0e-9, 1.0e-9, 1.0e-6, 10.0);
+        let integrator_settings = config.calculate_condition.integrator.clone();
+        let integration = match integrator_settings.method {
+            IntegratorMethod::Rk45 => {
+                IntegrationMode::Rk45 { solver: DormandPrince54::new(1.0e-9, 1.0e-9, 1.0e-6, 10.0) }
+            }
+            IntegratorMethod::Rk4 => {
+                let time_step = config.calculate_condition.time_step;
+                let default_dt = if time_step.is_finite() && time_step > 0.0 {
+                    (time_step / 2.0).max(1.0e-6)
+                } else {
+                    0.1
+                };
+                let user_dt = integrator_settings
+                    .rk4_step
+                    .filter(|v| v.is_finite() && *v > 0.0)
+                    .unwrap_or(default_dt);
+                IntegrationMode::Rk4 { step: user_dt }
+            }
+        };
 
         // Initialize state from launch conditions
         let pos_llh = Vector3::new(
@@ -204,6 +230,8 @@ impl Simulator {
             velocity_ned: vel_ned,
             sea_level_mach: 0.0,
             acceleration_magnitude: 0.0,
+            acc_eci: Vector3::zeros(),
+            acc_body: Vector3::zeros(),
             angle_of_attack: 0.0,
             sideslip_angle: 0.0,
             attitude_azimuth: 0.0,
@@ -217,7 +245,6 @@ impl Simulator {
             rocket,
             atmosphere,
             gravity,
-            integrator,
             state,
             trajectory: Vec::new(),
             stage_runtime,
@@ -226,6 +253,7 @@ impl Simulator {
             last_thrust_magnitude: 0.0,
             last_drag_magnitude: 0.0,
             telemetry_cpp: Vec::new(),
+            integration,
         })
     }
 
@@ -241,24 +269,24 @@ impl Simulator {
         self.telemetry_cpp.push(row0);
         let end_time = self.config.calculate_condition.end_time;
         let dt_out = self.config.calculate_condition.time_step;
+        if !(dt_out.is_finite() && dt_out > 0.0) {
+            return self.trajectory.clone();
+        }
 
-        while self.state.time < end_time {
-            // substep RK4 to reduce integration error
-            let sub = 2u32;
-            let h = dt_out / sub as f64;
-            for _ in 0..sub {
-                if self.state.time >= end_time {
-                    break;
-                }
-                self.step(h);
-            }
+        let mut next_output_time = (self.state.time + dt_out).min(end_time);
+
+        while self.state.time + 1.0e-9 < end_time {
+            self.advance_to_time(next_output_time);
             self.trajectory.push(self.state.clone());
-            // capture C++-compatible telemetry row for this output time
             let row = self.capture_cpp_row();
             self.telemetry_cpp.push(row);
             if self.state.altitude <= 0.0 {
                 break;
             }
+            if next_output_time >= end_time {
+                break;
+            }
+            next_output_time = (next_output_time + dt_out).min(end_time);
         }
         self.trajectory.clone()
     }
@@ -290,12 +318,8 @@ impl Simulator {
         }
     }
 
-    /// Single integration step
-    pub fn step(&mut self, dt: f64) {
-        // For backward compatibility in tests: perform a simple RK4 step
-        use crate::math::RungeKutta4;
-        let rk4 = RungeKutta4;
-        let current_state = vec![
+    fn state_vector(&self) -> Vec<f64> {
+        vec![
             self.state.mass,
             self.state.position.x,
             self.state.position.y,
@@ -303,22 +327,31 @@ impl Simulator {
             self.state.velocity.x,
             self.state.velocity.y,
             self.state.velocity.z,
-        ];
-        let new_state =
-            rk4.integrate(&current_state, self.state.time, dt, |t, state| self.dynamics(t, state));
-        self.state.time += dt;
+        ]
+    }
+
+    fn apply_state_vector(&mut self, time: f64, new_state: &[f64]) {
+        if new_state.len() < 7 {
+            return;
+        }
+
+        self.state.time = time;
         self.state.mass = new_state[0];
         self.state.position = Vector3::new(new_state[1], new_state[2], new_state[3]);
         self.state.velocity = Vector3::new(new_state[4], new_state[5], new_state[6]);
 
-        // Check for ground contact and constrain position/velocity
         let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&self.state.position, self.state.time);
         let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        if pos_llh.z < 0.0 && self.state.velocity.dot(&self.state.position.normalize()) < 0.0 {
-            // Rocket has hit the ground and is descending, set altitude to 0 and stop motion
+        let descending = self
+            .state
+            .position
+            .try_normalize(1.0e-9)
+            .map(|radial| self.state.velocity.dot(&radial) < 0.0)
+            .unwrap_or(false);
+
+        if pos_llh.z < 0.0 && descending {
             let ground_llh = Vector3::new(pos_llh.x, pos_llh.y, 0.0);
             let ground_ecef = CoordinateTransform::pos_llh_to_ecef(&ground_llh);
-            // Convert back to ECI using inverse transformation
             let dcm_ecef_to_eci = CoordinateTransform::dcm_eci_to_ecef(self.state.time).transpose();
             self.state.position = dcm_ecef_to_eci * ground_ecef;
             self.state.velocity = Vector3::zeros();
@@ -326,6 +359,56 @@ impl Simulator {
 
         self.update_stage_index();
         self.update_derived_quantities();
+    }
+
+    fn integrate_rk4_step(&mut self, dt: f64) {
+        if !(dt.is_finite() && dt > 0.0) {
+            return;
+        }
+
+        let rk4 = RungeKutta4;
+        let current_state = self.state_vector();
+        let new_state =
+            rk4.integrate(&current_state, self.state.time, dt, |t, state| self.dynamics(t, state));
+        self.apply_state_vector(self.state.time + dt, &new_state);
+    }
+
+    fn advance_to_time(&mut self, target_time: f64) {
+        let end_time = self.config.calculate_condition.end_time;
+        let target = target_time.min(end_time);
+        if target <= self.state.time {
+            return;
+        }
+
+        match self.integration {
+            IntegrationMode::Rk4 { step } => {
+                let mut remaining = target - self.state.time;
+                while remaining > 1.0e-12 {
+                    let dt = step.min(remaining);
+                    self.integrate_rk4_step(dt);
+                    remaining = target - self.state.time;
+                }
+            }
+            IntegrationMode::Rk45 { solver } => {
+                let mut state_vec = self.state_vector();
+                let mut time = self.state.time;
+                let solver_inst = solver;
+                solver_inst.advance_to(&mut state_vec, &mut time, target, |t, state| {
+                    self.dynamics(t, state)
+                });
+                let final_time = if (time - target).abs() < 1.0e-9 { target } else { time };
+                self.apply_state_vector(final_time, &state_vec);
+            }
+        }
+    }
+
+    /// Single integration step
+    pub fn step(&mut self, dt: f64) {
+        if !(dt.is_finite() && dt > 0.0) {
+            return;
+        }
+        let target = (self.state.time + dt).min(self.config.calculate_condition.end_time);
+        self.advance_to_time(target);
     }
 
     /// Update derived quantities for telemetry
@@ -433,6 +516,46 @@ impl Simulator {
             self.state.angle_of_attack = 0.0;
             self.state.sideslip_angle = 0.0;
         }
+
+        // Compute acceleration components (same as in capture_cpp_row)
+        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
+        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, self.state.time);
+        let (az_deg, el_deg) = self.rocket.attitude_at_time(self.state.time);
+        let dcm_ned_to_body =
+            CoordinateTransform::dcm_ned_to_body(deg2rad(az_deg), deg2rad(el_deg), None);
+
+        // Forces in ECI frame
+        let gravity_eci = self.gravity.gravity_eci(&self.state.position);
+        let mut acc_eci = gravity_eci;
+
+        // Add thrust acceleration if active
+        if self.state.thrust > 0.0 && self.state.mass > 0.0 {
+            let (thrust_force, _) = self.compute_thrust_force(
+                self.state.time,
+                &self.state.position,
+                &self.state.velocity,
+            );
+            acc_eci += thrust_force / self.state.mass;
+        }
+
+        // Add aerodynamic acceleration
+        if vel_air_mag > 0.1 && self.state.mass > 0.0 {
+            let aero_force = self.compute_aerodynamic_forces(
+                &self.state.position,
+                &self.state.velocity,
+                self.state.time,
+                self.state.mach_number,
+                self.state.mass,
+            );
+            acc_eci += aero_force / self.state.mass;
+        }
+
+        // Body-frame acceleration (exclude gravity for body-frame measurement)
+        let acc_body_eci = acc_eci - gravity_eci;
+        let acc_body = (dcm_ned_to_body * dcm_eci_to_ned) * acc_body_eci;
+
+        self.state.acc_eci = acc_eci;
+        self.state.acc_body = acc_body;
     }
 
     /// System dynamics function
@@ -863,6 +986,7 @@ mod tests {
                 air_density_file_exists: false,
                 air_density_file: "".to_string(),
                 air_density_variation: 0.0,
+                integrator: IntegratorSettings::default(),
             },
             launch: LaunchCondition {
                 position_llh: [35.0, 139.0, 0.0],
@@ -979,6 +1103,10 @@ mod tests {
                 duration_s: 60.0,
                 output_step_s: 1.0,
                 air_density_percent: 0.0,
+                integrator: ClientIntegrator {
+                    method: IntegratorMethod::Rk4,
+                    rk4_step_s: Some(0.5),
+                },
             },
             launch: ClientLaunch {
                 latitude_deg: 35.0,

@@ -59,6 +59,10 @@ export function createDefaultConfig(): ClientConfig {
       duration_s: 450,
       output_step_s: 1,
       air_density_percent: 0,
+      integrator: {
+        method: 'rk45',
+        rk4_step_s: 0.5,
+      },
     },
     launch: {
       latitude_deg: 42.4925,
@@ -141,6 +145,10 @@ function createOrbitalDemoPreset(): ClientConfig {
       duration_s: 520,
       output_step_s: 2,
       air_density_percent: 0,
+      integrator: {
+        method: 'rk45',
+        rk4_step_s: 1,
+      },
     },
     launch: {
       latitude_deg: 30.0,
@@ -207,6 +215,10 @@ function createHopperTestPreset(): ClientConfig {
       duration_s: 180,
       output_step_s: 0.5,
       air_density_percent: 0,
+      integrator: {
+        method: 'rk45',
+        rk4_step_s: 0.25,
+      },
     },
     launch: {
       latitude_deg: 32.98,

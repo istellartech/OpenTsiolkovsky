@@ -586,7 +586,8 @@ export function createAccelerationChart(
   stageBands: StageBand[],
   markers: EventMarker[]
 ): ChartConfiguration {
-  const datasetPoints = extendSeriesFallback(
+  // Total acceleration magnitude
+  const totalAccPoints = extendSeriesFallback(
     buildNumericSeries(
       data,
       (state) => state.time,
@@ -595,30 +596,144 @@ export function createAccelerationChart(
     { x: 0, y: 0 },
   )
 
-  // Calculate max acceleration before engine cutoff
-  const maxAcceleration = getMaxBeforeCutoff(data, (state) => (state.acceleration_magnitude ?? 0) / 9.80665)
-  const maxScale = maxAcceleration > 0 ? maxAcceleration * 1.1 : 10 // 10% margin or default 10G
+  // Body-frame acceleration components
+  const bodyXPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => {
+        const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+        return acc_body.x / 9.80665 // Convert to G
+      },
+    ),
+    { x: 0, y: 0 },
+  )
+
+  const bodyYPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => {
+        const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+        return acc_body.y / 9.80665 // Convert to G
+      },
+    ),
+    { x: 0, y: 0 },
+  )
+
+  const bodyZPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => {
+        const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+        return acc_body.z / 9.80665 // Convert to G
+      },
+    ),
+    { x: 0, y: 0 },
+  )
+
+  // Calculate max acceleration before engine cutoff for all components
+  const maxTotal = getMaxBeforeCutoff(data, (state) => (state.acceleration_magnitude ?? 0) / 9.80665)
+
+  // Body X-axis max and min values
+  const maxBodyX = getMaxBeforeCutoff(data, (state) => {
+    const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+    return acc_body.x / 9.80665
+  })
+  const minBodyX = getMinBeforeCutoff(data, (state) => {
+    const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+    return acc_body.x / 9.80665
+  })
+
+  // Body Y-axis max and min values
+  const maxBodyY = getMaxBeforeCutoff(data, (state) => {
+    const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+    return acc_body.y / 9.80665
+  })
+  const minBodyY = getMinBeforeCutoff(data, (state) => {
+    const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+    return acc_body.y / 9.80665
+  })
+
+  // Body Z-axis max and min values
+  const maxBodyZ = getMaxBeforeCutoff(data, (state) => {
+    const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+    return acc_body.z / 9.80665
+  })
+  const minBodyZ = getMinBeforeCutoff(data, (state) => {
+    const acc_body = vec3ToObject(state.acc_body || [0, 0, 0])
+    return acc_body.z / 9.80665
+  })
+
+  // Calculate overall max and min for scaling
+  const maxPositive = Math.max(maxTotal, maxBodyX, maxBodyY, maxBodyZ, 0)
+  const minNegative = Math.min(minBodyX, minBodyY, minBodyZ, 0)
+
+  const maxScale = maxPositive > 0 ? maxPositive * 1.1 : 10 // 10% margin or default 10G
+  const minScale = minNegative < 0 ? minNegative * 1.1 : 0 // 10% margin for negative or 0
 
   return {
     type: 'line',
     data: {
-      datasets: [{
-        label: '加速度',
-        data: datasetPoints,
-        borderColor: '#f59e0b',
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-        borderWidth: 2,
-        pointRadius: 0,
-        tension: 0.1,
-        fill: 'origin',
-        parsing: false,
-        spanGaps: true,
-      }]
+      datasets: [
+        {
+          label: '合計加速度',
+          data: totalAccPoints,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245, 158, 11, 0.1)',
+          borderWidth: 3,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: '機体X軸 (前後)',
+          data: bodyXPoints,
+          borderColor: '#dc2626',
+          backgroundColor: 'rgba(220, 38, 38, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: '機体Y軸 (左右)',
+          data: bodyYPoints,
+          borderColor: '#059669',
+          backgroundColor: 'rgba(5, 150, 105, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        },
+        {
+          label: '機体Z軸 (上下)',
+          data: bodyZPoints,
+          borderColor: '#7c3aed',
+          backgroundColor: 'rgba(124, 58, 237, 0.1)',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.1,
+          fill: false,
+          parsing: false,
+          spanGaps: true,
+        }
+      ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: createPluginOptions(stageBands, markers) as any,
+      plugins: {
+        ...createPluginOptions(stageBands, markers),
+        legend: { display: true, position: 'top' }
+      } as any,
       scales: {
         x: {
           type: 'linear',
@@ -629,8 +744,9 @@ export function createAccelerationChart(
           type: 'linear',
           title: { display: true, text: '加速度 (G)' },
           grid: { color: '#f1f5f9' },
-          beginAtZero: true,
-          max: maxScale
+          beginAtZero: false,
+          max: maxScale,
+          min: minScale
         }
       }
     }

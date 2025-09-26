@@ -96,6 +96,18 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
     push('simulation.air_density_percent', '空気密度変動は-100〜100%の範囲で指定してください。')
   }
 
+  const integrator = simulation.integrator || { method: 'rk4', rk4_step_s: simulation.output_step_s ? simulation.output_step_s / 2 : undefined }
+  if (integrator.method !== 'rk4' && integrator.method !== 'rk45') {
+    push('simulation.integrator.method', '積分器はRK4またはRK45を選択してください。')
+  }
+  if (integrator.method === 'rk4') {
+    if (!isFiniteNumber(integrator.rk4_step_s) || integrator.rk4_step_s <= 0) {
+      push('simulation.integrator.rk4_step_s', 'RK4の刻み幅は正の値にしてください。')
+    } else if (isFiniteNumber(simulation.duration_s) && integrator.rk4_step_s > simulation.duration_s) {
+      push('simulation.integrator.rk4_step_s', 'RK4の刻み幅はシミュレーション時間以下にしてください。')
+    }
+  }
+
   // Launch validation
   if (!isFiniteNumber(launch.latitude_deg) || launch.latitude_deg < -90 || launch.latitude_deg > 90) {
     push('launch.latitude_deg', '緯度は-90〜90度の範囲で指定してください。')

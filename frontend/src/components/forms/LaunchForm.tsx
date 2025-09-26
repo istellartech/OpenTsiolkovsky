@@ -54,6 +54,10 @@ interface LaunchFormProps {
 export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeFieldRef }: LaunchFormProps) {
   const dateValue = formatDateInput(config.launch.datetime_utc)
   const timeValue = formatTimeInput(config.launch.datetime_utc)
+  const integrator = config.simulation.integrator ?? {
+    method: 'rk45' as const,
+    rk4_step_s: Math.max(config.simulation.output_step_s / 2, 0.001),
+  }
 
   const handleDateTimeChange = (dateVal: string, timeVal: string) => {
     const newDateTime = parseDateTimeInputs(dateVal, timeVal, config.launch.datetime_utc)
@@ -121,7 +125,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
       <div className="field-grid">
         <NumberField
           id="velocity-north"
-          label="初速度 北 (m/s)"
+          label="初期速度 北 (m/s)"
           value={config.launch.velocity_ned_mps[0]}
           onChange={(value) => setConfig({
             ...config,
@@ -137,7 +141,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <NumberField
           id="velocity-east"
-          label="初速度 東 (m/s)"
+          label="初期速度 東 (m/s)"
           value={config.launch.velocity_ned_mps[1]}
           onChange={(value) => setConfig({
             ...config,
@@ -152,7 +156,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <NumberField
           id="velocity-down"
-          label="初速度 下 (m/s)"
+          label="初期速度 下 (m/s)"
           value={config.launch.velocity_ned_mps[2]}
           onChange={(value) => setConfig({
             ...config,
@@ -169,7 +173,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <label htmlFor="launch-date" className="text-sm font-medium text-slate-900">
-            Launch Date
+            打上げ日
           </label>
           <input
             id="launch-date"
@@ -183,7 +187,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <div className="space-y-2">
           <label htmlFor="launch-time" className="text-sm font-medium text-slate-900">
-            打ち上げ時刻 (UTC)
+            打上げ時刻 (UTC)
           </label>
           <input
             id="launch-time"
@@ -199,11 +203,11 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
       <div className="field-grid">
         <NumberField
           id="simulation-duration"
-          label="Simulation Duration (s)"
+          label="シミュレーション期間 (秒)"
           value={config.simulation.duration_s}
           onChange={(value) => setConfig({
             ...config,
-            simulation: { ...config.simulation, duration_s: value }
+            simulation: { ...config.simulation, duration_s: value, integrator },
           })}
           hasError={issuesSet.has('simulation.duration_s')}
           registerRef={makeFieldRef('simulation.duration_s')}
@@ -213,11 +217,11 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <NumberField
           id="simulation-output-step"
-          label="Output Step (s)"
+          label="出力時間刻み (秒)"
           value={config.simulation.output_step_s}
           onChange={(value) => setConfig({
             ...config,
-            simulation: { ...config.simulation, output_step_s: value }
+            simulation: { ...config.simulation, output_step_s: value, integrator },
           })}
           hasError={issuesSet.has('simulation.output_step_s')}
           registerRef={makeFieldRef('simulation.output_step_s')}
@@ -225,14 +229,68 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
           min={0.1}
         />
 
+        <div className="space-y-2">
+          <label
+            htmlFor="integrator-method"
+            className={issuesSet.has('simulation.integrator.method') ? 'text-sm font-medium text-rose-600' : 'text-sm font-medium text-slate-900'}
+          >
+            数値積分手法
+          </label>
+          <select
+            id="integrator-method"
+            value={integrator.method}
+            onChange={(e) => {
+              const method = (e.target.value === 'rk45' ? 'rk45' : 'rk4') as 'rk4' | 'rk45'
+              setConfig({
+                ...config,
+                simulation: {
+                  ...config.simulation,
+                  integrator: {
+                    ...integrator,
+                    method,
+                  },
+                },
+              })
+            }}
+            ref={(el) => makeFieldRef('simulation.integrator.method')(el)}
+            aria-invalid={issuesSet.has('simulation.integrator.method') || undefined}
+            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 shadow-inner focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-brand/30 focus-visible:ring-offset-1"
+          >
+            <option value="rk45">RK45（自動刻み）</option>
+            <option value="rk4">RK4（固定刻み）</option>
+          </select>
+        </div>
+
+        {integrator.method === 'rk4' && (
+          <NumberField
+            id="integrator-rk4-step"
+            label="RK4時間刻み (秒)"
+            value={integrator.rk4_step_s ?? Math.max(config.simulation.output_step_s / 2, 0.001)}
+            onChange={(value) => setConfig({
+              ...config,
+              simulation: {
+                ...config.simulation,
+                integrator: {
+                  ...integrator,
+                  rk4_step_s: value,
+                },
+              },
+            })}
+            hasError={issuesSet.has('simulation.integrator.rk4_step_s')}
+            registerRef={makeFieldRef('simulation.integrator.rk4_step_s')}
+            step="0.01"
+            min={0.001}
+          />
+        )}
+
         {showVariations && (
           <NumberField
             id="air-density-percent"
-            label="Air Density Variation (%)"
+            label="空気密度変動 (%)"
             value={config.simulation.air_density_percent}
             onChange={(value) => setConfig({
               ...config,
-              simulation: { ...config.simulation, air_density_percent: value }
+              simulation: { ...config.simulation, air_density_percent: value, integrator },
             })}
             hasError={issuesSet.has('simulation.air_density_percent')}
             registerRef={makeFieldRef('simulation.air_density_percent')}

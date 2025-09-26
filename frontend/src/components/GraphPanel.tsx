@@ -258,7 +258,7 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
         <ChartCard ref={velocityChartRef} title="Velocity" config={createVelocityChart(displayData, stageBands, eventMarkers)} />
         <ChartCard ref={machChartRef} title="Mach Number" config={createMachChart(displayData, stageBands, eventMarkers)} />
         <ChartCard ref={thrustChartRef} title="Thrust & Drag" config={createThrustChart(displayData, stageBands, eventMarkers)} />
-        <ChartCard ref={accelerationChartRef} title="Acceleration" config={createAccelerationChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={accelerationChartRef} title="Acceleration (ECI & Body)" config={createAccelerationChart(displayData, stageBands, eventMarkers)} />
         <ChartCard ref={dynamicPressureChartRef} title="Dynamic Pressure" config={createDynamicPressureChart(displayData, stageBands, eventMarkers)} />
       </div>
 

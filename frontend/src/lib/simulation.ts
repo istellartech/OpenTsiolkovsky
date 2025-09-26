@@ -23,6 +23,8 @@ export type SimulationState = {
   velocity_ned?: Vec3Json  // NED velocity components [m/s]
   sea_level_mach?: number  // Mach number based on sea level sound speed
   acceleration_magnitude?: number  // Total acceleration magnitude [m/s²]
+  acc_eci?: Vec3Json  // ECI acceleration components [m/s²]
+  acc_body?: Vec3Json  // Body-frame acceleration components [m/s²]
   angle_of_attack?: number  // Attack of angle [deg]
   sideslip_angle?: number   // Sideslip angle [deg]
   attitude_azimuth?: number  // Attitude azimuth [deg]
@@ -242,12 +244,18 @@ export type ClientStageConfig = {
   rotational_inertia_kgm2: [number, number, number]
 }
 
+export type ClientIntegratorConfig = {
+  method: 'rk4' | 'rk45'
+  rk4_step_s?: number | null
+}
+
 export type ClientConfig = {
   name: string
   simulation: {
     duration_s: number
     output_step_s: number
     air_density_percent: number
+    integrator: ClientIntegratorConfig
   }
   launch: {
     latitude_deg: number
@@ -390,6 +398,10 @@ type LegacyRocketConfig = {
     "air density variation file exist?(bool)": boolean
     "air density variation file name(str)": string
     "variation ratio of air density[%](-100to100, default=0)": number
+    integrator: {
+      "method(str)": 'rk4' | 'rk45'
+      "rk4 step[s]"?: number
+    }
   }
   launch: {
     "position LLH[deg,deg,m]": [number, number, number]
@@ -486,6 +498,18 @@ export function toLegacyRocketConfig(config: ClientConfig): LegacyRocketConfig {
   const stage2 = stages[1] ? toLegacyStage(stages[1], stages.length > 2) : undefined
   const stage3 = stages[2] ? toLegacyStage(stages[2], false) : undefined
 
+  const integrator = simulation.integrator ?? { method: 'rk45' as const, rk4_step_s: null }
+  const method = integrator.method === 'rk45' ? 'rk45' : 'rk4'
+  const legacyIntegrator: LegacyRocketConfig['calculate condition']['integrator'] = {
+    'method(str)': method,
+  }
+  if (method === 'rk4') {
+    const step = integrator.rk4_step_s
+    if (typeof step === 'number' && Number.isFinite(step) && step > 0) {
+      legacyIntegrator['rk4 step[s]'] = step
+    }
+  }
+
   return {
     "name(str)": config.name,
     "calculate condition": {
@@ -494,6 +518,7 @@ export function toLegacyRocketConfig(config: ClientConfig): LegacyRocketConfig {
       "air density variation file exist?(bool)": false,
       "air density variation file name(str)": '',
       "variation ratio of air density[%](-100to100, default=0)": simulation.air_density_percent,
+      integrator: legacyIntegrator,
     },
     launch: {
       "position LLH[deg,deg,m]": [launch.latitude_deg, launch.longitude_deg, launch.altitude_m],

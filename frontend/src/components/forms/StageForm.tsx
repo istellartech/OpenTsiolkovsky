@@ -292,7 +292,7 @@ export function StageForm({
                       <div className="field-grid">
                         <NumberField
                           id={`stage-${index}-thrust-constant`}
-                          label="定推力 (N)"
+                          label="固定推力 (N)"
                           value={stage.thrust_constant}
                           onChange={(value) => updateStage(index, { thrust_constant: value })}
                           hasError={issuesSet.has(`stage.thrust_constant`)}
@@ -349,7 +349,7 @@ export function StageForm({
                       <div className="field-grid">
                         <NumberField
                           id={`stage-${index}-isp-constant`}
-                          label="定Isp (s)"
+                          label="固定Isp (s)"
                           value={stage.isp_constant}
                           onChange={(value) => updateStage(index, { isp_constant: value })}
                           hasError={issuesSet.has(`stage.isp_constant`)}

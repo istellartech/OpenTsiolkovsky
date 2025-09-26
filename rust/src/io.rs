@@ -301,6 +301,12 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
         "dynamic_pressure[Pa]",
         "thrust[N]",
         "drag_force[N]",
+        "acc_eci_x[m/s2]",
+        "acc_eci_y[m/s2]",
+        "acc_eci_z[m/s2]",
+        "acc_body_x[m/s2]",
+        "acc_body_y[m/s2]",
+        "acc_body_z[m/s2]",
     ])?;
 
     // Write data
@@ -320,6 +326,12 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
             state.dynamic_pressure.to_string(),
             state.thrust.to_string(),
             state.drag_force.to_string(),
+            state.acc_eci.x.to_string(),
+            state.acc_eci.y.to_string(),
+            state.acc_eci.z.to_string(),
+            state.acc_body.x.to_string(),
+            state.acc_body.y.to_string(),
+            state.acc_body.z.to_string(),
         ])?;
     }
 

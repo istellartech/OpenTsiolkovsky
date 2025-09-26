@@ -206,6 +206,36 @@ impl<'de> Deserialize<'de> for RocketConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum IntegratorMethod {
+    #[serde(alias = "RK4", alias = "RungeKutta4")]
+    Rk4,
+    #[serde(alias = "RK45", alias = "DormandPrince")]
+    Rk45,
+}
+
+impl Default for IntegratorMethod {
+    fn default() -> Self {
+        IntegratorMethod::Rk4
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntegratorSettings {
+    #[serde(rename = "method(str)", default)]
+    pub method: IntegratorMethod,
+
+    #[serde(rename = "rk4 step[s]", default, skip_serializing_if = "Option::is_none")]
+    pub rk4_step: Option<f64>,
+}
+
+impl Default for IntegratorSettings {
+    fn default() -> Self {
+        Self { method: IntegratorMethod::Rk4, rk4_step: None }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CalculateCondition {
     #[serde(rename = "end time[s]")]
@@ -222,6 +252,9 @@ pub struct CalculateCondition {
 
     #[serde(rename = "variation ratio of air density[%](-100to100, default=0)")]
     pub air_density_variation: f64,
+
+    #[serde(default)]
+    pub integrator: IntegratorSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -732,6 +765,22 @@ pub struct ClientSimulation {
     pub output_step_s: f64,
     #[serde(default)]
     pub air_density_percent: f64,
+    #[serde(default)]
+    pub integrator: ClientIntegrator,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientIntegrator {
+    #[serde(default)]
+    pub method: IntegratorMethod,
+    #[serde(default)]
+    pub rk4_step_s: Option<f64>,
+}
+
+impl Default for ClientIntegrator {
+    fn default() -> Self {
+        Self { method: IntegratorMethod::Rk4, rk4_step_s: None }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -960,12 +1009,18 @@ impl ClientConfig {
         let ClientConfig { name, simulation, launch, stages, stage, aerodynamics, attitude, wind } =
             self;
 
+        let integrator = IntegratorSettings {
+            method: simulation.integrator.method,
+            rk4_step: simulation.integrator.rk4_step_s,
+        };
+
         let calc = CalculateCondition {
             end_time: simulation.duration_s,
             time_step: simulation.output_step_s,
             air_density_file_exists: false,
             air_density_file: String::new(),
             air_density_variation: simulation.air_density_percent,
+            integrator,
         };
 
         let launch = LaunchCondition {
