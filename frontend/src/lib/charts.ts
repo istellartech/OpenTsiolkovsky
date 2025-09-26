@@ -239,30 +239,36 @@ export function createAltitudeChart(
 export function createVelocityChart(
   data: SimulationState[],
   stageBands: StageBand[],
-  markers: EventMarker[]
+  markers: EventMarker[],
+  coordinateFrame: 'eci' | 'ecef' = 'ecef'
 ): ChartConfiguration {
+  // Helper function to get the appropriate velocity field based on coordinate frame
+  const getVelocityNED = (state: SimulationState) => {
+    if (coordinateFrame === 'eci') {
+      return state.velocity_eci_ned || state.velocity_ned
+    } else {
+      return state.velocity_ecef_ned || state.velocity_ned
+    }
+  }
+
   const totalVelPoints = extendSeriesFallback(
     buildNumericSeries(
       data,
       (state) => state.time,
       (state) => {
-        if (state.velocity_ned) {
-          const vel_ned = vec3ToObject(state.velocity_ned);
+        const velocityField = getVelocityNED(state);
+        if (velocityField) {
+          const vel_ned = vec3ToObject(velocityField);
           const totalVel = Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y + vel_ned.z * vel_ned.z);
 
-          // Debug logging to compare backend vs calculated values
+          // Debug logging to compare coordinate frames
           if (state.time < 10) { // Only log first 10 seconds to avoid spam
-            const backendVel = state.velocity_magnitude ?? 0;
-            const diff = Math.abs(backendVel - totalVel);
-            console.log(`t=${state.time}s: backend_magnitude=${backendVel}, calculated_total=${totalVel.toFixed(2)}, difference=${diff.toFixed(2)}`);
-            if (diff > 10) { // Warn if difference is significant
-              console.warn(`Large velocity difference detected at t=${state.time}s`);
-            }
+            console.log(`t=${state.time}s (${coordinateFrame.toUpperCase()}): total_vel=${totalVel.toFixed(2)}`);
           }
 
           return totalVel;
         }
-        // Fallback to backend value if velocity_ned is not available
+        // Fallback to backend value if velocity fields are not available
         return state.velocity_magnitude ?? 0;
       },
     ),
@@ -275,8 +281,9 @@ export function createVelocityChart(
       data,
       (state) => state.time,
       (state) => {
-        if (state.velocity_ned) {
-          const vel_ned = vec3ToObject(state.velocity_ned);
+        const velocityField = getVelocityNED(state);
+        if (velocityField) {
+          const vel_ned = vec3ToObject(velocityField);
           return -vel_ned.z; // NED Z is down, so negate for upward positive
         }
         return 0;
@@ -291,12 +298,13 @@ export function createVelocityChart(
       data,
       (state) => state.time,
       (state) => {
-        if (state.velocity_ned) {
-          const vel_ned = vec3ToObject(state.velocity_ned);
+        const velocityField = getVelocityNED(state);
+        if (velocityField) {
+          const vel_ned = vec3ToObject(velocityField);
           const horizontalSpeed = Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y);
           // Debug logging - remove after testing
           if (state.time < 10) { // Only log first 10 seconds to avoid spam
-            console.log(`t=${state.time}s: velocity_ned=`, state.velocity_ned, 'horizontal=', horizontalSpeed);
+            console.log(`t=${state.time}s (${coordinateFrame.toUpperCase()}): horizontal_vel=${horizontalSpeed.toFixed(2)}`);
           }
           return horizontalSpeed;
         }
@@ -308,22 +316,25 @@ export function createVelocityChart(
 
   // Calculate max velocity before engine cutoff
   const maxTotalVel = getMaxBeforeCutoff(data, (state) => {
-    if (state.velocity_ned) {
-      const vel_ned = vec3ToObject(state.velocity_ned);
+    const velocityField = getVelocityNED(state);
+    if (velocityField) {
+      const vel_ned = vec3ToObject(velocityField);
       return Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y + vel_ned.z * vel_ned.z);
     }
     return state.velocity_magnitude ?? 0;
   })
   const maxVerticalVel = getMaxBeforeCutoff(data, (state) => {
-    if (state.velocity_ned) {
-      const vel_ned = vec3ToObject(state.velocity_ned);
+    const velocityField = getVelocityNED(state);
+    if (velocityField) {
+      const vel_ned = vec3ToObject(velocityField);
       return Math.abs(-vel_ned.z); // Take absolute value for max scale calculation
     }
     return 0;
   })
   const maxHorizontalVel = getMaxBeforeCutoff(data, (state) => {
-    if (state.velocity_ned) {
-      const vel_ned = vec3ToObject(state.velocity_ned);
+    const velocityField = getVelocityNED(state);
+    if (velocityField) {
+      const vel_ned = vec3ToObject(velocityField);
       return Math.sqrt(vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y);
     }
     return 0;
@@ -331,8 +342,9 @@ export function createVelocityChart(
 
   // Calculate min velocity before engine cutoff (important for vertical velocity which can be negative)
   const minVerticalVel = getMinBeforeCutoff(data, (state) => {
-    if (state.velocity_ned) {
-      const vel_ned = vec3ToObject(state.velocity_ned);
+    const velocityField = getVelocityNED(state);
+    if (velocityField) {
+      const vel_ned = vec3ToObject(velocityField);
       return -vel_ned.z; // NED Z is down, so negate for upward positive
     }
     return 0;
@@ -832,30 +844,6 @@ export function createAttitudeChart(
     { x: 0, y: 0 },
   )
 
-  const aoaPoints = extendSeriesFallback(
-    buildNumericSeries(
-      data,
-      (state) => state.time,
-      (state) => {
-        const aoa = state.angle_of_attack ?? 0;
-        // Debug logging - remove after testing
-        if (state.time < 10) { // Only log first 10 seconds to avoid spam
-          console.log(`t=${state.time}s: angle_of_attack=`, state.angle_of_attack, 'aoa=', aoa);
-        }
-        return aoa;
-      },
-    ),
-    { x: 0, y: 0 },
-  )
-
-  const sideslipPoints = extendSeriesFallback(
-    buildNumericSeries(
-      data,
-      (state) => state.time,
-      (state) => state.sideslip_angle ?? 0,
-    ),
-    { x: 0, y: 0 },
-  )
 
   return {
     type: 'line',
@@ -884,7 +872,59 @@ export function createAttitudeChart(
           fill: false,
           parsing: false,
           spanGaps: true,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        ...createPluginOptions(stageBands, markers),
+        legend: { display: true, position: 'top' }
+      } as any,
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Time (s)' },
+          grid: { color: '#f1f5f9' }
         },
+        y: {
+          type: 'linear',
+          title: { display: true, text: 'Angle (deg)' },
+          grid: { color: '#f1f5f9' }
+        }
+      }
+    }
+  }
+}
+
+export function createAoAChart(
+  data: SimulationState[],
+  stageBands: StageBand[],
+  markers: EventMarker[]
+): ChartConfiguration {
+  const aoaPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.angle_of_attack ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
+  const sideslipPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.sideslip_angle ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
+  return {
+    type: 'line',
+    data: {
+      datasets: [
         {
           label: 'Angle of Attack',
           data: aoaPoints,
@@ -978,6 +1018,60 @@ export function createTrajectoryChart(
         y: {
           type: 'linear',
           title: { display: true, text: '高度 (km)' },
+          grid: { color: '#f1f5f9' },
+          beginAtZero: true
+        }
+      }
+    }
+  }
+}
+
+export function createMassChart(
+  data: SimulationState[],
+  stageBands: StageBand[],
+  markers: EventMarker[]
+): ChartConfiguration {
+  const massPoints = extendSeriesFallback(
+    buildNumericSeries(
+      data,
+      (state) => state.time,
+      (state) => state.mass ?? 0,
+    ),
+    { x: 0, y: 0 },
+  )
+
+  return {
+    type: 'line',
+    data: {
+      datasets: [{
+        label: '質量 (kg)',
+        data: massPoints,
+        borderColor: '#059669',
+        backgroundColor: 'rgba(5, 150, 105, 0.1)',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.1,
+        fill: false,
+        parsing: false,
+        spanGaps: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        intersect: false,
+        mode: 'index',
+      },
+      plugins: createPluginOptions(stageBands, markers),
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: '時間 (s)' },
+          grid: { color: '#f1f5f9' }
+        },
+        y: {
+          title: { display: true, text: '質量 (kg)' },
           grid: { color: '#f1f5f9' },
           beginAtZero: true
         }

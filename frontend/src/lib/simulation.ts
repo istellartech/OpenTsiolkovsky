@@ -20,8 +20,10 @@ export type SimulationState = {
   drag_force: number
   downrange_km?: number
   // New fields for enhanced visualization
-  velocity_ned?: Vec3Json  // NED velocity components [m/s]
-  sea_level_mach?: number  // Mach number based on sea level sound speed
+  velocity_ned?: Vec3Json       // NED velocity components [m/s] (backward compatibility)
+  velocity_eci_ned?: Vec3Json   // ECI velocity in NED frame [m/s]
+  velocity_ecef_ned?: Vec3Json  // ECEF velocity in NED frame [m/s]
+  sea_level_mach?: number       // Mach number based on sea level sound speed
   acceleration_magnitude?: number  // Total acceleration magnitude [m/s²]
   acc_eci?: Vec3Json  // ECI acceleration components [m/s²]
   acc_body?: Vec3Json  // Body-frame acceleration components [m/s²]

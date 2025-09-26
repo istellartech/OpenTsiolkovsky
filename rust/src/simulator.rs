@@ -23,15 +23,17 @@ pub struct SimulationState {
     pub thrust: f64,             // Current thrust [N]
     pub drag_force: f64,         // Current drag force [N]
     // New fields for enhanced visualization
-    pub velocity_ned: Vector3<f64>,  // NED velocity components [m/s]
-    pub sea_level_mach: f64,         // Mach number based on sea level sound speed
+    pub velocity_ned: Vector3<f64>, // NED velocity components [m/s] (for backward compatibility)
+    pub velocity_eci_ned: Vector3<f64>, // ECI velocity in NED frame [m/s]
+    pub velocity_ecef_ned: Vector3<f64>, // ECEF velocity in NED frame [m/s]
+    pub sea_level_mach: f64,        // Mach number based on sea level sound speed
     pub acceleration_magnitude: f64, // Total acceleration magnitude [m/s²]
-    pub acc_eci: Vector3<f64>,       // ECI acceleration components [m/s²]
-    pub acc_body: Vector3<f64>,      // Body-frame acceleration components [m/s²]
-    pub angle_of_attack: f64,        // Attack of angle [deg]
-    pub sideslip_angle: f64,         // Sideslip angle [deg]
-    pub attitude_azimuth: f64,       // Attitude azimuth [deg]
-    pub attitude_elevation: f64,     // Attitude elevation [deg]
+    pub acc_eci: Vector3<f64>,      // ECI acceleration components [m/s²]
+    pub acc_body: Vector3<f64>,     // Body-frame acceleration components [m/s²]
+    pub angle_of_attack: f64,       // Attack of angle [deg]
+    pub sideslip_angle: f64,        // Sideslip angle [deg]
+    pub attitude_azimuth: f64,      // Attitude azimuth [deg]
+    pub attitude_elevation: f64,    // Attitude elevation [deg]
 }
 
 /// C++-compatible CSV row telemetry
@@ -228,6 +230,8 @@ impl Simulator {
             drag_force: 0.0,
             // Initialize new fields
             velocity_ned: vel_ned,
+            velocity_eci_ned: Vector3::zeros(),
+            velocity_ecef_ned: vel_ned,
             sea_level_mach: 0.0,
             acceleration_magnitude: 0.0,
             acc_eci: Vector3::zeros(),
@@ -276,13 +280,41 @@ impl Simulator {
         let mut next_output_time = (self.state.time + dt_out).min(end_time);
 
         while self.state.time + 1.0e-9 < end_time {
+            // Check if next step would lead to ground impact
+            let current_altitude = self.state.altitude;
+            let current_velocity = self.state.velocity;
+            let current_position = self.state.position;
+
+            // Estimate velocity component toward/away from Earth center
+            let radial_velocity = if let Some(radial_unit) = current_position.try_normalize(1.0e-9)
+            {
+                current_velocity.dot(&radial_unit)
+            } else {
+                0.0
+            };
+
+            // If currently above ground and descending, check if next step would go below ground
+            if current_altitude > 0.0 && radial_velocity < 0.0 {
+                // Simple linear prediction: will altitude be negative after dt_out?
+                let altitude_change_rate = radial_velocity; // Approximate as purely radial
+                let predicted_altitude = current_altitude + altitude_change_rate * dt_out;
+
+                if predicted_altitude <= 0.0 {
+                    // This would be the last valid state before ground impact
+                    break;
+                }
+            }
+
             self.advance_to_time(next_output_time);
             self.trajectory.push(self.state.clone());
             let row = self.capture_cpp_row();
             self.telemetry_cpp.push(row);
+
+            // Also check after integration in case prediction was wrong
             if self.state.altitude <= 0.0 {
                 break;
             }
+
             if next_output_time >= end_time {
                 break;
             }
@@ -340,22 +372,7 @@ impl Simulator {
         self.state.position = Vector3::new(new_state[1], new_state[2], new_state[3]);
         self.state.velocity = Vector3::new(new_state[4], new_state[5], new_state[6]);
 
-        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&self.state.position, self.state.time);
-        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        let descending = self
-            .state
-            .position
-            .try_normalize(1.0e-9)
-            .map(|radial| self.state.velocity.dot(&radial) < 0.0)
-            .unwrap_or(false);
-
-        if pos_llh.z < 0.0 && descending {
-            let ground_llh = Vector3::new(pos_llh.x, pos_llh.y, 0.0);
-            let ground_ecef = CoordinateTransform::pos_llh_to_ecef(&ground_llh);
-            let dcm_ecef_to_eci = CoordinateTransform::dcm_eci_to_ecef(self.state.time).transpose();
-            self.state.position = dcm_ecef_to_eci * ground_ecef;
-            self.state.velocity = Vector3::zeros();
-        }
+        // No longer need ground clamping logic - simulation ends before landing
 
         self.update_stage_index();
         self.update_derived_quantities();
@@ -462,8 +479,15 @@ impl Simulator {
         self.state.drag_force = ca * self.state.dynamic_pressure * reference_area;
         self.last_drag_magnitude = self.state.drag_force;
 
-        // Update new fields for enhanced visualization
-        self.state.velocity_ned = vel_ned;
+        // Calculate velocities in both coordinate systems
+        // ECI velocity in NED frame (includes Earth rotation)
+        self.state.velocity_eci_ned = dcm_eci_to_ned * self.state.velocity;
+
+        // ECEF velocity in NED frame (Earth-relative) - vel_ned is already computed above
+        self.state.velocity_ecef_ned = vel_ned;
+
+        // Update legacy field for backward compatibility (use ECEF for expected behavior)
+        self.state.velocity_ned = self.state.velocity_ecef_ned;
 
         // Sea level Mach number (using constant sea level sound speed = 340.3 m/s)
         const SEA_LEVEL_SOUND_SPEED: f64 = 340.3;
@@ -572,15 +596,8 @@ impl Simulator {
         let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
         let altitude = pos_llh.z;
 
-        // Check if rocket has hit the ground (negative altitude) and is descending
-        if altitude <= 0.0 && velocity.dot(&position.normalize()) < 0.0 {
-            // Stop all dynamics when rocket hits ground and is moving toward Earth
-            return vec![
-                0.0, // dmass/dt = 0 (no more propellant consumption)
-                0.0, 0.0, 0.0, // dpos/dt = 0 (stop moving)
-                0.0, 0.0, 0.0, // dvel/dt = 0 (no acceleration)
-            ];
-        }
+        // No longer need ground impact handling in dynamics
+        // Simulation will end before hitting the ground
 
         // Atmospheric conditions
         let atm_conditions = self.atmosphere.conditions(altitude);
@@ -1061,19 +1078,24 @@ mod tests {
         let mut simulator = Simulator::new(rocket).unwrap();
         let trajectory = simulator.run();
 
-        // Check that simulation stops when altitude goes to zero or negative
+        // Check that simulation stops BEFORE hitting the ground (altitude > 0)
         let final_state = trajectory.last().unwrap();
-        assert!(final_state.altitude <= 1.0); // Should be at or very close to ground
+        assert!(final_state.altitude > 0.0); // Should stop before ground impact
 
         // Check that there are no states with negative altitude
-        let negative_altitudes: Vec<_> = trajectory
-            .iter()
-            .filter(|state| state.altitude < -1.0) // Allow small numerical errors
-            .collect();
+        let negative_altitudes: Vec<_> =
+            trajectory.iter().filter(|state| state.altitude < 0.0).collect();
         assert!(
             negative_altitudes.is_empty(),
-            "Found {} states with significantly negative altitude",
+            "Found {} states with negative altitude",
             negative_altitudes.len()
+        );
+
+        // Check that the final state has reasonable low altitude (close to but above ground)
+        assert!(
+            final_state.altitude < 1000.0,
+            "Final altitude {} is too high - simulation should end closer to ground",
+            final_state.altitude
         );
     }
 

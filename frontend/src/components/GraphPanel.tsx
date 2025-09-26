@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react'
 import { Chart, type ChartConfiguration } from 'chart.js/auto'
 import { Download, PackageOpen, MapPin } from 'lucide-react'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Badge, Button } from './ui'
@@ -12,7 +12,9 @@ import {
   createAccelerationChart,
   createDynamicPressureChart,
   createAttitudeChart,
-  createTrajectoryChart
+  createAoAChart,
+  createTrajectoryChart,
+  createMassChart
 } from '../lib/charts'
 import { downloadChartAsImage, getChartFilename, downloadAllChartsAsZip } from '../lib/charts'
 import { downloadKML } from '../lib/utils'
@@ -98,6 +100,7 @@ interface GraphPanelProps {
 
 export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
   const chartData = useChartData(data, stagePlanConfig)
+  const [velocityFrame, setVelocityFrame] = useState<'eci' | 'ecef'>('ecef')
 
   // Chart refs for bulk download
   const altitudeChartRef = useRef<ChartCardHandle>(null)
@@ -106,7 +109,9 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
   const thrustChartRef = useRef<ChartCardHandle>(null)
   const accelerationChartRef = useRef<ChartCardHandle>(null)
   const dynamicPressureChartRef = useRef<ChartCardHandle>(null)
+  const massChartRef = useRef<ChartCardHandle>(null)
   const attitudeChartRef = useRef<ChartCardHandle>(null)
+  const aoaChartRef = useRef<ChartCardHandle>(null)
   const trajectoryChartRef = useRef<ChartCardHandle>(null)
 
   const handleDownloadAllCharts = async () => {
@@ -117,7 +122,9 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
       thrustChartRef,
       accelerationChartRef,
       dynamicPressureChartRef,
+      massChartRef,
       attitudeChartRef,
+      aoaChartRef,
       trajectoryChartRef,
     ]
 
@@ -252,20 +259,42 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
         ))}
       </div>
 
+      {/* Velocity Coordinate System Toggle - Compact */}
+      <div className="mb-2 flex items-center justify-end gap-2 text-xs">
+        <span className="text-slate-500">Velocity frame:</span>
+        <Button
+          variant={velocityFrame === 'ecef' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setVelocityFrame('ecef')}
+          className="h-6 px-2 text-xs"
+        >
+          ECEF
+        </Button>
+        <Button
+          variant={velocityFrame === 'eci' ? 'default' : 'ghost'}
+          size="sm"
+          onClick={() => setVelocityFrame('eci')}
+          className="h-6 px-2 text-xs"
+        >
+          ECI
+        </Button>
+      </div>
+
       {/* Main Charts */}
       <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <ChartCard ref={altitudeChartRef} title="Altitude" config={createAltitudeChart(displayData, stageBands, eventMarkers)} />
-        <ChartCard ref={velocityChartRef} title="Velocity" config={createVelocityChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={velocityChartRef} title={`Velocity (${velocityFrame.toUpperCase()})`} config={createVelocityChart(displayData, stageBands, eventMarkers, velocityFrame)} />
         <ChartCard ref={machChartRef} title="Mach Number" config={createMachChart(displayData, stageBands, eventMarkers)} />
         <ChartCard ref={thrustChartRef} title="Thrust & Drag" config={createThrustChart(displayData, stageBands, eventMarkers)} />
         <ChartCard ref={accelerationChartRef} title="Acceleration (ECI & Body)" config={createAccelerationChart(displayData, stageBands, eventMarkers)} />
         <ChartCard ref={dynamicPressureChartRef} title="Dynamic Pressure" config={createDynamicPressureChart(displayData, stageBands, eventMarkers)} />
+        <ChartCard ref={massChartRef} title="Mass" config={createMassChart(displayData, stageBands, eventMarkers)} />
       </div>
 
       {/* Secondary Charts */}
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard ref={attitudeChartRef} title="Attitude" config={createAttitudeChart(displayData, stageBands, eventMarkers)} />
-        <div></div> {/* Empty space for better layout */}
+        <ChartCard ref={aoaChartRef} title="Angle of Attack (AoA)" config={createAoAChart(displayData, stageBands, eventMarkers)} />
       </div>
 
       {/* Trajectory Chart */}

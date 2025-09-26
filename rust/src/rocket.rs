@@ -206,19 +206,14 @@ impl<'de> Deserialize<'de> for RocketConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum IntegratorMethod {
     #[serde(alias = "RK4", alias = "RungeKutta4")]
+    #[default]
     Rk4,
     #[serde(alias = "RK45", alias = "DormandPrince")]
     Rk45,
-}
-
-impl Default for IntegratorMethod {
-    fn default() -> Self {
-        IntegratorMethod::Rk4
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
