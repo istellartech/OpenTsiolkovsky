@@ -250,8 +250,8 @@ export function generateKML(data: KMLData): string {
       if (currentStage >= 0 && index > 0) {
         stageEvents.push({
           time: state.time,
-          name: `Stage ${currentStage + 1} Separation`,
-          description: `Stage ${currentStage + 1} separated at t+${state.time.toFixed(1)}s`
+          name: `Stage ${currentStage} Separation`,
+          description: `Stage ${currentStage} separated at t+${state.time.toFixed(1)}s`
         })
       }
       currentStage = state.stage

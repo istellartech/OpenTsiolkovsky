@@ -3,7 +3,7 @@ import type React from 'react'
 import type { ClientConfig, SimulationState } from '../lib/simulation'
 import { runSimulation } from '../lib/simulation'
 import { createDefaultConfig } from '../config/defaults'
-import { validateConfig, type ValidationIssue } from '../utils/validation'
+import { validateConfig, isValidClientConfig, type ValidationIssue } from '../utils/validation'
 
 export function useSimulation(onResult: (trajectory: SimulationState[], config: ClientConfig) => void) {
   const [config, setConfig] = useState<ClientConfig>(() => createDefaultConfig())
@@ -90,18 +90,23 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
         const content = e.target?.result as string
         const importedConfig = JSON.parse(content)
 
-        // Basic validation
-        if (typeof importedConfig === 'object' && importedConfig !== null) {
-          setConfig(importedConfig)
-          setUseCnProfile(importedConfig.aerodynamics?.cn_profile?.length > 0 || false)
-          setUseCaProfile(importedConfig.aerodynamics?.ca_profile?.length > 0 || false)
-          setUseAttitudeProfile(importedConfig.attitude?.profile?.length > 0 || false)
-          setUseWindProfile(importedConfig.wind?.profile?.length > 0 || false)
-          setSelectedPresetId('custom')
-          setShowTemplates(false)
+        // Validate structure before setting config
+        if (!isValidClientConfig(importedConfig)) {
+          setError('設定ファイルの構造が不正です。必須フィールド（simulation, launch, aerodynamics, attitude, wind）が不足している可能性があります。')
+          return
         }
+
+        // If structure is valid, apply the config
+        setConfig(importedConfig)
+        setUseCnProfile(importedConfig.aerodynamics?.cn_profile?.length > 0 || false)
+        setUseCaProfile(importedConfig.aerodynamics?.ca_profile?.length > 0 || false)
+        setUseAttitudeProfile(importedConfig.attitude?.profile?.length > 0 || false)
+        setUseWindProfile(importedConfig.wind?.profile?.length > 0 || false)
+        setSelectedPresetId('custom')
+        setShowTemplates(false)
+        setError(null) // Clear any previous errors
       } catch (error) {
-        setError('Failed to import configuration: Invalid JSON format')
+        setError('設定ファイルの読み込みに失敗しました。JSONフォーマットが正しくない可能性があります。')
       }
     }
     reader.readAsText(file)

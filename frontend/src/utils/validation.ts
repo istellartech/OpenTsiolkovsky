@@ -9,6 +9,38 @@ export interface ValidationIssue {
 
 export const VALIDATION_ERROR_MESSAGE = '入力値に問題があります。リストを確認して修正してください。'
 
+export function isValidClientConfig(obj: unknown): obj is ClientConfig {
+  if (!obj || typeof obj !== 'object') return false
+
+  const config = obj as any
+
+  // Check required top-level properties
+  const requiredTopLevel = ['simulation', 'launch', 'aerodynamics', 'attitude', 'wind']
+  for (const key of requiredTopLevel) {
+    if (!config[key] || typeof config[key] !== 'object') return false
+  }
+
+  // Check simulation properties
+  if (!config.simulation.hasOwnProperty('duration_s') ||
+      !config.simulation.hasOwnProperty('output_step_s') ||
+      !config.simulation.hasOwnProperty('air_density_percent')) return false
+
+  // Check launch properties
+  if (!config.launch.hasOwnProperty('latitude_deg') ||
+      !config.launch.hasOwnProperty('longitude_deg') ||
+      !config.launch.hasOwnProperty('altitude_m') ||
+      !Array.isArray(config.launch.velocity_ned_mps) ||
+      !config.launch.datetime_utc) return false
+
+  // Check launch datetime
+  const dt = config.launch.datetime_utc
+  if (!dt.hasOwnProperty('year') || !dt.hasOwnProperty('month') ||
+      !dt.hasOwnProperty('day') || !dt.hasOwnProperty('hour') ||
+      !dt.hasOwnProperty('minute') || !dt.hasOwnProperty('second')) return false
+
+  return true
+}
+
 export function numberFromInput(value: string): number {
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
@@ -20,7 +52,18 @@ export function isFiniteNumber(value: unknown): value is number {
 
 export function validateConfig(config: ClientConfig): ValidationIssue[] {
   const issues: ValidationIssue[] = []
-  const { simulation, launch, aerodynamics, attitude, wind } = config
+
+  // Add defensive null checks
+  if (!config) {
+    issues.push({ field: 'config', message: '設定オブジェクトが見つかりません。' })
+    return issues
+  }
+
+  const simulation = config.simulation || {}
+  const launch = config.launch || {}
+  const aerodynamics = config.aerodynamics || {}
+  const attitude = config.attitude || {}
+  const wind = config.wind || {}
   const stageList = config.stages && config.stages.length > 0 ? config.stages : [createDefaultStage()]
 
   if (stageList.length === 0) {
@@ -73,7 +116,9 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
     push('launch.velocity_ned_mps', '初期速度は5,000 m/s以下にしてください。')
   }
 
-  const { year, month, day, hour, minute, second } = launch.datetime_utc
+  // Safe access to datetime_utc with fallback
+  const datetimeUtc = launch.datetime_utc || {}
+  const { year = 2024, month = 1, day = 1, hour = 0, minute = 0, second = 0 } = datetimeUtc
   const launchDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
   const isValidDate =
     launchDate.getUTCFullYear() === year &&
