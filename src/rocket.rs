@@ -201,10 +201,8 @@ impl<'de> Deserialize<'de> for RocketConfig {
             if let Some(stage) = helper.stage3 {
                 stages.push(stage);
             }
-            if stages.is_empty() {
-                if let Some(stage) = helper.stage {
-                    stages.push(stage);
-                }
+            if stages.is_empty() && helper.stage.is_some() {
+                stages.push(helper.stage.unwrap());
             }
         }
 

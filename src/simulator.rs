@@ -1150,21 +1150,25 @@ mod tests {
     fn client_config_multi_stage_progresses() {
         use crate::rocket::*;
 
-        let mut stage1 = ClientStage::default();
-        stage1.mass_initial_kg = 1000.0;
-        stage1.burn_end_s = 6.0;
-        stage1.forced_cutoff_s = 6.0;
-        stage1.separation_time_s = 6.5;
-        stage1.thrust_constant = 200_000.0;
-        stage1.isp_constant = 250.0;
+        let stage1 = ClientStage {
+            mass_initial_kg: 1000.0,
+            burn_end_s: 6.0,
+            forced_cutoff_s: 6.0,
+            separation_time_s: 6.5,
+            thrust_constant: 200_000.0,
+            isp_constant: 250.0,
+            ..Default::default()
+        };
 
-        let mut stage2 = ClientStage::default();
-        stage2.mass_initial_kg = 200.0;
-        stage2.burn_end_s = 8.0;
-        stage2.forced_cutoff_s = 8.0;
-        stage2.separation_time_s = 1000.0;
-        stage2.thrust_constant = 60_000.0;
-        stage2.isp_constant = 270.0;
+        let stage2 = ClientStage {
+            mass_initial_kg: 200.0,
+            burn_end_s: 8.0,
+            forced_cutoff_s: 8.0,
+            separation_time_s: 1000.0,
+            thrust_constant: 60_000.0,
+            isp_constant: 270.0,
+            ..Default::default()
+        };
 
         let config = ClientConfig {
             name: "multi".to_string(),
