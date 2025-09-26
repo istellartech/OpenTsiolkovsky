@@ -261,19 +261,19 @@ export const PRESET_OPTIONS: PresetOption[] = [
   {
     id: 'sample',
     label: 'MOMO Sounding Rocket',
-    description: 'Interstellar Technologies sounding rocket from Hokkaido Spaceport (~100 km apogee).',
+    description: '観測ロケット',
     create: () => createDefaultConfig(),
   },
   {
     id: 'orbital',
     label: 'Orbital Demo Launcher',
-    description: 'Two-stage launcher profile tuned for an orbital insertion rehearsal.',
+    description: '軌道投入デモ',
     create: () => createOrbitalDemoPreset(),
   },
   {
     id: 'hopper',
     label: 'VTOL Hopper Test',
-    description: 'Low-altitude vertical hop scenario for landing guidance experiments.',
+    description: '垂直着陸試験',
     create: () => createHopperTestPreset(),
   },
 ]

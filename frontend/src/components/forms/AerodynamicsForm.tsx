@@ -25,12 +25,12 @@ export function AerodynamicsForm({
   makeFieldRef
 }: AerodynamicsFormProps) {
   const cnColumns: Column<ClientMachSample>[] = [
-    { key: 'mach', label: 'Mach Number', step: '0.1', min: 0 },
+    { key: 'mach', label: 'マッハ数', step: '0.1', min: 0 },
     { key: 'value', label: 'CN', step: '0.01' },
   ]
 
   const caColumns: Column<ClientMachSample>[] = [
-    { key: 'mach', label: 'Mach Number', step: '0.1', min: 0 },
+    { key: 'mach', label: 'マッハ数', step: '0.1', min: 0 },
     { key: 'value', label: 'CA', step: '0.01', min: 0 },
   ]
 
@@ -44,14 +44,14 @@ export function AerodynamicsForm({
   return (
     <div className="section-shell space-y-6">
       <div>
-        <h3>Aerodynamics</h3>
-        <p className="text-sm text-slate-600">Configure aerodynamic properties and coefficients.</p>
+        <h3>空力特性</h3>
+        <p className="text-sm text-slate-600">空力特性と係数を設定してください。</p>
       </div>
 
       <div className="field-grid">
         <NumberField
           id="body-diameter"
-          label="Body Diameter (m)"
+          label="機体直径 (m)"
           value={config.aerodynamics.body_diameter_m}
           onChange={(value) => updateAerodynamics({ body_diameter_m: value })}
           hasError={issuesSet.has('aerodynamics.body_diameter_m')}
@@ -62,7 +62,7 @@ export function AerodynamicsForm({
 
         <NumberField
           id="ballistic-coefficient"
-          label="Ballistic Coefficient"
+          label="弾道係数"
           value={config.aerodynamics.ballistic_coefficient}
           onChange={(value) => updateAerodynamics({ ballistic_coefficient: value })}
           hasError={issuesSet.has('aerodynamics.ballistic_coefficient')}
@@ -74,10 +74,10 @@ export function AerodynamicsForm({
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">Normal Force Coefficient (CN)</h4>
+          <h4 className="text-sm font-semibold">法線力係数 (CN)</h4>
           <SwitchField
             id="use-cn-profile"
-            label="Use Mach Profile"
+            label="Machプロファイル使用"
             checked={useCnProfile}
             onCheckedChange={setUseCnProfile}
           />
@@ -88,7 +88,7 @@ export function AerodynamicsForm({
             <div className="field-grid">
               <NumberField
                 id="cn-constant"
-                label="CN Constant"
+                label="定CN"
                 value={config.aerodynamics.cn_constant}
                 onChange={(value) => updateAerodynamics({ cn_constant: value })}
                 hasError={issuesSet.has('aerodynamics.cn_constant')}
@@ -100,7 +100,7 @@ export function AerodynamicsForm({
               <div className="field-grid">
                 <NumberField
                   id="cn-multiplier"
-                  label="CN Multiplier"
+                  label="CN倍率"
                   value={config.aerodynamics.cn_multiplier}
                   onChange={(value) => updateAerodynamics({ cn_multiplier: value })}
                   hasError={issuesSet.has('aerodynamics.cn_multiplier')}
@@ -113,21 +113,21 @@ export function AerodynamicsForm({
           </div>
         ) : (
           <EditableTable
-            title="CN vs Mach Number"
+            title="CN vs マッハ数"
             columns={cnColumns}
             rows={config.aerodynamics.cn_profile}
             onChange={(profile) => updateAerodynamics({ cn_profile: profile })}
-            addLabel="Add CN point"
+            addLabel="CNポイントを追加"
           />
         )}
       </div>
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold">Axial Force Coefficient (CA)</h4>
+          <h4 className="text-sm font-semibold">軸方向力係数 (CA)</h4>
           <SwitchField
             id="use-ca-profile"
-            label="Use Mach Profile"
+            label="Machプロファイル使用"
             checked={useCaProfile}
             onCheckedChange={setUseCaProfile}
           />
@@ -138,7 +138,7 @@ export function AerodynamicsForm({
             <div className="field-grid">
               <NumberField
                 id="ca-constant"
-                label="CA Constant"
+                label="定CA"
                 value={config.aerodynamics.ca_constant}
                 onChange={(value) => updateAerodynamics({ ca_constant: value })}
                 hasError={issuesSet.has('aerodynamics.ca_constant')}
@@ -151,7 +151,7 @@ export function AerodynamicsForm({
               <div className="field-grid">
                 <NumberField
                   id="ca-multiplier"
-                  label="CA Multiplier"
+                  label="CA倍率"
                   value={config.aerodynamics.ca_multiplier}
                   onChange={(value) => updateAerodynamics({ ca_multiplier: value })}
                   hasError={issuesSet.has('aerodynamics.ca_multiplier')}
@@ -164,11 +164,11 @@ export function AerodynamicsForm({
           </div>
         ) : (
           <EditableTable
-            title="CA vs Mach Number"
+            title="CA vs マッハ数"
             columns={caColumns}
             rows={config.aerodynamics.ca_profile}
             onChange={(profile) => updateAerodynamics({ ca_profile: profile })}
-            addLabel="Add CA point"
+            addLabel="CAポイントを追加"
           />
         )}
       </div>

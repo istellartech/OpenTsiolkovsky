@@ -27,16 +27,16 @@ export default function App() {
           <div className="flex flex-col gap-8">
             <Card className="panel-card">
               <CardHeader className="border-b border-slate-200/80 bg-white/60">
-                <CardTitle>Output</CardTitle>
-                <CardDescription>Results are grouped by stages and key metrics for quick comparison.</CardDescription>
+                <CardTitle>出力</CardTitle>
+                <CardDescription>結果はステージ別に整理され、主要指標を比較できます。</CardDescription>
               </CardHeader>
               <CardContent>
                 {result ? (
-                  <Suspense fallback={<div className="py-12 text-sm text-slate-500">Loading analysis…</div>}>
+                  <Suspense fallback={<div className="py-12 text-sm text-slate-500">分析中…</div>}>
                     <GraphPanel data={result.trajectory} stagePlanConfig={result.config} result={result} />
                   </Suspense>
                 ) : (
-                  <div className="py-8 text-sm text-slate-500">Run a simulation to unlock charts and summaries.</div>
+                  <div className="py-8 text-sm text-slate-500">シミュレーションを実行してグラフと集計を表示。</div>
                 )}
               </CardContent>
             </Card>

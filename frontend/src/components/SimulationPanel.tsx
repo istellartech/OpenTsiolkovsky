@@ -51,12 +51,12 @@ export function SimulationPanel({ onResult }: Props) {
       <CardHeader className="border-b border-slate-200/80 bg-white/60">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Simulation Configuration</CardTitle>
-            <CardDescription>Configure your rocket simulation parameters and run analysis.</CardDescription>
+            <CardTitle>シミュレーション設定</CardTitle>
+            <CardDescription>ロケットシミュレーションのパラメータを設定し、解析を実行。</CardDescription>
           </div>
           <SwitchField
             id="global-show-variations"
-            label="Show Variations"
+            label="変動値を表示"
             checked={showVariations}
             onCheckedChange={setShowVariations}
           />
@@ -71,7 +71,7 @@ export function SimulationPanel({ onResult }: Props) {
             onClick={() => document.getElementById('config-import')?.click()}
             className="flex items-center gap-2"
           >
-            📁 Import JSON
+            📁 JSON読み込み
           </Button>
           <Button
             type="button"
@@ -79,7 +79,7 @@ export function SimulationPanel({ onResult }: Props) {
             onClick={handleExportConfig}
             className="flex items-center gap-2"
           >
-            💾 Export JSON
+            💾 JSON書き出し
           </Button>
           <div className="ml-auto">
             <Button
@@ -89,7 +89,7 @@ export function SimulationPanel({ onResult }: Props) {
               onClick={() => setShowTemplates(!showTemplates)}
               className="text-xs text-slate-500"
             >
-              {showTemplates ? 'Hide' : 'Show'} Quick Start Templates
+              {showTemplates ? '非表示' : '表示'} クイックスタートテンプレート
             </Button>
           </div>
           <input
@@ -104,7 +104,7 @@ export function SimulationPanel({ onResult }: Props) {
         {/* Quick Start Templates - Collapsible */}
         {showTemplates && (
           <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
-            <h4 className="mb-3 text-sm font-medium text-slate-700">Quick Start Templates</h4>
+            <h4 className="mb-3 text-sm font-medium text-slate-700">クイックスタートテンプレート</h4>
             <div className="grid gap-2 sm:grid-cols-3">
               {PRESET_OPTIONS.map((preset) => (
                 <Button
@@ -125,11 +125,11 @@ export function SimulationPanel({ onResult }: Props) {
 
         <Tabs defaultValue="basic" className="w-full">
           <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="basic">Launch</TabsTrigger>
-            <TabsTrigger value="stages">Stages</TabsTrigger>
-            <TabsTrigger value="aerodynamics">Aero</TabsTrigger>
-            <TabsTrigger value="wind">Wind</TabsTrigger>
-            <TabsTrigger value="preview">Preview</TabsTrigger>
+            <TabsTrigger value="basic">打ち上げ</TabsTrigger>
+            <TabsTrigger value="stages">ステージ</TabsTrigger>
+            <TabsTrigger value="aerodynamics">空力</TabsTrigger>
+            <TabsTrigger value="wind">風</TabsTrigger>
+            <TabsTrigger value="preview">プレビュー</TabsTrigger>
           </TabsList>
 
           <TabsContent value="basic" className="mt-6">
@@ -187,8 +187,8 @@ export function SimulationPanel({ onResult }: Props) {
             <div className="space-y-4">
               <div className="rounded-lg border border-slate-300 bg-slate-900 p-4">
                 <div className="mb-3 flex items-center gap-2">
-                  <div className="text-sm font-medium text-slate-100">Configuration JSON</div>
-                  <Badge variant="secondary" className="text-xs">Preview</Badge>
+                  <div className="text-sm font-medium text-slate-100">設定JSON</div>
+                  <Badge variant="secondary" className="text-xs">プレビュー</Badge>
                 </div>
                 <div className="max-h-96 overflow-auto rounded border border-slate-700 bg-slate-950 p-3">
                   <pre className="font-mono text-xs text-green-400 leading-relaxed">
@@ -204,7 +204,7 @@ export function SimulationPanel({ onResult }: Props) {
             {hasValidationIssues && (
               <div className="space-y-3 rounded-lg border border-rose-200 bg-rose-50 p-4">
                 <div className="flex items-start gap-3">
-                  <Badge variant="destructive">Issues Found</Badge>
+                  <Badge variant="destructive">問題が見つかりました</Badge>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-rose-800">{VALIDATION_ERROR_MESSAGE}</p>
                     <ul className="mt-2 space-y-1 text-xs text-rose-700">
@@ -218,7 +218,7 @@ export function SimulationPanel({ onResult }: Props) {
                   </div>
                 </div>
                 <Button type="button" size="sm" variant="outline" onClick={scrollToFirstError}>
-                  Go to first issue
+                  最初の問題に移動
                 </Button>
               </div>
             )}
@@ -226,7 +226,7 @@ export function SimulationPanel({ onResult }: Props) {
             {/* Error Display */}
             {error && (
               <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-                <strong>Simulation Error:</strong> {error}
+                <strong>シミュレーションエラー:</strong> {error}
               </div>
             )}
 
@@ -237,7 +237,7 @@ export function SimulationPanel({ onResult }: Props) {
               className="w-full"
               size="lg"
             >
-              {loading ? 'Running simulation...' : 'Run Simulation'}
+              {loading ? 'シミュレーション実行中...' : 'シミュレーション実行'}
             </Button>
           </div>
         </Tabs>

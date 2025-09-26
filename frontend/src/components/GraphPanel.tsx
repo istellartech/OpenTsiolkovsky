@@ -151,7 +151,7 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
   if (!data || data.length === 0) {
     return (
       <div className="py-8 text-center text-slate-500">
-        No simulation data available. Please run a simulation first.
+        シミュレーションデータがありません。まずシミュレーションを実行してください。
       </div>
     )
   }
@@ -159,11 +159,11 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
   if (data.length === 1) {
     return (
       <div className="py-8 text-center text-orange-500">
-        <div className="text-lg font-semibold">⚠️ Insufficient Data Points</div>
+        <div className="text-lg font-semibold">⚠️ データポイント不足</div>
         <div className="mt-2 text-sm">
-          Only {data.length} data point available. Simulation may have terminated early.
+          {data.length} データポイントのみあります。シミュレーションが早期終了した可能性があります。
           <br />
-          Check the browser console for simulation details.
+          詳細はブラウザコンソールを確認してください。
         </div>
       </div>
     )
@@ -172,11 +172,11 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
   if (!chartData) {
     return (
       <div className="py-8 text-center text-red-500">
-        <div className="text-lg font-semibold">❌ Data Processing Error</div>
+        <div className="text-lg font-semibold">❌ データ処理エラー</div>
         <div className="mt-2 text-sm">
-          Failed to process {data.length} simulation data points.
+          {data.length} シミュレーションデータポイントの処理に失敗しました。
           <br />
-          Check the browser console for error details.
+          エラー詳細はブラウザコンソールを確認してください。
         </div>
       </div>
     )
@@ -188,24 +188,24 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
   const overallSummary = [
     {
       key: 'max-altitude',
-      label: 'Max Altitude',
+      label: '最高高度',
       value: formatValue(Math.max(...displayData.map(d => d.altitude || 0)) / 1000, 'km'),
       detail: `at t = ${formatValue(displayData.find(d => d.altitude === Math.max(...displayData.map(s => s.altitude || 0)))?.time || 0, 's')}`
     },
     {
       key: 'max-velocity',
-      label: 'Max Velocity',
+      label: '最高速度',
       value: formatValue(Math.max(...displayData.map(d => d.velocity_magnitude || 0)), 'm/s'),
       detail: `Mach ${formatValue(Math.max(...displayData.map(d => d.mach_number || 0)), '')}`
     },
     {
       key: 'final-downrange',
-      label: 'Final Downrange',
+      label: '最終到達距離',
       value: formatValue(displayData[displayData.length - 1]?.downrange_km || 0, 'km')
     },
     {
       key: 'flight-time',
-      label: 'Flight Time',
+      label: '飛行時間',
       value: formatValue(displayData[displayData.length - 1]?.time || 0, 's')
     }
   ]
@@ -274,7 +274,7 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
       {/* Stage Details */}
       {stageSummaries.length > 0 && (
         <div className="space-y-4">
-          <h4 className="text-lg font-semibold">Stage Performance</h4>
+          <h4 className="text-lg font-semibold">ステージ性能</h4>
           <Accordion type="multiple" defaultValue={['stage-0']}>
             {stageSummaries.map((summary, idx) => (
               <AccordionItem key={`stage-${idx}`} value={`stage-${idx}`}>
@@ -284,7 +284,7 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
                       className="h-3 w-3 rounded-full"
                       style={{ backgroundColor: summary.accentColor }}
                     />
-                    <span>Stage {summary.stage}</span>
+                    <span>ステージ {summary.stage}</span>
                     <Badge variant="secondary">{formatValue(summary.duration, 's')}</Badge>
                   </div>
                 </AccordionTrigger>
@@ -292,7 +292,7 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
                   <div className="grid gap-4 sm:grid-cols-3">
                     <div className="rounded-lg border border-slate-200/60 bg-slate-50/80 p-4">
                       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Max Altitude
+                        最高高度
                       </div>
                       <div className="mt-1 text-lg font-semibold text-slate-900">
                         {formatValue(summary.maxAltitude / 1000, 'km')}
@@ -308,7 +308,7 @@ export function GraphPanel({ data, stagePlanConfig, result }: GraphPanelProps) {
                     </div>
                     <div className="rounded-lg border border-slate-200/60 bg-slate-50/80 p-4">
                       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Max Thrust
+                        最大推力
                       </div>
                       <div className="mt-1 text-lg font-semibold text-slate-900">
                         {formatValue(summary.maxThrust / 1000, 'kN')}

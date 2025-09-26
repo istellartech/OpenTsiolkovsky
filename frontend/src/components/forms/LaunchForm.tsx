@@ -69,14 +69,14 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
   return (
     <div className="section-shell space-y-6">
       <div>
-        <h3>Launch Parameters</h3>
-        <p className="text-sm text-slate-600">Configure the initial launch conditions for your rocket.</p>
+        <h3>打ち上げパラメータ</h3>
+        <p className="text-sm text-slate-600">ロケットの初期打ち上げ条件を設定してください。</p>
       </div>
 
       <div className="field-grid">
         <NumberField
           id="launch-latitude"
-          label="Latitude (degrees)"
+          label="緯度 (度)"
           value={config.launch.latitude_deg}
           onChange={(value) => setConfig({
             ...config,
@@ -91,7 +91,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <NumberField
           id="launch-longitude"
-          label="Longitude (degrees)"
+          label="経度 (度)"
           value={config.launch.longitude_deg}
           onChange={(value) => setConfig({
             ...config,
@@ -106,7 +106,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <NumberField
           id="launch-altitude"
-          label="Altitude (m)"
+          label="高度 (m)"
           value={config.launch.altitude_m}
           onChange={(value) => setConfig({
             ...config,
@@ -121,7 +121,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
       <div className="field-grid">
         <NumberField
           id="velocity-north"
-          label="Initial Velocity North (m/s)"
+          label="初速度 北 (m/s)"
           value={config.launch.velocity_ned_mps[0]}
           onChange={(value) => setConfig({
             ...config,
@@ -137,7 +137,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <NumberField
           id="velocity-east"
-          label="Initial Velocity East (m/s)"
+          label="初速度 東 (m/s)"
           value={config.launch.velocity_ned_mps[1]}
           onChange={(value) => setConfig({
             ...config,
@@ -152,7 +152,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <NumberField
           id="velocity-down"
-          label="Initial Velocity Down (m/s)"
+          label="初速度 下 (m/s)"
           value={config.launch.velocity_ned_mps[2]}
           onChange={(value) => setConfig({
             ...config,
@@ -183,7 +183,7 @@ export function LaunchForm({ config, setConfig, showVariations, issuesSet, makeF
 
         <div className="space-y-2">
           <label htmlFor="launch-time" className="text-sm font-medium text-slate-900">
-            Launch Time (UTC)
+            打ち上げ時刻 (UTC)
           </label>
           <input
             id="launch-time"

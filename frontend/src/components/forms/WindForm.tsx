@@ -25,15 +25,15 @@ export function WindForm({
   makeFieldRef
 }: WindFormProps) {
   const attitudeColumns: Column<ClientAttitudeSample>[] = [
-    { key: 'time', label: 'Time (s)', step: '0.1', min: 0 },
-    { key: 'azimuth_deg', label: 'Azimuth (deg)', step: '1', min: 0 },
-    { key: 'elevation_deg', label: 'Elevation (deg)', step: '1', min: 0 },
+    { key: 'time', label: '時間 (s)', step: '0.1', min: 0 },
+    { key: 'azimuth_deg', label: '方位角 (度)', step: '1', min: 0 },
+    { key: 'elevation_deg', label: '仰角 (度)', step: '1', min: 0 },
   ]
 
   const windColumns: Column<ClientWindSample>[] = [
-    { key: 'altitude_m', label: 'Altitude (m)', step: '1', min: 0 },
-    { key: 'speed_mps', label: 'Speed (m/s)', step: '0.1', min: 0 },
-    { key: 'direction_deg', label: 'Direction (deg)', step: '1', min: 0 },
+    { key: 'altitude_m', label: '高度 (m)', step: '1', min: 0 },
+    { key: 'speed_mps', label: '速度 (m/s)', step: '0.1', min: 0 },
+    { key: 'direction_deg', label: '方向 (度)', step: '1', min: 0 },
   ]
 
   const updateAttitude = (updates: Partial<ClientConfig['attitude']>) => {
@@ -55,14 +55,14 @@ export function WindForm({
       {/* Attitude Section */}
       <div className="space-y-6">
         <div>
-          <h3>Attitude Configuration</h3>
-          <p className="text-sm text-slate-600">Configure rocket attitude and guidance parameters.</p>
+          <h3>姿勢設定</h3>
+          <p className="text-sm text-slate-600">ロケットの姿勢と誘導パラメータを設定してください。</p>
         </div>
 
         <div className="field-grid">
           <NumberField
             id="azimuth"
-            label="Azimuth (degrees)"
+            label="方位角 (度)"
             value={config.attitude.azimuth_deg}
             onChange={(value) => updateAttitude({ azimuth_deg: value })}
             hasError={issuesSet.has('attitude.azimuth_deg')}
@@ -74,7 +74,7 @@ export function WindForm({
 
           <NumberField
             id="elevation"
-            label="Elevation (degrees)"
+            label="仰角 (度)"
             value={config.attitude.elevation_deg}
             onChange={(value) => updateAttitude({ elevation_deg: value })}
             hasError={issuesSet.has('attitude.elevation_deg')}
@@ -87,11 +87,11 @@ export function WindForm({
 
         {showVariations && (
           <div className="space-y-4">
-            <h4 className="text-sm font-semibold">Variation Parameters</h4>
+            <h4 className="text-sm font-semibold">変動パラメータ</h4>
             <div className="field-grid">
               <NumberField
                 id="pitch-offset"
-                label="Pitch Offset (degrees)"
+                label="ピッチオフセット (度)"
                 value={config.attitude.pitch_offset_deg}
                 onChange={(value) => updateAttitude({ pitch_offset_deg: value })}
                 hasError={issuesSet.has('attitude.pitch_offset_deg')}
@@ -103,7 +103,7 @@ export function WindForm({
 
               <NumberField
                 id="yaw-offset"
-                label="Yaw Offset (degrees)"
+                label="ヨーオフセット (度)"
                 value={config.attitude.yaw_offset_deg}
                 onChange={(value) => updateAttitude({ yaw_offset_deg: value })}
                 hasError={issuesSet.has('attitude.yaw_offset_deg')}
@@ -115,7 +115,7 @@ export function WindForm({
 
               <NumberField
                 id="roll-offset"
-                label="Roll Offset (degrees)"
+                label="ロールオフセット (度)"
                 value={config.attitude.roll_offset_deg}
                 onChange={(value) => updateAttitude({ roll_offset_deg: value })}
                 hasError={issuesSet.has('attitude.roll_offset_deg')}
@@ -127,7 +127,7 @@ export function WindForm({
 
               <NumberField
                 id="gyro-bias-x"
-                label="Gyro Bias X (deg/h)"
+                label="ジャイロバイアス X (度/h)"
                 value={config.attitude.gyro_bias_deg_h[0]}
                 onChange={(value) => updateAttitude({
                   gyro_bias_deg_h: [value, config.attitude.gyro_bias_deg_h[1], config.attitude.gyro_bias_deg_h[2]]
@@ -141,7 +141,7 @@ export function WindForm({
 
               <NumberField
                 id="gyro-bias-y"
-                label="Gyro Bias Y (deg/h)"
+                label="ジャイロバイアス Y (度/h)"
                 value={config.attitude.gyro_bias_deg_h[1]}
                 onChange={(value) => updateAttitude({
                   gyro_bias_deg_h: [config.attitude.gyro_bias_deg_h[0], value, config.attitude.gyro_bias_deg_h[2]]
@@ -155,7 +155,7 @@ export function WindForm({
 
               <NumberField
                 id="gyro-bias-z"
-                label="Gyro Bias Z (deg/h)"
+                label="ジャイロバイアス Z (度/h)"
                 value={config.attitude.gyro_bias_deg_h[2]}
                 onChange={(value) => updateAttitude({
                   gyro_bias_deg_h: [config.attitude.gyro_bias_deg_h[0], config.attitude.gyro_bias_deg_h[1], value]
@@ -172,10 +172,10 @@ export function WindForm({
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold">Attitude Profile</h4>
+            <h4 className="text-sm font-semibold">姿勢プロファイル</h4>
             <SwitchField
               id="use-attitude-profile"
-              label="Use Time-Based Profile"
+              label="時間ベースプロファイル使用"
               checked={useAttitudeProfile}
               onCheckedChange={setUseAttitudeProfile}
             />
@@ -183,11 +183,11 @@ export function WindForm({
 
           {useAttitudeProfile && (
             <EditableTable
-              title="Attitude vs Time"
+              title="姿勢 vs 時間"
               columns={attitudeColumns}
               rows={config.attitude.profile}
               onChange={(profile) => updateAttitude({ profile })}
-              addLabel="Add attitude point"
+              addLabel="姿勢ポイントを追加"
             />
           )}
         </div>
@@ -196,14 +196,14 @@ export function WindForm({
       {/* Wind Section */}
       <div className="space-y-6">
         <div>
-          <h3>Wind Configuration</h3>
-          <p className="text-sm text-slate-600">Configure wind conditions and atmospheric parameters.</p>
+          <h3>風設定</h3>
+          <p className="text-sm text-slate-600">風条件と大気パラメータを設定してください。</p>
         </div>
 
         <div className="field-grid">
           <NumberField
             id="wind-speed"
-            label="Wind Speed (m/s)"
+            label="風速 (m/s)"
             value={config.wind.speed_mps}
             onChange={(value) => updateWind({ speed_mps: value })}
             hasError={issuesSet.has('wind.speed_mps')}
@@ -214,7 +214,7 @@ export function WindForm({
 
           <NumberField
             id="wind-direction"
-            label="Wind Direction (degrees)"
+            label="風向 (度)"
             value={config.wind.direction_deg}
             onChange={(value) => updateWind({ direction_deg: value })}
             hasError={issuesSet.has('wind.direction_deg')}
@@ -227,10 +227,10 @@ export function WindForm({
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold">Wind Profile</h4>
+            <h4 className="text-sm font-semibold">風プロファイル</h4>
             <SwitchField
               id="use-wind-profile"
-              label="Use Altitude-Based Profile"
+              label="高度ベースプロファイル使用"
               checked={useWindProfile}
               onCheckedChange={setUseWindProfile}
             />
@@ -238,11 +238,11 @@ export function WindForm({
 
           {useWindProfile && (
             <EditableTable
-              title="Wind vs Altitude"
+              title="風 vs 高度"
               columns={windColumns}
               rows={config.wind.profile}
               onChange={(profile) => updateWind({ profile })}
-              addLabel="Add wind point"
+              addLabel="風ポイントを追加"
             />
           )}
         </div>

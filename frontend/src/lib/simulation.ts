@@ -50,6 +50,169 @@ export function vec3ToObject(vec: Vec3Json): { x: number, y: number, z: number }
   }
 }
 
+const DEG2RAD = Math.PI / 180
+const RAD2DEG = 180 / Math.PI
+
+function toRadians(value: number | undefined): number {
+  return (Number.isFinite(value) ? (value as number) : 0) * DEG2RAD
+}
+
+function toDegrees(value: number): number {
+  return value * RAD2DEG
+}
+
+type Vec3 = { x: number; y: number; z: number }
+
+function subtractVec(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.x - b.x,
+    y: a.y - b.y,
+    z: a.z - b.z,
+  }
+}
+
+function mulMat3Vec3(m: number[][], v: Vec3): Vec3 {
+  return {
+    x: m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+    y: m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+    z: m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z,
+  }
+}
+
+function dcmNedToBody(azimuthRad: number, elevationRad: number, rollRad = 0): number[][] {
+  const ca = Math.cos(azimuthRad)
+  const sa = Math.sin(azimuthRad)
+  const ce = Math.cos(elevationRad)
+  const se = Math.sin(elevationRad)
+  const cr = Math.cos(rollRad)
+  const sr = Math.sin(rollRad)
+
+  return [
+    [ca * ce, sa * ce, -se],
+    [ca * se * sr - sa * cr, sa * se * sr + ca * cr, ce * sr],
+    [ca * se * cr + sa * sr, sa * se * cr - ca * sr, ce * cr],
+  ]
+}
+
+function windVectorFromSample(speed: number, direction: number): Vec3 {
+  const dirRad = toRadians(direction)
+  return {
+    x: -speed * Math.cos(dirRad),
+    y: -speed * Math.sin(dirRad),
+    z: 0,
+  }
+}
+
+function interpolateWindVector(
+  altitude: number,
+  profile: ClientWindSample[]
+): Vec3 {
+  if (profile.length === 0) {
+    return { x: 0, y: 0, z: 0 }
+  }
+
+  if (!Number.isFinite(altitude)) {
+    altitude = 0
+  }
+
+  if (altitude <= profile[0].altitude_m) {
+    return windVectorFromSample(profile[0].speed_mps, profile[0].direction_deg)
+  }
+
+  const last = profile[profile.length - 1]
+  if (altitude >= last.altitude_m) {
+    return windVectorFromSample(last.speed_mps, last.direction_deg)
+  }
+
+  for (let i = 0; i < profile.length - 1; i++) {
+    const lower = profile[i]
+    const upper = profile[i + 1]
+    if (altitude >= lower.altitude_m && altitude <= upper.altitude_m) {
+      const span = Math.max(upper.altitude_m - lower.altitude_m, 1e-6)
+      const t = (altitude - lower.altitude_m) / span
+      const lowVec = windVectorFromSample(lower.speed_mps, lower.direction_deg)
+      const highVec = windVectorFromSample(upper.speed_mps, upper.direction_deg)
+      return {
+        x: lowVec.x + t * (highVec.x - lowVec.x),
+        y: lowVec.y + t * (highVec.y - lowVec.y),
+        z: 0,
+      }
+    }
+  }
+
+  return windVectorFromSample(last.speed_mps, last.direction_deg)
+}
+
+function augmentAerodynamicAngles(states: SimulationState[], config: ClientConfig) {
+  if (!Array.isArray(states) || states.length === 0) return
+
+  const constantWind = windVectorFromSample(
+    config.wind?.speed_mps ?? 0,
+    config.wind?.direction_deg ?? 0
+  )
+
+  const windProfile = (config.wind?.profile || [])
+    .slice()
+    .sort((a, b) => a.altitude_m - b.altitude_m)
+
+  for (const state of states) {
+    if (!Number.isFinite(state.angle_of_attack)) {
+      state.angle_of_attack = 0
+    }
+    if (!Number.isFinite(state.sideslip_angle)) {
+      state.sideslip_angle = 0
+    }
+
+    const hasAlpha = Number.isFinite(state.angle_of_attack) && Math.abs(state.angle_of_attack ?? 0) > 1e-6
+    const hasBeta = Number.isFinite(state.sideslip_angle) && Math.abs(state.sideslip_angle ?? 0) > 1e-6
+    if (hasAlpha && hasBeta) {
+      continue
+    }
+
+    const velNed = vec3ToObject(state.velocity_ned || state.velocity || [0, 0, 0])
+
+    const windVec = windProfile.length > 0
+      ? interpolateWindVector(state.altitude ?? 0, windProfile)
+      : constantWind
+
+    const velAirNed = subtractVec(velNed, windVec)
+    const velMagSq = velAirNed.x * velAirNed.x + velAirNed.y * velAirNed.y + velAirNed.z * velAirNed.z
+    if (velMagSq < 1e-8) {
+      continue
+    }
+
+    const azimuthDeg = Number.isFinite(state.attitude_azimuth)
+      ? (state.attitude_azimuth as number)
+      : config.attitude?.azimuth_deg ?? 0
+    const elevationDeg = Number.isFinite(state.attitude_elevation)
+      ? (state.attitude_elevation as number)
+      : config.attitude?.elevation_deg ?? 0
+    const rollDeg = config.attitude?.roll_offset_deg ?? 0
+
+    const transform = dcmNedToBody(
+      toRadians(azimuthDeg),
+      toRadians(elevationDeg),
+      toRadians(rollDeg)
+    )
+    const velBody = mulMat3Vec3(transform, velAirNed)
+
+    const longitudinal = Math.abs(velBody.x)
+    if (longitudinal < 1e-6) {
+      continue
+    }
+
+    const alpha = toDegrees(Math.atan2(velBody.z, velBody.x))
+    const beta = toDegrees(Math.atan2(velBody.y, velBody.x))
+
+    if (!hasAlpha) {
+      state.angle_of_attack = alpha
+    }
+    if (!hasBeta) {
+      state.sideslip_angle = beta
+    }
+  }
+}
+
 export type ClientTimeSample = { time: number, value: number }
 export type ClientMachSample = { mach: number, value: number }
 export type ClientAttitudeSample = { time: number, azimuth_deg: number, elevation_deg: number }
@@ -359,14 +522,25 @@ let modPromise: Promise<any> | null = null
 
 export function initWasm(): Promise<any> {
   if (!modPromise) {
-    // Use Vite's glob import to optionally load the wasm-pack output if present.
-    // This avoids build-time resolution errors when the WASM bundle has not been generated yet.
-    const candidates = import.meta.glob('../wasm/openTsiolkovsky.{js,ts}') as Record<string, () => Promise<any>>
-    const keys = Object.keys(candidates)
-    if (keys.length === 0) {
-      modPromise = Promise.reject(new Error('WASM bundle not found. Run: bash scripts/wasm_build.sh'))
+    const glob = (import.meta as any)?.glob
+
+    if (typeof glob === 'function') {
+      // Use Vite's glob import to optionally load the wasm-pack output if present.
+      // This avoids build-time resolution errors when the WASM bundle has not been generated yet.
+      const candidates = glob('../wasm/openTsiolkovsky.{js,ts}') as Record<string, () => Promise<any>>
+      const keys = Object.keys(candidates)
+      if (keys.length === 0) {
+        modPromise = Promise.reject(new Error('WASM bundle not found. Run: bash scripts/wasm_build.sh'))
+      } else {
+        modPromise = candidates[keys[0]]().then(async (module) => {
+          if (typeof module.default === 'function') {
+            await module.default()
+          }
+          return module
+        })
+      }
     } else {
-      modPromise = candidates[keys[0]]().then(async (module) => {
+      modPromise = import('../wasm/openTsiolkovsky.js').then(async (module) => {
         if (typeof module.default === 'function') {
           await module.default()
         }
@@ -385,6 +559,8 @@ export async function runSimulation(config: ClientConfig): Promise<SimulationSta
     const sim = new mod.WasmSimulator(JSON.stringify(config))
     const json = await sim.run()
     const result = JSON.parse(json) as SimulationState[]
+
+    augmentAerodynamicAngles(result, config)
 
     // Detailed validation and logging
     console.log('WASM simulation result details:', {
@@ -424,6 +600,8 @@ export async function runSimulation(config: ClientConfig): Promise<SimulationSta
     const sim = new mod.WasmSimulator(JSON.stringify(legacyPayload))
     const json = await sim.run()
     const result = JSON.parse(json) as SimulationState[]
+
+    augmentAerodynamicAngles(result, config)
 
     // Detailed validation and logging for legacy format
     console.log('Legacy WASM simulation result details:', {

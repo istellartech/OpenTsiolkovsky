@@ -102,12 +102,12 @@ export function StageForm({
   }
 
   const thrustColumns: Column<ClientTimeSample>[] = [
-    { key: 'time', label: 'Time (s)', step: '0.1', min: 0 },
-    { key: 'value', label: 'Thrust (N)', step: '1', min: 0 },
+    { key: 'time', label: '時間 (s)', step: '0.1', min: 0 },
+    { key: 'value', label: '推力 (N)', step: '1', min: 0 },
   ]
 
   const ispColumns: Column<ClientTimeSample>[] = [
-    { key: 'time', label: 'Time (s)', step: '0.1', min: 0 },
+    { key: 'time', label: '時間 (s)', step: '0.1', min: 0 },
     { key: 'value', label: 'Isp (s)', step: '1', min: 1 },
   ]
 
@@ -115,21 +115,21 @@ export function StageForm({
     <div className="section-shell space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3>Stage Configuration</h3>
-          <p className="text-sm text-slate-600">Configure rocket stages and their performance profiles.</p>
+          <h3>ステージ構成</h3>
+          <p className="text-sm text-slate-600">ロケットステージと性能プロファイルを設定してください。</p>
         </div>
         <div className="flex gap-2">
           {hasVariations && (
             <SwitchField
               id="show-variations"
-              label="Show Profiles"
+              label="プロファイル表示"
               checked={showVariations}
               onCheckedChange={setShowVariations}
             />
           )}
           {stages.length < MAX_STAGE_COUNT && (
             <Button type="button" variant="outline" onClick={addStage}>
-              Add Stage
+              ステージを追加
             </Button>
           )}
         </div>
@@ -152,7 +152,7 @@ export function StageForm({
                     className="h-3 w-3 rounded-full"
                     style={{ backgroundColor: stageColor }}
                   />
-                  <span>Stage {index + 1}</span>
+                  <span>ステージ {index + 1}</span>
                   {stages.length > 1 && (
                     <Button
                       type="button"
@@ -163,7 +163,7 @@ export function StageForm({
                         removeStage(index)
                       }}
                     >
-                      Remove
+                      削除
                     </Button>
                   )}
                 </div>
@@ -172,7 +172,7 @@ export function StageForm({
                 <div className="field-grid">
                   <NumberField
                     id={`stage-${index}-mass-initial`}
-                    label="Initial Mass (kg)"
+                    label="初期質量 (kg)"
                     value={stage.mass_initial_kg}
                     onChange={(value) => updateStage(index, { mass_initial_kg: value })}
                     hasError={issuesSet.has(`stage.mass_initial_kg`)}
@@ -183,7 +183,7 @@ export function StageForm({
 
                   <NumberField
                     id={`stage-${index}-mass-dry`}
-                    label="Dry Mass (kg)"
+                    label="乾燥質量 (kg)"
                     value={stage.mass_dry_kg}
                     onChange={(value) => updateStage(index, { mass_dry_kg: value })}
                     step="1"
@@ -192,7 +192,7 @@ export function StageForm({
 
                   <NumberField
                     id={`stage-${index}-burn-start`}
-                    label="Burn Start (s)"
+                    label="燃焼開始 (s)"
                     value={stage.burn_start_s}
                     onChange={(value) => updateStage(index, { burn_start_s: value })}
                     hasError={issuesSet.has(`stage.burn_start_s`)}
@@ -203,7 +203,7 @@ export function StageForm({
 
                   <NumberField
                     id={`stage-${index}-burn-end`}
-                    label="Burn End (s)"
+                    label="燃焼終了 (s)"
                     value={stage.burn_end_s}
                     onChange={(value) => updateStage(index, { burn_end_s: value })}
                     hasError={issuesSet.has(`stage.burn_end_s`)}
@@ -214,7 +214,7 @@ export function StageForm({
 
                   <NumberField
                     id={`stage-${index}-forced-cutoff`}
-                    label="Forced Cutoff (s)"
+                    label="強制停止 (s)"
                     value={stage.forced_cutoff_s}
                     onChange={(value) => updateStage(index, { forced_cutoff_s: value })}
                     hasError={issuesSet.has(`stage.forced_cutoff_s`)}
@@ -225,7 +225,7 @@ export function StageForm({
 
                   <NumberField
                     id={`stage-${index}-separation-time`}
-                    label="Separation Time (s)"
+                    label="分離時刻 (s)"
                     value={stage.separation_time_s}
                     onChange={(value) => updateStage(index, { separation_time_s: value })}
                     hasError={issuesSet.has(`stage.separation_time_s`)}
@@ -238,7 +238,7 @@ export function StageForm({
                 <div className="field-grid">
                   <SelectField
                     id={`stage-${index}-power-mode`}
-                    label="Power Flight Mode"
+                    label="動力飛行モード"
                     value={stage.power_mode}
                     options={POWER_MODE_OPTIONS}
                     onChange={(value) => updateStage(index, { power_mode: value })}
@@ -248,7 +248,7 @@ export function StageForm({
 
                   <SelectField
                     id={`stage-${index}-free-mode`}
-                    label="Free Flight Mode"
+                    label="自由飛行モード"
                     value={stage.free_mode}
                     options={FREE_MODE_OPTIONS}
                     onChange={(value) => updateStage(index, { free_mode: value })}
@@ -260,7 +260,7 @@ export function StageForm({
                 <div className="field-grid">
                   <NumberField
                     id={`stage-${index}-throat-diameter`}
-                    label="Throat Diameter (m)"
+                    label="スロート直径 (m)"
                     value={stage.throat_diameter_m}
                     onChange={(value) => updateStage(index, { throat_diameter_m: value })}
                     hasError={issuesSet.has(`stage.throat_diameter_m`)}
@@ -273,10 +273,10 @@ export function StageForm({
                 {/* Thrust Configuration */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold">Thrust Configuration</h4>
+                    <h4 className="text-sm font-semibold">推力設定</h4>
                     <SwitchField
                       id={`use-thrust-profile-${index}`}
-                      label="Use Time Profile"
+                      label="時間プロファイル使用"
                       checked={useThrustProfile[index] || false}
                       onCheckedChange={(checked) => {
                         setUseThrustProfile(prev => ({ ...prev, [index]: checked }))
@@ -292,7 +292,7 @@ export function StageForm({
                       <div className="field-grid">
                         <NumberField
                           id={`stage-${index}-thrust-constant`}
-                          label="Thrust Constant (N)"
+                          label="定推力 (N)"
                           value={stage.thrust_constant}
                           onChange={(value) => updateStage(index, { thrust_constant: value })}
                           hasError={issuesSet.has(`stage.thrust_constant`)}
@@ -305,7 +305,7 @@ export function StageForm({
                         <div className="field-grid">
                           <NumberField
                             id={`stage-${index}-thrust-multiplier`}
-                            label="Thrust Multiplier"
+                            label="推力倍率"
                             value={stage.thrust_multiplier}
                             onChange={(value) => updateStage(index, { thrust_multiplier: value })}
                             hasError={issuesSet.has(`stage.thrust_multiplier`)}
@@ -318,11 +318,11 @@ export function StageForm({
                     </div>
                   ) : (
                     <EditableTable
-                      title="Thrust vs Time"
+                      title="推力 vs 時間"
                       columns={thrustColumns}
                       rows={stage.thrust_profile || []}
                       onChange={(profile) => updateStage(index, { thrust_profile: profile })}
-                      addLabel="Add thrust point"
+                      addLabel="推力ポイントを追加"
                     />
                   )}
                 </div>
@@ -330,10 +330,10 @@ export function StageForm({
                 {/* Isp Configuration */}
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-semibold">Isp Configuration</h4>
+                    <h4 className="text-sm font-semibold">Isp設定</h4>
                     <SwitchField
                       id={`use-isp-profile-${index}`}
-                      label="Use Time Profile"
+                      label="時間プロファイル使用"
                       checked={useIspProfile[index] || false}
                       onCheckedChange={(checked) => {
                         setUseIspProfile(prev => ({ ...prev, [index]: checked }))
@@ -349,7 +349,7 @@ export function StageForm({
                       <div className="field-grid">
                         <NumberField
                           id={`stage-${index}-isp-constant`}
-                          label="Isp Constant (s)"
+                          label="定Isp (s)"
                           value={stage.isp_constant}
                           onChange={(value) => updateStage(index, { isp_constant: value })}
                           hasError={issuesSet.has(`stage.isp_constant`)}
@@ -362,7 +362,7 @@ export function StageForm({
                         <div className="field-grid">
                           <NumberField
                             id={`stage-${index}-isp-multiplier`}
-                            label="Isp Multiplier"
+                            label="Isp倍率"
                             value={stage.isp_multiplier}
                             onChange={(value) => updateStage(index, { isp_multiplier: value })}
                             hasError={issuesSet.has(`stage.isp_multiplier`)}
@@ -375,11 +375,11 @@ export function StageForm({
                     </div>
                   ) : (
                     <EditableTable
-                      title="Isp vs Time"
+                      title="Isp vs 時間"
                       columns={ispColumns}
                       rows={stage.isp_profile || []}
                       onChange={(profile) => updateStage(index, { isp_profile: profile })}
-                      addLabel="Add Isp point"
+                      addLabel="Ispポイントを追加"
                     />
                   )}
                 </div>

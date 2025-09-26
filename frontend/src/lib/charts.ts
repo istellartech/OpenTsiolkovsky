@@ -200,7 +200,7 @@ export function createAltitudeChart(
     type: 'line',
     data: {
       datasets: [{
-        label: 'Altitude',
+        label: '高度',
         data: datasetPoints,
         borderColor: '#2563eb',
         backgroundColor: 'rgba(37, 99, 235, 0.1)',
@@ -226,7 +226,7 @@ export function createAltitudeChart(
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'Altitude (km)' },
+          title: { display: true, text: '高度 (km)' },
           grid: { color: '#f1f5f9' },
           beginAtZero: true,
           max: paddedAltitudeMax ?? 10,
@@ -349,7 +349,7 @@ export function createVelocityChart(
     data: {
       datasets: [
         {
-          label: 'Total Velocity',
+          label: '合計速度',
           data: totalVelPoints,
           borderColor: '#dc2626',
           backgroundColor: 'rgba(220, 38, 38, 0.1)',
@@ -361,7 +361,7 @@ export function createVelocityChart(
           spanGaps: true,
         },
         {
-          label: 'Vertical Velocity',
+          label: '垂直速度',
           data: verticalVelPoints,
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37, 99, 235, 0.1)',
@@ -373,7 +373,7 @@ export function createVelocityChart(
           spanGaps: true,
         },
         {
-          label: 'Horizontal Velocity',
+          label: '水平速度',
           data: horizontalVelPoints,
           borderColor: '#059669',
           backgroundColor: 'rgba(5, 150, 105, 0.1)',
@@ -401,7 +401,7 @@ export function createVelocityChart(
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'Velocity (m/s)' },
+          title: { display: true, text: '速度 (m/s)' },
           grid: { color: '#f1f5f9' },
           beginAtZero: minScale >= 0, // Only begin at zero if minimum is not negative
           min: minScale,
@@ -446,7 +446,7 @@ export function createMachChart(
     data: {
       datasets: [
         {
-          label: 'Mach Number (Altitude)',
+          label: 'マッハ数 (高度)',
           data: altitudeMachPoints,
           borderColor: '#7c3aed',
           backgroundColor: 'rgba(124, 58, 237, 0.1)',
@@ -458,7 +458,7 @@ export function createMachChart(
           spanGaps: true,
         },
         {
-          label: 'Mach Number (Sea Level)',
+          label: 'マッハ数 (海面)',
           data: seaLevelMachPoints,
           borderColor: '#ea580c',
           backgroundColor: 'rgba(234, 88, 12, 0.1)',
@@ -487,7 +487,7 @@ export function createMachChart(
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'Mach Number' },
+          title: { display: true, text: 'マッハ数' },
           grid: { color: '#f1f5f9' },
           beginAtZero: true,
           max: maxScale
@@ -531,7 +531,7 @@ export function createThrustChart(
     data: {
       datasets: [
         {
-          label: 'Thrust',
+          label: '推力',
           data: thrustPoints,
           borderColor: '#ea580c',
           backgroundColor: 'rgba(234, 88, 12, 0.1)',
@@ -543,7 +543,7 @@ export function createThrustChart(
           spanGaps: true,
         },
         {
-          label: 'Drag Force',
+          label: '抗力',
           data: dragPoints,
           borderColor: '#dc2626',
           backgroundColor: 'rgba(220, 38, 38, 0.1)',
@@ -603,7 +603,7 @@ export function createAccelerationChart(
     type: 'line',
     data: {
       datasets: [{
-        label: 'Acceleration',
+        label: '加速度',
         data: datasetPoints,
         borderColor: '#f59e0b',
         backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -627,7 +627,7 @@ export function createAccelerationChart(
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'Acceleration (G)' },
+          title: { display: true, text: '加速度 (G)' },
           grid: { color: '#f1f5f9' },
           beginAtZero: true,
           max: maxScale
@@ -659,7 +659,7 @@ export function createDynamicPressureChart(
     type: 'line',
     data: {
       datasets: [{
-        label: 'Dynamic Pressure',
+        label: '動圧',
         data: datasetPoints,
         borderColor: '#8b5cf6',
         backgroundColor: 'rgba(139, 92, 246, 0.1)',
@@ -683,7 +683,7 @@ export function createDynamicPressureChart(
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'Dynamic Pressure (kPa)' },
+          title: { display: true, text: '動圧 (kPa)' },
           grid: { color: '#f1f5f9' },
           beginAtZero: true,
           max: maxScale
@@ -835,7 +835,7 @@ export function createTrajectoryChart(
     type: 'line',
     data: {
       datasets: [{
-        label: 'Trajectory',
+        label: '軸道',
         data: datasetPoints,
         borderColor: '#059669',
         backgroundColor: 'rgba(5, 150, 105, 0.1)',
@@ -856,12 +856,12 @@ export function createTrajectoryChart(
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Downrange (km)' },
+          title: { display: true, text: '水平距離 (km)' },
           grid: { color: '#f1f5f9' }
         },
         y: {
           type: 'linear',
-          title: { display: true, text: 'Altitude (km)' },
+          title: { display: true, text: '高度 (km)' },
           grid: { color: '#f1f5f9' },
           beginAtZero: true
         }
