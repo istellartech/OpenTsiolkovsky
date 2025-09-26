@@ -55,6 +55,7 @@ jobs:
       - name: Build WASM
         run: |
           wasm-pack build --target web --features wasm
+          mkdir -p frontend/src/wasm
           cp pkg/*.js pkg/*.wasm pkg/*.d.ts frontend/src/wasm/
       - uses: oven-sh/setup-bun@v1
         with:
