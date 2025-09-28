@@ -19,6 +19,9 @@ pub enum IoError {
 
     #[error("CSV parse error: {0}")]
     CsvParse(#[from] csv::Error),
+
+    #[error("Configuration validation error:\n{}", .0.join("\n"))]
+    ConfigValidation(Vec<String>),
 }
 
 pub type Result<T> = std::result::Result<T, IoError>;
@@ -67,8 +70,349 @@ fn parse_csv_rows_from_str<const N: usize>(content: &str) -> Result<Vec<[f64; N]
 /// Load rocket configuration from JSON file
 pub fn load_config<P: AsRef<Path>>(path: P) -> Result<RocketConfig> {
     let content = fs::read_to_string(path)?;
-    let config = serde_json::from_str(&content)?;
+    let config: RocketConfig = serde_json::from_str(&content)?;
+
+    // Validate the configuration and return detailed errors if any
+    if let Err(validation_errors) = validate_config(&config) {
+        return Err(IoError::ConfigValidation(validation_errors));
+    }
+
     Ok(config)
+}
+
+/// Validate rocket configuration and return detailed error messages
+pub fn validate_config(config: &RocketConfig) -> std::result::Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+
+    // Validate calculation conditions
+    validate_calculate_condition(&config.calculate_condition, &mut errors);
+
+    // Validate launch conditions
+    validate_launch_condition(&config.launch, &mut errors);
+
+    // Validate stages
+    validate_stages(&config.stages, &mut errors);
+
+    // Validate wind configuration
+    validate_wind_config(&config.wind, &mut errors);
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+fn validate_calculate_condition(calc: &crate::rocket::CalculateCondition, errors: &mut Vec<String>) {
+    // Validate end time
+    if !calc.end_time.is_finite() || calc.end_time <= 0.0 {
+        errors.push(format!(
+            "計算条件: 終了時間 '{:.3}秒' は正の有限値である必要があります",
+            calc.end_time
+        ));
+    } else if calc.end_time > 3600.0 {
+        errors.push(format!(
+            "計算条件: 終了時間 '{:.1}秒' は通常1時間(3600秒)を超えません - 意図的ですか？",
+            calc.end_time
+        ));
+    }
+
+    // Validate time step
+    if !calc.time_step.is_finite() || calc.time_step <= 0.0 {
+        errors.push(format!(
+            "計算条件: 出力時間刻み '{:.6}秒' は正の有限値である必要があります",
+            calc.time_step
+        ));
+    } else if calc.time_step > calc.end_time / 10.0 {
+        errors.push(format!(
+            "計算条件: 出力時間刻み '{:.3}秒' が終了時間 '{:.1}秒' に対して大きすぎます (推奨: <{:.3}秒)",
+            calc.time_step, calc.end_time, calc.end_time / 100.0
+        ));
+    } else if calc.time_step < 0.001 {
+        errors.push(format!(
+            "計算条件: 出力時間刻み '{:.6}秒' が小さすぎて大量の出力データが生成される可能性があります",
+            calc.time_step
+        ));
+    }
+
+    // Validate air density variation
+    if !calc.air_density_variation.is_finite() {
+        errors.push("計算条件: 大気密度変動率は有限値である必要があります".to_string());
+    } else if calc.air_density_variation < -100.0 || calc.air_density_variation > 100.0 {
+        errors.push(format!(
+            "計算条件: 大気密度変動率 '{:.1}%' は-100%から100%の範囲内である必要があります",
+            calc.air_density_variation
+        ));
+    }
+
+    // Validate integrator settings
+    match calc.integrator.method {
+        crate::rocket::IntegratorMethod::Rk4 => {
+            if let Some(step) = calc.integrator.rk4_step {
+                if !step.is_finite() || step <= 0.0 {
+                    errors.push(format!(
+                        "積分器設定: RK4ステップサイズ '{:.6}秒' は正の有限値である必要があります",
+                        step
+                    ));
+                } else if step > 1.0 {
+                    errors.push(format!(
+                        "積分器設定: RK4ステップサイズ '{:.3}秒' が大きすぎます (推奨: <1.0秒)",
+                        step
+                    ));
+                } else if step < 1e-6 {
+                    errors.push(format!(
+                        "積分器設定: RK4ステップサイズ '{:.6}秒' が小さすぎて計算時間が過大になる可能性があります",
+                        step
+                    ));
+                }
+            }
+        },
+        crate::rocket::IntegratorMethod::Rk45 => {
+            // RK45 doesn't have explicit tolerance settings in this implementation
+            // The adaptive algorithm handles tolerance internally
+        }
+    }
+}
+
+fn validate_launch_condition(launch: &crate::rocket::LaunchCondition, errors: &mut Vec<String>) {
+    // Validate position LLH
+    let [lat, lon, alt] = launch.position_llh;
+
+    if !lat.is_finite() || lat < -90.0 || lat > 90.0 {
+        errors.push(format!(
+            "打ち上げ条件: 緯度 '{:.6}度' は-90度から90度の範囲内である必要があります",
+            lat
+        ));
+    }
+
+    if !lon.is_finite() || lon < -180.0 || lon > 180.0 {
+        errors.push(format!(
+            "打ち上げ条件: 経度 '{:.6}度' は-180度から180度の範囲内である必要があります",
+            lon
+        ));
+    }
+
+    if !alt.is_finite() {
+        errors.push(format!(
+            "打ち上げ条件: 高度 '{:.1}m' は有限値である必要があります",
+            alt
+        ));
+    } else if alt < -500.0 {
+        errors.push(format!(
+            "打ち上げ条件: 高度 '{:.1}m' が海面下すぎます",
+            alt
+        ));
+    } else if alt > 10000.0 {
+        errors.push(format!(
+            "打ち上げ条件: 高度 '{:.1}m' が高すぎます (通常の発射台は10km未満)",
+            alt
+        ));
+    }
+
+    // Validate velocity NED
+    let [vn, ve, vd] = launch.velocity_ned;
+    let velocity_mag = (vn*vn + ve*ve + vd*vd).sqrt();
+
+    if !vn.is_finite() || !ve.is_finite() || !vd.is_finite() {
+        errors.push("打ち上げ条件: 初期速度成分は有限値である必要があります".to_string());
+    } else if velocity_mag > 100.0 {
+        errors.push(format!(
+            "打ち上げ条件: 初期速度 '{:.1}m/s' が大きすぎます (通常は地面からの静止状態)",
+            velocity_mag
+        ));
+    }
+
+    // Validate launch time
+    let [year, month, day, hour, min, sec] = launch.launch_time;
+
+    if year < 1900 || year > 2100 {
+        errors.push(format!(
+            "打ち上げ条件: 打ち上げ年 '{}年' は1900年から2100年の範囲内である必要があります",
+            year
+        ));
+    }
+
+    if month < 1 || month > 12 {
+        errors.push(format!(
+            "打ち上げ条件: 月 '{}月' は1から12の範囲内である必要があります",
+            month
+        ));
+    }
+
+    if day < 1 || day > 31 {
+        errors.push(format!(
+            "打ち上げ条件: 日 '{}日' は1から31の範囲内である必要があります",
+            day
+        ));
+    }
+
+    if hour < 0 || hour > 23 {
+        errors.push(format!(
+            "打ち上げ条件: 時 '{}時' は0から23の範囲内である必要があります",
+            hour
+        ));
+    }
+
+    if min < 0 || min > 59 {
+        errors.push(format!(
+            "打ち上げ条件: 分 '{}分' は0から59の範囲内である必要があります",
+            min
+        ));
+    }
+
+    if sec < 0 || sec > 59 {
+        errors.push(format!(
+            "打ち上げ条件: 秒 '{}秒' は0から59の範囲内である必要があります",
+            sec
+        ));
+    }
+}
+
+fn validate_stages(stages: &[crate::rocket::StageConfig], errors: &mut Vec<String>) {
+    if stages.is_empty() {
+        errors.push("ステージ設定: 少なくとも1つのステージが必要です".to_string());
+        return;
+    }
+
+    if stages.len() > 10 {
+        errors.push(format!(
+            "ステージ設定: ステージ数 '{}個' が多すぎます (通常は1-4個)",
+            stages.len()
+        ));
+    }
+
+    for (i, stage) in stages.iter().enumerate() {
+        let stage_num = i + 1;
+        validate_single_stage(stage, stage_num, errors);
+    }
+
+    // Validate stage separation timing
+    validate_stage_separation_timing(stages, errors);
+}
+
+fn validate_single_stage(stage: &crate::rocket::StageConfig, stage_num: usize, errors: &mut Vec<String>) {
+    // Validate mass
+    if !stage.mass_initial.is_finite() || stage.mass_initial <= 0.0 {
+        errors.push(format!(
+            "ステージ{}: 初期質量 '{:.1}kg' は正の有限値である必要があります",
+            stage_num, stage.mass_initial
+        ));
+    } else if stage.mass_initial > 1000000.0 {
+        errors.push(format!(
+            "ステージ{}: 初期質量 '{:.0}kg' が大きすぎます (通常は100万kg未満)",
+            stage_num, stage.mass_initial
+        ));
+    }
+
+    // Validate thrust timing
+    if !stage.thrust.burn_start_time.is_finite() || stage.thrust.burn_start_time < 0.0 {
+        errors.push(format!(
+            "ステージ{}: 燃焼開始時刻 '{:.3}秒' は非負の有限値である必要があります",
+            stage_num, stage.thrust.burn_start_time
+        ));
+    }
+
+    if !stage.thrust.burn_end_time.is_finite() || stage.thrust.burn_end_time < 0.0 {
+        errors.push(format!(
+            "ステージ{}: 燃焼終了時刻 '{:.3}秒' は非負の有限値である必要があります",
+            stage_num, stage.thrust.burn_end_time
+        ));
+    }
+
+    if stage.thrust.burn_end_time <= stage.thrust.burn_start_time {
+        errors.push(format!(
+            "ステージ{}: 燃焼終了時刻 '{:.3}秒' は燃焼開始時刻 '{:.3}秒' より後である必要があります",
+            stage_num, stage.thrust.burn_end_time, stage.thrust.burn_start_time
+        ));
+    }
+
+    // Validate thrust magnitude
+    if !stage.thrust.const_thrust_vac.is_finite() || stage.thrust.const_thrust_vac < 0.0 {
+        errors.push(format!(
+            "ステージ{}: 真空推力 '{:.1}N' は非負の有限値である必要があります",
+            stage_num, stage.thrust.const_thrust_vac
+        ));
+    } else if stage.thrust.const_thrust_vac > 50000000.0 {
+        errors.push(format!(
+            "ステージ{}: 真空推力 '{:.0}N' が大きすぎます (通常は50MN未満)",
+            stage_num, stage.thrust.const_thrust_vac
+        ));
+    }
+
+    // Validate ISP
+    if !stage.thrust.const_isp_vac.is_finite() || stage.thrust.const_isp_vac <= 0.0 {
+        errors.push(format!(
+            "ステージ{}: 真空比推力 '{:.1}秒' は正の有限値である必要があります",
+            stage_num, stage.thrust.const_isp_vac
+        ));
+    } else if stage.thrust.const_isp_vac > 500.0 {
+        errors.push(format!(
+            "ステージ{}: 真空比推力 '{:.1}秒' が高すぎます (通常は500秒未満)",
+            stage_num, stage.thrust.const_isp_vac
+        ));
+    } else if stage.thrust.const_isp_vac < 100.0 {
+        errors.push(format!(
+            "ステージ{}: 真空比推力 '{:.1}秒' が低すぎます (通常は100秒以上)",
+            stage_num, stage.thrust.const_isp_vac
+        ));
+    }
+
+    // Validate engine geometry
+    if !stage.thrust.throat_diameter.is_finite() || stage.thrust.throat_diameter <= 0.0 {
+        errors.push(format!(
+            "ステージ{}: スロート直径 '{:.4}m' は正の有限値である必要があります",
+            stage_num, stage.thrust.throat_diameter
+        ));
+    }
+
+    if !stage.thrust.nozzle_expansion_ratio.is_finite() || stage.thrust.nozzle_expansion_ratio < 1.0 {
+        errors.push(format!(
+            "ステージ{}: ノズル膨張比 '{:.1}' は1以上の有限値である必要があります",
+            stage_num, stage.thrust.nozzle_expansion_ratio
+        ));
+    }
+
+    // Validate aerodynamics
+    if !stage.aero.body_diameter.is_finite() || stage.aero.body_diameter <= 0.0 {
+        errors.push(format!(
+            "ステージ{}: 機体直径 '{:.3}m' は正の有限値である必要があります",
+            stage_num, stage.aero.body_diameter
+        ));
+    } else if stage.aero.body_diameter > 50.0 {
+        errors.push(format!(
+            "ステージ{}: 機体直径 '{:.1}m' が大きすぎます (通常は50m未満)",
+            stage_num, stage.aero.body_diameter
+        ));
+    }
+}
+
+fn validate_stage_separation_timing(stages: &[crate::rocket::StageConfig], errors: &mut Vec<String>) {
+    for i in 0..stages.len() - 1 {
+        let current_stage = &stages[i];
+        let next_stage = &stages[i + 1];
+
+        // Check if separation time is reasonable
+        if current_stage.stage.following_stage_exists {
+            if current_stage.stage.separation_time <= current_stage.thrust.burn_end_time {
+                errors.push(format!(
+                    "ステージ{}: 分離時刻 '{:.3}秒' は燃焼終了時刻 '{:.3}秒' より後である必要があります",
+                    i + 1, current_stage.stage.separation_time, current_stage.thrust.burn_end_time
+                ));
+            }
+
+            if next_stage.thrust.burn_start_time < current_stage.stage.separation_time {
+                errors.push(format!(
+                    "ステージ{}: 次段燃焼開始時刻 '{:.3}秒' は前段分離時刻 '{:.3}秒' より後である必要があります",
+                    i + 2, next_stage.thrust.burn_start_time, current_stage.stage.separation_time
+                ));
+            }
+        }
+    }
+}
+
+fn validate_wind_config(_wind: &crate::rocket::WindConfig, _errors: &mut Vec<String>) {
+    // Wind configuration validation can be added here if needed
+    // For now, basic wind config is typically simple and doesn't need extensive validation
 }
 
 /// Load CSV data as (time, value) pairs

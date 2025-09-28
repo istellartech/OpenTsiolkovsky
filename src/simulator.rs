@@ -76,6 +76,8 @@ pub struct CsvCppRow {
     pub loss_thrust: f64,
     pub is_powered: i32,
     pub is_separated: i32,
+    pub stage_number: u8,
+    pub event_label: String,
 }
 
 #[derive(Debug, Clone)]
@@ -280,8 +282,12 @@ impl Simulator {
         }
 
         let mut next_output_time = (self.state.time + dt_out).min(end_time);
+        let mut prev_state: Option<SimulationState> = None;
 
         while self.state.time + 1.0e-9 < end_time {
+            // Save previous state for potential interpolation
+            let previous_state = self.state.clone();
+
             // Check if next step would lead to ground impact
             let current_altitude = self.state.altitude;
             let current_velocity = self.state.velocity;
@@ -301,9 +307,32 @@ impl Simulator {
                 let altitude_change_rate = radial_velocity; // Approximate as purely radial
                 let predicted_altitude = current_altitude + altitude_change_rate * dt_out;
 
-                if predicted_altitude <= 0.0 {
-                    // This would be the last valid state before ground impact
-                    break;
+                if predicted_altitude <= 0.0 && current_altitude >= 10.0 {
+                    // Refine time step for more accurate landing detection
+                    let refined_dt = dt_out * 0.1; // Use smaller time steps near landing
+                    let refined_time = (self.state.time + refined_dt).min(end_time);
+                    self.advance_to_time(refined_time);
+                    self.update_derived_quantities();
+
+                    if self.state.altitude <= 0.0 {
+                        // Landing detected with refined step - interpolate impact point
+                        let impact_state = self.interpolate_impact_point(&previous_state, &self.state);
+                        self.trajectory.push(impact_state.clone());
+
+                        // Update internal state to impact state for final telemetry
+                        self.state = impact_state;
+                        let row = self.capture_cpp_row();
+                        self.telemetry_cpp.push(row);
+                        break;
+                    }
+
+                    // Continue with refined timestep
+                    self.trajectory.push(self.state.clone());
+                    let row = self.capture_cpp_row();
+                    self.telemetry_cpp.push(row);
+
+                    prev_state = Some(previous_state);
+                    continue;
                 }
             }
 
@@ -312,14 +341,29 @@ impl Simulator {
             let row = self.capture_cpp_row();
             self.telemetry_cpp.push(row);
 
-            // Also check after integration in case prediction was wrong
+            // Check after integration for ground impact
             if self.state.altitude <= 0.0 {
+                if let Some(prev) = prev_state {
+                    // Remove the last trajectory point and replace with interpolated impact
+                    self.trajectory.pop();
+                    self.telemetry_cpp.pop();
+
+                    let impact_state = self.interpolate_impact_point(&prev, &self.state);
+                    self.trajectory.push(impact_state.clone());
+
+                    // Update internal state to impact state for final telemetry
+                    self.state = impact_state;
+                    let row = self.capture_cpp_row();
+                    self.telemetry_cpp.push(row);
+                }
                 break;
             }
 
             if next_output_time >= end_time {
                 break;
             }
+
+            prev_state = Some(previous_state);
             next_output_time = (next_output_time + dt_out).min(end_time);
         }
         self.trajectory.clone()
@@ -328,6 +372,104 @@ impl Simulator {
     /// Get current simulation state
     pub fn current_state(&self) -> &SimulationState {
         &self.state
+    }
+
+    /// Interpolate exact impact point between two states
+    fn interpolate_impact_point(&self, state_before: &SimulationState, state_after: &SimulationState) -> SimulationState {
+        use crate::physics::coordinates::CoordinateTransform as CT;
+
+        // Linear interpolation factor based on altitude
+        let alt_before = state_before.altitude;
+        let alt_after = state_after.altitude;
+
+        if alt_before <= 0.0 || alt_after >= 0.0 {
+            // Edge case: return the state that's closer to ground level
+            return if alt_before.abs() < alt_after.abs() {
+                state_before.clone()
+            } else {
+                state_after.clone()
+            };
+        }
+
+        // Calculate interpolation factor to reach altitude = 0
+        let t = -alt_before / (alt_after - alt_before);
+        let t = t.clamp(0.0, 1.0); // Ensure t is between 0 and 1
+
+        // Interpolate all state variables
+        let time = state_before.time + t * (state_after.time - state_before.time);
+        let position = state_before.position + t * (state_after.position - state_before.position);
+        let velocity = state_before.velocity + t * (state_after.velocity - state_before.velocity);
+        let mass = state_before.mass + t * (state_after.mass - state_before.mass);
+        let stage = state_before.stage; // Stage doesn't interpolate
+
+        // Convert interpolated position to get exact altitude
+        let pos_ecef = CT::pos_eci_to_ecef(&position, time);
+        let pos_llh = CT::pos_ecef_to_llh(&pos_ecef);
+        let _altitude = pos_llh.z; // Should be very close to 0
+
+        // Calculate other derived quantities at impact point
+        let velocity_magnitude = velocity.magnitude();
+
+        // Get atmospheric conditions at impact (sea level)
+        let atm = self.atmosphere.conditions(0.0);
+        let mach_number = velocity_magnitude / atm.speed_of_sound;
+        let dynamic_pressure = 0.5 * atm.density * velocity_magnitude.powi(2);
+
+        // Stage information
+        let stage_idx = self.stage_index_for_time(time);
+        let stage_info = &self.stage_runtime[stage_idx];
+        let stage_cfg = self.rocket.stage_config(stage_idx);
+        let stage_local_time = self.stage_local_time(stage_idx, time);
+
+        // Calculate thrust at impact time
+        let is_powered = time >= stage_info.burn_start && time < stage_info.forced_cutoff;
+        let thrust = if is_powered {
+            self.rocket.thrust_at(stage_idx, stage_local_time)
+        } else {
+            0.0
+        };
+
+        // Calculate drag (should be minimal at impact if near sea level)
+        let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
+        let ref_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
+        let drag_force = ca * dynamic_pressure * ref_area;
+
+        // Position and coordinate frame calculations for detailed state
+        let dcm_eci_to_ned = CT::dcm_eci_to_ned(&pos_llh, time);
+        let vel_ned = CT::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
+        let vel_ecef_ned = vel_ned; // At impact, these should be similar
+
+        // Attitude calculations
+        let (az_deg, el_deg) = self.rocket.attitude_at_time(time);
+        let dcm_ned_to_body = CT::dcm_ned_to_body(deg2rad(az_deg), deg2rad(el_deg), None);
+        let vel_air_body = CT::vel_air_body_frame(&dcm_ned_to_body, &vel_ned, &Vector3::zeros());
+        let angles = CT::angle_of_attack(&vel_air_body);
+
+        // Create interpolated impact state
+        SimulationState {
+            time,
+            position,
+            velocity,
+            mass,
+            stage,
+            altitude: 0.0, // Force altitude to exactly 0 at impact
+            velocity_magnitude,
+            mach_number,
+            dynamic_pressure,
+            thrust,
+            drag_force,
+            velocity_ned: vel_ned,
+            velocity_eci_ned: vel_ned,
+            velocity_ecef_ned: vel_ecef_ned,
+            sea_level_mach: velocity_magnitude / self.atmosphere.conditions(0.0).speed_of_sound,
+            acceleration_magnitude: 0.0, // Will be calculated if needed
+            acc_eci: Vector3::zeros(),    // Will be calculated if needed
+            acc_body: Vector3::zeros(),   // Will be calculated if needed
+            angle_of_attack: angles.x.to_degrees(),
+            sideslip_angle: angles.y.to_degrees(),
+            attitude_azimuth: az_deg,
+            attitude_elevation: el_deg,
+        }
     }
 
     fn stage_index_for_time(&self, time: f64) -> usize {
@@ -781,6 +923,9 @@ impl Simulator {
         );
         let downrange = CT::distance_surface(&launch_llh, &pos_llh);
 
+        // Determine event label based on current state
+        let event_label = self.determine_event_label(t, stage_idx, is_powered, stage_local_time);
+
         CsvCppRow {
             time: t,
             mass,
@@ -819,6 +964,82 @@ impl Simulator {
             loss_thrust,
             is_powered: if is_powered { 1 } else { 0 },
             is_separated: if stage_idx > 0 { 1 } else { 0 },
+            stage_number: (stage_idx + 1) as u8,
+            event_label,
+        }
+    }
+
+    /// Determine event label for current simulation state
+    fn determine_event_label(&self, time: f64, stage_idx: usize, is_powered: bool, stage_local_time: f64) -> String {
+        const TIME_TOLERANCE: f64 = 0.1; // 0.1 second tolerance for event detection
+
+        let stage_info = &self.stage_runtime[stage_idx];
+
+        // Check for specific events based on timing and state
+
+        // Landing/Impact detection
+        if self.state.altitude <= 0.0 {
+            return "Impact".to_string();
+        }
+
+        // Stage separation events
+        if stage_idx > 0 {
+            let prev_stage = &self.stage_runtime[stage_idx - 1];
+            if (time - prev_stage.separation_time).abs() < TIME_TOLERANCE {
+                return format!("Stage{}_Separation", stage_idx);
+            }
+        }
+
+        // Engine ignition and cutoff events
+        if is_powered {
+            if (time - stage_info.burn_start).abs() < TIME_TOLERANCE {
+                return format!("Stage{}_Ignition", stage_idx + 1);
+            }
+            if (time - stage_info.burn_end).abs() < TIME_TOLERANCE ||
+               (time - stage_info.forced_cutoff).abs() < TIME_TOLERANCE {
+                return format!("Stage{}_MECO", stage_idx + 1); // Main Engine Cut-Off
+            }
+        }
+
+        // Dynamic pressure and flight phase events
+        if self.state.dynamic_pressure > 0.0 {
+            // Check for Max-Q (requires tracking max dynamic pressure - simplified here)
+            if self.state.altitude > 1000.0 && self.state.altitude < 20000.0 &&
+               self.state.dynamic_pressure > 30000.0 { // Rough threshold for Max-Q
+                return "Max_Q_Region".to_string();
+            }
+        }
+
+        // Mach number events
+        if self.state.mach_number >= 1.0 && self.state.mach_number < 1.1 {
+            return "Mach_1".to_string();
+        }
+
+        // Altitude-based milestones
+        if self.state.altitude > 100000.0 { // Karman line
+            return "Space".to_string();
+        } else if self.state.altitude > 50000.0 {
+            return "Stratosphere".to_string();
+        } else if self.state.altitude > 11000.0 {
+            return "Tropopause".to_string();
+        }
+
+        // Flight phase based on powered/coast status and stage
+        if is_powered {
+            if stage_local_time < 1.0 {
+                return format!("Stage{}_Early_Burn", stage_idx + 1);
+            } else if time - stage_info.burn_end < 10.0 {
+                return format!("Stage{}_Late_Burn", stage_idx + 1);
+            } else {
+                return format!("Stage{}_Powered", stage_idx + 1);
+            }
+        } else {
+            if self.state.velocity.magnitude() > 0.0 &&
+               self.state.velocity.dot(&self.state.position.normalize()) < 0.0 {
+                return "Descent".to_string();
+            } else {
+                return format!("Stage{}_Coast", stage_idx + 1);
+            }
         }
     }
 

@@ -14,5 +14,19 @@ pub use simulator::{SimulationState, Simulator};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+/// Configuration validation error
+#[derive(Debug)]
+pub struct ConfigValidationError {
+    pub errors: Vec<String>,
+}
+
+impl std::fmt::Display for ConfigValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "設定検証エラー:\n{}", self.errors.join("\n"))
+    }
+}
+
+impl std::error::Error for ConfigValidationError {}
+
 #[cfg(test)]
 mod tests;

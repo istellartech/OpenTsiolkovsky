@@ -1,12 +1,57 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import type React from 'react'
 import type { ClientConfig, SimulationState } from '../lib/simulation'
 import { runSimulation } from '../lib/simulation'
 import { createDefaultConfig } from '../config/defaults'
 import { validateConfig, isValidClientConfig, type ValidationIssue } from '../utils/validation'
 
+const LOCALSTORAGE_KEY = 'openTsiolkovsky_config'
+const LOCALSTORAGE_AUTOSAVE_KEY = 'openTsiolkovsky_autosave_enabled'
+
+// localStorage utility functions
+const loadConfigFromStorage = (): ClientConfig | null => {
+  try {
+    const stored = localStorage.getItem(LOCALSTORAGE_KEY)
+    if (!stored) return null
+
+    const config = JSON.parse(stored)
+    return isValidClientConfig(config) ? config : null
+  } catch {
+    return null
+  }
+}
+
+const saveConfigToStorage = (config: ClientConfig) => {
+  try {
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(config, null, 2))
+  } catch (error) {
+    console.warn('Failed to save config to localStorage:', error)
+  }
+}
+
+const isAutoSaveEnabled = (): boolean => {
+  try {
+    const stored = localStorage.getItem(LOCALSTORAGE_AUTOSAVE_KEY)
+    return stored !== 'false' // Default to true
+  } catch {
+    return true
+  }
+}
+
+const setAutoSaveEnabled = (enabled: boolean) => {
+  try {
+    localStorage.setItem(LOCALSTORAGE_AUTOSAVE_KEY, enabled.toString())
+  } catch (error) {
+    console.warn('Failed to save autosave preference:', error)
+  }
+}
+
 export function useSimulation(onResult: (trajectory: SimulationState[], config: ClientConfig, executionTime: number) => void) {
-  const [config, setConfig] = useState<ClientConfig>(() => createDefaultConfig())
+  // Initialize config with localStorage data if available
+  const [config, setConfig] = useState<ClientConfig>(() => {
+    const savedConfig = loadConfigFromStorage()
+    return savedConfig || createDefaultConfig()
+  })
   const [useCnProfile, setUseCnProfile] = useState(() => config.aerodynamics.cn_profile.length > 0)
   const [useCaProfile, setUseCaProfile] = useState(() => config.aerodynamics.ca_profile.length > 0)
   const [useAttitudeProfile, setUseAttitudeProfile] = useState(() => config.attitude.profile.length > 0)
@@ -16,9 +61,16 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
   const [isCompleted, setIsCompleted] = useState(false)
   const [executionTime, setExecutionTime] = useState<number | null>(null)
   const [showVariations, setShowVariations] = useState(false)
-  const [selectedPresetId, setSelectedPresetId] = useState<string>('sample')
+  const [selectedPresetId, setSelectedPresetId] = useState<string>(() => {
+    const savedConfig = loadConfigFromStorage()
+    return savedConfig ? 'custom' : 'sample'
+  })
   const [openStageIds, setOpenStageIds] = useState<string[]>(['stage-0'])
   const [showTemplates, setShowTemplates] = useState(false)
+  const [autoSaveEnabled, setAutoSaveEnabledState] = useState(() => isAutoSaveEnabled())
+
+  // Debounced auto-save timer ref
+  const autoSaveTimeoutRef = useRef<number | null>(null)
 
   const jsonPreview = useMemo(() => JSON.stringify(config, null, 2), [config])
   const validationIssues = useMemo(() => validateConfig(config), [config])
@@ -26,6 +78,28 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
   const issuesSet = useMemo(() => new Set(validationIssues.map((issue) => issue.field)), [validationIssues])
 
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
+
+  // Auto-save config to localStorage when it changes
+  useEffect(() => {
+    if (!autoSaveEnabled) return
+
+    // Clear existing timeout
+    if (autoSaveTimeoutRef.current !== null) {
+      clearTimeout(autoSaveTimeoutRef.current)
+    }
+
+    // Set debounced save (1 second delay)
+    autoSaveTimeoutRef.current = window.setTimeout(() => {
+      saveConfigToStorage(config)
+    }, 1000)
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (autoSaveTimeoutRef.current !== null) {
+        clearTimeout(autoSaveTimeoutRef.current)
+      }
+    }
+  }, [config, autoSaveEnabled])
 
   const makeFieldRef = useCallback(
     (field?: string) => (el: HTMLElement | null) => {
@@ -143,6 +217,36 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
     URL.revokeObjectURL(url)
   }, [config])
 
+  // Auto-save management functions
+  const toggleAutoSave = useCallback(() => {
+    const newValue = !autoSaveEnabled
+    setAutoSaveEnabledState(newValue)
+    setAutoSaveEnabled(newValue)
+  }, [autoSaveEnabled])
+
+  const clearSavedConfig = useCallback(() => {
+    try {
+      localStorage.removeItem(LOCALSTORAGE_KEY)
+      setSelectedPresetId('sample')
+      const defaultConfig = createDefaultConfig()
+      setConfig(defaultConfig)
+      setUseCnProfile(defaultConfig.aerodynamics.cn_profile.length > 0)
+      setUseCaProfile(defaultConfig.aerodynamics.ca_profile.length > 0)
+      setUseAttitudeProfile(defaultConfig.attitude.profile.length > 0)
+      setUseWindProfile(defaultConfig.wind.profile.length > 0)
+    } catch (error) {
+      console.warn('Failed to clear saved config:', error)
+    }
+  }, [])
+
+  const saveConfigNow = useCallback(() => {
+    if (autoSaveTimeoutRef.current !== null) {
+      clearTimeout(autoSaveTimeoutRef.current)
+      autoSaveTimeoutRef.current = null
+    }
+    saveConfigToStorage(config)
+  }, [config])
+
   return {
     // State
     config,
@@ -166,6 +270,7 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
     setOpenStageIds,
     showTemplates,
     setShowTemplates,
+    autoSaveEnabled,
 
     // Computed
     jsonPreview,
@@ -180,5 +285,8 @@ export function useSimulation(onResult: (trajectory: SimulationState[], config: 
     handleExportConfig,
     makeFieldRef,
     scrollToFirstError,
+    toggleAutoSave,
+    clearSavedConfig,
+    saveConfigNow,
   }
 }

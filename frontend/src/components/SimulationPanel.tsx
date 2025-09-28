@@ -130,7 +130,7 @@ export function SimulationPanel({ onResult }: Props) {
             <TabsTrigger value="basic">打ち上げ</TabsTrigger>
             <TabsTrigger value="stages">ステージ</TabsTrigger>
             <TabsTrigger value="aerodynamics">空力</TabsTrigger>
-            <TabsTrigger value="wind">風</TabsTrigger>
+            <TabsTrigger value="wind">姿勢・風</TabsTrigger>
             <TabsTrigger value="preview">プレビュー</TabsTrigger>
           </TabsList>
 

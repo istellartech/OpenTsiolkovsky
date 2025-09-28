@@ -1,4 +1,4 @@
-import { useEffect, useRef, forwardRef, useImperativeHandle, useState } from 'react'
+import { useEffect, useRef, forwardRef, useImperativeHandle, useState, useMemo } from 'react'
 import { Chart, type ChartConfiguration } from 'chart.js/auto'
 import { Download, PackageOpen, MapPin } from 'lucide-react'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, Badge, Button } from './ui'
@@ -33,10 +33,38 @@ export interface ChartCardHandle {
   getTitle: () => string
 }
 
+// Helper function to determine if chart structure has changed significantly
+const isStructuralChange = (oldConfig: ChartConfiguration | null, newConfig: ChartConfiguration): boolean => {
+  if (!oldConfig) return true
+
+  // Check if chart type changed
+  if (oldConfig.type !== newConfig.type) return true
+
+  // Check if number of datasets changed
+  const oldDatasetCount = oldConfig.data?.datasets?.length || 0
+  const newDatasetCount = newConfig.data?.datasets?.length || 0
+  if (oldDatasetCount !== newDatasetCount) return true
+
+  // Check if dataset types changed (e.g., line to bar)
+  for (let i = 0; i < newDatasetCount; i++) {
+    const oldDataset = oldConfig.data?.datasets?.[i]
+    const newDataset = newConfig.data?.datasets?.[i]
+    if (oldDataset?.type !== newDataset?.type) return true
+  }
+
+  // Check if significant axis configuration changed
+  const oldScales = oldConfig.options?.scales
+  const newScales = newConfig.options?.scales
+  if (JSON.stringify(oldScales) !== JSON.stringify(newScales)) return true
+
+  return false
+}
+
 const ChartCard = forwardRef<ChartCardHandle, ChartCardProps>(
   ({ config, title, height = 260 }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const chartRef = useRef<Chart | null>(null)
+    const lastConfigRef = useRef<ChartConfiguration | null>(null)
 
     useImperativeHandle(ref, () => ({
       getChart: () => chartRef.current,
@@ -46,20 +74,52 @@ const ChartCard = forwardRef<ChartCardHandle, ChartCardProps>(
     useEffect(() => {
       if (!canvasRef.current) return
 
-      // Destroy existing chart
-      if (chartRef.current) {
-        chartRef.current.destroy()
-        chartRef.current = null
-      }
+      const needsRecreate = isStructuralChange(lastConfigRef.current, config)
 
-      // Create new chart
-      chartRef.current = new Chart(canvasRef.current, config)
+      if (needsRecreate) {
+        // Destroy existing chart and create new one
+        if (chartRef.current) {
+          chartRef.current.destroy()
+          chartRef.current = null
+        }
+
+        // Create new chart
+        chartRef.current = new Chart(canvasRef.current, config)
+        lastConfigRef.current = JSON.parse(JSON.stringify(config)) // Deep copy
+      } else if (chartRef.current) {
+        // Update existing chart with new data
+        try {
+          // Update data
+          if (config.data) {
+            chartRef.current.data = config.data
+          }
+
+          // Update options if they exist
+          if (config.options) {
+            Object.assign(chartRef.current.options, config.options)
+          }
+
+          // Trigger chart update with animation
+          chartRef.current.update('none') // 'none' for no animation, 'active' for animation
+          lastConfigRef.current = JSON.parse(JSON.stringify(config)) // Deep copy
+        } catch (error) {
+          console.warn('Chart update failed, recreating chart:', error)
+          // Fallback to recreation if update fails
+          if (chartRef.current) {
+            chartRef.current.destroy()
+            chartRef.current = null
+          }
+          chartRef.current = new Chart(canvasRef.current, config)
+          lastConfigRef.current = JSON.parse(JSON.stringify(config))
+        }
+      }
 
       return () => {
         if (chartRef.current) {
           chartRef.current.destroy()
           chartRef.current = null
         }
+        lastConfigRef.current = null
       }
     }, [config])
 
