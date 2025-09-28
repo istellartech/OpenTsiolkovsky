@@ -324,8 +324,8 @@ function validateAttitude(attitude: any, push: (field: string, message: string) 
         push('attitude.profile', '姿勢プロファイルの方位角は0〜360度未満で指定してください。')
         break
       }
-      if (!isFiniteNumber(sample.elevation_deg) || sample.elevation_deg < 0 || sample.elevation_deg > 90) {
-        push('attitude.profile', '姿勢プロファイルの仰角は0〜90度で指定してください。')
+      if (!isFiniteNumber(sample.elevation_deg) || sample.elevation_deg < -90 || sample.elevation_deg > 90) {
+        push('attitude.profile', '姿勢プロファイルの仰角は-90〜90度で指定してください。')
         break
       }
       prevTime = sample.time
