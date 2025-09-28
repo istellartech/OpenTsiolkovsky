@@ -328,7 +328,7 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "openTsiolkovsky"
-version = "0.6.0"
+version = "0.5.0"
 dependencies = [
  "approx",
  "clap",

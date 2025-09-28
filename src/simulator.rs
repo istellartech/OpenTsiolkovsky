@@ -1027,19 +1027,17 @@ impl Simulator {
         // Flight phase based on powered/coast status and stage
         if is_powered {
             if stage_local_time < 1.0 {
-                return format!("Stage{}_Early_Burn", stage_idx + 1);
+                format!("Stage{}_Early_Burn", stage_idx + 1)
             } else if time - stage_info.burn_end < 10.0 {
-                return format!("Stage{}_Late_Burn", stage_idx + 1);
+                format!("Stage{}_Late_Burn", stage_idx + 1)
             } else {
-                return format!("Stage{}_Powered", stage_idx + 1);
+                format!("Stage{}_Powered", stage_idx + 1)
             }
+        } else if self.state.velocity.magnitude() > 0.0 &&
+            self.state.velocity.dot(&self.state.position.normalize()) < 0.0 {
+            "Descent".to_string()
         } else {
-            if self.state.velocity.magnitude() > 0.0 &&
-               self.state.velocity.dot(&self.state.position.normalize()) < 0.0 {
-                return "Descent".to_string();
-            } else {
-                return format!("Stage{}_Coast", stage_idx + 1);
-            }
+            format!("Stage{}_Coast", stage_idx + 1)
         }
     }
 

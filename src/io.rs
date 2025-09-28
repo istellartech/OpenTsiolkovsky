@@ -178,14 +178,14 @@ fn validate_launch_condition(launch: &crate::rocket::LaunchCondition, errors: &m
     // Validate position LLH
     let [lat, lon, alt] = launch.position_llh;
 
-    if !lat.is_finite() || lat < -90.0 || lat > 90.0 {
+    if !lat.is_finite() || !(-90.0..=90.0).contains(&lat) {
         errors.push(format!(
             "打ち上げ条件: 緯度 '{:.6}度' は-90度から90度の範囲内である必要があります",
             lat
         ));
     }
 
-    if !lon.is_finite() || lon < -180.0 || lon > 180.0 {
+    if !lon.is_finite() || !(-180.0..=180.0).contains(&lon) {
         errors.push(format!(
             "打ち上げ条件: 経度 '{:.6}度' は-180度から180度の範囲内である必要があります",
             lon
@@ -225,42 +225,42 @@ fn validate_launch_condition(launch: &crate::rocket::LaunchCondition, errors: &m
     // Validate launch time
     let [year, month, day, hour, min, sec] = launch.launch_time;
 
-    if year < 1900 || year > 2100 {
+    if !(1900..=2100).contains(&year) {
         errors.push(format!(
             "打ち上げ条件: 打ち上げ年 '{}年' は1900年から2100年の範囲内である必要があります",
             year
         ));
     }
 
-    if month < 1 || month > 12 {
+    if !(1..=12).contains(&month) {
         errors.push(format!(
             "打ち上げ条件: 月 '{}月' は1から12の範囲内である必要があります",
             month
         ));
     }
 
-    if day < 1 || day > 31 {
+    if !(1..=31).contains(&day) {
         errors.push(format!(
             "打ち上げ条件: 日 '{}日' は1から31の範囲内である必要があります",
             day
         ));
     }
 
-    if hour < 0 || hour > 23 {
+    if !(0..=23).contains(&hour) {
         errors.push(format!(
             "打ち上げ条件: 時 '{}時' は0から23の範囲内である必要があります",
             hour
         ));
     }
 
-    if min < 0 || min > 59 {
+    if !(0..=59).contains(&min) {
         errors.push(format!(
             "打ち上げ条件: 分 '{}分' は0から59の範囲内である必要があります",
             min
         ));
     }
 
-    if sec < 0 || sec > 59 {
+    if !(0..=59).contains(&sec) {
         errors.push(format!(
             "打ち上げ条件: 秒 '{}秒' は0から59の範囲内である必要があります",
             sec
@@ -410,6 +410,7 @@ fn validate_stage_separation_timing(stages: &[crate::rocket::StageConfig], error
     }
 }
 
+#[allow(clippy::ptr_arg)]
 fn validate_wind_config(_wind: &crate::rocket::WindConfig, _errors: &mut Vec<String>) {
     // Wind configuration validation can be added here if needed
     // For now, basic wind config is typically simple and doesn't need extensive validation
