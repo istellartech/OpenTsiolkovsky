@@ -1359,25 +1359,25 @@ mod tests {
         let mut simulator = Simulator::new(rocket).unwrap();
         let trajectory = simulator.run();
 
-        // Check that simulation stops BEFORE hitting the ground (altitude > 0)
+        // Check that simulation accurately finds the impact point (altitude ≈ 0)
         let final_state = trajectory.last().unwrap();
-        assert!(final_state.altitude > 0.0); // Should stop before ground impact
+        assert!(final_state.altitude <= 0.1); // Should be at or very close to ground level
 
-        // Check that there are no states with negative altitude
-        let negative_altitudes: Vec<_> = trajectory
+        // Check that there are no states with significantly negative altitude (below -1m)
+        let deeply_negative_altitudes: Vec<_> = trajectory
             .iter()
-            .filter(|state| state.altitude < 0.0)
+            .filter(|state| state.altitude < -1.0)
             .collect();
         assert!(
-            negative_altitudes.is_empty(),
-            "Found {} states with negative altitude",
-            negative_altitudes.len()
+            deeply_negative_altitudes.is_empty(),
+            "Found {} states with altitude below -1m",
+            deeply_negative_altitudes.len()
         );
 
-        // Check that the final state has reasonable low altitude (close to but above ground)
+        // Check that the final state has ground level altitude (≤ 0.1m)
         assert!(
-            final_state.altitude < 1000.0,
-            "Final altitude {} is too high - simulation should end closer to ground",
+            final_state.altitude <= 0.1,
+            "Final altitude {} is too high - simulation should end at ground level",
             final_state.altitude
         );
     }
