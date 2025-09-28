@@ -316,7 +316,8 @@ impl Simulator {
 
                     if self.state.altitude <= 0.0 {
                         // Landing detected with refined step - interpolate impact point
-                        let impact_state = self.interpolate_impact_point(&previous_state, &self.state);
+                        let impact_state =
+                            self.interpolate_impact_point(&previous_state, &self.state);
                         self.trajectory.push(impact_state.clone());
 
                         // Update internal state to impact state for final telemetry
@@ -375,7 +376,11 @@ impl Simulator {
     }
 
     /// Interpolate exact impact point between two states
-    fn interpolate_impact_point(&self, state_before: &SimulationState, state_after: &SimulationState) -> SimulationState {
+    fn interpolate_impact_point(
+        &self,
+        state_before: &SimulationState,
+        state_after: &SimulationState,
+    ) -> SimulationState {
         use crate::physics::coordinates::CoordinateTransform as CT;
 
         // Linear interpolation factor based on altitude
@@ -463,8 +468,8 @@ impl Simulator {
             velocity_ecef_ned: vel_ecef_ned,
             sea_level_mach: velocity_magnitude / self.atmosphere.conditions(0.0).speed_of_sound,
             acceleration_magnitude: 0.0, // Will be calculated if needed
-            acc_eci: Vector3::zeros(),    // Will be calculated if needed
-            acc_body: Vector3::zeros(),   // Will be calculated if needed
+            acc_eci: Vector3::zeros(),   // Will be calculated if needed
+            acc_body: Vector3::zeros(),  // Will be calculated if needed
             angle_of_attack: angles.x.to_degrees(),
             sideslip_angle: angles.y.to_degrees(),
             attitude_azimuth: az_deg,
@@ -970,7 +975,13 @@ impl Simulator {
     }
 
     /// Determine event label for current simulation state
-    fn determine_event_label(&self, time: f64, stage_idx: usize, is_powered: bool, stage_local_time: f64) -> String {
+    fn determine_event_label(
+        &self,
+        time: f64,
+        stage_idx: usize,
+        is_powered: bool,
+        stage_local_time: f64,
+    ) -> String {
         const TIME_TOLERANCE: f64 = 0.1; // 0.1 second tolerance for event detection
 
         let stage_info = &self.stage_runtime[stage_idx];
@@ -995,8 +1006,9 @@ impl Simulator {
             if (time - stage_info.burn_start).abs() < TIME_TOLERANCE {
                 return format!("Stage{}_Ignition", stage_idx + 1);
             }
-            if (time - stage_info.burn_end).abs() < TIME_TOLERANCE ||
-               (time - stage_info.forced_cutoff).abs() < TIME_TOLERANCE {
+            if (time - stage_info.burn_end).abs() < TIME_TOLERANCE
+                || (time - stage_info.forced_cutoff).abs() < TIME_TOLERANCE
+            {
                 return format!("Stage{}_MECO", stage_idx + 1); // Main Engine Cut-Off
             }
         }
@@ -1004,8 +1016,11 @@ impl Simulator {
         // Dynamic pressure and flight phase events
         if self.state.dynamic_pressure > 0.0 {
             // Check for Max-Q (requires tracking max dynamic pressure - simplified here)
-            if self.state.altitude > 1000.0 && self.state.altitude < 20000.0 &&
-               self.state.dynamic_pressure > 30000.0 { // Rough threshold for Max-Q
+            if self.state.altitude > 1000.0
+                && self.state.altitude < 20000.0
+                && self.state.dynamic_pressure > 30000.0
+            {
+                // Rough threshold for Max-Q
                 return "Max_Q_Region".to_string();
             }
         }
@@ -1016,7 +1031,8 @@ impl Simulator {
         }
 
         // Altitude-based milestones
-        if self.state.altitude > 100000.0 { // Karman line
+        if self.state.altitude > 100000.0 {
+            // Karman line
             return "Space".to_string();
         } else if self.state.altitude > 50000.0 {
             return "Stratosphere".to_string();
@@ -1033,8 +1049,9 @@ impl Simulator {
             } else {
                 format!("Stage{}_Powered", stage_idx + 1)
             }
-        } else if self.state.velocity.magnitude() > 0.0 &&
-            self.state.velocity.dot(&self.state.position.normalize()) < 0.0 {
+        } else if self.state.velocity.magnitude() > 0.0
+            && self.state.velocity.dot(&self.state.position.normalize()) < 0.0
+        {
             "Descent".to_string()
         } else {
             format!("Stage{}_Coast", stage_idx + 1)

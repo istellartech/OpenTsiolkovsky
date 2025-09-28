@@ -103,7 +103,10 @@ pub fn validate_config(config: &RocketConfig) -> std::result::Result<(), Vec<Str
     }
 }
 
-fn validate_calculate_condition(calc: &crate::rocket::CalculateCondition, errors: &mut Vec<String>) {
+fn validate_calculate_condition(
+    calc: &crate::rocket::CalculateCondition,
+    errors: &mut Vec<String>,
+) {
     // Validate end time
     if !calc.end_time.is_finite() || calc.end_time <= 0.0 {
         errors.push(format!(
@@ -166,7 +169,7 @@ fn validate_calculate_condition(calc: &crate::rocket::CalculateCondition, errors
                     ));
                 }
             }
-        },
+        }
         crate::rocket::IntegratorMethod::Rk45 => {
             // RK45 doesn't have explicit tolerance settings in this implementation
             // The adaptive algorithm handles tolerance internally
@@ -198,10 +201,7 @@ fn validate_launch_condition(launch: &crate::rocket::LaunchCondition, errors: &m
             alt
         ));
     } else if alt < -500.0 {
-        errors.push(format!(
-            "打ち上げ条件: 高度 '{:.1}m' が海面下すぎます",
-            alt
-        ));
+        errors.push(format!("打ち上げ条件: 高度 '{:.1}m' が海面下すぎます", alt));
     } else if alt > 10000.0 {
         errors.push(format!(
             "打ち上げ条件: 高度 '{:.1}m' が高すぎます (通常の発射台は10km未満)",
@@ -211,7 +211,7 @@ fn validate_launch_condition(launch: &crate::rocket::LaunchCondition, errors: &m
 
     // Validate velocity NED
     let [vn, ve, vd] = launch.velocity_ned;
-    let velocity_mag = (vn*vn + ve*ve + vd*vd).sqrt();
+    let velocity_mag = (vn * vn + ve * ve + vd * vd).sqrt();
 
     if !vn.is_finite() || !ve.is_finite() || !vd.is_finite() {
         errors.push("打ち上げ条件: 初期速度成分は有限値である必要があります".to_string());
@@ -290,7 +290,11 @@ fn validate_stages(stages: &[crate::rocket::StageConfig], errors: &mut Vec<Strin
     validate_stage_separation_timing(stages, errors);
 }
 
-fn validate_single_stage(stage: &crate::rocket::StageConfig, stage_num: usize, errors: &mut Vec<String>) {
+fn validate_single_stage(
+    stage: &crate::rocket::StageConfig,
+    stage_num: usize,
+    errors: &mut Vec<String>,
+) {
     // Validate mass
     if !stage.mass_initial.is_finite() || stage.mass_initial <= 0.0 {
         errors.push(format!(
@@ -365,7 +369,8 @@ fn validate_single_stage(stage: &crate::rocket::StageConfig, stage_num: usize, e
         ));
     }
 
-    if !stage.thrust.nozzle_expansion_ratio.is_finite() || stage.thrust.nozzle_expansion_ratio < 1.0 {
+    if !stage.thrust.nozzle_expansion_ratio.is_finite() || stage.thrust.nozzle_expansion_ratio < 1.0
+    {
         errors.push(format!(
             "ステージ{}: ノズル膨張比 '{:.1}' は1以上の有限値である必要があります",
             stage_num, stage.thrust.nozzle_expansion_ratio
@@ -386,7 +391,10 @@ fn validate_single_stage(stage: &crate::rocket::StageConfig, stage_num: usize, e
     }
 }
 
-fn validate_stage_separation_timing(stages: &[crate::rocket::StageConfig], errors: &mut Vec<String>) {
+fn validate_stage_separation_timing(
+    stages: &[crate::rocket::StageConfig],
+    errors: &mut Vec<String>,
+) {
     for i in 0..stages.len() - 1 {
         let current_stage = &stages[i];
         let next_stage = &stages[i + 1];
