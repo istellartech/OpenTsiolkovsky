@@ -113,11 +113,6 @@ fn validate_calculate_condition(
             "計算条件: 終了時間 '{:.3}秒' は正の有限値である必要があります",
             calc.end_time
         ));
-    } else if calc.end_time > 3600.0 {
-        errors.push(format!(
-            "計算条件: 終了時間 '{:.1}秒' は通常1時間(3600秒)を超えません - 意図的ですか？",
-            calc.end_time
-        ));
     }
 
     // Validate time step
@@ -391,31 +386,56 @@ fn validate_single_stage(
     }
 }
 
+/// Stage times (burn start/end, forced cutoff, separation) are relative to each
+/// stage's own start, i.e. the previous stage's separation (see
+/// `build_stage_runtime` in `simulator.rs`). Only the following stage's own
+/// timing needs to be valid; its absolute start is always the separation.
 fn validate_stage_separation_timing(
     stages: &[crate::rocket::StageConfig],
     errors: &mut Vec<String>,
 ) {
-    for i in 0..stages.len() - 1 {
-        let current_stage = &stages[i];
-        let next_stage = &stages[i + 1];
-
-        // Check if separation time is reasonable
-        if current_stage.stage.following_stage_exists {
-            if current_stage.stage.separation_time <= current_stage.thrust.burn_end_time {
-                errors.push(format!(
-                    "ステージ{}: 分離時刻 '{:.3}秒' は燃焼終了時刻 '{:.3}秒' より後である必要があります",
-                    i + 1, current_stage.stage.separation_time, current_stage.thrust.burn_end_time
-                ));
-            }
-
-            if next_stage.thrust.burn_start_time < current_stage.stage.separation_time {
-                errors.push(format!(
-                    "ステージ{}: 次段燃焼開始時刻 '{:.3}秒' は前段分離時刻 '{:.3}秒' より後である必要があります",
-                    i + 2, next_stage.thrust.burn_start_time, current_stage.stage.separation_time
-                ));
-            }
+    for (i, stage) in stages.iter().enumerate() {
+        if stage.stage.following_stage_exists
+            && (!stage.stage.separation_time.is_finite() || stage.stage.separation_time < 0.0)
+        {
+            errors.push(format!(
+                "ステージ{}: 分離時刻 '{:.3}秒' (段開始からの相対時刻) は非負の有限値である必要があります",
+                i + 1,
+                stage.stage.separation_time
+            ));
         }
     }
+}
+
+/// Collect non-fatal warnings for a configuration that passed validation.
+/// These describe settings the solver accepts (e.g. by clamping) but that may
+/// be unintended.
+pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
+    let mut warnings = Vec::new();
+
+    let end_time = config.calculate_condition.end_time;
+    if end_time.is_finite() && end_time > 3600.0 {
+        warnings.push(format!(
+            "計算条件: 終了時間 '{:.1}秒' が1時間(3600秒)を超えています - 意図的ですか？",
+            end_time
+        ));
+    }
+
+    for (i, stage) in config.stages.iter().enumerate() {
+        if stage.stage.following_stage_exists
+            && stage.stage.separation_time.is_finite()
+            && stage.stage.separation_time < stage.thrust.burn_end_time
+        {
+            warnings.push(format!(
+                "ステージ{}: 分離時刻 '{:.3}秒' が燃焼終了時刻 '{:.3}秒' より前のため、燃焼は分離時刻で打ち切られます",
+                i + 1,
+                stage.stage.separation_time,
+                stage.thrust.burn_end_time
+            ));
+        }
+    }
+
+    warnings
 }
 
 #[allow(clippy::ptr_arg)]
@@ -854,5 +874,60 @@ mod tests {
         assert_eq!(ts.time.len(), 3);
         assert_eq!(ts.values[1], 20.0);
         Ok(())
+    }
+
+    fn load_ss520_config() -> RocketConfig {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/SS-520-4/param_SS520-4.json");
+        let content = fs::read_to_string(path).expect("read SS-520-4 example");
+        serde_json::from_str(&content).expect("parse SS-520-4 example")
+    }
+
+    #[test]
+    fn test_multistage_relative_times_pass_validation() {
+        // SS-520-4: stage 1 separates at 31.7 s (before its 33.0 s burn end) and
+        // stage 3 burns from 0.0 s relative to its own start.
+        let config = load_ss520_config();
+        assert!(config.stages.len() >= 3);
+        assert_eq!(validate_config(&config), Ok(()));
+
+        let warnings = config_warnings(&config);
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.starts_with("ステージ1: 分離時刻"))
+        );
+        assert!(warnings.iter().any(|w| w.starts_with("計算条件: 終了時間")));
+    }
+
+    #[test]
+    fn test_next_stage_burn_start_is_relative() {
+        let mut config = load_ss520_config();
+        // Next-stage burn start earlier than the previous stage's separation
+        // time is valid because it is measured from that separation.
+        config.stages[0].stage.separation_time = 100.0;
+        config.stages[0].thrust.burn_end_time = 33.0;
+        config.stages[1].thrust.burn_start_time = 5.0;
+        assert_eq!(validate_config(&config), Ok(()));
+        assert!(
+            !config_warnings(&config)
+                .iter()
+                .any(|w| w.starts_with("ステージ1:"))
+        );
+
+        // A negative relative burn start is still rejected.
+        config.stages[1].thrust.burn_start_time = -1.0;
+        let errors = validate_config(&config).unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.starts_with("ステージ2: 燃焼開始時刻"))
+        );
+
+        // So is a negative separation time.
+        config.stages[1].thrust.burn_start_time = 0.0;
+        config.stages[0].stage.separation_time = -1.0;
+        let errors = validate_config(&config).unwrap_err();
+        assert!(errors.iter().any(|e| e.starts_with("ステージ1: 分離時刻")));
     }
 }
