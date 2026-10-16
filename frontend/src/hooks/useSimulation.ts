@@ -13,9 +13,13 @@ function loadStored(): { config: ClientConfig; presetId: string } | null {
   try {
     const stored = localStorage.getItem(LOCALSTORAGE_KEY)
     if (!stored) return null
+    const presetId = localStorage.getItem(LOCALSTORAGE_PRESET_KEY) ?? 'custom'
+    // An unedited preset is rebuilt from code so fixes to presets take effect.
+    const preset = PRESET_OPTIONS.find((p) => p.id === presetId)
+    if (preset) return { config: preset.create(), presetId }
     const config = JSON.parse(stored)
     if (!isValidClientConfig(config)) return null
-    return { config, presetId: localStorage.getItem(LOCALSTORAGE_PRESET_KEY) ?? 'custom' }
+    return { config, presetId: 'custom' }
   } catch {
     return null
   }

@@ -188,15 +188,16 @@ function createSS520Preset(): ClientConfig {
     ],
   })
 
+  // Stage times are measured from the start of each stage (= previous separation).
   const stage3 = cloneStage({
     ...createDefaultStage(),
     power_mode: 0,
     free_mode: 2,
     mass_initial_kg: 86,
     mass_dry_kg: 60,
-    burn_start_s: 228,
-    burn_end_s: 253.6,
-    forced_cutoff_s: 253.6,
+    burn_start_s: 0,
+    burn_end_s: 25.6,
+    forced_cutoff_s: 25.6,
     separation_time_s: 1000000,
     throat_diameter_m: 0.05,
     nozzle_expansion_ratio: 10,
@@ -204,9 +205,9 @@ function createSS520Preset(): ClientConfig {
     thrust_constant: 12760,
     isp_constant: 282.6,
     thrust_profile: [
-      { time: 228, value: 12760 },
-      { time: 253.6, value: 1970 },
-      { time: 253.7, value: 0 },
+      { time: 0, value: 12760 },
+      { time: 25.6, value: 1970 },
+      { time: 25.7, value: 0 },
     ],
   })
 
@@ -270,12 +271,14 @@ function createSS520Preset(): ClientConfig {
 }
 
 function createFalcon9ISSPreset(): ClientConfig {
+  // Rough public figures. mass_initial is each stage's own fuelled mass;
+  // stage times are measured from the start of that stage.
   const stage1 = cloneStage({
     ...createDefaultStage(),
     power_mode: 2,
     free_mode: 0,
-    mass_initial_kg: 550000,
-    mass_dry_kg: 25000,
+    mass_initial_kg: 433000,
+    mass_dry_kg: 24000,
     burn_start_s: 0,
     burn_end_s: 162,
     forced_cutoff_s: 162,
@@ -283,20 +286,21 @@ function createFalcon9ISSPreset(): ClientConfig {
     throat_diameter_m: 0.75,
     nozzle_expansion_ratio: 16,
     nozzle_exit_pressure_pa: 60000,
-    thrust_constant: 7605000,
-    isp_constant: 282,
+    thrust_constant: 7700000,
+    isp_constant: 311,
   })
 
   const stage2 = cloneStage({
     ...createDefaultStage(),
     power_mode: 2,
     free_mode: 1,
-    mass_initial_kg: 111500,
+    // 111.5 t fuelled second stage + ~15 t payload
+    mass_initial_kg: 126500,
     mass_dry_kg: 4000,
-    burn_start_s: 165,
-    burn_end_s: 545,
-    forced_cutoff_s: 545,
-    separation_time_s: 600,
+    burn_start_s: 3,
+    burn_end_s: 383,
+    forced_cutoff_s: 383,
+    separation_time_s: 1000000,
     throat_diameter_m: 0.92,
     nozzle_expansion_ratio: 165,
     nozzle_exit_pressure_pa: 1000,
@@ -305,10 +309,10 @@ function createFalcon9ISSPreset(): ClientConfig {
   })
 
   return {
-    name: 'Falcon 9 to ISS',
+    name: 'Falcon 9 class LEO',
     simulation: {
-      duration_s: 600,
-      output_step_s: 1,
+      duration_s: 7000,
+      output_step_s: 2,
       air_density_percent: 0,
       integrator: {
         method: 'rk45',
@@ -374,6 +378,9 @@ function createFalcon9ISSPreset(): ClientConfig {
 export interface PresetOption {
   id: string
   label: string
+  /** What kind of vehicle / flight this is */
+  kind: string
+  site: string
   description: string
   create: () => ClientConfig
 }
@@ -381,20 +388,26 @@ export interface PresetOption {
 export const PRESET_OPTIONS: PresetOption[] = [
   {
     id: 'sample',
-    label: 'MOMO Sounding Rocket',
-    description: '観測ロケット',
+    label: 'MOMO',
+    kind: '単段の観測ロケット',
+    site: '北海道 大樹町',
+    description: '液体1段・推力16.5 kN。宇宙空間（高度100 km）に届いて海上に落下する弾道飛行。',
     create: () => createDefaultConfig(),
   },
   {
     id: 'orbital',
-    label: 'SS-520-5 Sounding Rocket',
-    description: '世界最小の軌道投入ロケット（3段式）',
+    label: 'SS-520',
+    kind: '3段式の固体ロケット',
+    site: '鹿児島 内之浦',
+    description: '固体3段。姿勢を一定に保つ設定のため軌道には乗らず、高度約750 kmまで上がる弾道飛行。',
     create: () => createSS520Preset(),
   },
   {
     id: 'hopper',
-    label: 'Falcon 9 to ISS',
-    description: 'ISS軌道投入ミッション',
+    label: 'Falcon 9 級',
+    kind: '2段式の軌道投入ロケット',
+    site: 'フロリダ ケープカナベラル',
+    description: '液体2段・ペイロード約15 t（2段質量に含む）。簡易な姿勢プログラムで楕円の低軌道に投入し、約2時間を計算。',
     create: () => createFalcon9ISSPreset(),
   },
 ]

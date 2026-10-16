@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { ChevronRight, Plus, X } from 'lucide-react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
+import { Plus, X } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 /* ------------------------------------------------------------------ Buttons */
@@ -29,9 +29,8 @@ export function Button({
 export function IconButton({
   label,
   className,
-  tone = 'light',
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; tone?: 'light' | 'dark' }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
     <button
       type="button"
@@ -39,7 +38,7 @@ export function IconButton({
       title={label}
       className={cn(
         'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] transition-colors',
-        tone === 'light' ? 'text-ink-2 hover:bg-surface-2 hover:text-ink' : 'text-white/80 hover:bg-white/10 hover:text-white',
+        'text-ink-2 hover:bg-surface-2 hover:text-ink',
         className,
       )}
       {...props}
@@ -60,7 +59,7 @@ export function Segmented<T extends string | number>({
   value: T
   options: { value: T; label: ReactNode; title?: string }[]
   onChange: (v: T) => void
-  tone?: 'light' | 'dark'
+  tone?: 'light' | 'map'
   size?: 'sm' | 'md'
   className?: string
 }) {
@@ -69,7 +68,7 @@ export function Segmented<T extends string | number>({
       role="radiogroup"
       className={cn(
         'inline-flex rounded-[7px] p-0.5',
-        tone === 'light' ? 'bg-surface-2 ring-1 ring-line' : 'bg-black/60 ring-1 ring-white/10',
+        tone === 'light' ? 'bg-surface-2 ring-1 ring-line' : 'bg-surface ring-1 ring-line-strong shadow-[0_1px_2px_rgba(0,0,0,0.06)]',
         className,
       )}
     >
@@ -86,13 +85,11 @@ export function Segmented<T extends string | number>({
             className={cn(
               'rounded-[5px] font-medium transition-colors',
               size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
-              tone === 'light'
-                ? active
+              active
+                ? tone === 'light'
                   ? 'bg-surface text-ink shadow-[0_0_0_1px_var(--line-strong)]'
-                  : 'text-ink-3 hover:text-ink'
-                : active
-                  ? 'bg-white text-black'
-                  : 'text-white/70 hover:text-white',
+                  : 'bg-ink text-surface'
+                : 'text-ink-3 hover:text-ink',
             )}
           >
             {o.label}
@@ -125,12 +122,26 @@ function useFieldState(path?: string) {
 
 /* ----------------------------------------------------------------- Fields */
 
-function FieldRow({ label, hint, error, children }: { label: ReactNode; hint?: string; error?: string; children: ReactNode }) {
+function FieldRow({
+  label,
+  hint,
+  note,
+  error,
+  children,
+}: {
+  label: ReactNode
+  hint?: string
+  note?: ReactNode
+  error?: string
+  children: ReactNode
+}) {
   return (
     <div className="py-[3px]">
       <label className="flex min-h-8 items-center gap-3">
-        <span className="min-w-0 flex-1 text-ink-2" title={hint}>
+        <span className="min-w-0 flex-1 leading-tight text-ink-2">
           {label}
+          {note && <span className="num block text-[10px] text-ink-3">{note}</span>}
+          {hint && <span className="block text-[10px] leading-snug text-ink-3">{hint}</span>}
         </span>
         {children}
       </label>
@@ -197,6 +208,7 @@ export function NumberField({
   unit,
   path,
   hint,
+  note,
 }: {
   label: ReactNode
   value: number
@@ -204,10 +216,11 @@ export function NumberField({
   unit?: string
   path?: string
   hint?: string
+  note?: ReactNode
 }) {
   const { error, ref } = useFieldState(path)
   return (
-    <FieldRow label={label} hint={hint} error={error}>
+    <FieldRow label={label} hint={hint} note={note} error={error}>
       <NumberInput
         ariaLabel={typeof label === 'string' ? label : undefined}
         value={value}
@@ -357,75 +370,6 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
         />
       </button>
     </label>
-  )
-}
-
-/* --------------------------------------------------------------- Sections */
-
-export function Section({
-  title,
-  meta,
-  defaultOpen = true,
-  children,
-  id,
-}: {
-  title: string
-  meta?: ReactNode
-  defaultOpen?: boolean
-  children: ReactNode
-  id?: string
-}) {
-  const storageKey = id ? `ot.section.${id}` : null
-  const [open, setOpen] = useState(() => {
-    if (!storageKey) return defaultOpen
-    try {
-      const v = localStorage.getItem(storageKey)
-      return v === null ? defaultOpen : v === '1'
-    } catch {
-      return defaultOpen
-    }
-  })
-  useEffect(() => {
-    if (!storageKey) return
-    try {
-      localStorage.setItem(storageKey, open ? '1' : '0')
-    } catch {
-      /* ignore */
-    }
-  }, [open, storageKey])
-
-  return (
-    <section className="border-b border-line">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        className="flex h-10 w-full items-center gap-1.5 px-4 text-left hover:bg-surface-2"
-      >
-        <ChevronRight className={cn('h-3.5 w-3.5 text-ink-3 transition-transform', open && 'rotate-90')} />
-        <span className="text-[13px] font-semibold">{title}</span>
-        {meta && <span className="num ml-auto truncate pl-3 text-[11px] text-ink-3">{meta}</span>}
-      </button>
-      {open && <div className="px-4 pb-3">{children}</div>}
-    </section>
-  )
-}
-
-/** A quiet "more settings" disclosure inside a section. */
-export function More({ children, label = '詳細' }: { children: ReactNode; label?: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="mt-1">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="flex h-7 items-center gap-1 text-[12px] text-ink-3 hover:text-ink"
-      >
-        <ChevronRight className={cn('h-3 w-3 transition-transform', open && 'rotate-90')} />
-        {label}
-      </button>
-      {open && <div className="border-l border-line pl-3">{children}</div>}
-    </div>
   )
 }
 

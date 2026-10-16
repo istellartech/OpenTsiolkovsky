@@ -176,29 +176,29 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
   return (
     <div
       className={cn(
-        'pointer-events-none select-none rounded-[8px] bg-black/70 text-white ring-1 ring-white/10',
+        'pointer-events-none select-none rounded-[8px] bg-surface/95 text-ink ring-1 ring-line-strong shadow-[0_1px_3px_rgba(0,0,0,0.08)]',
         compact ? 'px-2.5 py-2' : 'w-[13.5rem] px-3 py-2.5',
       )}
     >
       <div className="flex items-center justify-between">
         <div className="num text-[15px] font-medium">
-          <span className="text-white/50">T+</span>
+          <span className="text-ink-3">T+</span>
           {fmt(t, 1)}
-          <span className="text-[11px] text-white/50"> s</span>
+          <span className="text-[11px] text-ink-3"> s</span>
         </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-white/70">
+        <div className="flex items-center gap-1.5 text-[11px] text-ink-2">
           <span className="h-2 w-2 rounded-full" style={{ background: stageColorVar(s.stage) }} />
           {s.stage}段
         </div>
       </div>
-      {!compact && <div className="mb-1.5 h-4 truncate text-[11px] text-white/55">{last?.label}</div>}
+      {!compact && <div className="mb-1.5 h-4 truncate text-[11px] text-ink-3">{last?.label}</div>}
       <dl className={cn('grid gap-x-3', compact ? 'mt-1 grid-cols-3 gap-y-0.5' : 'grid-cols-1 gap-y-[3px]')}>
         {(compact ? rows.slice(0, 3) : rows).map(([k, v, u]) => (
           <div key={k} className={cn('flex items-baseline', compact ? 'flex-col' : 'justify-between')}>
-            <dt className="text-[11px] text-white/55">{k}</dt>
+            <dt className="text-[11px] text-ink-3">{k}</dt>
             <dd className="num text-[13px]">
               {v}
-              {u && <span className="text-[10px] text-white/50"> {u}</span>}
+              {u && <span className="text-[10px] text-ink-3"> {u}</span>}
             </dd>
           </div>
         ))}

@@ -68,17 +68,6 @@ function themeColors() {
   return { ink: v('--ink'), ink2: v('--ink-2'), ink3: v('--ink-3'), line: v('--line'), surface: v('--surface') }
 }
 
-function useColorScheme() {
-  const [dark, setDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const on = () => setDark(mq.matches)
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [])
-  return dark
-}
-
 const fmt = (v: number, digits = 1) =>
   Number.isFinite(v) ? v.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '—'
 
@@ -104,7 +93,7 @@ const eventLines = (track: Track, color: string): Plugin<'line'> => ({
   },
 })
 
-function ChartCard({ spec, track, dark }: { spec: ChartSpec; track: Track; dark: boolean }) {
+function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chartRef = useRef<Chart<'line'> | null>(null)
   const lineRef = useRef<HTMLDivElement>(null)
@@ -238,7 +227,7 @@ function ChartCard({ spec, track, dark }: { spec: ChartSpec; track: Track; dark:
       chart.destroy()
       chartRef.current = null
     }
-  }, [spec, track, dark])
+  }, [spec, track])
 
   const download = () => {
     const chart = chartRef.current
@@ -279,11 +268,10 @@ function ChartCard({ spec, track, dark }: { spec: ChartSpec; track: Track; dark:
 }
 
 export function ChartGrid({ track }: { track: Track }) {
-  const dark = useColorScheme()
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2">
       {CHARTS.map((spec) => (
-        <ChartCard key={spec.id} spec={spec} track={track} dark={dark} />
+        <ChartCard key={spec.id} spec={spec} track={track} />
       ))}
     </div>
   )

@@ -1,50 +1,29 @@
 @import 'tailwindcss';
 
 /*
-  Design tokens. One signal colour (international orange) is reserved for the
-  vehicle, the playhead and the primary state; everything else stays neutral.
+  Light, paper-and-map palette. Colour is reserved for data: the vehicle and
+  its stages. Chrome stays in warm neutrals.
 */
 :root {
   color-scheme: light;
-  --bg: #efefec;
+  --bg: #f2f1ed;
   --surface: #ffffff;
-  --surface-2: #f6f6f3;
-  --line: #e2e2dd;
-  --line-strong: #cfcfc8;
-  --ink: #18191a;
-  --ink-2: #4b4d50;
-  --ink-3: #8a8c8f;
-  --signal: #ff4f00;
+  --surface-2: #f7f6f3;
+  --line: #e3e1db;
+  --line-strong: #cfccc4;
+  --ink: #1d1c1a;
+  --ink-2: #57544e;
+  --ink-3: #8e8a82;
+  --signal: #e2491b;
   --signal-ink: #ffffff;
-  --danger: #d1242f;
-  --ok: #1a7f4b;
-  --stage-1: #ff4f00;
-  --stage-2: #2463eb;
-  --stage-3: #0f8a6a;
-  --stage-4: #8b4fd8;
+  --danger: #c62828;
+  --ok: #2e7d4f;
+  --map: #e9ebe8;
+  --stage-1: #e2491b;
+  --stage-2: #2f5fd0;
+  --stage-3: #12866a;
+  --stage-4: #8a4fcf;
   --stage-5: #b7791f;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #0f1011;
-    --surface: #17181a;
-    --surface-2: #1d1f21;
-    --line: #2a2c2f;
-    --line-strong: #3a3d41;
-    --ink: #ececea;
-    --ink-2: #b3b5b8;
-    --ink-3: #75787c;
-    --signal: #ff6a26;
-    --danger: #ff6b6b;
-    --ok: #3fbf7f;
-    --stage-1: #ff6a26;
-    --stage-2: #5b8cff;
-    --stage-3: #2ec4a0;
-    --stage-4: #b18cff;
-    --stage-5: #e0a841;
-  }
 }
 
 @theme {
@@ -60,6 +39,7 @@
   --color-signal-ink: var(--signal-ink);
   --color-danger: var(--danger);
   --color-ok: var(--ok);
+  --color-map: var(--map);
 
   --font-sans: 'IBM Plex Sans JP', 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
@@ -120,8 +100,12 @@ input[type='number'] {
   left: auto !important;
   right: 8px !important;
   bottom: 4px !important;
-  opacity: 0.55;
+  opacity: 0.7;
   font-size: 10px;
+}
+.cesium-widget-credits,
+.cesium-widget-credits a {
+  color: var(--ink-3) !important;
 }
 .cesium-credit-logoContainer {
   display: none !important;

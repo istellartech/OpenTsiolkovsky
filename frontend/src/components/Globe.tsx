@@ -32,9 +32,48 @@ import { Segmented } from './primitives'
 
 export type CameraMode = 'overview' | 'follow'
 
-const SATELLITE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services'
+const ESRI_CREDIT = 'Tiles © Esri'
 
-function createViewer(container: HTMLElement): Viewer {
+export type Basemap = 'map' | 'terrain' | 'satellite'
+
+const BASEMAPS: Record<Basemap, { layers: { path: string; max: number }[]; credit: string }> = {
+  map: {
+    layers: [
+      { path: 'Canvas/World_Light_Gray_Base', max: 16 },
+      { path: 'Canvas/World_Light_Gray_Reference', max: 16 },
+    ],
+    credit: `${ESRI_CREDIT} — Esri, HERE, Garmin, © OpenStreetMap contributors`,
+  },
+  terrain: {
+    layers: [{ path: 'World_Terrain_Base', max: 9 }],
+    credit: `${ESRI_CREDIT} — Source: USGS, Esri, TANA, DeLorme, NPS`,
+  },
+  satellite: {
+    layers: [{ path: 'World_Imagery', max: 17 }],
+    credit: `${ESRI_CREDIT} — Esri, Maxar, Earthstar Geographics`,
+  },
+}
+
+const PAPER = '#f2f1ed'
+const INK = '#1d1c1a'
+
+function setBasemap(viewer: Viewer, basemap: Basemap) {
+  // Keep layer 0 (offline Natural Earth fallback), replace the rest.
+  while (viewer.imageryLayers.length > 1) viewer.imageryLayers.remove(viewer.imageryLayers.get(1), true)
+  const spec = BASEMAPS[basemap]
+  for (const l of spec.layers) {
+    viewer.imageryLayers.addImageryProvider(
+      new UrlTemplateImageryProvider({
+        url: `${ESRI}/${l.path}/MapServer/tile/{z}/{y}/{x}`,
+        maximumLevel: l.max,
+        credit: spec.credit,
+      }),
+    )
+  }
+}
+
+function createViewer(container: HTMLElement, basemap: Basemap): Viewer {
   const viewer = new Viewer(container, {
     animation: false,
     timeline: false,
@@ -46,23 +85,24 @@ function createViewer(container: HTMLElement): Viewer {
     fullscreenButton: false,
     infoBox: false,
     selectionIndicator: false,
-    // Offline fallback that ships with Cesium; satellite imagery is layered on top.
+    skyBox: false,
+    skyAtmosphere: false,
+    // Offline fallback that ships with Cesium; online tiles are layered on top.
     baseLayer: ImageryLayer.fromProviderAsync(
       TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')),
       {},
     ),
   })
-  viewer.imageryLayers.addImageryProvider(
-    new UrlTemplateImageryProvider({
-      url: SATELLITE_URL,
-      maximumLevel: 17,
-      credit: 'Imagery © Esri, Maxar, Earthstar Geographics',
-    }),
-  )
-  viewer.scene.globe.enableLighting = false
-  viewer.scene.backgroundColor = Color.BLACK
-  // Shown until imagery tiles arrive, so the globe is never an empty void.
-  viewer.scene.globe.baseColor = Color.fromCssColorString('#1d2733')
+  setBasemap(viewer, basemap)
+  const { scene } = viewer
+  // A flat, map-like globe on paper rather than a planet in space.
+  scene.backgroundColor = Color.fromCssColorString(PAPER)
+  scene.globe.baseColor = Color.fromCssColorString('#e6e8e4')
+  scene.globe.enableLighting = false
+  scene.globe.showGroundAtmosphere = false
+  scene.fog.enabled = false
+  if (scene.sun) scene.sun.show = false
+  if (scene.moon) scene.moon.show = false
   viewer.cesiumWidget.screenSpaceEventHandler.removeInputAction(ScreenSpaceEventType.LEFT_DOUBLE_CLICK)
   return viewer
 }
@@ -86,8 +126,8 @@ function buildScene(viewer: Viewer, track: Track): Built {
       positions,
       width: 1.5,
       material: new PolylineDashMaterialProperty({
-        color: Color.WHITE.withAlpha(0.55),
-        dashLength: 12,
+        color: Color.fromCssColorString(INK).withAlpha(0.45),
+        dashLength: 10,
       }),
     },
   })
@@ -98,7 +138,7 @@ function buildScene(viewer: Viewer, track: Track): Built {
       positions: ground,
       width: 1.5,
       clampToGround: true,
-      material: Color.WHITE.withAlpha(0.35),
+      material: Color.fromCssColorString(INK).withAlpha(0.3),
     },
   })
 
@@ -138,7 +178,7 @@ function buildScene(viewer: Viewer, track: Track): Built {
         return [pos, Cartesian3.fromDegrees(s.lon, s.lat, 0)]
       }, false),
       width: 1,
-      material: new PolylineDashMaterialProperty({ color: Color.WHITE.withAlpha(0.7), dashLength: 6 }),
+      material: new PolylineDashMaterialProperty({ color: Color.fromCssColorString(INK).withAlpha(0.55), dashLength: 6 }),
     },
   })
 
@@ -146,7 +186,7 @@ function buildScene(viewer: Viewer, track: Track): Built {
     position: new CallbackPositionProperty(() => current().pos, false),
     point: {
       pixelSize: 11,
-      color: Color.fromCssColorString('#ff4f00'),
+      color: Color.fromCssColorString(readStageColor(1)),
       outlineColor: Color.WHITE,
       outlineWidth: 2,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
@@ -158,18 +198,18 @@ function buildScene(viewer: Viewer, track: Track): Built {
     viewer.entities.add({
       position: Cartesian3.fromDegrees(s.lon, s.lat, 0),
       point: {
-        pixelSize: 6,
-        color: Color.WHITE,
-        outlineColor: Color.BLACK.withAlpha(0.6),
-        outlineWidth: 1,
+        pixelSize: 7,
+        color: Color.fromCssColorString(INK),
+        outlineColor: Color.WHITE,
+        outlineWidth: 2,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
         text,
         font: '500 12px "IBM Plex Sans JP", sans-serif',
-        fillColor: Color.WHITE,
-        outlineColor: Color.BLACK.withAlpha(0.8),
-        outlineWidth: 3,
+        fillColor: Color.fromCssColorString(INK),
+        outlineColor: Color.WHITE,
+        outlineWidth: 4,
         style: LabelStyle.FILL_AND_OUTLINE,
         horizontalOrigin: HorizontalOrigin.LEFT,
         verticalOrigin: VerticalOrigin.CENTER,
@@ -209,7 +249,8 @@ function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
   const frustum = viewer.camera.frustum as PerspectiveFrustum
   const aspect = viewer.canvas.clientWidth / Math.max(viewer.canvas.clientHeight, 1)
   const fov = frustum.fov ?? CesiumMath.toRadians(60)
-  const fovNarrow = aspect >= 1 ? 2 * Math.atan(Math.tan(fov / 2) / aspect) : fov
+  // Cesium's fov is horizontal on landscape canvases and vertical on portrait ones.
+  const fovNarrow = 2 * Math.atan(Math.tan(fov / 2) * (aspect >= 1 ? 1 / aspect : aspect))
   const range = (radius / Math.sin(fovNarrow / 2)) * 1.12
   viewer.camera.flyToBoundingSphere(built.sphere, {
     offset: new HeadingPitchRange(built.heading, CesiumMath.toRadians(-20), range),
@@ -227,10 +268,28 @@ export default function Globe({ track }: GlobeProps) {
   const builtRef = useRef<Built | null>(null)
   const launchKeyRef = useRef<string>('')
   const [mode, setMode] = useState<CameraMode>('overview')
+  const [basemap, setBasemapState] = useState<Basemap>(() => {
+    try {
+      const v = localStorage.getItem('ot.basemap')
+      return v === 'terrain' || v === 'satellite' ? v : 'map'
+    } catch {
+      return 'map'
+    }
+  })
+
+  const changeBasemap = (next: Basemap) => {
+    setBasemapState(next)
+    if (viewerRef.current) setBasemap(viewerRef.current, next)
+    try {
+      localStorage.setItem('ot.basemap', next)
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     if (!containerRef.current) return
-    const viewer = createViewer(containerRef.current)
+    const viewer = createViewer(containerRef.current, basemap)
     viewerRef.current = viewer
     if (import.meta.env.DEV) (window as unknown as { __viewer: Viewer }).__viewer = viewer
     return () => {
@@ -261,6 +320,7 @@ export default function Globe({ track }: GlobeProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track])
 
+
   const changeMode = (next: CameraMode) => {
     setMode(next)
     const viewer = viewerRef.current
@@ -271,16 +331,27 @@ export default function Globe({ track }: GlobeProps) {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-black">
+    <div className="relative h-full w-full overflow-hidden bg-bg">
       <div ref={containerRef} className="absolute inset-0" />
-      <div className="absolute right-3 top-3">
+      <div className="absolute bottom-7 left-3 flex flex-row items-end gap-1.5 md:bottom-auto md:left-auto md:right-3 md:top-3 md:flex-col">
         <Segmented
-          tone="dark"
+          tone="map"
           value={mode}
           onChange={changeMode}
           options={[
-            { value: 'overview', label: '全体' },
-            { value: 'follow', label: '追従' },
+            { value: 'overview', label: '全体', title: '軌道全体が見える視点' },
+            { value: 'follow', label: '追従', title: '機体を追いかける視点' },
+          ]}
+        />
+        <Segmented
+          tone="map"
+          size="sm"
+          value={basemap}
+          onChange={changeBasemap}
+          options={[
+            { value: 'map', label: '地図' },
+            { value: 'terrain', label: '地形' },
+            { value: 'satellite', label: '衛星' },
           ]}
         />
       </div>
