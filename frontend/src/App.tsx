@@ -52,6 +52,7 @@ export default function App() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [mobileView, setMobileView] = useState<MobileView>('globe')
   const [panelTab, setPanelTab] = useState<PanelTab>('charts')
+  const split = useSplitRatio()
 
   // Field refs for "jump to issue".
   const fieldRefs = useRef(new Map<string, HTMLElement>())
@@ -137,7 +138,7 @@ export default function App() {
       </Suspense>
       {track && (
         <div className="absolute left-3 top-3">
-          <Telemetry track={track} compact={isMobile} />
+          <Telemetry track={track} compact={isMobile || split.ratio < 0.35} />
         </div>
       )}
       {!track && sim.status !== 'running' && (
@@ -214,11 +215,18 @@ export default function App() {
             </>
           ) : (
             <SplitView
+              ratio={split.ratio}
+              onRatio={split.setRatio}
               top={globe}
               bar={track ? <PlaybackBar track={track} /> : null}
               bottom={
                 track ? (
-                  <BottomPanel tab={panelTab} onTab={setPanelTab} track={track} />
+                  <BottomPanel
+                    tab={panelTab}
+                    onTab={setPanelTab}
+                    track={track}
+                    layoutSwitch={<LayoutSwitch layout={split.layout} onRatio={split.setRatio} />}
+                  />
                 ) : (
                   <div className="flex h-full items-center justify-center text-ink-3">{sim.status === 'running' ? '計算中…' : ''}</div>
                 )
@@ -449,12 +457,21 @@ function Menu({
 
 const SPLIT_KEY = 'ot.split'
 
-function SplitView({ top, bar, bottom }: { top: ReactNode; bar: ReactNode; bottom: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null)
+/** Share of the main area given to the map; the rest goes to charts. */
+const LAYOUTS = [
+  { value: 'map', label: '地図', ratio: 0.68, title: '地図を大きく' },
+  { value: 'even', label: '半々', ratio: 0.5, title: '地図とグラフを半分ずつ' },
+  { value: 'charts', label: 'グラフ', ratio: 0.22, title: 'グラフを大きく' },
+] as const
+type LayoutValue = (typeof LAYOUTS)[number]['value'] | 'custom'
+
+const clampRatio = (r: number) => Math.min(Math.max(r, 0.15), 0.85)
+
+function useSplitRatio() {
   const [ratio, setRatio] = useState(() => {
     try {
       const v = Number(localStorage.getItem(SPLIT_KEY))
-      return v > 0.15 && v < 0.9 ? v : 0.58
+      return v >= 0.15 && v <= 0.85 ? v : 0.58
     } catch {
       return 0.58
     }
@@ -466,30 +483,96 @@ function SplitView({ top, bar, bottom }: { top: ReactNode; bar: ReactNode; botto
       /* ignore */
     }
   }, [ratio])
+  const layout: LayoutValue = LAYOUTS.find((l) => Math.abs(l.ratio - ratio) < 0.015)?.value ?? 'custom'
+  return { ratio, setRatio, layout }
+}
+
+function LayoutSwitch({ layout, onRatio }: { layout: LayoutValue; onRatio: (r: number) => void }) {
+  return (
+    <Segmented
+      size="sm"
+      value={layout}
+      onChange={(v) => {
+        const hit = LAYOUTS.find((l) => l.value === v)
+        if (hit) onRatio(hit.ratio)
+      }}
+      options={LAYOUTS.map((l) => ({
+        value: l.value as LayoutValue,
+        title: l.title,
+        label: (
+          <span className="flex items-center gap-1">
+            <LayoutGlyph ratio={l.ratio} />
+            {l.label}
+          </span>
+        ),
+      }))}
+    />
+  )
+}
+
+/** Tiny picture of the split: map on top (dark), charts below (light). */
+function LayoutGlyph({ ratio }: { ratio: number }) {
+  return (
+    <span aria-hidden className="flex h-[11px] w-[9px] flex-col overflow-hidden rounded-[2px] ring-1 ring-current">
+      <span className="bg-current opacity-60" style={{ height: `${ratio * 100}%` }} />
+    </span>
+  )
+}
+
+function SplitView({
+  top,
+  bar,
+  bottom,
+  ratio,
+  onRatio,
+}: {
+  top: ReactNode
+  bar: ReactNode
+  bottom: ReactNode
+  ratio: number
+  onRatio: (r: number) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const anim = dragging ? '' : 'transition-[flex-grow] duration-300 ease-out'
 
   return (
     <div ref={ref} className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-[160px]" style={{ flex: `${ratio} 1 0` }}>
+      <div className={cn('min-h-[140px]', anim)} style={{ flex: `${ratio} 1 0` }}>
         {top}
       </div>
       <div
         role="separator"
+        tabIndex={0}
         aria-orientation="horizontal"
-        aria-label="表示領域の境界"
-        className="relative z-10 h-0 cursor-row-resize"
+        aria-label="地図とグラフの境界（上下キーで調整）"
+        aria-valuenow={Math.round(ratio * 100)}
+        aria-valuemin={15}
+        aria-valuemax={85}
+        title="ドラッグで地図とグラフの比率を調整"
+        className="group relative z-10 flex h-2 shrink-0 cursor-row-resize touch-none items-center justify-center border-t border-line bg-surface hover:bg-surface-2"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
+          setDragging(true)
         }}
+        onPointerUp={() => setDragging(false)}
+        onPointerCancel={() => setDragging(false)}
         onPointerMove={(e) => {
           if (!e.currentTarget.hasPointerCapture(e.pointerId) || !ref.current) return
           const r = ref.current.getBoundingClientRect()
-          setRatio(Math.min(Math.max((e.clientY - r.top) / r.height, 0.2), 0.85))
+          onRatio(clampRatio((e.clientY - r.top) / r.height))
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp') onRatio(clampRatio(ratio - 0.05))
+          else if (e.key === 'ArrowDown') onRatio(clampRatio(ratio + 0.05))
+          else return
+          e.preventDefault()
         }}
       >
-        <div className="absolute inset-x-0 -top-1.5 h-3" />
+        <span className="h-[3px] w-8 rounded-full bg-line-strong group-hover:bg-ink-3" />
       </div>
       {bar}
-      <div className="min-h-[120px] overflow-hidden" style={{ flex: `${1 - ratio} 1 0` }}>
+      <div className={cn('min-h-[120px] overflow-hidden', anim)} style={{ flex: `${1 - ratio} 1 0` }}>
         {bottom}
       </div>
     </div>
@@ -498,7 +581,17 @@ function SplitView({ top, bar, bottom }: { top: ReactNode; bar: ReactNode; botto
 
 /* ------------------------------------------------------------ Bottom panel */
 
-function BottomPanel({ tab, onTab, track }: { tab: PanelTab; onTab: (t: PanelTab) => void; track: Track }) {
+function BottomPanel({
+  tab,
+  onTab,
+  track,
+  layoutSwitch,
+}: {
+  tab: PanelTab
+  onTab: (t: PanelTab) => void
+  track: Track
+  layoutSwitch: ReactNode
+}) {
   return (
     <div className="flex h-full flex-col bg-bg">
       <div className="flex shrink-0 items-center gap-3 border-b border-line bg-surface px-3 py-1.5">
@@ -514,6 +607,7 @@ function BottomPanel({ tab, onTab, track }: { tab: PanelTab; onTab: (t: PanelTab
         <div className="min-w-0 flex-1 overflow-x-auto">
           <Summary track={track} inline />
         </div>
+        <div className="shrink-0">{layoutSwitch}</div>
       </div>
       <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto p-2">
         <Suspense fallback={null}>

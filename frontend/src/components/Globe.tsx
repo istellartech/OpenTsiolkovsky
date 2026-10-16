@@ -321,6 +321,33 @@ export default function Globe({ track }: GlobeProps) {
   }, [track])
 
 
+  // Re-fit the overview when the map area is resized (layout switch, divider drag).
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    let timer: number | undefined
+    let last = { w: el.clientWidth, h: el.clientHeight }
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth
+      const h = el.clientHeight
+      if (Math.abs(w - last.w) < 24 && Math.abs(h - last.h) < 24) return
+      last = { w, h }
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const viewer = viewerRef.current
+        const built = builtRef.current
+        if (viewer && built && modeRef.current === 'overview') frameOverview(viewer, built, 0.6)
+      }, 350)
+    })
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      window.clearTimeout(timer)
+    }
+  }, [])
+
   const changeMode = (next: CameraMode) => {
     setMode(next)
     const viewer = viewerRef.current
