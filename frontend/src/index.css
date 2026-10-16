@@ -1,75 +1,131 @@
 @import 'tailwindcss';
 
-@custom-variant dark (&:is(.dark *));
-
-@theme {
-  --color-brand-50: #fff6ef;
-  --color-brand-100: #ffe5d0;
-  --color-brand-200: #ffc89c;
-  --color-brand-300: #ffa162;
-  --color-brand-400: #ff8740;
-  --color-brand-500: #ff7a1a;
-  --color-brand-600: #f16005;
-  --color-brand-700: #c24a04;
-  --color-brand-800: #9c3b09;
-  --color-brand-900: #7d330c;
-  --color-brand: #ff7a1a;
-  --color-brand-foreground: #14110f;
-
-  --font-sans: 'Noto Sans JP', 'Inter', system-ui, sans-serif;
-
-  --shadow-soft: 0 18px 40px -32px rgba(15, 23, 42, 0.4);
-}
-
 /*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  Design tokens. One signal colour (international orange) is reserved for the
+  vehicle, the playhead and the primary state; everything else stays neutral.
 */
-*,
-::after,
-::before,
-::backdrop,
-::file-selector-button {
-  border-color: var(--color-gray-200, currentcolor);
-}
-
-@utility panel-card {
-  @apply rounded-2xl border border-slate-200 bg-white/80 shadow-soft backdrop-blur-sm;
-}
-
-@utility section-shell {
-  @apply rounded-xl border border-slate-200/80 bg-white/95 p-4 shadow-xs;
-}
-
-@utility field-grid {
-  @apply grid gap-3 sm:grid-cols-2 lg:grid-cols-3;
-}
-
 :root {
   color-scheme: light;
+  --bg: #efefec;
+  --surface: #ffffff;
+  --surface-2: #f6f6f3;
+  --line: #e2e2dd;
+  --line-strong: #cfcfc8;
+  --ink: #18191a;
+  --ink-2: #4b4d50;
+  --ink-3: #8a8c8f;
+  --signal: #ff4f00;
+  --signal-ink: #ffffff;
+  --danger: #d1242f;
+  --ok: #1a7f4b;
+  --stage-1: #ff4f00;
+  --stage-2: #2463eb;
+  --stage-3: #0f8a6a;
+  --stage-4: #8b4fd8;
+  --stage-5: #b7791f;
 }
 
-html {
-  @apply scroll-smooth;
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0f1011;
+    --surface: #17181a;
+    --surface-2: #1d1f21;
+    --line: #2a2c2f;
+    --line-strong: #3a3d41;
+    --ink: #ececea;
+    --ink-2: #b3b5b8;
+    --ink-3: #75787c;
+    --signal: #ff6a26;
+    --danger: #ff6b6b;
+    --ok: #3fbf7f;
+    --stage-1: #ff6a26;
+    --stage-2: #5b8cff;
+    --stage-3: #2ec4a0;
+    --stage-4: #b18cff;
+    --stage-5: #e0a841;
+  }
+}
+
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-signal: var(--signal);
+  --color-signal-ink: var(--signal-ink);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+
+  --font-sans: 'IBM Plex Sans JP', 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+
+*,
+::after,
+::before {
+  border-color: var(--line);
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
-  @apply min-h-screen bg-white text-slate-900 antialiased;
-  font-feature-settings: 'rlig' 1, 'calt' 0;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
 }
 
-h1 {
-  @apply text-3xl font-semibold tracking-tight text-slate-950;
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
-h2 {
-  @apply text-2xl font-semibold tracking-tight text-slate-900;
+/* Number inputs: no spinners, the unit sits inside the field instead. */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
 }
 
-h3 {
-  @apply text-lg font-semibold tracking-tight text-slate-900;
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 1px;
+}
+
+/* Thin, quiet scrollbars for the panels. */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Cesium: keep the attribution but make it unobtrusive. */
+.cesium-viewer-bottom {
+  left: auto !important;
+  right: 8px !important;
+  bottom: 4px !important;
+  opacity: 0.55;
+  font-size: 10px;
+}
+.cesium-credit-logoContainer {
+  display: none !important;
+}
+.cesium-widget-credits {
+  font-family: var(--font-sans);
 }

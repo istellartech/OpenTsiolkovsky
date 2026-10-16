@@ -1,0 +1,498 @@
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { ChevronRight, Plus, X } from 'lucide-react'
+import { cn } from '../lib/utils'
+
+/* ------------------------------------------------------------------ Buttons */
+
+type ButtonVariant = 'primary' | 'plain' | 'quiet'
+
+export function Button({
+  variant = 'plain',
+  className,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] px-3 text-[13px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40',
+        variant === 'primary' && 'bg-signal text-signal-ink hover:brightness-95',
+        variant === 'plain' && 'border border-line-strong bg-surface text-ink hover:bg-surface-2',
+        variant === 'quiet' && 'text-ink-2 hover:bg-surface-2 hover:text-ink',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+export function IconButton({
+  label,
+  className,
+  tone = 'light',
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string; tone?: 'light' | 'dark' }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className={cn(
+        'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] transition-colors',
+        tone === 'light' ? 'text-ink-2 hover:bg-surface-2 hover:text-ink' : 'text-white/80 hover:bg-white/10 hover:text-white',
+        className,
+      )}
+      {...props}
+    />
+  )
+}
+
+/* -------------------------------------------------------------- Segmented */
+
+export function Segmented<T extends string | number>({
+  value,
+  options,
+  onChange,
+  tone = 'light',
+  size = 'md',
+  className,
+}: {
+  value: T
+  options: { value: T; label: ReactNode; title?: string }[]
+  onChange: (v: T) => void
+  tone?: 'light' | 'dark'
+  size?: 'sm' | 'md'
+  className?: string
+}) {
+  return (
+    <div
+      role="radiogroup"
+      className={cn(
+        'inline-flex rounded-[7px] p-0.5',
+        tone === 'light' ? 'bg-surface-2 ring-1 ring-line' : 'bg-black/60 ring-1 ring-white/10',
+        className,
+      )}
+    >
+      {options.map((o) => {
+        const active = o.value === value
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            title={o.title}
+            onClick={() => onChange(o.value)}
+            className={cn(
+              'rounded-[5px] font-medium transition-colors',
+              size === 'sm' ? 'h-6 px-2 text-[11px]' : 'h-7 px-2.5 text-[12px]',
+              tone === 'light'
+                ? active
+                  ? 'bg-surface text-ink shadow-[0_0_0_1px_var(--line-strong)]'
+                  : 'text-ink-3 hover:text-ink'
+                : active
+                  ? 'bg-white text-black'
+                  : 'text-white/70 hover:text-white',
+            )}
+          >
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* ----------------------------------------------------- Validation context */
+
+interface FieldContextValue {
+  issues: Map<string, string>
+  register: (path: string) => (el: HTMLElement | null) => void
+}
+
+export const FieldContext = createContext<FieldContextValue>({
+  issues: new Map(),
+  register: () => () => {},
+})
+
+function useFieldState(path?: string) {
+  const ctx = useContext(FieldContext)
+  return {
+    error: path ? ctx.issues.get(path) : undefined,
+    ref: path ? ctx.register(path) : undefined,
+  }
+}
+
+/* ----------------------------------------------------------------- Fields */
+
+function FieldRow({ label, hint, error, children }: { label: ReactNode; hint?: string; error?: string; children: ReactNode }) {
+  return (
+    <div className="py-[3px]">
+      <label className="flex min-h-8 items-center gap-3">
+        <span className="min-w-0 flex-1 text-ink-2" title={hint}>
+          {label}
+        </span>
+        {children}
+      </label>
+      {error && <p className="mt-0.5 text-right text-[11px] leading-tight text-danger">{error}</p>}
+    </div>
+  )
+}
+
+const inputBase =
+  'h-8 w-full rounded-[6px] border border-line bg-surface-2 text-ink outline-none transition-colors hover:border-line-strong focus:border-signal focus:bg-surface'
+
+/** Numeric input that keeps the raw text while typing ("-", "1.", "") and commits valid numbers. */
+export function NumberInput({
+  value,
+  onChange,
+  unit,
+  error,
+  inputRef,
+  className,
+  ariaLabel,
+}: {
+  value: number
+  onChange: (v: number) => void
+  unit?: string
+  error?: boolean
+  inputRef?: (el: HTMLElement | null) => void
+  className?: string
+  ariaLabel?: string
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? (Number.isFinite(value) ? String(value) : '')
+  return (
+    <div className={cn('relative', className)}>
+      <input
+        ref={inputRef}
+        type="number"
+        inputMode="decimal"
+        step="any"
+        aria-label={ariaLabel}
+        aria-invalid={error || undefined}
+        value={shown}
+        onFocus={() => setDraft(shown)}
+        onBlur={() => setDraft(null)}
+        onChange={(e) => {
+          setDraft(e.target.value)
+          const n = e.target.value.trim() === '' ? NaN : Number(e.target.value)
+          if (Number.isFinite(n)) onChange(n)
+        }}
+        className={cn(inputBase, 'num pl-2 text-right text-[13px]', unit ? 'pr-10' : 'pr-2', error && 'border-danger')}
+      />
+      {unit && (
+        <span className="pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-start pl-1 text-[11px] text-ink-3">
+          {unit}
+        </span>
+      )}
+    </div>
+  )
+}
+
+export function NumberField({
+  label,
+  value,
+  onChange,
+  unit,
+  path,
+  hint,
+}: {
+  label: ReactNode
+  value: number
+  onChange: (v: number) => void
+  unit?: string
+  path?: string
+  hint?: string
+}) {
+  const { error, ref } = useFieldState(path)
+  return (
+    <FieldRow label={label} hint={hint} error={error}>
+      <NumberInput
+        ariaLabel={typeof label === 'string' ? label : undefined}
+        value={value}
+        onChange={onChange}
+        unit={unit}
+        error={!!error}
+        inputRef={ref}
+        className="w-[9.5rem] shrink-0"
+      />
+    </FieldRow>
+  )
+}
+
+/** Three numbers sharing one label, e.g. a NED vector. */
+export function VectorField({
+  label,
+  value,
+  onChange,
+  axes,
+  unit,
+  path,
+}: {
+  label: ReactNode
+  value: [number, number, number]
+  onChange: (v: [number, number, number]) => void
+  axes: [string, string, string]
+  unit: string
+  path?: string
+}) {
+  const { error, ref } = useFieldState(path)
+  return (
+    <div className="py-[3px]">
+      <div className="flex min-h-8 items-center justify-between text-ink-2">
+        <span>{label}</span>
+        <span className="text-[11px] text-ink-3">{unit}</span>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {axes.map((axis, i) => (
+          <div key={axis} className="relative">
+            <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-[11px] text-ink-3">{axis}</span>
+            <NumberInput
+              ariaLabel={`${label} ${axis}`}
+              value={value[i]}
+              error={!!error}
+              inputRef={i === 0 ? ref : undefined}
+              onChange={(n) => {
+                const next = [...value] as [number, number, number]
+                next[i] = n
+                onChange(next)
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      {error && <p className="mt-0.5 text-right text-[11px] text-danger">{error}</p>}
+    </div>
+  )
+}
+
+export function SelectField<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  path,
+}: {
+  label: ReactNode
+  value: T
+  options: { value: T; label: string }[]
+  onChange: (v: T) => void
+  path?: string
+}) {
+  const { error, ref } = useFieldState(path)
+  return (
+    <FieldRow label={label} error={error}>
+      <select
+        ref={ref}
+        aria-label={typeof label === 'string' ? label : undefined}
+        value={String(value)}
+        onChange={(e) => {
+          const hit = options.find((o) => String(o.value) === e.target.value)
+          if (hit) onChange(hit.value)
+        }}
+        className={cn(inputBase, 'w-[9.5rem] shrink-0 cursor-pointer px-2 text-[12px]', error && 'border-danger')}
+      >
+        {options.map((o) => (
+          <option key={String(o.value)} value={String(o.value)}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </FieldRow>
+  )
+}
+
+export function TextInputField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  path,
+  className,
+}: {
+  label: ReactNode
+  value: string
+  onChange: (v: string) => void
+  type?: 'text' | 'date' | 'time'
+  path?: string
+  className?: string
+}) {
+  const { error, ref } = useFieldState(path)
+  return (
+    <FieldRow label={label} error={error}>
+      <input
+        ref={ref}
+        aria-label={typeof label === 'string' ? label : undefined}
+        type={type}
+        step={type === 'time' ? 1 : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(inputBase, 'num w-[9.5rem] shrink-0 px-2 text-[12px]', className, error && 'border-danger')}
+      />
+    </FieldRow>
+  )
+}
+
+export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode }) {
+  return (
+    <label className="flex min-h-8 cursor-pointer items-center justify-between gap-3 py-[3px] text-ink-2">
+      <span>{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={typeof label === 'string' ? label : undefined}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          'relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors',
+          checked ? 'bg-signal' : 'bg-line-strong',
+        )}
+      >
+        <span
+          className={cn(
+            'absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-transform',
+            checked ? 'translate-x-[14px]' : 'translate-x-[2px]',
+          )}
+        />
+      </button>
+    </label>
+  )
+}
+
+/* --------------------------------------------------------------- Sections */
+
+export function Section({
+  title,
+  meta,
+  defaultOpen = true,
+  children,
+  id,
+}: {
+  title: string
+  meta?: ReactNode
+  defaultOpen?: boolean
+  children: ReactNode
+  id?: string
+}) {
+  const storageKey = id ? `ot.section.${id}` : null
+  const [open, setOpen] = useState(() => {
+    if (!storageKey) return defaultOpen
+    try {
+      const v = localStorage.getItem(storageKey)
+      return v === null ? defaultOpen : v === '1'
+    } catch {
+      return defaultOpen
+    }
+  })
+  useEffect(() => {
+    if (!storageKey) return
+    try {
+      localStorage.setItem(storageKey, open ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [open, storageKey])
+
+  return (
+    <section className="border-b border-line">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex h-10 w-full items-center gap-1.5 px-4 text-left hover:bg-surface-2"
+      >
+        <ChevronRight className={cn('h-3.5 w-3.5 text-ink-3 transition-transform', open && 'rotate-90')} />
+        <span className="text-[13px] font-semibold">{title}</span>
+        {meta && <span className="num ml-auto truncate pl-3 text-[11px] text-ink-3">{meta}</span>}
+      </button>
+      {open && <div className="px-4 pb-3">{children}</div>}
+    </section>
+  )
+}
+
+/** A quiet "more settings" disclosure inside a section. */
+export function More({ children, label = '詳細' }: { children: ReactNode; label?: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex h-7 items-center gap-1 text-[12px] text-ink-3 hover:text-ink"
+      >
+        <ChevronRight className={cn('h-3 w-3 transition-transform', open && 'rotate-90')} />
+        {label}
+      </button>
+      {open && <div className="border-l border-line pl-3">{children}</div>}
+    </div>
+  )
+}
+
+/* ---------------------------------------------------------- Profile table */
+
+export interface ProfileColumn<T> {
+  key: keyof T & string
+  label: string
+}
+
+export function ProfileTable<T extends Record<string, number>>({
+  columns,
+  rows,
+  onChange,
+  path,
+}: {
+  columns: ProfileColumn<T>[]
+  rows: T[]
+  onChange: (rows: T[]) => void
+  path?: string
+}) {
+  const { error, ref } = useFieldState(path)
+  const update = (i: number, key: keyof T, v: number) =>
+    onChange(rows.map((r, j) => (j === i ? { ...r, [key]: v } : r)))
+  const add = () => {
+    const prev = rows[rows.length - 1]
+    const blank = Object.fromEntries(columns.map((c) => [c.key, prev ? prev[c.key] : 0])) as T
+    onChange([...rows, blank])
+  }
+  return (
+    <div ref={ref as (el: HTMLDivElement | null) => void} className="mt-1 mb-2">
+      <div
+        className="grid gap-1.5 pb-1 text-[11px] text-ink-3"
+        style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr)) 24px` }}
+      >
+        {columns.map((c) => (
+          <span key={c.key} className="text-right">
+            {c.label}
+          </span>
+        ))}
+        <span />
+      </div>
+      <div className="space-y-1">
+        {rows.map((row, i) => (
+          <div
+            key={i}
+            className="grid items-center gap-1.5"
+            style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr)) 24px` }}
+          >
+            {columns.map((c) => (
+              <NumberInput key={c.key} ariaLabel={`${c.label} ${i + 1}`} value={row[c.key]} onChange={(v) => update(i, c.key, v)} />
+            ))}
+            <button
+              type="button"
+              aria-label="行を削除"
+              onClick={() => onChange(rows.filter((_, j) => j !== i))}
+              className="flex h-6 w-6 items-center justify-center rounded text-ink-3 hover:bg-surface-2 hover:text-danger"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={add} className="mt-1.5 flex h-7 items-center gap-1 text-[12px] text-ink-2 hover:text-ink">
+        <Plus className="h-3.5 w-3.5" /> 行を追加
+      </button>
+      {error && <p className="text-[11px] text-danger">{error}</p>}
+    </div>
+  )
+}

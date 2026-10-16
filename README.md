@@ -10,7 +10,7 @@ OpenTsiolkovsky is a modern rocket flight simulator with command-line and web in
 * **Multi-Platform**:
   - **Rust implementation**: Main simulation engine with CLI and WASM support
   - **Command-line interface (CLI)**: Fast native execution
-  - **Modern React/TypeScript web frontend**: Interactive visualization
+  - **Modern React/TypeScript web frontend**: Results update live as parameters change; animated 3D globe (CesiumJS, Esri satellite imagery) with a shared timeline that drives the charts and telemetry; CSV/KML/JSON export
   - **WASM support**: Browser-based simulation
   - **Legacy C++ implementation**: Reference implementation in `legacy_cpp/`
 * **Multi-Stage Support**: Supports up to three rocket stages
@@ -40,6 +40,7 @@ cargo build --release
 cd frontend
 bun install
 bun run dev
+# Builds the WASM bundle first if frontend/src/wasm is missing (needs wasm-pack)
 # Open http://localhost:5173 in your browser
 ```
 

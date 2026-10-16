@@ -589,29 +589,6 @@ export async function runSimulation(config: ClientConfig): Promise<SimulationSta
 
     augmentAerodynamicAngles(result, config)
 
-    // Detailed validation and logging
-    console.log('WASM simulation result details:', {
-      count: result.length,
-      configDuration: config.simulation.duration_s,
-      configOutputStep: config.simulation.output_step_s,
-      expectedPoints: Math.ceil(config.simulation.duration_s / config.simulation.output_step_s),
-      firstPoint: result[0],
-      lastPoint: result[result.length - 1],
-      sampleFields: Object.keys(result[0] || {}),
-      timeRange: result.length > 1 ? `${result[0]?.time} to ${result[result.length - 1]?.time}` : 'single point',
-      altitudeRange: result.length > 1 ? `${result[0]?.altitude} to ${Math.max(...result.map(r => r.altitude || 0))}` : 'single altitude',
-      hasValidData: result.length > 1 && result.every(r => typeof r.time === 'number' && typeof r.altitude === 'number')
-    })
-
-    // Validate data quality
-    if (result.length < 2) {
-      console.error('❌ Simulation returned insufficient data points:', result.length)
-    } else if (result.length < config.simulation.duration_s / config.simulation.output_step_s * 0.5) {
-      console.warn('⚠️ Simulation may have terminated early. Expected ~' + Math.ceil(config.simulation.duration_s / config.simulation.output_step_s) + ' points, got ' + result.length)
-    } else {
-      console.log('✅ Simulation completed successfully with', result.length, 'data points')
-    }
-
     return result
   } catch (err: any) {
     const message = typeof err?.message === 'string' ? err.message : String(err)
@@ -622,36 +599,12 @@ export async function runSimulation(config: ClientConfig): Promise<SimulationSta
       throw err
     }
 
-    console.log('Falling back to legacy config format')
     const legacyPayload = toLegacyRocketConfig(config)
     const sim = new mod.WasmSimulator(JSON.stringify(legacyPayload))
     const json = await sim.run()
     const result = JSON.parse(json) as SimulationState[]
 
     augmentAerodynamicAngles(result, config)
-
-    // Detailed validation and logging for legacy format
-    console.log('Legacy WASM simulation result details:', {
-      count: result.length,
-      configDuration: config.simulation.duration_s,
-      configOutputStep: config.simulation.output_step_s,
-      expectedPoints: Math.ceil(config.simulation.duration_s / config.simulation.output_step_s),
-      firstPoint: result[0],
-      lastPoint: result[result.length - 1],
-      sampleFields: Object.keys(result[0] || {}),
-      timeRange: result.length > 1 ? `${result[0]?.time} to ${result[result.length - 1]?.time}` : 'single point',
-      altitudeRange: result.length > 1 ? `${result[0]?.altitude} to ${Math.max(...result.map(r => r.altitude || 0))}` : 'single altitude',
-      hasValidData: result.length > 1 && result.every(r => typeof r.time === 'number' && typeof r.altitude === 'number')
-    })
-
-    // Validate data quality for legacy format
-    if (result.length < 2) {
-      console.error('❌ Legacy simulation returned insufficient data points:', result.length)
-    } else if (result.length < config.simulation.duration_s / config.simulation.output_step_s * 0.5) {
-      console.warn('⚠️ Legacy simulation may have terminated early. Expected ~' + Math.ceil(config.simulation.duration_s / config.simulation.output_step_s) + ' points, got ' + result.length)
-    } else {
-      console.log('✅ Legacy simulation completed successfully with', result.length, 'data points')
-    }
 
     return result
   }

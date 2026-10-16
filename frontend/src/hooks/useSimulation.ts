@@ -1,292 +1,116 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import type React from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ClientConfig, SimulationState } from '../lib/simulation'
 import { runSimulation } from '../lib/simulation'
-import { createDefaultConfig } from '../config/defaults'
-import { validateConfig, isValidClientConfig, type ValidationIssue } from '../utils/validation'
+import { PRESET_OPTIONS, createDefaultConfig } from '../config/defaults'
+import { isValidClientConfig, validateConfig } from '../utils/validation'
+import { buildTrack, type Track } from '../lib/trajectory'
 
 const LOCALSTORAGE_KEY = 'openTsiolkovsky_config'
-const LOCALSTORAGE_AUTOSAVE_KEY = 'openTsiolkovsky_autosave_enabled'
+const LOCALSTORAGE_PRESET_KEY = 'openTsiolkovsky_preset'
+const RUN_DEBOUNCE_MS = 250
 
-// localStorage utility functions
-const loadConfigFromStorage = (): ClientConfig | null => {
+function loadStored(): { config: ClientConfig; presetId: string } | null {
   try {
     const stored = localStorage.getItem(LOCALSTORAGE_KEY)
     if (!stored) return null
-
     const config = JSON.parse(stored)
-    return isValidClientConfig(config) ? config : null
+    if (!isValidClientConfig(config)) return null
+    return { config, presetId: localStorage.getItem(LOCALSTORAGE_PRESET_KEY) ?? 'custom' }
   } catch {
     return null
   }
 }
 
-const saveConfigToStorage = (config: ClientConfig) => {
+function store(config: ClientConfig, presetId: string) {
   try {
-    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(config, null, 2))
-  } catch (error) {
-    console.warn('Failed to save config to localStorage:', error)
-  }
-}
-
-const isAutoSaveEnabled = (): boolean => {
-  try {
-    const stored = localStorage.getItem(LOCALSTORAGE_AUTOSAVE_KEY)
-    return stored !== 'false' // Default to true
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(config))
+    localStorage.setItem(LOCALSTORAGE_PRESET_KEY, presetId)
   } catch {
-    return true
+    /* storage may be unavailable */
   }
 }
 
-const setAutoSaveEnabled = (enabled: boolean) => {
-  try {
-    localStorage.setItem(LOCALSTORAGE_AUTOSAVE_KEY, enabled.toString())
-  } catch (error) {
-    console.warn('Failed to save autosave preference:', error)
-  }
+export type RunStatus = 'running' | 'ok' | 'invalid' | 'error'
+
+export interface SimulationResult {
+  states: SimulationState[]
+  track: Track
+  config: ClientConfig
+  ms: number
 }
 
-export function useSimulation(onResult: (trajectory: SimulationState[], config: ClientConfig, executionTime: number) => void) {
-  // Initialize config with localStorage data if available
-  const [config, setConfig] = useState<ClientConfig>(() => {
-    const savedConfig = loadConfigFromStorage()
-    return savedConfig || createDefaultConfig()
-  })
-  const [useCnProfile, setUseCnProfile] = useState(() => config.aerodynamics.cn_profile.length > 0)
-  const [useCaProfile, setUseCaProfile] = useState(() => config.aerodynamics.ca_profile.length > 0)
-  const [useAttitudeProfile, setUseAttitudeProfile] = useState(() => config.attitude.profile.length > 0)
-  const [useWindProfile, setUseWindProfile] = useState(() => config.wind.profile.length > 0)
-  const [loading, setLoading] = useState(false)
+export function useSimulation() {
+  const initial = useMemo(() => loadStored() ?? { config: createDefaultConfig(), presetId: 'sample' }, [])
+  const [config, setConfigState] = useState<ClientConfig>(initial.config)
+  const [presetId, setPresetId] = useState(initial.presetId)
+  const [status, setStatus] = useState<RunStatus>('running')
   const [error, setError] = useState<string | null>(null)
-  const [isCompleted, setIsCompleted] = useState(false)
-  const [executionTime, setExecutionTime] = useState<number | null>(null)
-  const [showVariations, setShowVariations] = useState(false)
-  const [selectedPresetId, setSelectedPresetId] = useState<string>(() => {
-    const savedConfig = loadConfigFromStorage()
-    return savedConfig ? 'custom' : 'sample'
-  })
-  const [openStageIds, setOpenStageIds] = useState<string[]>(['stage-0'])
-  const [showTemplates, setShowTemplates] = useState(false)
-  const [autoSaveEnabled, setAutoSaveEnabledState] = useState(() => isAutoSaveEnabled())
+  const [result, setResult] = useState<SimulationResult | null>(null)
+  const runSeq = useRef(0)
 
-  // Debounced auto-save timer ref
-  const autoSaveTimeoutRef = useRef<number | null>(null)
+  const issues = useMemo(() => validateConfig(config), [config])
+  const issueMap = useMemo(() => new Map(issues.map((i) => [i.field, i.message])), [issues])
 
-  const jsonPreview = useMemo(() => JSON.stringify(config, null, 2), [config])
-  const validationIssues = useMemo(() => validateConfig(config), [config])
-  const hasValidationIssues = validationIssues.length > 0
-  const issuesSet = useMemo(() => new Set(validationIssues.map((issue) => issue.field)), [validationIssues])
+  const patch = useCallback((fn: (c: ClientConfig) => ClientConfig) => {
+    setConfigState((c) => fn(c))
+    setPresetId('custom')
+  }, [])
 
-  const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
-
-  // Auto-save config to localStorage when it changes
+  // Persist and re-run on every change (debounced). The solver is fast enough
+  // that results follow the inputs without an explicit "run" step.
   useEffect(() => {
-    if (!autoSaveEnabled) return
-
-    // Clear existing timeout
-    if (autoSaveTimeoutRef.current !== null) {
-      clearTimeout(autoSaveTimeoutRef.current)
+    store(config, presetId)
+    if (issues.length > 0) {
+      setStatus('invalid')
+      return
     }
-
-    // Set debounced save (1 second delay)
-    autoSaveTimeoutRef.current = window.setTimeout(() => {
-      saveConfigToStorage(config)
-    }, 1000)
-
-    // Cleanup timeout on unmount
-    return () => {
-      if (autoSaveTimeoutRef.current !== null) {
-        clearTimeout(autoSaveTimeoutRef.current)
-      }
-    }
-  }, [config, autoSaveEnabled])
-
-  const makeFieldRef = useCallback(
-    (field?: string) => (el: HTMLElement | null) => {
-      if (!field) return
-      if (el) {
-        fieldRefs.current[field] = el
-      } else {
-        delete fieldRefs.current[field]
-      }
-    },
-    [],
-  )
-
-  const handleRunSimulation = useCallback(async () => {
-    if (hasValidationIssues) return
-
-    setLoading(true)
-    setError(null)
-    setIsCompleted(false)
-    setExecutionTime(null)
-
-    const startTime = performance.now()
-
-    try {
-      const result = await runSimulation(config)
-      const endTime = performance.now()
-      const duration = Math.round(endTime - startTime)
-
-      setExecutionTime(duration)
-      setIsCompleted(true)
-      onResult(result, config, duration)
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown simulation error occurred'
-      setError(errorMessage)
-      setIsCompleted(false)
-      setExecutionTime(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [config, hasValidationIssues, onResult])
-
-  const handlePresetChange = useCallback((presetId: string, presetCreate: () => ClientConfig) => {
-    if (presetId === selectedPresetId) return
-
-    setSelectedPresetId(presetId)
-    const newConfig = presetCreate()
-    setConfig(newConfig)
-    setUseCnProfile(newConfig.aerodynamics.cn_profile.length > 0)
-    setUseCaProfile(newConfig.aerodynamics.ca_profile.length > 0)
-    setUseAttitudeProfile(newConfig.attitude.profile.length > 0)
-    setUseWindProfile(newConfig.wind.profile.length > 0)
-    setOpenStageIds(['stage-0'])
-    setShowVariations(false)
-  }, [selectedPresetId])
-
-  const scrollToFirstError = useCallback(() => {
-    if (validationIssues.length === 0) return
-
-    const firstIssue = validationIssues[0]
-    const element = fieldRefs.current[firstIssue.field]
-
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      element.focus?.()
-    }
-  }, [validationIssues])
-
-  const handleImportConfig = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
+    const seq = ++runSeq.current
+    setStatus('running')
+    const timer = window.setTimeout(async () => {
+      const t0 = performance.now()
       try {
-        const content = e.target?.result as string
-        const importedConfig = JSON.parse(content)
+        const states = await runSimulation(config)
+        if (seq !== runSeq.current) return
+        const track = buildTrack(states)
+        if (!track) throw new Error('計算結果のデータ点が不足しています。計算時間や出力間隔を確認してください。')
+        setResult({ states, track, config, ms: Math.round(performance.now() - t0) })
+        setError(null)
+        setStatus('ok')
+      } catch (err) {
+        if (seq !== runSeq.current) return
+        setError(err instanceof Error ? err.message : String(err))
+        setStatus('error')
+      }
+    }, RUN_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [config, issues.length, presetId])
 
-        // Validate structure before setting config
-        if (!isValidClientConfig(importedConfig)) {
-          setError('設定ファイルの構造が不正です。必須フィールド（simulation, launch, aerodynamics, attitude, wind）が不足している可能性があります。')
+  const applyPreset = useCallback((id: string) => {
+    const preset = PRESET_OPTIONS.find((p) => p.id === id)
+    if (!preset) return
+    setConfigState(preset.create())
+    setPresetId(id)
+  }, [])
+
+  const importConfig = useCallback((file: File) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result))
+        if (!isValidClientConfig(parsed)) {
+          setError('設定ファイルの構造が不正です（simulation, launch, aerodynamics, attitude, wind が必要です）。')
+          setStatus('error')
           return
         }
-
-        // If structure is valid, apply the config
-        setConfig(importedConfig)
-        setUseCnProfile(importedConfig.aerodynamics?.cn_profile?.length > 0 || false)
-        setUseCaProfile(importedConfig.aerodynamics?.ca_profile?.length > 0 || false)
-        setUseAttitudeProfile(importedConfig.attitude?.profile?.length > 0 || false)
-        setUseWindProfile(importedConfig.wind?.profile?.length > 0 || false)
-        setSelectedPresetId('custom')
-        setShowTemplates(false)
-        setError(null) // Clear any previous errors
-      } catch (error) {
-        setError('設定ファイルの読み込みに失敗しました。JSONフォーマットが正しくない可能性があります。')
+        setConfigState(parsed)
+        setPresetId('custom')
+      } catch {
+        setError('JSONとして読み込めませんでした。')
+        setStatus('error')
       }
     }
     reader.readAsText(file)
-
-    // Reset file input
-    event.target.value = ''
   }, [])
 
-  const handleExportConfig = useCallback(() => {
-    const dataStr = JSON.stringify(config, null, 2)
-    const dataBlob = new Blob([dataStr], { type: 'application/json' })
-    const url = URL.createObjectURL(dataBlob)
-
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${config.name || 'rocket-config'}-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-
-    URL.revokeObjectURL(url)
-  }, [config])
-
-  // Auto-save management functions
-  const toggleAutoSave = useCallback(() => {
-    const newValue = !autoSaveEnabled
-    setAutoSaveEnabledState(newValue)
-    setAutoSaveEnabled(newValue)
-  }, [autoSaveEnabled])
-
-  const clearSavedConfig = useCallback(() => {
-    try {
-      localStorage.removeItem(LOCALSTORAGE_KEY)
-      setSelectedPresetId('sample')
-      const defaultConfig = createDefaultConfig()
-      setConfig(defaultConfig)
-      setUseCnProfile(defaultConfig.aerodynamics.cn_profile.length > 0)
-      setUseCaProfile(defaultConfig.aerodynamics.ca_profile.length > 0)
-      setUseAttitudeProfile(defaultConfig.attitude.profile.length > 0)
-      setUseWindProfile(defaultConfig.wind.profile.length > 0)
-    } catch (error) {
-      console.warn('Failed to clear saved config:', error)
-    }
-  }, [])
-
-  const saveConfigNow = useCallback(() => {
-    if (autoSaveTimeoutRef.current !== null) {
-      clearTimeout(autoSaveTimeoutRef.current)
-      autoSaveTimeoutRef.current = null
-    }
-    saveConfigToStorage(config)
-  }, [config])
-
-  return {
-    // State
-    config,
-    setConfig,
-    useCnProfile,
-    setUseCnProfile,
-    useCaProfile,
-    setUseCaProfile,
-    useAttitudeProfile,
-    setUseAttitudeProfile,
-    useWindProfile,
-    setUseWindProfile,
-    loading,
-    error,
-    isCompleted,
-    executionTime,
-    showVariations,
-    setShowVariations,
-    selectedPresetId,
-    openStageIds,
-    setOpenStageIds,
-    showTemplates,
-    setShowTemplates,
-    autoSaveEnabled,
-
-    // Computed
-    jsonPreview,
-    validationIssues,
-    hasValidationIssues,
-    issuesSet,
-
-    // Methods
-    handleRunSimulation,
-    handlePresetChange,
-    handleImportConfig,
-    handleExportConfig,
-    makeFieldRef,
-    scrollToFirstError,
-    toggleAutoSave,
-    clearSavedConfig,
-    saveConfigNow,
-  }
+  return { config, patch, presetId, applyPreset, importConfig, status, error, result, issues, issueMap }
 }
