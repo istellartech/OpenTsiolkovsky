@@ -240,7 +240,7 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
 
   return (
     <figure className="group relative flex h-[210px] min-w-0 flex-col rounded-[8px] border border-line bg-surface p-3 pb-2">
-      <figcaption className="flex items-baseline gap-2 pb-1">
+      <figcaption className="flex h-6 shrink-0 items-center gap-2 pb-1">
         <span className="text-[12px] font-semibold">{spec.title}</span>
         {spec.series.length > 1 && (
           <span className="hidden truncate text-[11px] text-ink-3 sm:inline">
@@ -253,7 +253,7 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
           onClick={download}
           aria-label={`${spec.title}をPNGで保存`}
           title="PNGで保存"
-          className="-mr-1 hidden h-5 w-5 items-center justify-center rounded text-ink-3 hover:text-ink group-hover:flex"
+          className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-ink-3 opacity-0 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
         >
           <Download className="h-3 w-3" />
         </button>

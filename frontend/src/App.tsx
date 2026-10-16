@@ -162,8 +162,6 @@ export default function App() {
         exports={exports}
         hasResult={!!track}
         status={sim.status}
-        ms={result?.ms}
-        points={result?.states.length}
         error={sim.error}
         issues={sim.issues}
         onIssue={focusIssue}
@@ -275,8 +273,6 @@ function Header(props: {
   exports: { json: () => void; csv: () => void; kml: () => void }
   hasResult: boolean
   status: RunStatus
-  ms?: number
-  points?: number
   error: string | null
   issues: ValidationIssue[]
   onIssue: (i: ValidationIssue) => void
@@ -333,16 +329,12 @@ function Header(props: {
 
 function StatusIndicator({
   status,
-  ms,
-  points,
   error,
   issues,
   onIssue,
   compact,
 }: {
   status: RunStatus
-  ms?: number
-  points?: number
   error: string | null
   issues: ValidationIssue[]
   onIssue: (i: ValidationIssue) => void
@@ -359,7 +351,7 @@ function StatusIndicator({
     status === 'ok'
       ? compact
         ? ''
-        : `計算済み · ${ms} ms · ${points?.toLocaleString('ja-JP')} 点`
+        : '計算済み'
       : status === 'running'
         ? '計算中'
         : status === 'invalid'
