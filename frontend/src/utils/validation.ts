@@ -186,12 +186,14 @@ function validateStage(
     push(`${fieldPrefix}burn_end_s`, `${stageLabel}燃焼終了時刻は燃焼開始より大きい値にしてください。`)
   }
 
-  if (!isFiniteNumber(stage.forced_cutoff_s) || stage.forced_cutoff_s < stage.burn_end_s) {
-    push(`${fieldPrefix}forced_cutoff_s`, `${stageLabel}強制カットオフは燃焼終了時刻以降にしてください。`)
+  // A cutoff or separation before the nominal burn end simply ends the burn
+  // early (the solver clamps it); only times before ignition are invalid.
+  if (!isFiniteNumber(stage.forced_cutoff_s) || stage.forced_cutoff_s <= stage.burn_start_s) {
+    push(`${fieldPrefix}forced_cutoff_s`, `${stageLabel}強制停止は燃焼開始より後にしてください。`)
   }
 
-  if (!isFiniteNumber(stage.separation_time_s) || stage.separation_time_s < stage.burn_end_s) {
-    push(`${fieldPrefix}separation_time_s`, `${stageLabel}分離時刻は燃焼終了時刻以上にしてください。`)
+  if (!isFiniteNumber(stage.separation_time_s) || stage.separation_time_s <= stage.burn_start_s) {
+    push(`${fieldPrefix}separation_time_s`, `${stageLabel}分離時刻は燃焼開始より後にしてください。`)
   }
 
   if (!isFiniteNumber(stage.throat_diameter_m) || stage.throat_diameter_m <= 0) {

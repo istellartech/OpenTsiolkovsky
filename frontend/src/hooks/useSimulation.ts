@@ -4,6 +4,7 @@ import { runSimulation } from '../lib/simulation'
 import { PRESET_OPTIONS } from '../config/presets'
 import { isValidClientConfig, validateConfig } from '../utils/validation'
 import { buildTrack, type Track } from '../lib/trajectory'
+import { baseName, fromLegacyParamFile, isLegacyParamFile } from '../lib/legacy'
 
 const LOCALSTORAGE_KEY = 'openTsiolkovsky_config'
 const LOCALSTORAGE_PRESET_KEY = 'openTsiolkovsky_preset'
@@ -35,6 +36,11 @@ function store(config: ClientConfig, presetId: string) {
 }
 
 export type RunStatus = 'running' | 'ok' | 'invalid' | 'error'
+
+export interface ImportResult {
+  ok: boolean
+  message: string
+}
 
 export interface SimulationResult {
   states: SimulationState[]
@@ -96,25 +102,54 @@ export function useSimulation() {
     setPresetId(id)
   }, [])
 
-  const importConfig = useCallback((file: File) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result))
-        if (!isValidClientConfig(parsed)) {
-          setError('設定ファイルの構造が不正です（simulation, launch, aerodynamics, attitude, wind が必要です）。')
-          setStatus('error')
-          return
-        }
-        setConfigState(parsed)
-        setPresetId('custom')
-      } catch {
-        setError('JSONとして読み込めませんでした。')
-        setStatus('error')
-      }
+  /**
+   * Open a settings file: either one saved from this app, or a CLI parameter
+   * file (param_*.json) together with the CSV tables it references.
+   * Resolves with a user-facing result message.
+   */
+  const importFiles = useCallback(async (files: File[]): Promise<ImportResult> => {
+    const jsonFiles = files.filter((f) => /\.json$/i.test(f.name) || f.type === 'application/json')
+    const csvFiles = files.filter((f) => /\.csv$/i.test(f.name))
+    if (jsonFiles.length === 0) {
+      return { ok: false, message: csvFiles.length ? 'CSV だけでは開けません。設定の .json ファイルも一緒に選んでください。' : '.json ファイルを選んでください。' }
     }
-    reader.readAsText(file)
+    if (jsonFiles.length > 1) return { ok: false, message: '設定の .json ファイルは1つだけ選んでください。' }
+    const file = jsonFiles[0]
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(await file.text())
+    } catch {
+      return { ok: false, message: `「${file.name}」はJSONとして読めませんでした。` }
+    }
+
+    if (isLegacyParamFile(parsed)) {
+      const csv = new Map<string, string>()
+      for (const f of csvFiles) csv.set(baseName(f.name), await f.text())
+      let imported
+      try {
+        imported = fromLegacyParamFile(parsed, csv)
+      } catch (err) {
+        return { ok: false, message: `「${file.name}」を変換できませんでした：${err instanceof Error ? err.message : String(err)}` }
+      }
+      setConfigState(imported.config)
+      setPresetId('custom')
+      const notes: string[] = []
+      if (imported.missing.length) {
+        notes.push(`参照しているCSVが見つからないため定数値を使っています（${imported.missing.join('、')}）。JSONと一緒に選ぶかドロップしてください。`)
+      }
+      if (imported.unsupported.length) notes.push(`この画面では扱えない設定は無視しました：${imported.unsupported.join('、')}。`)
+      const used = csvFiles.length ? `（CSV ${csvFiles.length}件）` : ''
+      return { ok: imported.missing.length === 0, message: [`CLI用の「${file.name}」${used}を読み込みました。`, ...notes].join(' ') }
+    }
+
+    if (!isValidClientConfig(parsed)) {
+      return { ok: false, message: `「${file.name}」は設定ファイルとして読めませんでした（このアプリで保存した設定か、CLI用の param_*.json を選んでください）。` }
+    }
+    setConfigState(parsed)
+    setPresetId('custom')
+    return { ok: true, message: `「${file.name}」を読み込みました。` }
   }, [])
 
-  return { config, patch, presetId, applyPreset, importConfig, status, error, result, issues, issueMap }
+  return { config, patch, presetId, applyPreset, importFiles, status, error, result, issues, issueMap }
 }

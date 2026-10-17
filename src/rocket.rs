@@ -201,8 +201,10 @@ impl<'de> Deserialize<'de> for RocketConfig {
             if let Some(stage) = helper.stage3 {
                 stages.push(stage);
             }
-            if stages.is_empty() && helper.stage.is_some() {
-                stages.push(helper.stage.unwrap());
+            if stages.is_empty()
+                && let Some(stage) = helper.stage
+            {
+                stages.push(stage);
             }
         }
 
@@ -873,6 +875,26 @@ pub struct ClientStage {
     pub isp_multiplier: f64,
     #[serde(default)]
     pub isp_profile: Vec<ClientTimeSample>,
+    /// Per-stage aerodynamic values; unset fields use `ClientAerodynamics`.
+    /// (Mach tables stay vehicle-wide, as in the CLI where they come from stage 1.)
+    #[serde(default)]
+    pub aero: Option<ClientStageAero>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ClientStageAero {
+    #[serde(default)]
+    pub body_diameter_m: Option<f64>,
+    #[serde(default)]
+    pub cn_constant: Option<f64>,
+    #[serde(default)]
+    pub cn_multiplier: Option<f64>,
+    #[serde(default)]
+    pub ca_constant: Option<f64>,
+    #[serde(default)]
+    pub ca_multiplier: Option<f64>,
+    #[serde(default)]
+    pub ballistic_coefficient: Option<f64>,
 }
 
 impl Default for ClientStage {
@@ -894,6 +916,7 @@ impl Default for ClientStage {
             isp_constant: default_isp_constant(),
             isp_multiplier: default_multiplier(),
             isp_profile: Vec::new(),
+            aero: None,
         }
     }
 }
@@ -1204,17 +1227,20 @@ fn build_stage_config(
         nozzle_exhaust_pressure: stage.nozzle_exit_pressure_pa,
     };
 
+    let own = stage.aero.clone().unwrap_or_default();
     let aero = AeroConfig {
-        body_diameter: aerodynamics.body_diameter_m,
+        body_diameter: own.body_diameter_m.unwrap_or(aerodynamics.body_diameter_m),
         cn_file_exists: false,
         cn_file_name: String::new(),
-        normal_multiplier: aerodynamics.cn_multiplier,
-        const_normal_coefficient: aerodynamics.cn_constant,
+        normal_multiplier: own.cn_multiplier.unwrap_or(aerodynamics.cn_multiplier),
+        const_normal_coefficient: own.cn_constant.unwrap_or(aerodynamics.cn_constant),
         ca_file_exists: false,
         ca_file_name: String::new(),
-        axial_multiplier: aerodynamics.ca_multiplier,
-        const_axial_coefficient: aerodynamics.ca_constant,
-        ballistic_coefficient: aerodynamics.ballistic_coefficient,
+        axial_multiplier: own.ca_multiplier.unwrap_or(aerodynamics.ca_multiplier),
+        const_axial_coefficient: own.ca_constant.unwrap_or(aerodynamics.ca_constant),
+        ballistic_coefficient: own
+            .ballistic_coefficient
+            .unwrap_or(aerodynamics.ballistic_coefficient),
     };
 
     let attitude_cfg = AttitudeConfig {
@@ -1261,5 +1287,40 @@ fn build_stage_config(
                 1.0e6
             },
         },
+    }
+}
+
+#[cfg(test)]
+mod client_stage_aero_tests {
+    use super::*;
+
+    #[test]
+    fn per_stage_aero_overrides_vehicle_values() {
+        let json = r#"{
+            "name": "aero",
+            "simulation": { "duration_s": 10, "output_step_s": 1 },
+            "launch": {
+                "latitude_deg": 31.25, "longitude_deg": 131.08, "altitude_m": 0,
+                "velocity_ned_mps": [0, 0, 0],
+                "datetime_utc": { "year": 2020, "month": 1, "day": 1, "hour": 0, "minute": 0, "second": 0 }
+            },
+            "stages": [
+                { "mass_initial_kg": 1000, "separation_time_s": 5 },
+                { "mass_initial_kg": 100, "aero": { "body_diameter_m": 0.1, "ca_constant": 0.3 } }
+            ],
+            "aerodynamics": { "body_diameter_m": 0.52, "ca_constant": 0.5, "ballistic_coefficient": 120 }
+        }"#;
+        let config: ClientConfig = serde_json::from_str(json).unwrap();
+        let rocket = config.into_rocket();
+
+        let s1 = &rocket.stage_config(0).aero;
+        assert_eq!(s1.body_diameter, 0.52);
+        assert_eq!(s1.const_axial_coefficient, 0.5);
+
+        let s2 = &rocket.stage_config(1).aero;
+        assert_eq!(s2.body_diameter, 0.1);
+        assert_eq!(s2.const_axial_coefficient, 0.3);
+        // Unset fields fall back to the vehicle-wide value
+        assert_eq!(s2.ballistic_coefficient, 120.0);
     }
 }

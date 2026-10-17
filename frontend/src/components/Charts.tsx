@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chart, type ChartConfiguration, type Plugin } from 'chart.js/auto'
-import { Download } from 'lucide-react'
+import { Download, Maximize2, RotateCcw, X } from 'lucide-react'
 import { readStageColor, sampleAt, type Track, type TrackSample } from '../lib/trajectory'
 import { playback } from '../lib/playback'
 
@@ -93,23 +93,54 @@ const eventLines = (track: Track, color: string): Plugin<'line'> => ({
   },
 })
 
-function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
+interface ChartViewProps {
+  spec: ChartSpec
+  track: Track
+  large?: boolean
+  onExpand?: () => void
+}
+
+/** Visible y range for samples inside [x0, x1], padded. */
+function yRangeFor(spec: ChartSpec, track: Track, x0: number, x1: number) {
+  let lo = Infinity
+  let hi = -Infinity
+  for (const s of track.samples) {
+    const x = spec.x === 'time' ? s.t : s.downrange
+    if (x < x0 || x > x1) continue
+    for (const ser of spec.series) {
+      const v = ser.get(s)
+      if (v < lo) lo = v
+      if (v > hi) hi = v
+    }
+  }
+  if (!Number.isFinite(lo)) return null
+  const pad = (hi - lo || Math.abs(hi) || 1) * 0.06
+  return { min: lo - pad, max: hi + pad }
+}
+
+function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chartRef = useRef<Chart<'line'> | null>(null)
   const lineRef = useRef<HTMLDivElement>(null)
   const dotRef = useRef<HTMLDivElement>(null)
   const valueRef = useRef<HTMLSpanElement>(null)
+  const selRef = useRef<HTMLDivElement>(null)
+  const placeRef = useRef<() => void>(() => {})
+  const dragRef = useRef<{ x0: number; moved: boolean } | null>(null)
+  const suppressClick = useRef(false)
+  const [zoomed, setZoomed] = useState(false)
 
   useEffect(() => {
     if (!canvasRef.current) return
     const c = themeColors()
     const xOf = (s: TrackSample) => (spec.x === 'time' ? s.t : s.downrange)
     const stageColors = new Map(track.stages.map((st) => [st.stage, readStageColor(st.stage)]))
+    const tick = large ? 11 : 10
 
     const datasets = spec.series.map((ser) => ({
       label: ser.label,
       data: track.samples.map((s) => ({ x: xOf(s), y: ser.get(s), stage: s.stage })),
-      borderWidth: ser.secondary ? 1.25 : 1.75,
+      borderWidth: ser.secondary ? (large ? 1.5 : 1.25) : large ? 2 : 1.75,
       borderColor: ser.secondary ? c.ink3 : stageColors.get(track.samples[0].stage),
       borderDash: ser.secondary ? [4, 3] : undefined,
       segment: ser.secondary
@@ -133,10 +164,10 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
         parsing: false as unknown as undefined,
         normalized: true,
         interaction: { mode: 'nearest', axis: 'x', intersect: false },
-        layout: { padding: { top: 4, right: 4 } },
+        layout: { padding: { top: 4, right: large ? 8 : 4 } },
         plugins: {
           legend: { display: false },
-          decimation: { enabled: spec.x === 'time', algorithm: 'lttb', samples: 600 },
+          decimation: { enabled: spec.x === 'time', algorithm: 'lttb', samples: large ? 2000 : 600 },
           tooltip: {
             backgroundColor: c.ink,
             titleColor: c.surface,
@@ -160,15 +191,23 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
             max: spec.x === 'time' ? track.t1 : undefined,
             border: { color: c.line },
             grid: { color: c.line, drawTicks: false },
-            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: 10 }, maxTicksLimit: 6, padding: 4 },
+            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 12 : 6, padding: 4, includeBounds: false },
+            title: large
+              ? { display: true, text: spec.x === 'time' ? '打上げからの時間 [s]' : 'ダウンレンジ [km]', color: c.ink3, font: { size: 11 } }
+              : undefined,
           },
           y: {
             border: { display: false },
             grid: { color: c.line, drawTicks: false },
-            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: 10 }, maxTicksLimit: 5, padding: 6 },
+            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 9 : 5, padding: 6, includeBounds: false },
+            title: large && spec.unit ? { display: true, text: `${spec.title} [${spec.unit}]`, color: c.ink3, font: { size: 11 } } : undefined,
           },
         },
         onClick: (_e, _els, chart) => {
+          if (suppressClick.current) {
+            suppressClick.current = false
+            return
+          }
           const evt = _e as unknown as { x: number }
           const xv = chart.scales.x.getValueForPixel(evt.x)
           if (xv === undefined) return
@@ -186,6 +225,12 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
     chartRef.current = chart
 
     const primary = spec.series[0]
+    const colorCache = new Map<number, string>()
+    const readStageColorCached = (stage: number) => {
+      let v = colorCache.get(stage)
+      if (!v) colorCache.set(stage, (v = readStageColor(stage)))
+      return v
+    }
     const place = () => {
       const t = playback.get().t
       const s = sampleAt(track, t)
@@ -195,6 +240,7 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
       const yv = primary.get(s)
       const y = chart.scales.y.getPixelForValue(yv)
       const inside = x >= area.left - 0.5 && x <= area.right + 0.5
+      const insideY = y >= area.top - 0.5 && y <= area.bottom + 0.5
       if (lineRef.current) {
         lineRef.current.style.display = inside && spec.x === 'time' ? 'block' : 'none'
         lineRef.current.style.transform = `translateX(${x}px)`
@@ -202,7 +248,7 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
         lineRef.current.style.height = `${area.bottom - area.top}px`
       }
       if (dotRef.current) {
-        dotRef.current.style.display = inside ? 'block' : 'none'
+        dotRef.current.style.display = inside && insideY ? 'block' : 'none'
         dotRef.current.style.transform = `translate(${x - 4}px, ${y - 4}px)`
         dotRef.current.style.background = readStageColorCached(s.stage)
       }
@@ -210,24 +256,78 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
         valueRef.current.textContent = `${fmt(yv, spec.digits)}${spec.unit ? ` ${spec.unit}` : ''}`
       }
     }
-    const colorCache = new Map<number, string>()
-    const readStageColorCached = (stage: number) => {
-      let v = colorCache.get(stage)
-      if (!v) colorCache.set(stage, (v = readStageColor(stage)))
-      return v
-    }
+    placeRef.current = place
 
     place()
     const unsub = playback.subscribe(place)
     const ro = new ResizeObserver(() => requestAnimationFrame(place))
     ro.observe(canvasRef.current)
+    setZoomed(false)
     return () => {
       unsub()
       ro.disconnect()
       chart.destroy()
       chartRef.current = null
     }
-  }, [spec, track])
+  }, [spec, track, large])
+
+  const setRange = (x0?: number, x1?: number) => {
+    const chart = chartRef.current
+    if (!chart) return
+    const xs = chart.options.scales!.x!
+    const ys = chart.options.scales!.y!
+    if (x0 === undefined || x1 === undefined) {
+      xs.min = spec.x === 'time' ? track.t0 : undefined
+      xs.max = spec.x === 'time' ? track.t1 : undefined
+      ys.min = undefined
+      ys.max = undefined
+      setZoomed(false)
+    } else {
+      xs.min = x0
+      xs.max = x1
+      const yr = yRangeFor(spec, track, x0, x1)
+      ys.min = yr?.min
+      ys.max = yr?.max
+      setZoomed(true)
+    }
+    chart.update('none')
+    placeRef.current()
+  }
+
+  // Drag across the plot to zoom into that x range (enlarged view only).
+  const localX = (e: React.PointerEvent) => e.clientX - e.currentTarget.getBoundingClientRect().left
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!large || e.button !== 0) return
+    dragRef.current = { x0: localX(e), moved: false }
+  }
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current
+    const sel = selRef.current
+    const area = chartRef.current?.chartArea
+    if (!d || !sel || !area) return
+    const x = Math.min(Math.max(localX(e), area.left), area.right)
+    if (!d.moved && Math.abs(x - d.x0) < 6) return
+    if (!d.moved) e.currentTarget.setPointerCapture(e.pointerId)
+    d.moved = true
+    sel.style.display = 'block'
+    sel.style.left = `${Math.min(d.x0, x)}px`
+    sel.style.width = `${Math.abs(x - d.x0)}px`
+    sel.style.top = `${area.top}px`
+    sel.style.height = `${area.bottom - area.top}px`
+  }
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (selRef.current) selRef.current.style.display = 'none'
+    const chart = chartRef.current
+    if (!d?.moved || !chart) return
+    suppressClick.current = true
+    const area = chart.chartArea
+    const x = Math.min(Math.max(localX(e), area.left), area.right)
+    const a = chart.scales.x.getValueForPixel(Math.min(d.x0, x))
+    const b = chart.scales.x.getValueForPixel(Math.max(d.x0, x))
+    if (a !== undefined && b !== undefined && b - a > 1e-6) setRange(a, b)
+  }
 
   const download = () => {
     const chart = chartRef.current
@@ -238,42 +338,125 @@ function ChartCard({ spec, track }: { spec: ChartSpec; track: Track }) {
     a.click()
   }
 
+  const iconBtn =
+    'flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-3 transition-opacity hover:bg-surface-2 hover:text-ink'
+  const revealOnHover = 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
+
   return (
-    <figure className="group relative flex h-[210px] min-w-0 flex-col rounded-[8px] border border-line bg-surface p-3 pb-2">
-      <figcaption className="flex h-6 shrink-0 items-center gap-2 pb-1">
-        <span className="text-[12px] font-semibold">{spec.title}</span>
+    <figure
+      className={
+        large
+          ? 'flex h-full min-h-0 min-w-0 flex-col'
+          : 'group relative flex h-[210px] min-w-0 flex-col rounded-[8px] border border-line bg-surface p-3 pb-2'
+      }
+      onDoubleClick={large ? undefined : onExpand}
+    >
+      <figcaption className={`flex shrink-0 items-center gap-2 pb-1 ${large ? 'h-8' : 'h-6'}`}>
+        <span className={large ? 'text-[15px] font-semibold' : 'text-[12px] font-semibold'}>{spec.title}</span>
         {spec.series.length > 1 && (
           <span className="hidden truncate text-[11px] text-ink-3 sm:inline">
             {spec.series[0].label} / <span className="border-b border-dashed border-ink-3">{spec.series[1].label}</span>
           </span>
         )}
-        <span ref={valueRef} className="num ml-auto whitespace-nowrap text-[12px] text-ink" />
+        <span ref={valueRef} className={`num ml-auto whitespace-nowrap text-ink ${large ? 'text-[14px]' : 'text-[12px]'}`} />
+        {large && zoomed && (
+          <button type="button" onClick={() => setRange()} className="flex h-7 items-center gap-1 rounded-[6px] border border-line px-2 text-[12px] text-ink-2 hover:bg-surface-2">
+            <RotateCcw className="h-3 w-3" /> 全体を表示
+          </button>
+        )}
         <button
           type="button"
           onClick={download}
           aria-label={`${spec.title}をPNGで保存`}
           title="PNGで保存"
-          className="-mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-ink-3 opacity-0 transition-opacity hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+          className={`${iconBtn} ${large ? '' : `-mr-1 ${revealOnHover}`}`}
         >
-          <Download className="h-3 w-3" />
+          <Download className="h-3.5 w-3.5" />
         </button>
+        {!large && onExpand && (
+          <button type="button" onClick={onExpand} aria-label={`${spec.title}を拡大`} title="拡大（ダブルクリックでも開きます）" className={`${iconBtn} -mr-1 ${revealOnHover}`}>
+            <Maximize2 className="h-3.5 w-3.5" />
+          </button>
+        )}
       </figcaption>
-      <div className="relative min-h-0 flex-1 cursor-crosshair">
+      <div
+        className="relative min-h-0 flex-1 cursor-crosshair touch-pan-y"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onDoubleClick={large ? () => setRange() : undefined}
+      >
         <canvas ref={canvasRef} />
         <div ref={lineRef} className="pointer-events-none absolute left-0 w-px bg-ink/60" style={{ top: 0 }} />
         <div ref={dotRef} className="pointer-events-none absolute left-0 top-0 h-2 w-2 rounded-full ring-2 ring-surface" />
+        <div ref={selRef} className="pointer-events-none absolute hidden border-x border-signal/60 bg-signal/10" />
       </div>
+      {large && (
+        <p className="pt-1 text-[11px] text-ink-3">
+          横にドラッグで範囲を拡大 · ダブルクリックで全体に戻す · クリックでその時刻へ移動
+        </p>
+      )}
     </figure>
   )
 }
 
-export function ChartGrid({ track }: { track: Track }) {
+function ChartDialog({ index, track, onIndex, onClose }: { index: number; track: Track; onIndex: (i: number) => void; onClose: () => void }) {
+  const spec = CHARTS[index]
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'PageDown' || e.key === ']') onIndex((index + 1) % CHARTS.length)
+      else if (e.key === 'PageUp' || e.key === '[') onIndex((index - 1 + CHARTS.length) % CHARTS.length)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [index, onIndex, onClose])
+
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2">
-      {CHARTS.map((spec) => (
-        <ChartCard key={spec.id} spec={spec} track={track} />
-      ))}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-2 sm:p-6" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${spec.title}（拡大表示）`}
+        onClick={(e) => e.stopPropagation()}
+        className="flex h-[min(760px,92vh)] w-[min(1200px,100%)] flex-col rounded-[10px] border border-line bg-surface p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.4)] sm:p-4"
+      >
+        <div className="mb-2 flex items-center gap-1 border-b border-line pb-2">
+          <div className="scroll-quiet flex min-w-0 flex-1 gap-1 overflow-x-auto">
+            {CHARTS.map((c, i) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => onIndex(i)}
+                className={`h-7 shrink-0 rounded-[6px] px-2 text-[12px] ${i === index ? 'bg-ink text-surface' : 'text-ink-2 hover:bg-surface-2'}`}
+              >
+                {c.title}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={onClose} aria-label="閉じる (Esc)" title="閉じる (Esc)" className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1">
+          <ChartView key={spec.id} spec={spec} track={track} large />
+        </div>
+      </div>
     </div>
+  )
+}
+
+export function ChartGrid({ track }: { track: Track }) {
+  const [open, setOpen] = useState<number | null>(null)
+  return (
+    <>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2">
+        {CHARTS.map((spec, i) => (
+          <ChartView key={spec.id} spec={spec} track={track} onExpand={() => setOpen(i)} />
+        ))}
+      </div>
+      {open !== null && <ChartDialog index={open} track={track} onIndex={setOpen} onClose={() => setOpen(null)} />}
+    </>
   )
 }
 

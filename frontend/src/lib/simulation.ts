@@ -244,6 +244,17 @@ export type ClientStageConfig = {
   isp_profile?: ClientTimeSample[]
   cg_position_m: [number, number, number]
   rotational_inertia_kgm2: [number, number, number]
+  /** Values for this stage only; unset fields use `aerodynamics` (Mach tables are always vehicle-wide) */
+  aero?: ClientStageAero
+}
+
+export type ClientStageAero = {
+  body_diameter_m?: number
+  cn_constant?: number
+  cn_multiplier?: number
+  ca_constant?: number
+  ca_multiplier?: number
+  ballistic_coefficient?: number
 }
 
 export type ClientIntegratorConfig = {

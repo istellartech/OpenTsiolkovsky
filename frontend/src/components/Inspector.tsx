@@ -509,6 +509,33 @@ function VehicleTab({
         <NumberField label="Isp倍率" unit="×" path={p('isp_multiplier')} value={stage.isp_multiplier} onChange={(v) => setStage({ isp_multiplier: v })} />
       </Group>
 
+      <Group title="この段の空力" note="上段で機体が細くなる場合などに使います。マッハ数テーブルは空力タブの設定を全段で共通に使います。">
+        <Toggle
+          label="この段だけ空力の値を変える"
+          checked={!!stage.aero}
+          onChange={(on) =>
+            setStage({
+              aero: on
+                ? {
+                    body_diameter_m: config.aerodynamics.body_diameter_m,
+                    ca_constant: config.aerodynamics.ca_constant,
+                    cn_constant: config.aerodynamics.cn_constant,
+                    ballistic_coefficient: config.aerodynamics.ballistic_coefficient,
+                  }
+                : undefined,
+            })
+          }
+        />
+        {stage.aero && (
+          <>
+            <NumberField label="機体直径" unit="m" value={stage.aero.body_diameter_m ?? config.aerodynamics.body_diameter_m} onChange={(v) => setStage({ aero: { ...stage.aero, body_diameter_m: v } })} />
+            <NumberField label="軸力係数 CA" unit="—" value={stage.aero.ca_constant ?? config.aerodynamics.ca_constant} onChange={(v) => setStage({ aero: { ...stage.aero, ca_constant: v } })} />
+            <NumberField label="法線力係数 CN" unit="—" value={stage.aero.cn_constant ?? config.aerodynamics.cn_constant} onChange={(v) => setStage({ aero: { ...stage.aero, cn_constant: v } })} />
+            <NumberField label="弾道係数" unit="kg/m²" value={stage.aero.ballistic_coefficient ?? config.aerodynamics.ballistic_coefficient} onChange={(v) => setStage({ aero: { ...stage.aero, ballistic_coefficient: v } })} />
+          </>
+        )}
+      </Group>
+
       <Group title="ノズル">
         <NumberField label="スロート径" unit="m" path={p('throat_diameter_m')} value={stage.throat_diameter_m} onChange={(v) => setStage({ throat_diameter_m: v })} />
         <NumberField label="膨張比" unit="—" path={p('nozzle_expansion_ratio')} value={stage.nozzle_expansion_ratio} onChange={(v) => setStage({ nozzle_expansion_ratio: v })} />
