@@ -16,6 +16,14 @@ else
   echo "[VERCEL BUILD] Rust already installed"
 fi
 
+# The build image can ship rustup without a default toolchain, in which case
+# every rustc/cargo call fails ("no default is configured").
+if ! rustup show active-toolchain >/dev/null 2>&1; then
+  echo "[VERCEL BUILD] No default Rust toolchain; installing stable..."
+  rustup toolchain install stable --profile minimal
+  rustup default stable
+fi
+
 # Add wasm32 target
 echo "[VERCEL BUILD] Adding wasm32-unknown-unknown target..."
 rustup target add wasm32-unknown-unknown
