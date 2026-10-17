@@ -309,6 +309,9 @@ export default function Globe({ track, reference = null }: GlobeProps) {
     }
   })
 
+  const basemapRef = useRef(basemap)
+  basemapRef.current = basemap
+
   const changeBasemap = (next: Basemap) => {
     setBasemapState(next)
     if (viewerRef.current) setBasemap(viewerRef.current, next, themeRef.current)
@@ -321,7 +324,7 @@ export default function Globe({ track, reference = null }: GlobeProps) {
 
   useEffect(() => {
     if (!containerRef.current) return
-    const viewer = createViewer(containerRef.current, basemap, themeRef.current)
+    const viewer = createViewer(containerRef.current, basemapRef.current, themeRef.current)
     viewerRef.current = viewer
     if (import.meta.env.DEV) (window as unknown as { __viewer: Viewer }).__viewer = viewer
     return () => {
@@ -353,8 +356,6 @@ export default function Globe({ track, reference = null }: GlobeProps) {
   }, [track, reference, theme, lang])
 
   // Restyle the scene when the colour theme changes (track entities are rebuilt above).
-  const basemapRef = useRef(basemap)
-  basemapRef.current = basemap
   const styledTheme = useRef(theme)
   useEffect(() => {
     const viewer = viewerRef.current

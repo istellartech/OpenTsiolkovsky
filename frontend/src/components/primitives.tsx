@@ -240,7 +240,7 @@ export function VectorField({
           <div key={axis} className="relative">
             <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-[11px] text-ink-3">{axis}</span>
             <NumberInput
-              ariaLabel={`${label} ${axis}`}
+              ariaLabel={typeof label === 'string' ? `${label} ${axis}` : axis}
               value={value[i]}
               error={!!error}
               inputRef={i === 0 ? ref : undefined}

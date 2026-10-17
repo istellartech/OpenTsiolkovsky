@@ -110,9 +110,7 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
     push('launch.velocity_ned_mps', tr('初期速度は5,000 m/s以下にしてください。', 'Initial velocity must be 5,000 m/s or less.'))
   }
 
-  // Safe access to datetime_utc with fallback
-  const datetimeUtc = launch.datetime_utc || {}
-  const { year = 2024, month = 1, day = 1, hour = 0, minute = 0, second = 0 } = datetimeUtc
+  const { year, month, day, hour, minute, second } = launch.datetime_utc
   const launchDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
   const isValidDate =
     launchDate.getUTCFullYear() === year &&

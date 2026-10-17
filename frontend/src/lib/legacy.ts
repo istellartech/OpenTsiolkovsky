@@ -22,6 +22,7 @@ export const isLegacyParamFile = (v: unknown): v is Json => !!v && typeof v === 
 
 const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
 const obj = (v: unknown): Json => (v && typeof v === 'object' ? (v as Json) : {})
+const str = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback)
 const bool = (v: unknown) => v === true
 
 /** Rows of the first `n` numeric columns; header and non-numeric rows are skipped. */
@@ -130,7 +131,7 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
 
   let cnProfile: ClientMachSample[] = []
   if (bool(aero['normal coefficient file exist?(bool)'])) {
-    const name = baseName(String(aero['normal coefficient file name(str)'] ?? ''))
+    const name = baseName(str(aero['normal coefficient file name(str)']))
     const text = csvByName.get(name)
     if (text === undefined) missing.push(name)
     else if (isSurface(text)) unsupported.push(tr(`CN の2次元テーブル（${name}）— 定数 CN を使います`, `2-D CN table (${name}) — constant CN is used instead`))
@@ -140,7 +141,7 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
   const calc = obj(json['calculate condition'])
   const outputStep = num(calc['time step for output[s]'], 1)
   const integ = obj(calc.integrator)
-  const method = String(integ['method(str)'] ?? 'rk4').toLowerCase() === 'rk45' ? 'rk45' : 'rk4'
+  const method = str(integ['method(str)'], 'rk4').toLowerCase() === 'rk45' ? 'rk45' : 'rk4'
   if (bool(calc['air density variation file exist?(bool)'])) unsupported.push(tr('大気密度変動ファイル', 'air density variation file'))
 
   const launch = obj(json.launch)
@@ -154,7 +155,7 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
   const attRows = table(att['attitude file exist?(bool)'], att['attitude file name(str)'], 3)
 
   const config: ClientConfig = {
-    name: String(json['name(str)'] ?? 'imported'),
+    name: str(json['name(str)'], 'imported'),
     simulation: {
       duration_s: num(calc['end time[s]'], 100),
       output_step_s: outputStep,

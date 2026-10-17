@@ -1,19 +1,31 @@
 import { Component, type ReactNode } from 'react'
 
+interface Props {
+  fallback: (reset: () => void) => ReactNode
+  /** A change of this value clears the error (e.g. a new result to show) */
+  resetKey?: unknown
+  children: ReactNode
+}
+
+interface State {
+  failed: boolean
+  resetKey: unknown
+}
+
 /** Keeps a failing view (e.g. the 3D globe) from taking the whole app down. */
-export class ErrorBoundary extends Component<{ fallback: (reset: () => void) => ReactNode; resetKey?: unknown; children: ReactNode }, { failed: boolean }> {
-  state = { failed: false }
+export class ErrorBoundary extends Component<Props, State> {
+  state: State = { failed: false, resetKey: this.props.resetKey }
 
   static getDerivedStateFromError() {
     return { failed: true }
   }
 
-  componentDidCatch(error: unknown) {
-    console.error('View failed:', error)
+  static getDerivedStateFromProps(props: Props, state: State): Partial<State> | null {
+    return props.resetKey !== state.resetKey ? { failed: false, resetKey: props.resetKey } : null
   }
 
-  componentDidUpdate(prev: { resetKey?: unknown }) {
-    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false })
+  componentDidCatch(error: unknown) {
+    console.error('View failed:', error)
   }
 
   render() {

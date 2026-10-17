@@ -37,11 +37,11 @@ export function vec3ToObject(vec: Vec3Json | undefined): Vec3 {
   }
 
   if (Array.isArray(vec)) {
-    const [x = 0, y = 0, z = 0] = vec
+    // Older outputs may carry short or non-numeric arrays.
     return {
-      x: Number(x),
-      y: Number(y),
-      z: Number(z),
+      x: Number(vec[0]) || 0,
+      y: Number(vec[1]) || 0,
+      z: Number(vec[2]) || 0,
     }
   }
 

@@ -51,7 +51,7 @@ export function suggestedSpeed(duration: number): number {
 
 export const playback = {
   get: () => state,
-  subscribe(l: Listener) {
+  subscribe: (l: Listener) => {
     listeners.add(l)
     return () => {
       listeners.delete(l)

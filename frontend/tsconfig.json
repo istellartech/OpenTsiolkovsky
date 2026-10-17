@@ -11,7 +11,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "lib": ["ES2020", "DOM"],
-    "types": ["vite/client"]
+    "types": ["vite-plus/client"]
   },
   "include": ["src"]
 }
