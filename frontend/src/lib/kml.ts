@@ -1,5 +1,6 @@
 // Google Earth export of a flight track.
 import type { Track } from './trajectory'
+import { eventLabel } from './events'
 
 function escapeXML(str: string): string {
   return str
@@ -19,7 +20,7 @@ export function generateKML(track: Track, vehicleName: string): string {
     .map((e) => {
       const s = track.samples.reduce((best, cur) => (Math.abs(cur.t - e.t) < Math.abs(best.t - e.t) ? cur : best))
       return `    <Placemark>
-      <name>${escapeXML(e.label)}</name>
+      <name>${escapeXML(eventLabel(e))}</name>
       <description>${escapeXML(`T+${e.t.toFixed(1)} s, ${(s.alt / 1000).toFixed(2)} km`)}</description>
       <styleUrl>#eventPoint</styleUrl>
       <Point>

@@ -5,6 +5,7 @@ import { sampleAt, type Track } from '../lib/trajectory'
 import { cn } from '../lib/cn'
 import { fmt } from '../lib/format'
 import { stageColorVar } from '../lib/theme'
+import { eventLabel, eventShort } from '../lib/events'
 
 /** Event labels that would collide with the previous one are dropped. */
 function spacedLabels(track: Track, pct: (t: number) => number, minGap = 4.5) {
@@ -66,7 +67,7 @@ function Scrubber({ track }: { track: Track }) {
       {track.events.map((e) => (
         <div
           key={`${e.kind}-${e.t}`}
-          title={`${e.label}  T+${fmt(e.t)} s`}
+          title={`${eventLabel(e)}  T+${fmt(e.t)} s`}
           className="absolute top-0 h-2 w-px bg-ink-3"
           style={{ left: `${pct(e.t)}%` }}
         />
@@ -104,7 +105,7 @@ function Scrubber({ track }: { track: Track }) {
               className="num absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none text-ink-3"
               style={{ left: `${pct(e.t)}%` }}
             >
-              {e.short}
+              {eventShort(e)}
             </span>
           ))}
       </div>
@@ -190,7 +191,7 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
           {s.stage}段
         </div>
       </div>
-      {!compact && <div className="mb-1.5 h-4 truncate text-[11px] text-ink-3">{last?.label}</div>}
+      {!compact && <div className="mb-1.5 h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last)}</div>}
       <dl className={cn('grid gap-x-3', compact ? 'mt-1 grid-cols-3 gap-y-0.5' : 'grid-cols-1 gap-y-[3px]')}>
         {(compact ? rows.slice(0, 3) : rows).map(([k, v, u]) => (
           <div key={k} className={cn('flex items-baseline', compact ? 'flex-col' : 'justify-between')}>

@@ -5,6 +5,7 @@ import { sampleAt, type Track, type TrackSample } from '../lib/trajectory'
 import { playback } from '../lib/playback'
 import { fmt } from '../lib/format'
 import { cssVar, readStageColor, useTheme } from '../lib/theme'
+import { eventLabel } from '../lib/events'
 
 interface Series {
   label: string
@@ -532,7 +533,7 @@ export function EventList({ track }: { track: Track }) {
               <span className={`mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle ${i <= active ? 'bg-signal' : 'bg-line-strong'}`} />
               T+{fmt(e.t, 1)}
             </td>
-            <td className="py-1.5 pr-3">{e.label}</td>
+            <td className="py-1.5 pr-3">{eventLabel(e)}</td>
             <td className="num py-1.5 pr-3 text-right">{fmt(s.alt / 1000, 1)} km</td>
             <td className="num py-1.5 pr-3 text-right">{fmt(s.speed, 0)} m/s</td>
             <td className="num hidden py-1.5 pr-3 text-right sm:table-cell">{fmt(s.mach, 2)}</td>

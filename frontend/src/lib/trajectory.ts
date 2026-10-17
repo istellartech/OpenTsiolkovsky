@@ -41,8 +41,12 @@ export type FlightEventKind = 'liftoff' | 'maxq' | 'burnout' | 'separation' | 'a
 export interface FlightEvent {
   kind: FlightEventKind
   t: number
-  label: string
-  short: string
+  /** Stage the event belongs to (burnout), or the stage being dropped (separation) */
+  stage?: number
+  /** Stage that continues after a separation */
+  nextStage?: number
+  /** For 'end': the vehicle reached the ground */
+  landed?: boolean
 }
 
 export interface StageSpan {
@@ -167,37 +171,32 @@ export function buildTrack(input: SimulationState[]): Track | null {
   }
 
   // Events
-  const events: FlightEvent[] = [{ kind: 'liftoff', t: first.t, label: 'リフトオフ', short: 'LO' }]
+  const events: FlightEvent[] = [{ kind: 'liftoff', t: first.t }]
 
   // Max-Q only means something inside the atmosphere during powered ascent.
   const maxQSample = samples[maxQIdx]
   if (maxQSample.q > 0 && maxQIdx > 0) {
-    events.push({ kind: 'maxq', t: maxQSample.t, label: '最大動圧', short: 'Max-Q' })
+    events.push({ kind: 'maxq', t: maxQSample.t })
   }
 
   for (let i = 1; i < samples.length; i++) {
     const prev = samples[i - 1]
     const cur = samples[i]
     if (cur.stage !== prev.stage) {
-      events.push({
-        kind: 'separation',
-        t: cur.t,
-        label: `${prev.stage}/${cur.stage}段 分離`,
-        short: `SEP${prev.stage}`,
-      })
+      events.push({ kind: 'separation', t: cur.t, stage: prev.stage, nextStage: cur.stage })
     } else if (prev.thrust > 0 && cur.thrust <= 0) {
-      events.push({ kind: 'burnout', t: cur.t, label: `${cur.stage}段 燃焼終了`, short: `BO${cur.stage}` })
+      events.push({ kind: 'burnout', t: cur.t, stage: cur.stage })
     }
   }
 
   const apogee = samples[apogeeIdx]
   const descends = apogeeIdx < samples.length - 1 && last.alt < apogee.alt - 1
   if (descends) {
-    events.push({ kind: 'apogee', t: apogee.t, label: '最高到達点', short: 'APO' })
+    events.push({ kind: 'apogee', t: apogee.t })
   }
 
   const landed = last.alt <= 1
-  events.push({ kind: 'end', t: last.t, label: landed ? '着地' : '計算終了', short: landed ? 'IMP' : 'END' })
+  events.push({ kind: 'end', t: last.t, landed })
   events.sort((a, b) => a.t - b.t)
 
   return {

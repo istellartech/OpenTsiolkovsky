@@ -1,13 +1,12 @@
 // Number formatting shared by the UI.
-
-const LOCALE = 'ja-JP'
+import { locale } from './i18n'
 
 /** Fixed number of decimals with digit grouping; "—" for non-finite values. */
 export const fmt = (v: number, d = 1) =>
-  Number.isFinite(v) ? v.toLocaleString(LOCALE, { minimumFractionDigits: d, maximumFractionDigits: d }) : '—'
+  Number.isFinite(v) ? v.toLocaleString(locale(), { minimumFractionDigits: d, maximumFractionDigits: d }) : '—'
 
 /** Up to `d` decimals, trailing zeros dropped. */
-export const fmtMax = (v: number, d: number) => v.toLocaleString(LOCALE, { maximumFractionDigits: d })
+export const fmtMax = (v: number, d: number) => v.toLocaleString(locale(), { maximumFractionDigits: d })
 
 export const fmtMass = (kg: number) => (kg >= 10000 ? `${fmtMax(kg / 1000, 1)} t` : `${fmtMax(Math.round(kg), 0)} kg`)
 
