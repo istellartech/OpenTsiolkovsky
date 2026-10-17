@@ -1,8 +1,9 @@
+use crate::physics::coordinates::CoordinateTransform;
 /// Input/Output handling for OpenTsiolkovsky
 ///
 /// Handles JSON configuration files and CSV data files
-use crate::rocket::{Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
-use crate::simulator::{FallBody, SimulationState, impact_point};
+use crate::rocket::{NeutralityData, Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
+use crate::simulator::{EventKind, FallBody, FlightEvent, SimulationState, impact_point};
 use serde_json;
 use std::fs;
 use std::io::Read;
@@ -121,16 +122,6 @@ fn validate_calculate_condition(
             "計算条件: 出力時間刻み '{:.6}秒' は正の有限値である必要があります",
             calc.time_step
         ));
-    } else if calc.time_step > calc.end_time / 10.0 {
-        errors.push(format!(
-            "計算条件: 出力時間刻み '{:.3}秒' が終了時間 '{:.1}秒' に対して大きすぎます (推奨: <{:.3}秒)",
-            calc.time_step, calc.end_time, calc.end_time / 100.0
-        ));
-    } else if calc.time_step < 0.001 {
-        errors.push(format!(
-            "計算条件: 出力時間刻み '{:.6}秒' が小さすぎて大量の出力データが生成される可能性があります",
-            calc.time_step
-        ));
     }
 
     // Validate air density variation
@@ -146,28 +137,33 @@ fn validate_calculate_condition(
     // Validate integrator settings
     match calc.integrator.method {
         crate::rocket::IntegratorMethod::Rk4 => {
-            if let Some(step) = calc.integrator.rk4_step {
-                if !step.is_finite() || step <= 0.0 {
-                    errors.push(format!(
-                        "積分器設定: RK4ステップサイズ '{:.6}秒' は正の有限値である必要があります",
-                        step
-                    ));
-                } else if step > 1.0 {
-                    errors.push(format!(
-                        "積分器設定: RK4ステップサイズ '{:.3}秒' が大きすぎます (推奨: <1.0秒)",
-                        step
-                    ));
-                } else if step < 1e-6 {
-                    errors.push(format!(
-                        "積分器設定: RK4ステップサイズ '{:.6}秒' が小さすぎて計算時間が過大になる可能性があります",
-                        step
-                    ));
-                }
+            if let Some(step) = calc.integrator.rk4_step
+                && (!step.is_finite() || step <= 0.0)
+            {
+                errors.push(format!(
+                    "積分器設定: RK4ステップサイズ '{:.6}秒' は正の有限値である必要があります",
+                    step
+                ));
             }
         }
         crate::rocket::IntegratorMethod::Rk45 => {
-            // RK45 doesn't have explicit tolerance settings in this implementation
-            // The adaptive algorithm handles tolerance internally
+            for (name, tol) in [
+                ("絶対", calc.integrator.rk45_abs_tol),
+                ("相対", calc.integrator.rk45_rel_tol),
+            ] {
+                if !tol.is_finite() || tol < 0.0 {
+                    errors.push(format!(
+                        "積分器設定: RK45の{}許容誤差 '{:e}' は非負の有限値である必要があります",
+                        name, tol
+                    ));
+                }
+            }
+            if calc.integrator.rk45_abs_tol <= 0.0 && calc.integrator.rk45_rel_tol <= 0.0 {
+                errors.push(
+                    "積分器設定: RK45の許容誤差は少なくとも一方が正である必要があります"
+                        .to_string(),
+                );
+            }
         }
     }
 }
@@ -197,24 +193,13 @@ fn validate_launch_condition(launch: &crate::rocket::LaunchCondition, errors: &m
         ));
     } else if alt < -500.0 {
         errors.push(format!("打ち上げ条件: 高度 '{:.1}m' が海面下すぎます", alt));
-    } else if alt > 10000.0 {
-        errors.push(format!(
-            "打ち上げ条件: 高度 '{:.1}m' が高すぎます (通常の発射台は10km未満)",
-            alt
-        ));
     }
 
     // Validate velocity NED
     let [vn, ve, vd] = launch.velocity_ned;
-    let velocity_mag = (vn * vn + ve * ve + vd * vd).sqrt();
 
     if !vn.is_finite() || !ve.is_finite() || !vd.is_finite() {
         errors.push("打ち上げ条件: 初期速度成分は有限値である必要があります".to_string());
-    } else if velocity_mag > 100.0 {
-        errors.push(format!(
-            "打ち上げ条件: 初期速度 '{:.1}m/s' が大きすぎます (通常は地面からの静止状態)",
-            velocity_mag
-        ));
     }
 
     // Validate launch time
@@ -269,13 +254,6 @@ fn validate_stages(stages: &[crate::rocket::StageConfig], errors: &mut Vec<Strin
         return;
     }
 
-    if stages.len() > 10 {
-        errors.push(format!(
-            "ステージ設定: ステージ数 '{}個' が多すぎます (通常は1-4個)",
-            stages.len()
-        ));
-    }
-
     for (i, stage) in stages.iter().enumerate() {
         let stage_num = i + 1;
         validate_single_stage(stage, stage_num, errors);
@@ -296,11 +274,6 @@ fn validate_single_stage(
             "ステージ{}: 初期質量 '{:.1}kg' は正の有限値である必要があります",
             stage_num, stage.mass_initial
         ));
-    } else if stage.mass_initial > 1000000.0 {
-        errors.push(format!(
-            "ステージ{}: 初期質量 '{:.0}kg' が大きすぎます (通常は100万kg未満)",
-            stage_num, stage.mass_initial
-        ));
     }
 
     // Validate thrust timing
@@ -318,9 +291,9 @@ fn validate_single_stage(
         ));
     }
 
-    if stage.thrust.burn_end_time <= stage.thrust.burn_start_time {
+    if stage.thrust.burn_end_time < stage.thrust.burn_start_time {
         errors.push(format!(
-            "ステージ{}: 燃焼終了時刻 '{:.3}秒' は燃焼開始時刻 '{:.3}秒' より後である必要があります",
+            "ステージ{}: 燃焼終了時刻 '{:.3}秒' は燃焼開始時刻 '{:.3}秒' 以降である必要があります",
             stage_num, stage.thrust.burn_end_time, stage.thrust.burn_start_time
         ));
     }
@@ -331,11 +304,6 @@ fn validate_single_stage(
             "ステージ{}: 真空推力 '{:.1}N' は非負の有限値である必要があります",
             stage_num, stage.thrust.const_thrust_vac
         ));
-    } else if stage.thrust.const_thrust_vac > 50000000.0 {
-        errors.push(format!(
-            "ステージ{}: 真空推力 '{:.0}N' が大きすぎます (通常は50MN未満)",
-            stage_num, stage.thrust.const_thrust_vac
-        ));
     }
 
     // Validate ISP
@@ -344,22 +312,12 @@ fn validate_single_stage(
             "ステージ{}: 真空比推力 '{:.1}秒' は正の有限値である必要があります",
             stage_num, stage.thrust.const_isp_vac
         ));
-    } else if stage.thrust.const_isp_vac > 500.0 {
-        errors.push(format!(
-            "ステージ{}: 真空比推力 '{:.1}秒' が高すぎます (通常は500秒未満)",
-            stage_num, stage.thrust.const_isp_vac
-        ));
-    } else if stage.thrust.const_isp_vac < 100.0 {
-        errors.push(format!(
-            "ステージ{}: 真空比推力 '{:.1}秒' が低すぎます (通常は100秒以上)",
-            stage_num, stage.thrust.const_isp_vac
-        ));
     }
 
     // Validate engine geometry
-    if !stage.thrust.throat_diameter.is_finite() || stage.thrust.throat_diameter <= 0.0 {
+    if !stage.thrust.throat_diameter.is_finite() || stage.thrust.throat_diameter < 0.0 {
         errors.push(format!(
-            "ステージ{}: スロート直径 '{:.4}m' は正の有限値である必要があります",
+            "ステージ{}: スロート直径 '{:.4}m' は非負の有限値である必要があります",
             stage_num, stage.thrust.throat_diameter
         ));
     }
@@ -376,11 +334,6 @@ fn validate_single_stage(
     if !stage.aero.body_diameter.is_finite() || stage.aero.body_diameter <= 0.0 {
         errors.push(format!(
             "ステージ{}: 機体直径 '{:.3}m' は正の有限値である必要があります",
-            stage_num, stage.aero.body_diameter
-        ));
-    } else if stage.aero.body_diameter > 50.0 {
-        errors.push(format!(
-            "ステージ{}: 機体直径 '{:.1}m' が大きすぎます (通常は50m未満)",
             stage_num, stage.aero.body_diameter
         ));
     }
@@ -413,6 +366,60 @@ fn validate_stage_separation_timing(
 pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
     let mut warnings = Vec::new();
 
+    // Unusual but valid values (an air launch, a restart in flight, ...)
+    let calc = &config.calculate_condition;
+    if calc.time_step.is_finite() && calc.time_step > calc.end_time / 10.0 {
+        warnings.push(format!(
+            "計算条件: 出力時間刻み '{:.3}秒' が終了時間 '{:.1}秒' に対して大きく、出力点が10点未満です",
+            calc.time_step, calc.end_time
+        ));
+    } else if calc.time_step < 0.001 {
+        warnings.push(format!(
+            "計算条件: 出力時間刻み '{:.6}秒' が小さく、出力データが大量になります",
+            calc.time_step
+        ));
+    }
+    if let Some(step) = calc.integrator.rk4_step
+        && calc.integrator.method == crate::rocket::IntegratorMethod::Rk4
+        && step.is_finite()
+        && step > 1.0
+    {
+        warnings.push(format!(
+            "積分器設定: RK4ステップサイズ '{:.3}秒' は大きく、精度が落ちる可能性があります (推奨: 1秒以下)",
+            step
+        ));
+    }
+    let alt = config.launch.position_llh[2];
+    if alt > 10_000.0 {
+        warnings.push(format!(
+            "打ち上げ条件: 高度 '{:.1}m' から開始します (空中発射または飛行途中からの再開)",
+            alt
+        ));
+    }
+    let speed = config
+        .launch
+        .velocity_ned
+        .iter()
+        .map(|v| v * v)
+        .sum::<f64>()
+        .sqrt();
+    if speed > 100.0 {
+        warnings.push(format!(
+            "打ち上げ条件: 初期速度 '{:.1}m/s' から開始します (発射台での保持・レール拘束は行いません)",
+            speed
+        ));
+    }
+    for (i, stage) in config.stages.iter().enumerate() {
+        let isp = stage.thrust.const_isp_vac;
+        if !stage.thrust.isp_file_exists && isp.is_finite() && !(100.0..=500.0).contains(&isp) {
+            warnings.push(format!(
+                "ステージ{}: 真空比推力 '{:.1}秒' は通常の範囲 (100〜500秒) の外です",
+                i + 1,
+                isp
+            ));
+        }
+    }
+
     let end_time = config.calculate_condition.end_time;
     if end_time.is_finite() && end_time > 3600.0 {
         warnings.push(format!(
@@ -431,6 +438,25 @@ pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
                 i + 1,
                 stage.stage.separation_time,
                 stage.thrust.burn_end_time
+            ));
+        }
+    }
+
+    for (i, stage) in config.stages.iter().enumerate() {
+        if stage.power_flight_mode != 0 {
+            warnings.push(format!(
+                "ステージ{}: 動力飛行モード '{}' は未対応のため 3DoF(0) で計算します",
+                i + 1,
+                stage.power_flight_mode
+            ));
+        }
+        let six_dof = &stage.six_dof;
+        if !six_dof.cg_cp_controller_position_file.is_empty()
+            || !six_dof.moment_of_inertia_file_name.is_empty()
+        {
+            warnings.push(format!(
+                "ステージ{}: 6DoF の設定ファイルは未対応のため使われません",
+                i + 1
             ));
         }
     }
@@ -463,6 +489,48 @@ pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
         }
     }
 
+    warnings
+}
+
+/// Warnings that need the loaded data tables (thrust and Isp profiles)
+pub fn rocket_warnings(rocket: &Rocket) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for i in 0..rocket.stage_count() {
+        let demand = rocket.propellant_demand(i);
+        let usable = rocket.usable_propellant(i);
+        if demand > usable * (1.0 + 1e-6) {
+            warnings.push(format!(
+                "ステージ{}: 燃焼に必要な推進剤 '{:.1}kg' が搭載量 '{:.1}kg' を超えるため、推進剤が尽きた時点で燃焼を終えます",
+                i + 1,
+                demand,
+                usable
+            ));
+        }
+        let stage = rocket.stage_config(i);
+        if stage.attitude_neutrality.considering_neutrality {
+            if rocket.neutrality[i].is_none() {
+                warnings.push(format!(
+                    "ステージ{}: 推力トリム(neutrality)の CG/CP ファイルが読めないため、トリムは無視されます",
+                    i + 1
+                ));
+            } else if rocket.cn_surface.is_none() {
+                warnings.push(format!(
+                    "ステージ{}: 推力トリム(neutrality)には CN の Mach×迎角テーブルが必要なため、トリムは無視されます",
+                    i + 1
+                ));
+            }
+        }
+        if let Some(dry) = stage.mass_dry
+            && !(0.0..=stage.mass_initial).contains(&dry)
+        {
+            warnings.push(format!(
+                "ステージ{}: 乾燥質量 '{:.1}kg' が初期質量 '{:.1}kg' の範囲外です",
+                i + 1,
+                dry,
+                stage.mass_initial
+            ));
+        }
+    }
     warnings
 }
 
@@ -592,6 +660,15 @@ pub fn load_attitude_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)
         .collect())
 }
 
+/// Roll column of an attitude CSV (time, azimuth, elevation, roll), if
+/// every row has one
+pub fn load_attitude_roll<P: AsRef<Path>>(path: P) -> Result<Option<TimeSeriesData>> {
+    let rows4 = load_csv_rows::<_, 4>(&path)?;
+    let rows3 = load_csv_rows::<_, 3>(&path)?;
+    Ok((!rows4.is_empty() && rows4.len() == rows3.len())
+        .then(|| TimeSeriesData::from_pairs(rows4.into_iter().map(|r| (r[0], r[3])))))
+}
+
 /// Parse attitude data CSV from string content (time, azimuth, elevation)
 pub fn parse_attitude_from_str(content: &str) -> Result<Vec<(f64, f64, f64)>> {
     Ok(parse_csv_rows_from_str::<3>(content)?
@@ -656,6 +733,23 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
         )?;
     }
 
+    for idx in 0..rocket.stage_count() {
+        let n = rocket.stage_config(idx).attitude_neutrality.clone();
+        if !n.considering_neutrality {
+            continue;
+        }
+        let cg_path = resolve_data_path(base, true, &n.cg_controller_position_file);
+        let cp_path = resolve_data_path(base, true, &n.cp_file);
+        if let (Some(cg_path), Some(cp_path)) = (cg_path, cp_path) {
+            let rows = load_csv_rows::<_, 3>(&cg_path)?;
+            rocket.neutrality[idx] = Some(NeutralityData {
+                cg: TimeSeriesData::from_pairs(rows.iter().map(|r| (r[0], r[1]))),
+                controller: TimeSeriesData::from_pairs(rows.iter().map(|r| (r[0], r[2]))),
+                cp: load_cn_surface(&cp_path)?,
+            });
+        }
+    }
+
     let primary_stage = rocket.config.primary_stage();
     let aero = &primary_stage.aero;
     if let Some(path) = resolve_data_path(base, aero.cn_file_exists, &aero.cn_file_name) {
@@ -672,6 +766,9 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
     rocket.ca_data = maybe_load(base, aero.ca_file_exists, &aero.ca_file_name, |p| {
         load_time_series(p)
     })?;
+    rocket.ca_power_off_data = maybe_load(base, true, &aero.ca_power_off_file_name, |p| {
+        load_time_series(p)
+    })?;
 
     let attitude = &primary_stage.attitude;
     rocket.attitude_data = maybe_load(
@@ -679,6 +776,21 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
         attitude.attitude_file_exists,
         &attitude.attitude_file_name,
         |p| load_attitude_data(p),
+    )?;
+    rocket.attitude_roll = maybe_load(
+        base,
+        attitude.attitude_file_exists,
+        &attitude.attitude_file_name,
+        |p| load_attitude_roll(p),
+    )?
+    .flatten();
+
+    let calc = &rocket.config.calculate_condition;
+    rocket.air_density_table = maybe_load(
+        base,
+        calc.air_density_file_exists,
+        &calc.air_density_file,
+        |p| load_time_series(p),
     )?;
 
     let wind = &rocket.config.wind;
@@ -732,10 +844,24 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
         "flight_mode",
         "IIP_lat[deg]",
         "IIP_lon[deg]",
+        "latitude[deg]",
+        "longitude[deg]",
+        "downrange[m]",
+        "stage",
     ])?;
+
+    let llh_of = |s: &SimulationState| {
+        CoordinateTransform::pos_ecef_to_llh(&CoordinateTransform::pos_eci_to_ecef(
+            &s.position,
+            s.time,
+        ))
+    };
+    let origin = trajectory.first().map(llh_of);
 
     // Write data
     for state in trajectory {
+        let llh = llh_of(state);
+        let downrange = origin.map_or(0.0, |o| CoordinateTransform::distance_surface(&o, &llh));
         wtr.write_record([
             state.time.to_string(),
             state.position.x.to_string(),
@@ -760,6 +886,10 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
             state.flight_mode.as_str().to_string(),
             state.iip_lat_deg.map_or(String::new(), |v| v.to_string()),
             state.iip_lon_deg.map_or(String::new(), |v| v.to_string()),
+            llh.x.to_string(),
+            llh.y.to_string(),
+            downrange.to_string(),
+            state.stage.to_string(),
         ])?;
     }
 
@@ -771,6 +901,7 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
 pub fn save_summary_json<P: AsRef<Path>>(
     trajectory: &[SimulationState],
     fall_bodies: &[FallBody],
+    events: &[FlightEvent],
     config: &RocketConfig,
     output_path: P,
 ) -> Result<()> {
@@ -809,6 +940,25 @@ pub fn save_summary_json<P: AsRef<Path>>(
         })
         .unwrap();
     let final_state = trajectory.last().unwrap();
+    let max_speed_state = trajectory
+        .iter()
+        .max_by(|a, b| {
+            a.velocity_ecef_ned
+                .magnitude()
+                .total_cmp(&b.velocity_ecef_ned.magnitude())
+        })
+        .unwrap();
+    let max_accel_state = trajectory
+        .iter()
+        .max_by(|a, b| a.acc_body.magnitude().total_cmp(&b.acc_body.magnitude()))
+        .unwrap();
+    let find_event = |kind: EventKind| events.iter().rev().find(|e| e.kind == kind);
+    let max_q = find_event(EventKind::MaxQ);
+    let final_orbit = crate::physics::orbit::elements(
+        &final_state.position,
+        &final_state.velocity,
+        crate::physics::orbit::gmst_rad(config.launch.launch_time),
+    );
 
     let summary = serde_json::json!({
         "rocket_name": config.name,
@@ -819,6 +969,15 @@ pub fn save_summary_json<P: AsRef<Path>>(
         "max_velocity_time_s": max_velocity_state.time,
         "max_mach_number": max_mach_state.mach_number,
         "max_mach_time_s": max_mach_state.time,
+        "max_speed_earth_relative_ms": max_speed_state.velocity_ecef_ned.magnitude(),
+        "max_speed_earth_relative_time_s": max_speed_state.time,
+        "max_dynamic_pressure_pa": max_q.map(|e| e.dynamic_pressure_pa),
+        "max_dynamic_pressure_time_s": max_q.map(|e| e.time_s),
+        "max_acceleration_ms2": max_accel_state.acc_body.magnitude(),
+        "max_acceleration_g": max_accel_state.acc_body.magnitude() / crate::math::constants::G0,
+        "max_acceleration_time_s": max_accel_state.time,
+        "burnout": find_event(EventKind::Burnout),
+        "final_orbit": final_orbit,
         "final_position_eci_m": [
             final_state.position.x,
             final_state.position.y,
@@ -832,6 +991,7 @@ pub fn save_summary_json<P: AsRef<Path>>(
         "final_mass_kg": final_state.mass,
         "simulation_points": trajectory.len(),
         "impact_point": impact_point(trajectory),
+        "events": events,
         "fall_bodies": fall_bodies
             .iter()
             .map(|b| serde_json::json!({
@@ -887,6 +1047,12 @@ pub fn save_monte_carlo_csv<P: AsRef<Path>>(
         header.push(format!("{body}_impact_lat[deg]"));
         header.push(format!("{body}_impact_lon[deg]"));
     }
+    // Added later: appended so the earlier columns keep their place
+    header.extend(
+        ["normal[%]", "separation_time[s]", "wind_speed_scale[%]"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
     wtr.write_record(&header)?;
 
     for case in cases {
@@ -922,6 +1088,11 @@ pub fn save_monte_carlo_csv<P: AsRef<Path>>(
                 None => row.extend([String::new(), String::new(), String::new()]),
             }
         }
+        row.extend([
+            p.normal_percent.to_string(),
+            p.separation_time_s.to_string(),
+            p.wind_speed_percent.to_string(),
+        ]);
         wtr.write_record(&row)?;
     }
     wtr.flush()?;
@@ -1015,6 +1186,44 @@ mod tests {
         assert_eq!(ts.time.len(), 3);
         assert_eq!(ts.values[1], 20.0);
         Ok(())
+    }
+
+    #[test]
+    fn test_minimal_legacy_config_uses_defaults() {
+        let json = r#"{
+            "name(str)": "simple_test",
+            "calculate condition": { "end time[s]": 300, "time step for output[s]": 1 },
+            "launch": { "position LLH[deg,deg,m]": [35.0, 139.0, 0.0] },
+            "stage1": {
+                "mass initial[kg]": 1000,
+                "thrust": {
+                    "const thrust vac[N]": 30000,
+                    "burn end time(time of each stage)[s]": 20
+                }
+            }
+        }"#;
+        let config: RocketConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(validate_config(&config), Ok(()));
+        let stage = &config.stages[0];
+        assert_eq!(stage.attitude.const_elevation, 90.0);
+        assert_eq!(stage.thrust.const_isp_vac, 200.0);
+        assert_eq!(config.wind.const_wind, [0.0, 0.0]);
+        let trajectory = crate::simulator::Simulator::new(Rocket::new(config))
+            .unwrap()
+            .run();
+        let apogee = trajectory.iter().map(|s| s.altitude).fold(0.0, f64::max);
+        assert!(apogee > 1000.0, "apogee {apogee}");
+    }
+
+    #[test]
+    fn test_air_launch_is_a_warning_not_an_error() {
+        let mut config = load_ss520_config();
+        config.launch.position_llh[2] = 12_000.0;
+        config.launch.velocity_ned = [200.0, 0.0, 0.0];
+        assert_eq!(validate_config(&config), Ok(()));
+        let warnings = config_warnings(&config);
+        assert!(warnings.iter().any(|w| w.contains("空中発射")));
+        assert!(warnings.iter().any(|w| w.contains("初期速度")));
     }
 
     fn load_ss520_config() -> RocketConfig {

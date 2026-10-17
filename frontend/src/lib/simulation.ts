@@ -55,9 +55,44 @@ export type FallBodyJson = {
   trajectory: SimulationState[]
 }
 
+/** What happened at a solver event (`EventKind` in src/simulator.rs) */
+export type EventKindJson =
+  | 'ignition'
+  | 'liftoff'
+  | 'rail_exit'
+  | 'burnout'
+  | 'separation'
+  | 'dump'
+  | 'mach1'
+  | 'max_q'
+  | 'apogee'
+  | 'impact'
+
+/** A flight event located by the solver, with the vehicle state at that moment */
+export type FlightEventJson = {
+  kind: EventKindJson
+  /** Stage the event belongs to (1-based) */
+  stage: number
+  time_s: number
+  altitude_m: number
+  latitude_deg: number
+  longitude_deg: number
+  /** Surface distance from the launch point [m] */
+  downrange_m: number
+  /** Earth-relative speed [m/s] */
+  speed_mps: number
+  /** Inertial speed [m/s] */
+  inertial_speed_mps: number
+  mach: number
+  dynamic_pressure_pa: number
+  mass_kg: number
+}
+
 export type SimulationOutput = {
   trajectory: SimulationState[]
   fall_bodies: FallBodyJson[]
+  /** Missing from outputs of older solver builds */
+  events?: FlightEventJson[]
 }
 
 export function vec3ToObject(vec: Vec3Json | undefined): Vec3 {
@@ -83,8 +118,13 @@ export function vec3ToObject(vec: Vec3Json | undefined): Vec3 {
 
 export type ClientTimeSample = { time: number; value: number }
 export type ClientMachSample = { mach: number; value: number }
-export type ClientAttitudeSample = { time: number; azimuth_deg: number; elevation_deg: number }
+/** `roll_deg` is used only when every row of the program has it */
+export type ClientAttitudeSample = { time: number; azimuth_deg: number; elevation_deg: number; roll_deg?: number }
 export type ClientWindSample = { altitude_m: number; speed_mps: number; direction_deg: number }
+export type ClientDensitySample = { altitude_m: number; percent: number }
+
+/** Standard atmosphere (`AtmosphereKind` in src/physics.rs) */
+export type AtmosphereModel = 'legacy' | 'ussa1976'
 
 export type ClientStageConfig = {
   power_mode: number
@@ -129,12 +169,17 @@ export type ClientStageAero = {
   cn_multiplier?: number
   ca_constant?: number
   ca_multiplier?: number
+  /** CA with the engine off for this stage */
+  ca_power_off_constant?: number
   ballistic_coefficient?: number
 }
 
 export type ClientIntegratorConfig = {
   method: 'rk4' | 'rk45'
   rk4_step_s?: number | null
+  /** RK45 tolerances (default 1e-9) */
+  rk45_abs_tol?: number
+  rk45_rel_tol?: number
 }
 
 export type ClientConfig = {
@@ -143,6 +188,10 @@ export type ClientConfig = {
     duration_s: number
     output_step_s: number
     air_density_percent: number
+    /** Density variation over altitude; replaces `air_density_percent` when set */
+    air_density_profile?: ClientDensitySample[]
+    /** Default `legacy` (as the C++ simulator) */
+    atmosphere_model?: AtmosphereModel
     integrator: ClientIntegratorConfig
   }
   launch: {
@@ -159,6 +208,8 @@ export type ClientConfig = {
       second: number
     }
     timezone_offset?: number // Timezone offset in hours from UTC (default: 9 for JST)
+    /** Launcher rail length [m]; 0 or unset: held on the pad only */
+    rail_length_m?: number
   }
   stages: ClientStageConfig[]
   aerodynamics: {
@@ -169,11 +220,16 @@ export type ClientConfig = {
     ca_constant: number
     ca_multiplier: number
     ca_profile: ClientMachSample[]
+    /** CA with the engine off (unset: the powered CA) */
+    ca_power_off_constant?: number
+    ca_power_off_profile?: ClientMachSample[]
     ballistic_coefficient: number
   }
   attitude: {
     elevation_deg: number
     azimuth_deg: number
+    /** Constant roll angle [deg] (default 0) */
+    roll_deg?: number
     pitch_offset_deg: number
     yaw_offset_deg: number
     roll_offset_deg: number

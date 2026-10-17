@@ -1,3 +1,10 @@
+//! Flight simulation engine
+//!
+//! A 3-DoF point-mass vehicle is integrated in the Earth-centred inertial
+//! frame (aligned with ECEF at t = 0) with the state
+//! `[mass, position, velocity]`. Stage ignition, burnout, separation and
+//! dumping products are scheduled discontinuities the integrator stops at;
+//! ground impact, apogee, Mach 1 and max-Q are located by root finding.
 use crate::math::{
     RungeKutta4,
     constants::{G0, OMEGA_EARTH},
@@ -8,13 +15,14 @@ use crate::physics::{
     atmosphere::{AtmosphereModel, AtmosphericConditions},
     coordinates::CoordinateTransform,
     gravity::GravityModel,
+    orbit::{OrbitalElements, elements, gmst_rad},
 };
 use crate::rocket::{IntegratorMethod, Rocket, RocketConfig};
-/// Main simulation engine
-///
-/// This module will contain the core simulation logic
-use nalgebra::Vector3;
+use nalgebra::{Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
+
+/// Integrated state vector: `[mass, x, y, z, vx, vy, vz]` (ECI)
+type StateVector = [f64; 7];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimulationState {
@@ -23,12 +31,12 @@ pub struct SimulationState {
     pub velocity: Vector3<f64>, // ECI coordinates [m/s]
     pub mass: f64,              // [kg]
     pub stage: u8,
-    pub altitude: f64,           // Altitude above sea level [m]
-    pub velocity_magnitude: f64, // |velocity| [m/s]
+    pub altitude: f64,           // Altitude above the WGS84 ellipsoid [m]
+    pub velocity_magnitude: f64, // |velocity| (inertial) [m/s]
     pub mach_number: f64,        // Mach number [-]
     pub dynamic_pressure: f64,   // Dynamic pressure [Pa]
-    pub thrust: f64,             // Current thrust [N]
-    pub drag_force: f64,         // Current drag force [N]
+    pub thrust: f64,             // Thrust after the nozzle exit pressure loss [N]
+    pub drag_force: f64,         // Axial aerodynamic force magnitude [N]
     // New fields for enhanced visualization
     pub velocity_ned: Vector3<f64>, // NED velocity components [m/s] (for backward compatibility)
     pub velocity_eci_ned: Vector3<f64>, // ECI velocity in NED frame [m/s]
@@ -87,6 +95,12 @@ impl FlightMode {
             FlightMode::FreeBallistic => "free_ballistic",
         }
     }
+
+    /// Whether the body follows the attitude program (otherwise it is
+    /// aligned with the airflow)
+    fn follows_attitude_program(&self) -> bool {
+        matches!(self, FlightMode::Power3Dof | FlightMode::Free3Dof)
+    }
 }
 
 /// C++-compatible CSV row telemetry
@@ -103,6 +117,7 @@ pub struct CsvCppRow {
     pub vel_ned: Vector3<f64>,
     pub acc_eci: Vector3<f64>,
     pub acc_body: Vector3<f64>,
+    /// Effective specific impulse, thrust / (mass flow · g0) [s] (as in C++)
     pub isp_s: f64,
     pub mach: f64,
     pub att_az_deg: f64,
@@ -121,7 +136,7 @@ pub struct CsvCppRow {
     pub downrange: f64,
     pub iip_lat_deg: f64,
     pub iip_lon_deg: f64,
-    pub dcm_body_to_eci: nalgebra::Matrix3<f64>,
+    pub dcm_body_to_eci: Matrix3<f64>,
     pub inertial_speed: f64,
     pub kinetic_energy_ned: f64,
     pub loss_gravity: f64,
@@ -130,7 +145,6 @@ pub struct CsvCppRow {
     pub is_powered: i32,
     pub is_separated: i32,
     pub stage_number: u8,
-    pub event_label: String,
 }
 
 #[derive(Debug, Clone)]
@@ -138,12 +152,13 @@ struct StageRuntime {
     index: usize,
     start_time: f64,
     burn_start: f64,
-    burn_end: f64,
-    forced_cutoff: f64,
     /// End of powered flight: the earlier of burn end and forced cutoff
     power_end: f64,
     separation_time: f64,
     stack_mass: f64,
+    /// Vehicle mass at which this stage's propellant is used up [kg];
+    /// lowered when a dumping product leaves
+    mass_floor: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -167,7 +182,7 @@ fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRunti
     for (idx, &mass) in stack_mass.iter().enumerate().take(rocket.stage_count()) {
         let stage_cfg = rocket.stage_config(idx);
         let burn_start = start_time + stage_cfg.thrust.burn_start_time;
-        let burn_end = start_time + stage_cfg.thrust.burn_end_time;
+        let burn_end = start_time + rocket.burn_end_time(idx);
         let forced_cutoff = start_time + stage_cfg.thrust.forced_cutoff_time;
 
         let mut separation_time = if stage_cfg.stage.following_stage_exists {
@@ -188,11 +203,10 @@ fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRunti
             index: idx,
             start_time,
             burn_start,
-            burn_end,
-            forced_cutoff,
             power_end: burn_end.min(forced_cutoff),
             separation_time,
             stack_mass: mass,
+            mass_floor: mass - rocket.usable_propellant(idx),
         });
 
         start_time = separation_time;
@@ -221,10 +235,11 @@ pub struct ImpactPoint {
     pub speed_mps: f64,
 }
 
-/// Impact point of a trajectory that ends on the ground
+/// Impact point of a trajectory that ends on the ground (a vehicle still
+/// resting on the pad has none)
 pub fn impact_point(trajectory: &[SimulationState]) -> Option<ImpactPoint> {
     let last = trajectory.last()?;
-    if trajectory.len() < 2 || last.altitude > 1.0 {
+    if trajectory.len() < 2 || last.altitude > 1.0 || last.velocity_ecef_ned.magnitude() < 1e-3 {
         return None;
     }
     let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&last.position, last.time);
@@ -235,6 +250,56 @@ pub fn impact_point(trajectory: &[SimulationState]) -> Option<ImpactPoint> {
         longitude_deg: llh.y,
         speed_mps: last.velocity_ecef_ned.magnitude(),
     })
+}
+
+/// What happened at a flight event
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EventKind {
+    /// Engine ignition of a stage
+    Ignition,
+    /// The vehicle starts to move off the pad / along the rail
+    Liftoff,
+    /// The vehicle leaves the end of the launcher rail
+    RailExit,
+    /// End of powered flight (burn end or forced cutoff)
+    Burnout,
+    /// Stage separation (the event belongs to the stage that separates)
+    Separation,
+    /// Dumping product release
+    Dump,
+    /// Mach number rises through 1
+    Mach1,
+    /// Largest dynamic pressure of the flight
+    MaxQ,
+    /// Earth-relative vertical speed turns from up to down
+    Apogee,
+    /// Ground impact
+    Impact,
+}
+
+/// A flight event and the vehicle state at that moment
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FlightEvent {
+    pub kind: EventKind,
+    /// Stage the event belongs to (1-based)
+    pub stage: u8,
+    pub time_s: f64,
+    pub altitude_m: f64,
+    pub latitude_deg: f64,
+    pub longitude_deg: f64,
+    /// Surface distance from the launch point [m]
+    pub downrange_m: f64,
+    /// Earth-relative speed [m/s]
+    pub speed_mps: f64,
+    /// Inertial speed [m/s]
+    pub inertial_speed_mps: f64,
+    pub mach: f64,
+    pub dynamic_pressure_pa: f64,
+    pub mass_kg: f64,
+    /// Osculating orbit at burnout and separation events
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orbit: Option<OrbitalElements>,
 }
 
 /// A spent stage or dumping product propagated from its release to the ground
@@ -256,6 +321,9 @@ pub struct FallBody {
 /// Longest time a released body is propagated while looking for its impact [s]
 const FALL_MAX_DURATION_S: f64 = 10_800.0;
 
+/// Altitude accuracy of the located ground impact [m]
+const IMPACT_ALTITUDE_TOL_M: f64 = 1.0e-3;
+
 /// State of a body at the moment it leaves the vehicle
 #[derive(Debug, Clone)]
 struct Release {
@@ -275,6 +343,75 @@ struct DumpEvent {
     done: bool,
 }
 
+/// Everything the dynamics evaluates at one instant; shared by the
+/// equations of motion and the telemetry so both always agree
+#[derive(Debug, Clone)]
+struct Forces {
+    stage_idx: usize,
+    is_powered: bool,
+    flight_mode: FlightMode,
+    pos_llh: Vector3<f64>,
+    dcm_eci_to_ned: Matrix3<f64>,
+    dcm_ned_to_body: Matrix3<f64>,
+    /// Reported attitude: azimuth, elevation, roll [deg]
+    attitude_deg: Vector3<f64>,
+    /// Earth-relative velocity in NED [m/s]
+    vel_ned: Vector3<f64>,
+    wind_speed: f64,
+    wind_dir_deg: f64,
+    atm: AtmosphericConditions,
+    mach: f64,
+    q: f64,
+    /// alpha, beta, total angle of attack [rad]
+    aoa: Vector3<f64>,
+    /// Effective thrust (after the nozzle exit pressure loss) [N]
+    thrust: f64,
+    mass_flow: f64,
+    thrust_body: Vector3<f64>,
+    /// Thrust trim angles (pitch, yaw) [rad]
+    gimbal_rad: (f64, f64),
+    aero_body: Vector3<f64>,
+    gravity_eci: Vector3<f64>,
+    acc_eci: Vector3<f64>,
+    /// On the launcher: acceleration along the rail without the
+    /// constraint (Earth-fixed frame) [m/s²]; 0 off the launcher
+    launcher_along: f64,
+}
+
+impl Forces {
+    fn dcm_body_to_eci(&self) -> Matrix3<f64> {
+        (self.dcm_ned_to_body * self.dcm_eci_to_ned).transpose()
+    }
+}
+
+/// Launch pad / rail constraint
+#[derive(Debug, Clone)]
+struct Launcher {
+    /// Constraint in force (until rail exit, or liftoff without a rail)
+    active: bool,
+    /// The vehicle has started to move
+    lifted: bool,
+    /// Rail length [m]
+    length: f64,
+    /// Rail direction (unit) and foot, ECEF
+    dir_ecef: Vector3<f64>,
+    origin_ecef: Vector3<f64>,
+}
+
+/// Simulator state that integration and event handling change; saved
+/// and restored while an event time is located
+#[derive(Debug, Clone)]
+struct Snapshot {
+    state: SimulationState,
+    current_stage_index: usize,
+    dumps_done: Vec<bool>,
+    releases: Vec<Release>,
+    events: Vec<FlightEvent>,
+    stage_runtime: Vec<StageRuntime>,
+    h_hint: Option<f64>,
+    launcher: Launcher,
+}
+
 /// Main simulator struct
 pub struct Simulator {
     pub config: RocketConfig,
@@ -286,18 +423,21 @@ pub struct Simulator {
     pub gravity: GravityModel,
     pub state: SimulationState,
     pub trajectory: Vec<SimulationState>,
+    /// Events of the last `run()`, in time order
+    pub events: Vec<FlightEvent>,
     stage_runtime: Vec<StageRuntime>,
     current_stage_index: usize,
-    // Telemetry helpers (computed consistently with dynamics)
-    last_dynamic_pressure: f64,
-    last_thrust_magnitude: f64,
-    last_drag_magnitude: f64,
     pub telemetry_cpp: Vec<CsvCppRow>,
     integration: IntegrationMode,
+    /// Step size carried between adaptive integration intervals
+    h_hint: Option<f64>,
+    /// Adaptive steps accepted at the minimum step size above tolerance
+    pub forced_steps: usize,
     /// Times the integrator must stop at: separations and dumps
     event_times: Vec<f64>,
     dump_events: Vec<DumpEvent>,
     releases: Vec<Release>,
+    launcher: Launcher,
     /// While integrating between two events: a time inside that interval,
     /// used for discrete state (stage, powered) so RK stages evaluated on an
     /// interval boundary do not see the next phase
@@ -320,12 +460,17 @@ impl Simulator {
     /// Create new simulator from configuration
     pub fn new(rocket: Rocket) -> Result<Self, SimError> {
         let config = rocket.config.clone();
-        let atmosphere = AtmosphereModel::new();
+        let atmosphere = AtmosphereModel::with_kind(config.calculate_condition.atmosphere_model);
         let gravity = GravityModel::new();
         let integrator_settings = config.calculate_condition.integrator.clone();
         let integration = match integrator_settings.method {
             IntegratorMethod::Rk45 => IntegrationMode::Rk45 {
-                solver: DormandPrince54::new(1.0e-9, 1.0e-9, 1.0e-6, 10.0),
+                solver: DormandPrince54::new(
+                    integrator_settings.rk45_abs_tol,
+                    integrator_settings.rk45_rel_tol,
+                    1.0e-6,
+                    10.0,
+                ),
             },
             IntegratorMethod::Rk4 => {
                 let time_step = config.calculate_condition.time_step;
@@ -343,29 +488,34 @@ impl Simulator {
         };
 
         // Initialize state from launch conditions
-        let pos_llh = Vector3::new(
-            config.launch.position_llh[0],
-            config.launch.position_llh[1],
-            config.launch.position_llh[2],
-        );
-        let vel_ned = Vector3::new(
-            config.launch.velocity_ned[0],
-            config.launch.velocity_ned[1],
-            config.launch.velocity_ned[2],
-        );
+        let pos_llh = Vector3::from(config.launch.position_llh);
+        let vel_ned = Vector3::from(config.launch.velocity_ned);
 
         let position = CoordinateTransform::pos_eci_init(&pos_llh);
         let velocity = CoordinateTransform::vel_eci_init(&vel_ned, &pos_llh);
 
-        let stage_runtime = build_stage_runtime(&config, &rocket);
-        let current_stage_index = 0;
-        let current_stage_cfg = rocket.stage_config(current_stage_index);
+        // Launcher: a vehicle starting at rest is held on the pad / rail
+        // Rail along the body axis at t = 0
+        let dir_ned = rocket.attitude_dcm(0.0).0.transpose() * Vector3::x();
+        let launcher = Launcher {
+            active: vel_ned.magnitude() < 1.0e-9,
+            lifted: false,
+            length: config.launch.rail_length.max(0.0),
+            dir_ecef: CoordinateTransform::dcm_ecef_to_ned(&pos_llh).transpose() * dir_ned,
+            origin_ecef: position,
+        };
 
-        let mut state = SimulationState {
+        let stage_runtime = build_stage_runtime(&config, &rocket);
+        let mass = stage_runtime
+            .first()
+            .map(|rt| rt.stack_mass)
+            .unwrap_or(rocket.stage_config(0).mass_initial);
+
+        let state = SimulationState {
             time: 0.0,
             position,
             velocity,
-            mass: current_stage_cfg.mass_initial,
+            mass,
             stage: 1,
             altitude: config.launch.position_llh[2],
             velocity_magnitude: velocity.magnitude(),
@@ -373,7 +523,6 @@ impl Simulator {
             dynamic_pressure: 0.0,
             thrust: 0.0,
             drag_force: 0.0,
-            // Initialize new fields
             velocity_ned: vel_ned,
             velocity_eci_ned: Vector3::zeros(),
             velocity_ecef_ned: vel_ned,
@@ -389,10 +538,6 @@ impl Simulator {
             iip_lat_deg: None,
             iip_lon_deg: None,
         };
-        state.mass = stage_runtime
-            .first()
-            .map(|rt| rt.stack_mass)
-            .unwrap_or(current_stage_cfg.mass_initial);
 
         let density_variation = config.calculate_condition.air_density_variation;
 
@@ -424,7 +569,7 @@ impl Simulator {
         event_times.sort_by(f64::total_cmp);
         event_times.dedup();
 
-        Ok(Simulator {
+        let mut sim = Simulator {
             config,
             rocket,
             atmosphere,
@@ -432,125 +577,126 @@ impl Simulator {
             gravity,
             state,
             trajectory: Vec::new(),
+            events: Vec::new(),
             stage_runtime,
-            current_stage_index,
-            last_dynamic_pressure: 0.0,
-            last_thrust_magnitude: 0.0,
-            last_drag_magnitude: 0.0,
+            current_stage_index: 0,
             telemetry_cpp: Vec::new(),
             integration,
+            h_hint: None,
+            forced_steps: 0,
             event_times,
             dump_events,
             releases: Vec::new(),
+            launcher,
             phase_time: None,
-        })
+        };
+        sim.refresh();
+        Ok(sim)
     }
 
-    /// Run full simulation
+    /// Run the full simulation and return the trajectory sampled every
+    /// output time step (plus the located impact, if any)
     pub fn run(&mut self) -> Vec<SimulationState> {
         self.trajectory.clear();
         self.telemetry_cpp.clear();
         self.releases.clear();
+        self.events.clear();
         for dump in &mut self.dump_events {
             dump.done = false;
         }
 
         // Record initial state (t=0) so outputs include the starting sample
-        self.update_derived_quantities();
-        self.trajectory.push(self.state.clone());
-        let row0 = self.capture_cpp_row();
-        self.telemetry_cpp.push(row0);
+        self.refresh();
+        self.record_output();
+        let t0 = self.state.time;
+        self.record_scheduled_events(t0, true);
+        if self.launcher.active && self.current_forces().launcher_along > 0.0 {
+            self.lift_off();
+        }
         let end_time = self.config.calculate_condition.end_time;
         let dt_out = self.config.calculate_condition.time_step;
         if !(dt_out.is_finite() && dt_out > 0.0) {
             return self.trajectory.clone();
         }
 
-        let mut next_output_time = (self.state.time + dt_out).min(end_time);
-        let mut prev_state: Option<SimulationState> = None;
-
+        // Max-Q: largest sampled q and the snapshot one output step before it
+        let mut max_q: Option<(f64, Snapshot, f64)> = None;
+        let mut k: u64 = 1;
         while self.state.time + 1.0e-9 < end_time {
-            // Save previous state for potential interpolation
-            let previous_state = self.state.clone();
+            // Output times from the step count: no accumulated round-off
+            let t_next = (t0 + k as f64 * dt_out).min(end_time);
+            let before = self.snapshot();
+            let prev = before.state.clone();
+            self.advance_to_time(t_next);
+            self.refresh();
 
-            // Check if next step would lead to ground impact
-            let current_altitude = self.state.altitude;
-            let current_velocity = self.state.velocity;
-            let current_position = self.state.position;
+            if self.state.altitude <= 0.0 && prev.altitude > 0.0 && !self.launcher.active {
+                self.locate(&before, prev.time, t_next, |sim| sim.state.altitude);
+                if max_q
+                    .as_ref()
+                    .is_none_or(|(q, _, _)| self.state.dynamic_pressure > *q)
+                {
+                    max_q = Some((self.state.dynamic_pressure, before, prev.time));
+                }
+                self.record_output();
+                self.record_event(EventKind::Impact);
+                break;
+            }
+            if self.state.altitude < 0.0 && !self.launcher.active {
+                // Started on (or below) the ground and sank
+                self.record_output();
+                self.record_event(EventKind::Impact);
+                break;
+            }
 
-            // Estimate velocity component toward/away from Earth center
-            let radial_velocity = if let Some(radial_unit) = current_position.try_normalize(1.0e-9)
-            {
-                current_velocity.dot(&radial_unit)
-            } else {
-                0.0
-            };
-
-            // If currently above ground and descending, check if next step would go below ground
-            if current_altitude > 0.0 && radial_velocity < 0.0 {
-                // Simple linear prediction: will altitude be negative after dt_out?
-                let altitude_change_rate = radial_velocity; // Approximate as purely radial
-                let predicted_altitude = current_altitude + altitude_change_rate * dt_out;
-
-                if predicted_altitude <= 0.0 && current_altitude >= 10.0 {
-                    // Refine time step for more accurate landing detection
-                    let refined_dt = dt_out * 0.1; // Use smaller time steps near landing
-                    let refined_time = (self.state.time + refined_dt).min(end_time);
-                    self.advance_to_time(refined_time);
-                    self.update_derived_quantities();
-
-                    if self.state.altitude <= 0.0 {
-                        // Landing detected with refined step - interpolate impact point
-                        let impact_state =
-                            self.interpolate_impact_point(&previous_state, &self.state);
-                        self.trajectory.push(impact_state.clone());
-
-                        // Update internal state to impact state for final telemetry
-                        self.state = impact_state;
-                        let row = self.capture_cpp_row();
-                        self.telemetry_cpp.push(row);
-                        break;
+            let vertical = |s: &SimulationState| -s.velocity_ecef_ned.z;
+            let mut located = Vec::new();
+            if vertical(&prev) > 0.0 && vertical(&self.state) <= 0.0 {
+                located.push(EventKind::Apogee);
+            }
+            if prev.mach_number < 1.0 && self.state.mach_number >= 1.0 {
+                located.push(EventKind::Mach1);
+            }
+            if !located.is_empty() {
+                let after = self.snapshot();
+                let mut found = Vec::new();
+                for kind in located {
+                    match kind {
+                        EventKind::Apogee => {
+                            self.locate(&before, prev.time, t_next, |sim| vertical(&sim.state))
+                        }
+                        _ => self.locate(&before, prev.time, t_next, |sim| {
+                            sim.state.mach_number - 1.0
+                        }),
                     }
-
-                    // Continue with refined timestep
-                    self.trajectory.push(self.state.clone());
-                    let row = self.capture_cpp_row();
-                    self.telemetry_cpp.push(row);
-
-                    prev_state = Some(previous_state);
-                    continue;
+                    found.push((kind, self.state.clone()));
+                }
+                self.restore(&after);
+                for (kind, state) in found {
+                    self.insert_event(kind, &state);
                 }
             }
-
-            self.advance_to_time(next_output_time);
-            self.trajectory.push(self.state.clone());
-            let row = self.capture_cpp_row();
-            self.telemetry_cpp.push(row);
-
-            // Check after integration for ground impact
-            if self.state.altitude <= 0.0 {
-                if let Some(prev) = prev_state {
-                    // Remove the last trajectory point and replace with interpolated impact
-                    self.trajectory.pop();
-                    self.telemetry_cpp.pop();
-
-                    let impact_state = self.interpolate_impact_point(&prev, &self.state);
-                    self.trajectory.push(impact_state.clone());
-
-                    // Update internal state to impact state for final telemetry
-                    self.state = impact_state;
-                    let row = self.capture_cpp_row();
-                    self.telemetry_cpp.push(row);
-                }
-                break;
+            if max_q
+                .as_ref()
+                .is_none_or(|(q, _, _)| self.state.dynamic_pressure > *q)
+            {
+                max_q = Some((self.state.dynamic_pressure, before, prev.time));
             }
 
-            if next_output_time >= end_time {
-                break;
-            }
+            self.record_output();
+            k += 1;
+        }
 
-            prev_state = Some(previous_state);
-            next_output_time = (next_output_time + dt_out).min(end_time);
+        if let Some((q, snap, t_lo)) = max_q
+            && q > 0.0
+        {
+            let end = self.snapshot();
+            let dt = self.config.calculate_condition.time_step;
+            let t_hi = (t_lo + 2.0 * dt).min(end.state.time);
+            self.locate_max_q(&snap, t_lo, t_hi);
+            let event_state = self.state.clone();
+            self.restore(&end);
+            self.insert_event(EventKind::MaxQ, &event_state);
         }
         self.trajectory.clone()
     }
@@ -560,114 +706,202 @@ impl Simulator {
         &self.state
     }
 
-    /// Interpolate exact impact point between two states
-    fn interpolate_impact_point(
-        &self,
-        state_before: &SimulationState,
-        state_after: &SimulationState,
-    ) -> SimulationState {
-        use crate::physics::coordinates::CoordinateTransform as CT;
-
-        // Linear interpolation factor based on altitude
-        let alt_before = state_before.altitude;
-        let alt_after = state_after.altitude;
-
-        if alt_before <= 0.0 || alt_after >= 0.0 {
-            // Edge case: return the state that's closer to ground level
-            return if alt_before.abs() < alt_after.abs() {
-                state_before.clone()
-            } else {
-                state_after.clone()
-            };
+    fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            state: self.state.clone(),
+            current_stage_index: self.current_stage_index,
+            dumps_done: self.dump_events.iter().map(|d| d.done).collect(),
+            releases: self.releases.clone(),
+            events: self.events.clone(),
+            stage_runtime: self.stage_runtime.clone(),
+            h_hint: self.h_hint,
+            launcher: self.launcher.clone(),
         }
+    }
 
-        // Calculate interpolation factor to reach altitude = 0
-        let t = -alt_before / (alt_after - alt_before);
-        let t = t.clamp(0.0, 1.0); // Ensure t is between 0 and 1
+    fn restore(&mut self, snap: &Snapshot) {
+        self.state = snap.state.clone();
+        self.current_stage_index = snap.current_stage_index;
+        for (dump, &done) in self.dump_events.iter_mut().zip(&snap.dumps_done) {
+            dump.done = done;
+        }
+        self.releases = snap.releases.clone();
+        self.events = snap.events.clone();
+        self.stage_runtime = snap.stage_runtime.clone();
+        self.h_hint = snap.h_hint;
+        self.launcher = snap.launcher.clone();
+    }
 
-        // Interpolate all state variables
-        let time = state_before.time + t * (state_after.time - state_before.time);
-        let position = state_before.position + t * (state_after.position - state_before.position);
-        let velocity = state_before.velocity + t * (state_after.velocity - state_before.velocity);
-        let mass = state_before.mass + t * (state_after.mass - state_before.mass);
-        let stage = state_before.stage; // Stage doesn't interpolate
+    /// Re-integrate from `from` to time `t` and refresh the derived state
+    fn evaluate_at(&mut self, from: &Snapshot, t: f64) {
+        self.restore(from);
+        self.advance_to_time(t);
+        self.refresh();
+    }
 
-        // Convert interpolated position to get exact altitude
-        let pos_ecef = CT::pos_eci_to_ecef(&position, time);
-        let pos_llh = CT::pos_ecef_to_llh(&pos_ecef);
-        let _altitude = pos_llh.z; // Should be very close to 0
+    /// Locate the root of `f` between `t_lo` and `t_hi` (where `f` changes
+    /// sign) with the Illinois method, re-integrating from `from` for every
+    /// trial time. Leaves the simulator at the located time.
+    fn locate<F: Fn(&Self) -> f64>(&mut self, from: &Snapshot, t_lo: f64, t_hi: f64, f: F) {
+        let (mut ta, mut tb) = (t_lo, t_hi);
+        self.evaluate_at(from, ta);
+        let mut fa = f(self);
+        self.evaluate_at(from, tb);
+        let mut fb = f(self);
+        let mut side = 0;
+        for _ in 0..100 {
+            if fb.abs() <= IMPACT_ALTITUDE_TOL_M * 1e-3 || tb - ta < 1.0e-9 {
+                break;
+            }
+            let mut tc = (ta * fb - tb * fa) / (fb - fa);
+            if !(tc > ta && tc < tb) {
+                tc = 0.5 * (ta + tb);
+            }
+            self.evaluate_at(from, tc);
+            let fc = f(self);
+            if fc.abs() <= IMPACT_ALTITUDE_TOL_M {
+                return;
+            }
+            if fc.signum() == fb.signum() {
+                tb = tc;
+                fb = fc;
+                if side == -1 {
+                    fa *= 0.5;
+                }
+                side = -1;
+            } else {
+                ta = tc;
+                fa = fc;
+                if side == 1 {
+                    fb *= 0.5;
+                }
+                side = 1;
+            }
+        }
+        // Leave the simulator on the side past the root
+        self.evaluate_at(from, tb);
+    }
 
-        // Calculate other derived quantities at impact point
-        let velocity_magnitude = velocity.magnitude();
-
-        // Get atmospheric conditions at impact (sea level)
-        let atm = self.atmosphere_at(0.0);
-        let mach_number = velocity_magnitude / atm.speed_of_sound;
-        let dynamic_pressure = 0.5 * atm.density * velocity_magnitude.powi(2);
-
-        // Stage information
-        let stage_idx = self.stage_index_for_time(time);
-        let stage_cfg = self.rocket.stage_config(stage_idx);
-        let stage_local_time = self.stage_local_time(stage_idx, time);
-
-        // Calculate thrust at impact time
-        let is_powered = self.is_powered_at(stage_idx, time);
-        let thrust = if is_powered {
-            self.rocket.thrust_at(stage_idx, stage_local_time)
-        } else {
-            0.0
+    /// Golden-section search for the largest dynamic pressure in [t_lo, t_hi]
+    fn locate_max_q(&mut self, from: &Snapshot, t_lo: f64, t_hi: f64) {
+        let ratio = 0.5 * (5f64.sqrt() - 1.0);
+        let (mut a, mut b) = (t_lo, t_hi);
+        let q_at = |sim: &mut Self, t: f64| {
+            sim.evaluate_at(from, t);
+            sim.state.dynamic_pressure
         };
+        let mut c = b - ratio * (b - a);
+        let mut d = a + ratio * (b - a);
+        let (mut qc, mut qd) = (q_at(self, c), q_at(self, d));
+        while b - a > 1.0e-6 {
+            if qc > qd {
+                b = d;
+                d = c;
+                qd = qc;
+                c = b - ratio * (b - a);
+                qc = q_at(self, c);
+            } else {
+                a = c;
+                c = d;
+                qc = qd;
+                d = a + ratio * (b - a);
+                qd = q_at(self, d);
+            }
+        }
+        q_at(self, 0.5 * (a + b));
+    }
 
-        // Calculate drag (should be minimal at impact if near sea level)
-        let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
-        let ref_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
-        let drag_force = ca * dynamic_pressure * ref_area;
+    /// Append the current state to the trajectory and the C++ telemetry
+    fn record_output(&mut self) {
+        self.trajectory.push(self.state.clone());
+        let row = self.capture_cpp_row();
+        self.telemetry_cpp.push(row);
+    }
 
-        // Position and coordinate frame calculations for detailed state
-        let dcm_eci_to_ned = CT::dcm_eci_to_ned(&pos_llh, time);
-        let vel_ned = CT::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
-        let vel_ecef_ned = vel_ned; // At impact, these should be similar
+    fn event_from(&self, kind: EventKind, state: &SimulationState) -> FlightEvent {
+        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&state.position, state.time);
+        let llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
+        let launch = Vector3::from(self.config.launch.position_llh);
+        FlightEvent {
+            kind,
+            stage: state.stage,
+            time_s: state.time,
+            altitude_m: state.altitude,
+            latitude_deg: llh.x,
+            longitude_deg: llh.y,
+            downrange_m: CoordinateTransform::distance_surface(&launch, &llh),
+            speed_mps: state.velocity_ecef_ned.magnitude(),
+            inertial_speed_mps: state.velocity_magnitude,
+            mach: state.mach_number,
+            dynamic_pressure_pa: state.dynamic_pressure,
+            mass_kg: state.mass,
+            orbit: matches!(kind, EventKind::Burnout | EventKind::Separation)
+                .then(|| self.orbit_of(state)),
+        }
+    }
 
-        // Attitude calculations
-        let (az_deg, el_deg) = self.rocket.attitude_at_time(time);
-        let dcm_ned_to_body = CT::dcm_ned_to_body(deg2rad(az_deg), deg2rad(el_deg), None);
-        let vel_air_body = CT::vel_air_body_frame(&dcm_ned_to_body, &vel_ned, &Vector3::zeros());
-        let angles = CT::angle_of_attack(&vel_air_body);
+    /// Osculating orbit of a state, node measured from the vernal equinox
+    pub fn orbit_of(&self, state: &SimulationState) -> OrbitalElements {
+        elements(
+            &state.position,
+            &state.velocity,
+            gmst_rad(self.config.launch.launch_time),
+        )
+    }
 
-        // Create interpolated impact state
-        SimulationState {
-            time,
-            position,
-            velocity,
-            mass,
-            stage,
-            altitude: 0.0, // Force altitude to exactly 0 at impact
-            velocity_magnitude,
-            mach_number,
-            dynamic_pressure,
-            thrust,
-            drag_force,
-            velocity_ned: vel_ned,
-            velocity_eci_ned: vel_ned,
-            velocity_ecef_ned: vel_ecef_ned,
-            sea_level_mach: velocity_magnitude / self.atmosphere_at(0.0).speed_of_sound,
-            acceleration_magnitude: 0.0, // Will be calculated if needed
-            acc_eci: Vector3::zeros(),   // Will be calculated if needed
-            acc_body: Vector3::zeros(),  // Will be calculated if needed
-            angle_of_attack: angles.x.to_degrees(),
-            sideslip_angle: angles.y.to_degrees(),
-            attitude_azimuth: az_deg,
-            attitude_elevation: el_deg,
-            flight_mode: self.flight_mode_at(stage_idx, time),
-            iip_lat_deg: None,
-            iip_lon_deg: None,
+    /// Record an event at the current state
+    fn record_event(&mut self, kind: EventKind) {
+        let state = self.state.clone();
+        self.insert_event(kind, &state);
+    }
+
+    /// Insert an event in time order
+    fn insert_event(&mut self, kind: EventKind, state: &SimulationState) {
+        let event = self.event_from(kind, state);
+        let at = self.events.partition_point(|e| e.time_s <= event.time_s);
+        self.events.insert(at, event);
+    }
+
+    /// Record the scheduled events (ignition, burnout, separation, dump)
+    /// that happen at time `t`; `initial` also records those at t <= 0
+    fn record_scheduled_events(&mut self, t: f64, initial: bool) {
+        let at = |e: f64| (e - t).abs() < 1.0e-9 || (initial && e <= t);
+        let mut kinds: Vec<(EventKind, usize)> = Vec::new();
+        for rt in &self.stage_runtime {
+            let powered = rt.power_end > rt.burn_start;
+            if powered && at(rt.burn_start) {
+                kinds.push((EventKind::Ignition, rt.index));
+            }
+            if powered && at(rt.power_end) && !initial {
+                kinds.push((EventKind::Burnout, rt.index));
+            }
+            let has_next = rt.index + 1 < self.stage_runtime.len();
+            if has_next && at(rt.separation_time) && !initial {
+                kinds.push((EventKind::Separation, rt.index));
+            }
+        }
+        for dump in &self.dump_events {
+            if at(dump.time) && !initial {
+                kinds.push((EventKind::Dump, dump.stage_idx));
+            }
+        }
+        for (kind, stage_idx) in kinds {
+            let mut state = self.state.clone();
+            state.stage = (stage_idx + 1) as u8;
+            self.insert_event(kind, &state);
         }
     }
 
     /// Atmosphere at altitude, with the configured density variation
     fn atmosphere_at(&self, altitude: f64) -> AtmosphericConditions {
-        self.atmosphere
-            .conditions_with_variation(altitude, self.density_variation)
+        match &self.rocket.air_density_table {
+            Some(table) => self
+                .atmosphere
+                .conditions_with_percent(altitude, table.interpolate(altitude)),
+            None => self
+                .atmosphere
+                .conditions_with_variation(altitude, self.density_variation),
+        }
     }
 
     /// Time used for discrete state (stage, powered) when evaluating dynamics at `t`
@@ -679,15 +913,6 @@ impl Simulator {
     fn is_powered_at(&self, stage_idx: usize, t: f64) -> bool {
         let stage = &self.stage_runtime[stage_idx];
         t >= stage.burn_start && t < stage.power_end
-    }
-
-    /// Flight mode of the vehicle at absolute time `t`
-    fn flight_mode_at(&self, stage_idx: usize, t: f64) -> FlightMode {
-        if self.is_powered_at(stage_idx, t) {
-            FlightMode::Power3Dof
-        } else {
-            FlightMode::free(self.rocket.stage_config(stage_idx).free_flight_mode)
-        }
     }
 
     fn stage_index_for_time(&self, time: f64) -> usize {
@@ -727,7 +952,6 @@ impl Simulator {
     /// Release the dumping products whose time has come
     fn apply_due_dumps(&mut self) {
         let now = self.state.time;
-        let mut released = false;
         for k in 0..self.dump_events.len() {
             let event = &self.dump_events[k];
             if event.done || event.time > now + 1.0e-9 {
@@ -751,58 +975,26 @@ impl Simulator {
                 mass,
             });
             self.state.mass -= mass;
-            released = true;
-        }
-        if released {
-            self.update_derived_quantities();
+            // The product was part of the stage's dry mass
+            self.stage_runtime[stage_idx].mass_floor -= mass;
         }
     }
 
-    fn state_vector(&self) -> Vec<f64> {
-        vec![
-            self.state.mass,
-            self.state.position.x,
-            self.state.position.y,
-            self.state.position.z,
-            self.state.velocity.x,
-            self.state.velocity.y,
-            self.state.velocity.z,
-        ]
+    fn state_vector(&self) -> StateVector {
+        let (p, v) = (self.state.position, self.state.velocity);
+        [self.state.mass, p.x, p.y, p.z, v.x, v.y, v.z]
     }
 
-    fn apply_state_vector(&mut self, time: f64, new_state: &[f64]) {
-        if new_state.len() < 7 {
-            return;
-        }
-
+    fn apply_state_vector(&mut self, time: f64, y: &StateVector) {
         self.state.time = time;
-        self.state.mass = new_state[0];
-        self.state.position = Vector3::new(new_state[1], new_state[2], new_state[3]);
-        self.state.velocity = Vector3::new(new_state[4], new_state[5], new_state[6]);
-
-        // No longer need ground clamping logic - simulation ends before landing
-
+        self.state.mass = y[0];
+        self.state.position = Vector3::new(y[1], y[2], y[3]);
+        self.state.velocity = Vector3::new(y[4], y[5], y[6]);
         self.update_stage_index();
-        self.update_derived_quantities();
     }
 
-    /// One RK4 step of `dt`, landing exactly on `t_next`
-    fn integrate_rk4_step(&mut self, dt: f64, t_next: f64) {
-        if !(dt.is_finite() && dt > 0.0) {
-            return;
-        }
-
-        let rk4 = RungeKutta4;
-        let current_state = self.state_vector();
-        let new_state = rk4.integrate(&current_state, self.state.time, dt, |t, state| {
-            self.dynamics(t, state)
-        });
-        let phase_time = self.phase_time.take();
-        self.apply_state_vector(t_next, &new_state);
-        self.phase_time = phase_time;
-    }
-
-    /// Advance to `target_time`, stopping at separations and dumps on the way
+    /// Advance to `target_time`, stopping at scheduled events on the way.
+    /// Derived quantities are not refreshed (see `refresh`).
     fn advance_to_time(&mut self, target_time: f64) {
         let end_time = self.config.calculate_condition.end_time;
         let target = target_time.min(end_time);
@@ -814,48 +1006,193 @@ impl Simulator {
         {
             self.integrate_to(event);
             self.apply_due_dumps();
+            self.refresh();
+            self.record_scheduled_events(event, false);
         }
         self.integrate_to(target);
         self.apply_due_dumps();
     }
 
-    /// Integrate to `target`; no event may lie strictly inside the interval
+    /// Integrate to `target`; no event may lie strictly inside the interval.
+    /// A burn that runs out of propellant on the way is cut off at the
+    /// moment of depletion (located by root finding).
     fn integrate_to(&mut self, target: f64) {
-        if target <= self.state.time {
+        let t0 = self.state.time;
+        if target <= t0 {
             return;
         }
-        self.phase_time = Some(0.5 * (self.state.time + target));
+        let y0 = self.state_vector();
+        let hint0 = self.h_hint;
+        let y = self.integrate_raw(&y0, t0, target);
 
+        if self.launcher.active {
+            const MOVED_M: f64 = 1.0e-6;
+            if !self.launcher.lifted && self.rail_distance(&y, target) > MOVED_M {
+                // First time the vehicle is pushed off: bisection
+                let (mut ta, mut tb) = (t0, target);
+                while tb - ta > 1.0e-9 {
+                    let tc = 0.5 * (ta + tb);
+                    self.h_hint = hint0;
+                    let yc = self.integrate_raw(&y0, t0, tc);
+                    self.apply_state_vector(tc, &yc);
+                    let pushed = self.current_forces().launcher_along > 0.0
+                        || self.rail_distance(&yc, tc) > MOVED_M;
+                    self.apply_state_vector(t0, &y0);
+                    if pushed {
+                        tb = tc;
+                    } else {
+                        ta = tc;
+                    }
+                }
+                self.h_hint = hint0;
+                let y_lift = self.integrate_raw(&y0, t0, ta);
+                self.apply_state_vector(ta, &y_lift);
+                self.lift_off();
+                self.integrate_to(target);
+                return;
+            }
+            let length = self.launcher.length;
+            if self.launcher.lifted && length > 0.0 && self.rail_distance(&y, target) >= length {
+                // Rail exit: Illinois on distance - length
+                let (mut ta, mut fa) = (t0, self.rail_distance(&y0, t0) - length);
+                let (mut tb, mut fb) = (target, self.rail_distance(&y, target) - length);
+                let mut side = 0;
+                let mut y_exit = y;
+                for _ in 0..100 {
+                    if tb - ta < 1.0e-9 {
+                        break;
+                    }
+                    let mut tc = (ta * fb - tb * fa) / (fb - fa);
+                    if !(tc > ta && tc < tb) {
+                        tc = 0.5 * (ta + tb);
+                    }
+                    self.h_hint = hint0;
+                    let yc = self.integrate_raw(&y0, t0, tc);
+                    let fc = self.rail_distance(&yc, tc) - length;
+                    if fc.abs() < 1.0e-6 {
+                        (tb, y_exit) = (tc, yc);
+                        break;
+                    }
+                    if fc > 0.0 {
+                        (tb, fb, y_exit) = (tc, fc, yc);
+                        if side == -1 {
+                            fa *= 0.5;
+                        }
+                        side = -1;
+                    } else {
+                        (ta, fa) = (tc, fc);
+                        if side == 1 {
+                            fb *= 0.5;
+                        }
+                        side = 1;
+                    }
+                }
+                self.apply_state_vector(tb, &y_exit);
+                self.launcher.active = false;
+                self.refresh();
+                self.record_event(EventKind::RailExit);
+                self.integrate_to(target);
+                return;
+            }
+        }
+
+        let stage_idx = self.stage_index_for_time(0.5 * (t0 + target));
+        let floor = self.stage_runtime[stage_idx].mass_floor;
+        let powered = self.is_powered_at(stage_idx, 0.5 * (t0 + target));
+        if powered && y[0] < floor && y0[0] > floor {
+            // Mass decreases monotonically while burning: Illinois on m - floor
+            let (mut ta, mut fa) = (t0, y0[0] - floor);
+            let (mut tb, mut fb) = (target, y[0] - floor);
+            let mut side = 0;
+            for _ in 0..100 {
+                if tb - ta < 1.0e-9 {
+                    break;
+                }
+                let mut tc = (ta * fb - tb * fa) / (fb - fa);
+                if !(tc > ta && tc < tb) {
+                    tc = 0.5 * (ta + tb);
+                }
+                self.h_hint = hint0;
+                let fc = self.integrate_raw(&y0, t0, tc)[0] - floor;
+                if fc.abs() < 1.0e-9 * floor.abs().max(1.0) {
+                    ta = tc;
+                    tb = tc;
+                    break;
+                }
+                if fc < 0.0 {
+                    tb = tc;
+                    fb = fc;
+                    if side == -1 {
+                        fa *= 0.5;
+                    }
+                    side = -1;
+                } else {
+                    ta = tc;
+                    fa = fc;
+                    if side == 1 {
+                        fb *= 0.5;
+                    }
+                    side = 1;
+                }
+            }
+            let t_out = 0.5 * (ta + tb);
+            self.h_hint = hint0;
+            let mut y_out = self.integrate_raw(&y0, t0, t_out);
+            y_out[0] = y_out[0].max(floor);
+            self.stage_runtime[stage_idx].power_end = t_out;
+            self.apply_state_vector(t_out, &y_out);
+            self.refresh();
+            self.record_event(EventKind::Burnout);
+            self.integrate_to(target);
+            return;
+        }
+        self.apply_state_vector(target, &y);
+    }
+
+    /// The vehicle starts to move: record liftoff; without a rail the
+    /// constraint ends here
+    fn lift_off(&mut self) {
+        self.launcher.lifted = true;
+        if self.launcher.length <= 0.0 {
+            self.launcher.active = false;
+        }
+        self.refresh();
+        self.record_event(EventKind::Liftoff);
+    }
+
+    /// Distance travelled along the launcher rail [m]
+    fn rail_distance(&self, y: &StateVector, t: f64) -> f64 {
+        let pos_ecef = CoordinateTransform::dcm_eci_to_ecef(t) * Vector3::new(y[1], y[2], y[3]);
+        self.launcher
+            .dir_ecef
+            .dot(&(pos_ecef - self.launcher.origin_ecef))
+    }
+
+    /// Integrate the equations of motion from `(t0, y0)` to `t1` without
+    /// touching the simulator state (except the adaptive step hint)
+    fn integrate_raw(&mut self, y0: &StateVector, t0: f64, t1: f64) -> StateVector {
+        self.phase_time = Some(0.5 * (t0 + t1));
+        let mut y = *y0;
+        let system = |t: f64, s: &StateVector| self.dynamics(t, s);
         match self.integration {
             IntegrationMode::Rk4 { step } => {
-                let mut remaining = target - self.state.time;
-                while remaining > 1.0e-12 {
-                    let (dt, t_next) = if step < remaining {
-                        (step, self.state.time + step)
-                    } else {
-                        (remaining, target)
-                    };
-                    self.integrate_rk4_step(dt, t_next);
-                    remaining = target - self.state.time;
+                // Equal steps no longer than `step`, ending exactly on t1
+                let n = ((t1 - t0) / step - 1.0e-9).ceil().max(1.0) as u64;
+                let h = (t1 - t0) / n as f64;
+                for i in 0..n {
+                    y = RungeKutta4.integrate(&y, t0 + i as f64 * h, h, system);
                 }
             }
             IntegrationMode::Rk45 { solver } => {
-                let mut state_vec = self.state_vector();
-                let mut time = self.state.time;
-                let solver_inst = solver;
-                solver_inst.advance_to(&mut state_vec, &mut time, target, |t, state| {
-                    self.dynamics(t, state)
-                });
-                let final_time = if (time - target).abs() < 1.0e-9 {
-                    target
-                } else {
-                    time
-                };
-                self.phase_time = None;
-                self.apply_state_vector(final_time, &state_vec);
+                let mut t = t0;
+                let mut hint = self.h_hint;
+                let forced = solver.advance_to(&mut y, &mut t, t1, &mut hint, system);
+                self.h_hint = hint;
+                self.forced_steps += forced;
             }
         }
         self.phase_time = None;
+        y
     }
 
     /// Propagate every spent stage and dumping product released during
@@ -912,17 +1249,19 @@ impl Simulator {
         rocket.stage_configs = vec![stage.clone()];
         rocket.thrust_tables = vec![None];
         rocket.isp_tables = vec![None];
+        rocket.neutrality = vec![None];
         rocket.config.stages = vec![stage];
         rocket.config.calculate_condition.end_time = release.time + FALL_MAX_DURATION_S;
 
         let Ok(mut sim) = Simulator::new(rocket) else {
             return body;
         };
+        sim.launcher.active = false;
         sim.state.time = release.time;
         sim.state.position = release.position;
         sim.state.velocity = release.velocity;
         sim.state.mass = release.mass;
-        sim.update_derived_quantities();
+        sim.refresh();
 
         let mut trajectory = sim.run();
         for state in &mut trajectory {
@@ -939,174 +1278,51 @@ impl Simulator {
         body
     }
 
-    /// Single integration step
+    /// Advance the simulation by `dt` (no event location)
     pub fn step(&mut self, dt: f64) {
         if !(dt.is_finite() && dt > 0.0) {
             return;
         }
         let target = (self.state.time + dt).min(self.config.calculate_condition.end_time);
         self.advance_to_time(target);
+        self.refresh();
     }
 
-    /// Update derived quantities for telemetry
-    fn update_derived_quantities(&mut self) {
-        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&self.state.position, self.state.time);
-        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        self.state.altitude = pos_llh.z;
+    /// Forces and derived quantities at the current state
+    fn current_forces(&self) -> Forces {
+        self.forces(self.state.time, &self.state_vector())
+    }
 
-        // Atmospheric conditions at current altitude
-        let atm = self.atmosphere_at(self.state.altitude);
-
-        // Transform velocity into NED and compute air-relative values
-        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, self.state.time);
-        let vel_ned = CoordinateTransform::vel_eci_to_ecef_ned_frame(
-            &self.state.position,
-            &self.state.velocity,
-            &dcm_eci_to_ned,
-        );
-
-        // Wind
-        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(self.state.altitude);
-        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir);
-
-        let vel_air_ned = vel_ned - wind_ned;
-        let vel_air_mag = vel_air_ned.magnitude();
-
-        // Use air-relative speed for Mach/Q like C++
-        self.state.velocity_magnitude = self.state.velocity.magnitude(); // keep ECI |v| for reference
-        self.state.mach_number = if atm.speed_of_sound > 0.0 {
-            vel_air_mag / atm.speed_of_sound
-        } else {
-            0.0
-        };
-        self.state.dynamic_pressure = 0.5 * atm.density * vel_air_mag.powi(2);
-        self.last_dynamic_pressure = self.state.dynamic_pressure;
-
-        // Burning window for thrust (C++同等)
-        let t = self.state.time;
-        let stage_idx = self.current_stage_index;
-        let stage_local_time = self.stage_local_time(stage_idx, t);
-        self.state.thrust = if self.is_powered_at(stage_idx, t) {
-            self.rocket.thrust_at(stage_idx, stage_local_time)
-        } else {
-            0.0
-        };
-        self.last_thrust_magnitude = self.state.thrust;
-
-        // Drag magnitude using CA(Mach)
-        let ca = self.rocket.ca_at_mach(stage_idx, self.state.mach_number);
-        let stage_cfg = self.rocket.stage_config(stage_idx);
-        let body_diameter = stage_cfg.aero.body_diameter;
-        let reference_area = std::f64::consts::PI * (body_diameter / 2.0).powi(2);
-        self.state.drag_force = ca * self.state.dynamic_pressure * reference_area;
-        self.last_drag_magnitude = self.state.drag_force;
-
-        // Calculate velocities in both coordinate systems
-        // ECI velocity in NED frame (includes Earth rotation)
-        self.state.velocity_eci_ned = dcm_eci_to_ned * self.state.velocity;
-
-        // ECEF velocity in NED frame (Earth-relative) - vel_ned is already computed above
-        self.state.velocity_ecef_ned = vel_ned;
-
-        // Update legacy field for backward compatibility (use ECEF for expected behavior)
-        self.state.velocity_ned = self.state.velocity_ecef_ned;
-
-        // Sea level Mach number (using constant sea level sound speed = 340.3 m/s)
+    /// Recompute the derived quantities of `self.state` from its time,
+    /// position, velocity and mass
+    fn refresh(&mut self) {
+        let f = self.current_forces();
+        let s = &mut self.state;
+        s.stage = (f.stage_idx + 1) as u8;
+        s.altitude = f.pos_llh.z;
+        s.velocity_magnitude = s.velocity.magnitude();
+        s.mach_number = f.mach;
+        s.dynamic_pressure = f.q;
+        s.thrust = f.thrust;
+        s.drag_force = f.aero_body.x.abs();
+        s.velocity_eci_ned = f.dcm_eci_to_ned * s.velocity;
+        s.velocity_ecef_ned = f.vel_ned;
+        s.velocity_ned = f.vel_ned;
+        // Mach number based on the sea level sound speed
         const SEA_LEVEL_SOUND_SPEED: f64 = 340.3;
-        self.state.sea_level_mach = vel_air_mag / SEA_LEVEL_SOUND_SPEED;
-
-        // Acceleration magnitude - compute from current forces
-        let gravity_acc = self.gravity.gravity_eci(&self.state.position);
-        let mut total_acc = gravity_acc;
-
-        // Add thrust acceleration if active
-        if self.state.thrust > 0.0 && self.state.mass > 0.0 {
-            let (thrust_force, _) =
-                self.compute_thrust_force(t, &self.state.position, &self.state.velocity);
-            total_acc += thrust_force / self.state.mass;
-        }
-
-        // Add aerodynamic acceleration
-        if vel_air_mag > 0.1 && self.state.mass > 0.0 {
-            let aero_force = self.compute_aerodynamic_forces(
-                &self.state.position,
-                &self.state.velocity,
-                t,
-                self.state.mach_number,
-                self.state.mass,
-            );
-            total_acc += aero_force / self.state.mass;
-        }
-
-        self.state.acceleration_magnitude = total_acc.magnitude();
-
-        // Attitude angles
-        let (azimuth_deg, elevation_deg) = self.rocket.attitude_at_time(t);
-        self.state.attitude_azimuth = azimuth_deg;
-        self.state.attitude_elevation = elevation_deg;
-
-        // Angle of attack
-        if vel_air_mag > 0.1 {
-            let dcm_ned_to_body = CoordinateTransform::dcm_ned_to_body(
-                deg2rad(azimuth_deg),
-                deg2rad(elevation_deg),
-                None,
-            );
-            let vel_air_body =
-                CoordinateTransform::vel_air_body_frame(&dcm_ned_to_body, &vel_ned, &wind_ned);
-            let angles = CoordinateTransform::angle_of_attack(&vel_air_body);
-            // Use the angle of attack (alpha) and sideslip angle (beta)
-            self.state.angle_of_attack = angles.x.to_degrees();
-            self.state.sideslip_angle = angles.y.to_degrees();
-        } else {
-            self.state.angle_of_attack = 0.0;
-            self.state.sideslip_angle = 0.0;
-        }
-
-        // Compute acceleration components (same as in capture_cpp_row)
-        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, self.state.time);
-        let (az_deg, el_deg) = self.rocket.attitude_at_time(self.state.time);
-        let dcm_ned_to_body =
-            CoordinateTransform::dcm_ned_to_body(deg2rad(az_deg), deg2rad(el_deg), None);
-
-        // Forces in ECI frame
-        let gravity_eci = self.gravity.gravity_eci(&self.state.position);
-        let mut acc_eci = gravity_eci;
-
-        // Add thrust acceleration if active
-        if self.state.thrust > 0.0 && self.state.mass > 0.0 {
-            let (thrust_force, _) = self.compute_thrust_force(
-                self.state.time,
-                &self.state.position,
-                &self.state.velocity,
-            );
-            acc_eci += thrust_force / self.state.mass;
-        }
-
-        // Add aerodynamic acceleration
-        if vel_air_mag > 0.1 && self.state.mass > 0.0 {
-            let aero_force = self.compute_aerodynamic_forces(
-                &self.state.position,
-                &self.state.velocity,
-                self.state.time,
-                self.state.mach_number,
-                self.state.mass,
-            );
-            acc_eci += aero_force / self.state.mass;
-        }
-
-        // Body-frame acceleration (exclude gravity for body-frame measurement)
-        let acc_body_eci = acc_eci - gravity_eci;
-        let acc_body = (dcm_ned_to_body * dcm_eci_to_ned) * acc_body_eci;
-
-        self.state.acc_eci = acc_eci;
-        self.state.acc_body = acc_body;
-
-        self.state.flight_mode = self.flight_mode_at(stage_idx, t);
-        let iip = Self::iip_of(&self.state.position, &self.state.velocity, t);
-        self.state.iip_lat_deg = iip.map(|p| p.x);
-        self.state.iip_lon_deg = iip.map(|p| p.y);
+        s.sea_level_mach = f.mach * f.atm.speed_of_sound / SEA_LEVEL_SOUND_SPEED;
+        s.acc_eci = f.acc_eci;
+        s.acceleration_magnitude = f.acc_eci.magnitude();
+        // Body-frame acceleration excludes gravity (what an accelerometer measures)
+        s.acc_body = f.dcm_ned_to_body * f.dcm_eci_to_ned * (f.acc_eci - f.gravity_eci);
+        s.angle_of_attack = f.aoa.x.to_degrees();
+        s.sideslip_angle = f.aoa.y.to_degrees();
+        s.attitude_azimuth = f.attitude_deg.x;
+        s.attitude_elevation = f.attitude_deg.y;
+        s.flight_mode = f.flight_mode;
+        let iip = Self::iip_of(&s.position, &s.velocity, s.time);
+        s.iip_lat_deg = iip.map(|p| p.x);
+        s.iip_lon_deg = iip.map(|p| p.y);
     }
 
     /// Instantaneous impact point [deg] of an ECI state at time `t`
@@ -1118,473 +1334,339 @@ impl Simulator {
         CoordinateTransform::pos_llh_iip(&pos_ecef, &vel_ecef)
     }
 
-    /// System dynamics function
-    ///
-    /// Computes derivatives: [dmass/dt, dpos/dt, dvel/dt]
-    fn dynamics(&self, t: f64, state: &[f64]) -> Vec<f64> {
-        // Extract state variables
-        let mass = state[0];
-        let position = Vector3::new(state[1], state[2], state[3]);
-        let velocity = Vector3::new(state[4], state[5], state[6]);
-
-        // Convert to LLH for altitude calculation
-        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&position, t);
-        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        let altitude = pos_llh.z;
-
-        // No longer need ground impact handling in dynamics
-        // Simulation will end before hitting the ground
-
-        // Atmospheric conditions
-        let atm_conditions = self.atmosphere_at(altitude);
-        let speed_of_sound = atm_conditions.speed_of_sound;
-
-        // Velocity analysis in air-relative NED frame
-        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
-        let velocity_ned =
-            CoordinateTransform::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
-        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(pos_llh.z);
-        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir);
-        let vel_air_ned = velocity_ned - wind_ned;
-        let vel_air_magnitude = vel_air_ned.magnitude();
-        let mach_number = if speed_of_sound > 0.0 {
-            vel_air_magnitude / speed_of_sound
-        } else {
-            0.0
-        };
-        // dynamic pressure is recomputed where needed based on air-relative velocity
-
-        // Forces in ECI frame
-        let mut total_force = Vector3::zeros();
-
-        // 1. Gravity force
-        let gravity_acceleration = self.gravity.gravity_eci(&position);
-        total_force += mass * gravity_acceleration;
-
-        // 2. Thrust force
-        let (thrust_force, mass_flow_rate) = self.compute_thrust_force(t, &position, &velocity);
-        total_force += thrust_force;
-
-        // 3. Aerodynamic forces
-        let aero_force =
-            self.compute_aerodynamic_forces(&position, &velocity, t, mach_number, mass);
-        total_force += aero_force;
-
-        // Acceleration
-        let acceleration = if mass > 0.0 {
-            total_force / mass
-        } else {
-            Vector3::zeros()
-        };
-
-        // Derivatives
-        vec![
-            -mass_flow_rate, // dmass/dt (propellant consumption)
-            velocity.x,      // dx/dt
-            velocity.y,      // dy/dt
-            velocity.z,      // dz/dt
-            acceleration.x,  // dvx/dt
-            acceleration.y,  // dvy/dt
-            acceleration.z,  // dvz/dt
+    /// Equations of motion: `[dm/dt, dr/dt, dv/dt]`
+    fn dynamics(&self, t: f64, y: &StateVector) -> StateVector {
+        let f = self.forces(t, y);
+        [
+            -f.mass_flow,
+            y[4],
+            y[5],
+            y[6],
+            f.acc_eci.x,
+            f.acc_eci.y,
+            f.acc_eci.z,
         ]
     }
 
-    fn capture_cpp_row(&self) -> CsvCppRow {
-        use crate::physics::coordinates::CoordinateTransform as CT;
-        let t = self.state.time;
-        let pos = self.state.position;
-        let vel = self.state.velocity;
-        let mass = self.state.mass;
+    /// Evaluate gravity, thrust and aerodynamics at time `t` and state `y`
+    fn forces(&self, t: f64, y: &StateVector) -> Forces {
+        let mass = y[0];
+        let position = Vector3::new(y[1], y[2], y[3]);
+        let velocity = Vector3::new(y[4], y[5], y[6]);
 
-        // Position LLH and ECEF
-        let pos_ecef = CT::pos_eci_to_ecef(&pos, t);
-        let pos_llh = CT::pos_ecef_to_llh(&pos_ecef);
-        let lat_deg = pos_llh.x;
-        let lon_deg = pos_llh.y;
-        let alt_m = pos_llh.z;
-
-        // DCMs
-        let dcm_eci_to_ned = CT::dcm_eci_to_ned(&pos_llh, t);
-
-        // Velocities
-        let vel_ned = CT::vel_eci_to_ecef_ned_frame(&pos, &vel, &dcm_eci_to_ned);
-
-        // Atmosphere and wind
-        let atm = self.atmosphere_at(alt_m);
-        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(alt_m);
-        let wind_ned = CT::vel_wind_ned_frame(wind_speed, wind_dir);
-
-        // Air-relative velocity and body frame vectors
-        let vel_air_ned = vel_ned - wind_ned;
-        let vel_air_mag = vel_air_ned.magnitude();
-        let (az_deg, el_deg) = self.rocket.attitude_at_time(t);
-        let dcm_ned_to_body = CT::dcm_ned_to_body(deg2rad(az_deg), deg2rad(el_deg), None);
-        let dcm_body_to_eci = (dcm_ned_to_body * dcm_eci_to_ned).transpose();
-        let vel_air_body = CT::vel_air_body_frame(&dcm_ned_to_body, &vel_ned, &wind_ned);
-        let angles = CT::angle_of_attack(&vel_air_body);
-        let alpha = angles.x;
-        let beta = angles.y;
-        let gamma = angles.z;
-
-        let stage_idx = self.stage_index_for_time(t);
+        let discrete_t = self.discrete_time(t);
+        let stage_idx = self.stage_index_for_time(discrete_t);
         let stage_cfg = self.rocket.stage_config(stage_idx);
-        let stage_local_time = self.stage_local_time(stage_idx, t);
+        let is_powered = self.is_powered_at(stage_idx, discrete_t);
+        let flight_mode = if is_powered {
+            FlightMode::Power3Dof
+        } else {
+            FlightMode::free(stage_cfg.free_flight_mode)
+        };
 
-        // Aerodynamics
-        let q = 0.5 * atm.density * vel_air_mag.powi(2);
-        let ca = self.rocket.ca_at_mach(stage_idx, self.state.mach_number);
-        let ref_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
-        let drag = ca * q * ref_area;
-        let aero_body = self.aero_force_body(
-            stage_idx,
-            self.state.mach_number,
-            &vel_air_body,
-            q * ref_area,
-        );
-        let aero_eci = dcm_body_to_eci * aero_body;
-
-        // Thrust
-        let is_powered = self.is_powered_at(stage_idx, t);
-        let thrust_vac = if is_powered {
-            self.rocket.thrust_at(stage_idx, stage_local_time)
+        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&position, t);
+        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
+        let atm = self.atmosphere_at(pos_llh.z);
+        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
+        let vel_ned =
+            CoordinateTransform::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
+        let (wind_speed, wind_dir_deg) = self.rocket.wind_at_altitude(pos_llh.z);
+        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir_deg);
+        let vel_air_ned = vel_ned - wind_ned;
+        let air_speed = vel_air_ned.magnitude();
+        let mach = if atm.speed_of_sound > 0.0 {
+            air_speed / atm.speed_of_sound
         } else {
             0.0
         };
-        let isp_vac = if is_powered {
-            self.rocket.isp_at(stage_idx, stage_local_time)
-        } else {
-            0.0
-        };
-        let throat_diameter = stage_cfg.thrust.throat_diameter;
-        let exit_area = std::f64::consts::PI
-            * (throat_diameter * throat_diameter)
-            * 0.25
-            * stage_cfg.thrust.nozzle_expansion_ratio;
-        let thrust_effective = if is_powered {
-            thrust_vac - exit_area * atm.pressure
-        } else {
-            0.0
-        };
-        let thrust_body = Vector3::new(thrust_effective, 0.0, 0.0);
-        let thrust_eci = dcm_body_to_eci * thrust_body;
+        let q = 0.5 * atm.density * air_speed * air_speed;
 
-        // Accelerations
-        let gravity_eci = self.gravity.gravity_eci(&pos);
-        let acc_eci = if mass > 0.0 {
-            (thrust_eci + aero_eci) / mass + gravity_eci
+        // Attitude: the program, or along the airflow for a free body
+        let (dcm_ned_to_body, attitude_deg) = if flight_mode.follows_attitude_program()
+            || air_speed < 1.0e-6
+        {
+            self.rocket.attitude_dcm(t)
+        } else {
+            let horizontal = vel_air_ned.x.hypot(vel_air_ned.y);
+            let att = Vector3::new(
+                vel_air_ned.y.atan2(vel_air_ned.x).to_degrees(),
+                (-vel_air_ned.z).atan2(horizontal).to_degrees(),
+                0.0,
+            );
+            let dcm = CoordinateTransform::dcm_ned_to_body(deg2rad(att.x), deg2rad(att.y), None);
+            (dcm, att)
+        };
+        let vel_air_body = dcm_ned_to_body * vel_air_ned;
+        let aoa = CoordinateTransform::angle_of_attack(&vel_air_body);
+
+        // Thrust along body +X, reduced by the ambient pressure at the exit
+        let (mut thrust, mut mass_flow) = (0.0, 0.0);
+        if is_powered {
+            let local_time = self.stage_local_time(stage_idx, t);
+            let thrust_vac = self.rocket.thrust_at(stage_idx, local_time);
+            let isp_vac = self.rocket.isp_at(stage_idx, local_time);
+            if thrust_vac > 0.0 && isp_vac > 0.0 {
+                mass_flow = thrust_vac / (isp_vac * G0);
+                let exit_area = std::f64::consts::PI
+                    * stage_cfg.thrust.throat_diameter.powi(2)
+                    * 0.25
+                    * stage_cfg.thrust.nozzle_expansion_ratio;
+                // Over-expanded at low altitude: no negative thrust
+                thrust = (thrust_vac - exit_area * atm.pressure).max(0.0);
+            }
+        }
+
+        // Aerodynamics in body axes
+        let reference_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
+        let aero_body = if air_speed < 0.1 {
+            Vector3::zeros()
+        } else {
+            match flight_mode {
+                // Ballistic coefficient model (body along the airflow)
+                FlightMode::FreeBallistic => Vector3::new(
+                    -q / stage_cfg.aero.ballistic_coefficient.max(1e-9) * mass.max(0.0),
+                    0.0,
+                    0.0,
+                ),
+                // Body aligned with the airflow (zero angle of attack)
+                FlightMode::FreeAeroStable => Vector3::new(
+                    -self.rocket.ca_at(stage_idx, mach, false) * q * reference_area,
+                    0.0,
+                    0.0,
+                ),
+                // Aerodynamic coefficients (CA, CN from Mach x |angle| table)
+                _ => self.aero_force_body(
+                    stage_idx,
+                    mach,
+                    is_powered,
+                    &vel_air_body,
+                    q * reference_area,
+                ),
+            }
+        };
+
+        let (thrust_body, gimbal_rad) = if is_powered {
+            self.trimmed_thrust(stage_idx, t, thrust, mach, &aoa, &aero_body)
+        } else {
+            (Vector3::new(thrust, 0.0, 0.0), (0.0, 0.0))
+        };
+
+        let gravity_eci = self.gravity.gravity_eci(&position);
+        let dcm_body_to_eci = (dcm_ned_to_body * dcm_eci_to_ned).transpose();
+        let mut acc_eci = if mass > 0.0 {
+            dcm_body_to_eci * (thrust_body + aero_body) / mass + gravity_eci
         } else {
             gravity_eci
         };
-        let acc_body = (dcm_ned_to_body * dcm_eci_to_ned) * (acc_eci - gravity_eci);
+
+        // On the launcher only the motion along the Earth-fixed rail is free.
+        // In the rotating frame: a_rel = a - w x (w x r) - 2 w x v_rel, of
+        // which the rail keeps the component along it.
+        let mut launcher_along = 0.0;
+        if self.launcher.active {
+            let omega = Vector3::new(0.0, 0.0, OMEGA_EARTH);
+            let u = CoordinateTransform::dcm_eci_to_ecef(t).transpose() * self.launcher.dir_ecef;
+            let v_rel = velocity - omega.cross(&position);
+            let frame = omega.cross(&omega.cross(&position)) + 2.0 * omega.cross(&v_rel);
+            launcher_along = u.dot(&(acc_eci - frame));
+            let along = if self.launcher.lifted {
+                launcher_along
+            } else {
+                // Held until the thrust overcomes the weight
+                launcher_along.max(0.0)
+            };
+            acc_eci = frame + along * u;
+        }
+
+        Forces {
+            stage_idx,
+            is_powered,
+            flight_mode,
+            pos_llh,
+            dcm_eci_to_ned,
+            dcm_ned_to_body,
+            attitude_deg,
+            vel_ned,
+            wind_speed,
+            wind_dir_deg,
+            atm,
+            mach,
+            q,
+            aoa,
+            thrust,
+            mass_flow,
+            thrust_body,
+            gimbal_rad,
+            aero_body,
+            gravity_eci,
+            acc_eci,
+            launcher_along,
+        }
+    }
+
+    fn capture_cpp_row(&self) -> CsvCppRow {
+        let f = self.current_forces();
+        let s = &self.state;
+        let mass = s.mass;
+        let dcm_body_to_eci = f.dcm_body_to_eci();
+        let stage_cfg = self.rocket.stage_config(f.stage_idx);
 
         // Loss terms
-        let vel_xy = (vel_ned.x * vel_ned.x + vel_ned.y * vel_ned.y).sqrt();
-        let path_angle = (-vel_ned.z).atan2(vel_xy);
-        let gravity_ned = dcm_eci_to_ned * gravity_eci;
-        let loss_gravity = if is_powered {
-            gravity_ned.z * path_angle.sin()
+        let vel_ned = f.vel_ned;
+        let path_angle = (-vel_ned.z).atan2(vel_ned.x.hypot(vel_ned.y));
+        let gravity_ned = f.dcm_eci_to_ned * f.gravity_eci;
+        let exit_area = std::f64::consts::PI
+            * stage_cfg.thrust.throat_diameter.powi(2)
+            * 0.25
+            * stage_cfg.thrust.nozzle_expansion_ratio;
+        let loss_thrust = if f.is_powered && mass > 0.0 {
+            f.atm.pressure * exit_area / mass
         } else {
             0.0
         };
-        let loss_thrust = if is_powered {
-            atm.pressure * exit_area / mass
+        let loss_aero = if mass > 0.0 {
+            f.aero_body.x.abs() / mass
         } else {
             0.0
         };
-        let loss_aero = drag / mass;
+        let isp_effective = if f.mass_flow > 1.0e-4 {
+            f.thrust / f.mass_flow / G0
+        } else {
+            0.0
+        };
 
-        // Downrange
-        let launch_llh = Vector3::new(
-            self.config.launch.position_llh[0],
-            self.config.launch.position_llh[1],
-            self.config.launch.position_llh[2],
-        );
-        let downrange = CT::distance_surface(&launch_llh, &pos_llh);
+        let launch_llh = Vector3::from(self.config.launch.position_llh);
+        let downrange = CoordinateTransform::distance_surface(&launch_llh, &f.pos_llh);
 
         // Instantaneous impact point (zeros when none exists, as in the C++ output)
-        let iip_llh = Self::iip_of(&pos, &vel, t).unwrap_or_else(Vector3::zeros);
-
-        // Determine event label based on current state
-        let event_label = self.determine_event_label(t, stage_idx, is_powered, stage_local_time);
+        let iip_llh = Self::iip_of(&s.position, &s.velocity, s.time).unwrap_or_else(Vector3::zeros);
 
         CsvCppRow {
-            time: t,
+            time: s.time,
             mass,
-            thrust: thrust_effective,
-            lat_deg,
-            lon_deg,
-            alt_m,
-            pos_eci: pos,
-            vel_eci: vel,
+            thrust: f.thrust,
+            lat_deg: f.pos_llh.x,
+            lon_deg: f.pos_llh.y,
+            alt_m: f.pos_llh.z,
+            pos_eci: s.position,
+            vel_eci: s.velocity,
             vel_ned,
-            acc_eci,
-            acc_body,
-            isp_s: isp_vac,
-            mach: self.state.mach_number,
-            att_az_deg: az_deg,
-            att_el_deg: el_deg,
-            att_roll_deg: 0.0,
-            aoa_alpha_deg: alpha.to_degrees(),
-            aoa_beta_deg: beta.to_degrees(),
-            aoa_gamma_deg: gamma.to_degrees(),
-            q_pa: q,
-            aero_body,
-            thrust_body,
-            gimbal_pitch_deg: 0.0,
-            gimbal_yaw_deg: 0.0,
-            wind_speed,
-            wind_dir_deg: wind_dir,
+            acc_eci: f.acc_eci,
+            acc_body: s.acc_body,
+            isp_s: isp_effective,
+            mach: f.mach,
+            att_az_deg: f.attitude_deg.x,
+            att_el_deg: f.attitude_deg.y,
+            att_roll_deg: f.attitude_deg.z,
+            aoa_alpha_deg: f.aoa.x.to_degrees(),
+            aoa_beta_deg: f.aoa.y.to_degrees(),
+            aoa_gamma_deg: f.aoa.z.to_degrees(),
+            q_pa: f.q,
+            aero_body: f.aero_body,
+            thrust_body: f.thrust_body,
+            gimbal_pitch_deg: f.gimbal_rad.0.to_degrees(),
+            gimbal_yaw_deg: f.gimbal_rad.1.to_degrees(),
+            wind_speed: f.wind_speed,
+            wind_dir_deg: f.wind_dir_deg,
             downrange,
             iip_lat_deg: iip_llh.x,
             iip_lon_deg: iip_llh.y,
             dcm_body_to_eci,
-            inertial_speed: vel.magnitude(),
-            kinetic_energy_ned: 0.5 * mass * vel_ned.magnitude().powi(2),
-            loss_gravity,
+            inertial_speed: s.velocity.magnitude(),
+            kinetic_energy_ned: 0.5 * mass * vel_ned.magnitude_squared(),
+            loss_gravity: gravity_ned.z * path_angle.sin(),
             loss_aero,
             loss_thrust,
-            is_powered: if is_powered { 1 } else { 0 },
-            is_separated: if stage_idx > 0 { 1 } else { 0 },
-            stage_number: (stage_idx + 1) as u8,
-            event_label,
+            is_powered: f.is_powered as i32,
+            is_separated: (f.stage_idx > 0) as i32,
+            stage_number: (f.stage_idx + 1) as u8,
         }
     }
 
-    /// Determine event label for current simulation state
-    fn determine_event_label(
+    /// Thrust vector in body axes and its trim angles (pitch, yaw) [rad].
+    ///
+    /// With "considering neutrality" the thrust is gimballed so that its
+    /// moment about the CG balances the aerodynamic moment (C++
+    /// `power_flight_3dof`); otherwise, or when no trim exists, it lies
+    /// along the body axis.
+    fn trimmed_thrust(
         &self,
-        time: f64,
         stage_idx: usize,
-        is_powered: bool,
-        stage_local_time: f64,
-    ) -> String {
-        const TIME_TOLERANCE: f64 = 0.1; // 0.1 second tolerance for event detection
-
-        let stage_info = &self.stage_runtime[stage_idx];
-
-        // Check for specific events based on timing and state
-
-        // Landing/Impact detection
-        if self.state.altitude <= 0.0 {
-            return "Impact".to_string();
-        }
-
-        // Stage separation events
-        if stage_idx > 0 {
-            let prev_stage = &self.stage_runtime[stage_idx - 1];
-            if (time - prev_stage.separation_time).abs() < TIME_TOLERANCE {
-                return format!("Stage{}_Separation", stage_idx);
-            }
-        }
-
-        // Engine ignition and cutoff events
-        if is_powered {
-            if (time - stage_info.burn_start).abs() < TIME_TOLERANCE {
-                return format!("Stage{}_Ignition", stage_idx + 1);
-            }
-            if (time - stage_info.burn_end).abs() < TIME_TOLERANCE
-                || (time - stage_info.forced_cutoff).abs() < TIME_TOLERANCE
-            {
-                return format!("Stage{}_MECO", stage_idx + 1); // Main Engine Cut-Off
-            }
-        }
-
-        // Dynamic pressure and flight phase events
-        if self.state.dynamic_pressure > 0.0 {
-            // Check for Max-Q (requires tracking max dynamic pressure - simplified here)
-            if self.state.altitude > 1000.0
-                && self.state.altitude < 20000.0
-                && self.state.dynamic_pressure > 30000.0
-            {
-                // Rough threshold for Max-Q
-                return "Max_Q_Region".to_string();
-            }
-        }
-
-        // Mach number events
-        if self.state.mach_number >= 1.0 && self.state.mach_number < 1.1 {
-            return "Mach_1".to_string();
-        }
-
-        // Altitude-based milestones
-        if self.state.altitude > 100000.0 {
-            // Karman line
-            return "Space".to_string();
-        } else if self.state.altitude > 50000.0 {
-            return "Stratosphere".to_string();
-        } else if self.state.altitude > 11000.0 {
-            return "Tropopause".to_string();
-        }
-
-        // Flight phase based on powered/coast status and stage
-        if is_powered {
-            if stage_local_time < 1.0 {
-                format!("Stage{}_Early_Burn", stage_idx + 1)
-            } else if time - stage_info.burn_end < 10.0 {
-                format!("Stage{}_Late_Burn", stage_idx + 1)
-            } else {
-                format!("Stage{}_Powered", stage_idx + 1)
-            }
-        } else if self.state.velocity.magnitude() > 0.0
-            && self.state.velocity.dot(&self.state.position.normalize()) < 0.0
-        {
-            "Descent".to_string()
-        } else {
-            format!("Stage{}_Coast", stage_idx + 1)
-        }
-    }
-
-    /// Compute thrust force in ECI frame
-    fn compute_thrust_force(
-        &self,
         t: f64,
-        position: &Vector3<f64>,
-        _velocity: &Vector3<f64>,
-    ) -> (Vector3<f64>, f64) {
-        let stage_idx = self.stage_index_for_time(self.discrete_time(t));
-        let stage_cfg = self.rocket.stage_config(stage_idx);
-        let local_time = self.stage_local_time(stage_idx, t);
-
-        // Check if engine is burning
-        if !self.is_powered_at(stage_idx, self.discrete_time(t)) {
-            return (Vector3::zeros(), 0.0);
-        }
-
-        // Get thrust (vacuum) and Isp (vacuum) at current time
-        let thrust_vac = self.rocket.thrust_at(stage_idx, local_time);
-        let isp_vac = self.rocket.isp_at(stage_idx, local_time);
-
-        if thrust_vac <= 0.0 || isp_vac <= 0.0 {
-            return (Vector3::zeros(), 0.0);
-        }
-
-        // Mass flow rate (use vacuum values like C++)
-        let mass_flow_rate = thrust_vac / (isp_vac * G0);
-
-        // Ambient pressure loss at nozzle exit (C++: thrust = thrust_vac - A_exit * p)
-        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(position, t);
-        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        let atm = self.atmosphere_at(pos_llh.z);
-        let throat_diameter = stage_cfg.thrust.throat_diameter;
-        let exit_area = std::f64::consts::PI
-            * (throat_diameter * throat_diameter)
-            * 0.25
-            * stage_cfg.thrust.nozzle_expansion_ratio;
-        let thrust_effective = thrust_vac - exit_area * atm.pressure;
-
-        // Thrust direction from attitude (Body +X) — C++互換
-        let (azimuth_deg, elevation_deg) = self.rocket.attitude_at_time(t);
-        let azimuth_rad = deg2rad(azimuth_deg);
-        let elevation_rad = deg2rad(elevation_deg);
-
-        // Body->ECI DCM = (NED->BODY * ECI->NED)^T
-        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
-        let dcm_ned_to_body =
-            CoordinateTransform::dcm_ned_to_body(azimuth_rad, elevation_rad, None);
-        let dcm_eci_to_body = dcm_ned_to_body * dcm_eci_to_ned;
-        let dcm_body_to_eci = dcm_eci_to_body.transpose();
-
-        // Thrust in body frame along +X
-        let thrust_body = Vector3::new(thrust_effective, 0.0, 0.0);
-        let thrust_eci = dcm_body_to_eci * thrust_body;
-
-        (thrust_eci, mass_flow_rate)
-    }
-
-    /// Compute aerodynamic forces in ECI frame
-    fn compute_aerodynamic_forces(
-        &self,
-        position: &Vector3<f64>,
-        velocity: &Vector3<f64>,
-        t: f64,
-        mach_number: f64,
-        mass: f64,
-    ) -> Vector3<f64> {
-        if velocity.magnitude() < 0.1 {
-            return Vector3::zeros();
-        }
-
-        // Convert to NED frame for aerodynamic calculations
-        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(position, t);
-        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
-        let velocity_ned =
-            CoordinateTransform::vel_eci_to_ecef_ned_frame(position, velocity, &dcm_eci_to_ned);
-
-        // Apply wind (if any)
-        let (wind_speed, wind_dir) = self.rocket.wind_at_altitude(pos_llh.z);
-        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir);
-
-        // Relative air velocity and dynamic pressure from air-relative speed
-        let vel_air_ned = velocity_ned - wind_ned;
-        let vel_air_magnitude = vel_air_ned.magnitude();
-        if vel_air_magnitude < 0.1 {
-            return Vector3::zeros();
-        }
-
-        let (azimuth_deg, elevation_deg) = self.rocket.attitude_at_time(t);
-        let azimuth_rad = deg2rad(azimuth_deg);
-        let elevation_rad = deg2rad(elevation_deg);
-        let dcm_ned_to_body =
-            CoordinateTransform::dcm_ned_to_body(azimuth_rad, elevation_rad, None);
-
-        let vel_air_body = CoordinateTransform::vel_air_body_frame(
-            &dcm_ned_to_body,
-            &vel_air_ned,
-            &Vector3::zeros(),
-        );
-
-        let stage_idx = self.stage_index_for_time(self.discrete_time(t));
-        let stage_cfg = self.rocket.stage_config(stage_idx);
-        let reference_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
-
-        // Recompute dynamic_pressure based on air-relative speed
-        let atm_density = self.atmosphere_at(pos_llh.z).density;
-        let q = 0.5 * atm_density * vel_air_magnitude.powi(2);
-
-        // Free flight without an attitude program: drag only, along -airflow
-        let drag_accel = match self.flight_mode_at(stage_idx, self.discrete_time(t)) {
-            // Ballistic coefficient model
-            FlightMode::FreeBallistic => Some(q / stage_cfg.aero.ballistic_coefficient.max(1e-9)),
-            // Body aligned with the airflow (zero angle of attack)
-            FlightMode::FreeAeroStable if mass > 0.0 => {
-                Some(self.rocket.ca_at_mach(stage_idx, mach_number) * q * reference_area / mass)
-            }
-            _ => None,
+        thrust: f64,
+        mach: f64,
+        aoa: &Vector3<f64>,
+        aero_body: &Vector3<f64>,
+    ) -> (Vector3<f64>, (f64, f64)) {
+        let along = (Vector3::new(thrust, 0.0, 0.0), (0.0, 0.0));
+        let cfg = &self.rocket.stage_config(stage_idx).attitude_neutrality;
+        let Some(Some(data)) = self.rocket.neutrality.get(stage_idx) else {
+            return along;
         };
-        if let Some(accel_mag) = drag_accel {
-            let force_ned = -accel_mag * mass * (vel_air_ned / vel_air_magnitude);
-            let dcm_ned_to_eci = dcm_eci_to_ned.transpose();
-            return dcm_ned_to_eci * force_ned;
+        if !cfg.considering_neutrality || self.rocket.cn_surface.is_none() || thrust <= 0.0 {
+            return along;
         }
-
-        // Otherwise use aerodynamic coefficients (CA, CN from Mach x |angle| table)
-        let total_aero_body =
-            self.aero_force_body(stage_idx, mach_number, &vel_air_body, q * reference_area);
-        let dcm_body_to_ned = dcm_ned_to_body.transpose();
-        let aero_force_ned = dcm_body_to_ned * total_aero_body;
-        let dcm_ned_to_eci = dcm_eci_to_ned.transpose();
-        dcm_ned_to_eci * aero_force_ned
+        // STA positions: +X body = -STA
+        let pos_cg = data.cg.interpolate(t) - cfg.xcg_offset;
+        let pos_ctrl = data.controller.interpolate(t) - cfg.xt_offset;
+        let cp =
+            |angle: f64| data.cp.interpolate_cxx(mach, angle.to_degrees().abs()) - cfg.xcp_offset;
+        let (dxt, dyt, dzt) = (
+            pos_ctrl - pos_cg,
+            cfg.ycg_offset - cfg.yt_offset,
+            cfg.zcg_offset - cfg.zt_offset,
+        );
+        let (dxp_pitch, dxp_yaw) = (pos_cg - cp(aoa.x), pos_cg - cp(aoa.y));
+        let (dyp, dzp) = (
+            cfg.ycp_offset - cfg.ycg_offset,
+            cfg.zcp_offset - cfg.zcg_offset,
+        );
+        let f = aero_body;
+        let term_yaw = (-f.y * dxp_yaw + f.x * dyp) / thrust / dxt.hypot(dyt);
+        let term_pitch = (-f.z * dxp_pitch + f.x * dzp) / thrust / dxt.hypot(dzt);
+        if !(term_yaw.abs() < 1.0 && term_pitch.abs() < 1.0) {
+            return along;
+        }
+        let yaw0 = term_yaw.asin() - dyt.atan2(dxt);
+        let pitch = term_pitch.asin() - dzt.atan2(dxt);
+        let half_pi = std::f64::consts::FRAC_PI_2;
+        if !(yaw0.abs() < half_pi && pitch.abs() < half_pi) {
+            return along;
+        }
+        // Compound angle
+        let yaw = (yaw0.tan() * pitch.cos()).atan();
+        (
+            thrust
+                * Vector3::new(
+                    yaw.cos() * pitch.cos(),
+                    -yaw.sin(),
+                    -yaw.cos() * pitch.sin(),
+                ),
+            (pitch, yaw),
+        )
     }
 
     /// Aerodynamic force in the body frame from CA and CN.
     ///
     /// `vel_air_body` is the vehicle's air-relative velocity in body axes and
-    /// `q_area` is dynamic pressure × reference area. Each component opposes
-    /// the matching velocity component, with the flow angle measured from the
-    /// body axis line (0–90°). For normal flight (u > 0) this is the usual
-    /// axial drag along −X and normal force from α/β; when the flow comes
-    /// from behind (|AoA| > 90°, e.g. re-entry with a fixed commanded
-    /// attitude) the body is treated as symmetric, so the force still
-    /// opposes the air-relative velocity and never adds energy.
+    /// `q_area` is dynamic pressure × reference area. The axial force opposes
+    /// the axial flow; the normal force CN(Mach, crossflow angle) lies in the
+    /// plane of the body axis and the airflow and opposes the crossflow,
+    /// with the crossflow angle measured from the body axis line (0–90°).
+    /// For pure pitch or yaw this is the usual CN(α) / CN(β); with both, the
+    /// total angle is used once instead of adding CN(α) and CN(β), which
+    /// overstates a non-linear CN. When the flow comes from behind (e.g.
+    /// re-entry with a fixed commanded attitude) the body is treated as
+    /// symmetric, so the force still opposes the air-relative velocity and
+    /// never adds energy.
     fn aero_force_body(
         &self,
         stage_idx: usize,
         mach_number: f64,
+        powered: bool,
         vel_air_body: &Vector3<f64>,
         q_area: f64,
     ) -> Vector3<f64> {
-        let sign = |x: f64| if x == 0.0 { 0.0 } else { x.signum() };
         let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
         // The axial force flips with the flow when it crosses broadside
         // (u = 0). A hard sign there makes the dynamics chatter around the
@@ -1596,27 +1678,28 @@ impl Simulator {
         let blend = 0.02 * speed;
         let axial_sign = if blend > 0.0 {
             u / u.hypot(blend) * speed.hypot(blend) / speed
+        } else if u == 0.0 {
+            0.0
         } else {
-            sign(u)
+            u.signum()
         };
-        let alpha_deg = w.abs().atan2(u.abs()).to_degrees();
-        let beta_deg = v.abs().atan2(u.abs()).to_degrees();
+        let ca = self.rocket.ca_at(stage_idx, mach_number, powered);
+        let axial = -axial_sign * ca * q_area;
 
-        let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
-        let cn_pitch = self.rocket.cn_at(stage_idx, mach_number, alpha_deg);
-        let cn_yaw = self.rocket.cn_at(stage_idx, mach_number, beta_deg);
-
-        Vector3::new(
-            -axial_sign * ca * q_area,
-            -sign(v) * cn_yaw * q_area,
-            -sign(w) * cn_pitch * q_area,
-        )
+        let cross = v.hypot(w);
+        if cross == 0.0 {
+            return Vector3::new(axial, 0.0, 0.0);
+        }
+        let angle_deg = cross.atan2(u.abs()).to_degrees();
+        let normal = self.rocket.cn_at(stage_idx, mach_number, angle_deg) * q_area;
+        Vector3::new(axial, -normal * v / cross, -normal * w / cross)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rocket::TimeSeriesData;
 
     fn create_test_config() -> RocketConfig {
         use crate::rocket::*;
@@ -1625,6 +1708,7 @@ mod tests {
             power_flight_mode: 0,
             free_flight_mode: 2,
             mass_initial: 1000.0,
+            mass_dry: None,
             thrust: ThrustConfig {
                 isp_file_exists: false,
                 isp_file_name: "".to_string(),
@@ -1651,6 +1735,8 @@ mod tests {
                 ca_file_name: "".to_string(),
                 axial_multiplier: 1.0,
                 const_axial_coefficient: 0.2,
+                const_axial_coefficient_power_off: None,
+                ca_power_off_file_name: "".to_string(),
                 ballistic_coefficient: 100.0,
             },
             attitude: AttitudeConfig {
@@ -1658,6 +1744,7 @@ mod tests {
                 attitude_file_name: "".to_string(),
                 const_elevation: 83.0,
                 const_azimuth: 113.0,
+                const_roll: 0.0,
                 pitch_offset: 0.0,
                 yaw_offset: 0.0,
                 roll_offset: 0.0,
@@ -1672,11 +1759,7 @@ mod tests {
                 dumping_product_ballistic_coefficient: 100.0,
                 additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
             },
-            attitude_neutrality: AttitudeNeutralityConfig {
-                considering_neutrality: false,
-                cg_controller_position_file: "".to_string(),
-                cp_file: "".to_string(),
-            },
+            attitude_neutrality: AttitudeNeutralityConfig::default(),
             six_dof: SixDofConfig {
                 cg_cp_controller_position_file: "".to_string(),
                 moment_of_inertia_file_name: "".to_string(),
@@ -1696,11 +1779,13 @@ mod tests {
                 air_density_file: "".to_string(),
                 air_density_variation: 0.0,
                 integrator: IntegratorSettings::default(),
+                atmosphere_model: Default::default(),
             },
             launch: LaunchCondition {
                 position_llh: [35.0, 139.0, 0.0],
                 velocity_ned: [0.0, 0.0, 0.0],
                 launch_time: [2023, 1, 1, 12, 0, 0],
+                rail_length: 0.0,
             },
             stages: vec![stage],
             wind: WindConfig {
@@ -1862,7 +1947,10 @@ mod tests {
     fn test_axial_force_continuous_through_broadside_flow() {
         let sim = Simulator::new(Rocket::new(create_test_config())).unwrap();
         let ca = sim.rocket.ca_at_mach(0, 1.0);
-        let axial = |u: f64, w: f64| sim.aero_force_body(0, 1.0, &Vector3::new(u, 0.0, w), 1.0).x;
+        let axial = |u: f64, w: f64| {
+            sim.aero_force_body(0, 1.0, true, &Vector3::new(u, 0.0, w), 1.0)
+                .x
+        };
         // Flow along the axis: exactly CA * q * S
         assert_eq!(axial(100.0, 0.0), -ca);
         assert_eq!(axial(-100.0, 0.0), ca);
@@ -2082,6 +2170,370 @@ mod tests {
     }
 
     #[test]
+    fn test_output_times_on_exact_grid() {
+        let mut config = coast_config(2);
+        config.calculate_condition.time_step = 0.1;
+        config.calculate_condition.end_time = 10.0;
+        let trajectory = run_config(config);
+        for (k, s) in trajectory.iter().enumerate() {
+            assert_eq!(s.time, k as f64 * 0.1, "sample {k}");
+        }
+    }
+
+    #[test]
+    fn test_impact_located_on_the_ground() {
+        for method in [IntegratorMethod::Rk4, IntegratorMethod::Rk45] {
+            let mut config = coast_config(2);
+            config.calculate_condition.end_time = 200.0;
+            config.calculate_condition.integrator.method = method;
+            let trajectory = run_config(config);
+            let last = trajectory.last().unwrap();
+            assert!(
+                last.altitude.abs() < 1e-2,
+                "impact altitude {}",
+                last.altitude
+            );
+            assert!(
+                trajectory.windows(2).all(|w| w[1].time > w[0].time),
+                "times must increase"
+            );
+            // Not on the output grid: located between two samples
+            let prev = &trajectory[trajectory.len() - 2];
+            assert!(last.time > prev.time && last.time < prev.time + 1.0);
+        }
+    }
+
+    #[test]
+    fn test_events_in_order_and_located() {
+        let mut config = coast_config(2);
+        config.calculate_condition.end_time = 200.0;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        let kinds: Vec<EventKind> = sim.events.iter().map(|e| e.kind).collect();
+        let without_max_q: Vec<EventKind> = kinds
+            .iter()
+            .copied()
+            .filter(|&k| k != EventKind::MaxQ)
+            .collect();
+        assert_eq!(
+            without_max_q,
+            [
+                EventKind::Ignition,
+                EventKind::Liftoff,
+                EventKind::Burnout,
+                EventKind::Apogee,
+                EventKind::Impact
+            ]
+        );
+        assert_eq!(kinds.iter().filter(|&&k| k == EventKind::MaxQ).count(), 1);
+        assert!(sim.events.windows(2).all(|w| w[0].time_s <= w[1].time_s));
+        let burnout = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Burnout)
+            .unwrap();
+        assert!((burnout.time_s - 5.0).abs() < 1e-9);
+
+        let apogee = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Apogee)
+            .unwrap();
+        let max_alt = trajectory.iter().map(|s| s.altitude).fold(0.0, f64::max);
+        assert!(
+            apogee.altitude_m >= max_alt - 1e-6,
+            "apogee {} vs {max_alt}",
+            apogee.altitude_m
+        );
+
+        let max_q = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::MaxQ)
+            .unwrap();
+        let sampled = trajectory
+            .iter()
+            .map(|s| s.dynamic_pressure)
+            .fold(0.0, f64::max);
+        assert!(max_q.dynamic_pressure_pa >= sampled * (1.0 - 1e-6));
+
+        let impact = sim.events.last().unwrap();
+        assert_eq!(impact.time_s, trajectory.last().unwrap().time);
+    }
+
+    #[test]
+    fn test_supersonic_flight_records_mach1() {
+        let mut config = coast_config(2);
+        config.stages[0].thrust.const_thrust_vac = 200_000.0;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        sim.run();
+        let mach1 = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Mach1)
+            .unwrap();
+        assert!((mach1.mach - 1.0).abs() < 1e-3, "mach {}", mach1.mach);
+    }
+
+    #[test]
+    fn test_telemetry_matches_dynamics() {
+        // Ballistic coast: the C++ telemetry must use the same drag as the
+        // equations of motion (drag accel = q / beta along the airflow)
+        let mut config = coast_config(2);
+        config.stages[0].aero.ballistic_coefficient = 50.0;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        for (s, row) in trajectory.iter().zip(&sim.telemetry_cpp).skip(1) {
+            assert!((row.acc_eci - s.acc_eci).magnitude() < 1e-9);
+            if s.flight_mode == FlightMode::FreeBallistic && s.dynamic_pressure > 1.0 {
+                let drag = s.dynamic_pressure / 50.0 * s.mass;
+                assert!((row.aero_body.x + drag).abs() < 1e-6 * drag);
+                assert!((s.drag_force - drag).abs() < 1e-6 * drag);
+                assert_eq!(row.aero_body.y, 0.0);
+                assert_eq!(row.aero_body.z, 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_burn_ends_when_propellant_runs_out() {
+        // 50 kN at Isp 200 s burns 25.5 kg/s; 60 kg of propellant lasts 2.35 s
+        let mut config = coast_config(2);
+        config.stages[0].mass_dry = Some(940.0);
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        let flow = 50_000.0 / (200.0 * G0);
+        let t_out = 60.0 / flow;
+        let burnout = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Burnout)
+            .unwrap();
+        assert!(
+            (burnout.time_s - t_out).abs() < 1e-6,
+            "burnout {}",
+            burnout.time_s
+        );
+        assert!((burnout.mass_kg - 940.0).abs() < 1e-6);
+        for s in trajectory.iter().filter(|s| s.time > t_out) {
+            assert_eq!(s.thrust, 0.0);
+            assert!((s.mass - 940.0).abs() < 1e-6, "mass {}", s.mass);
+        }
+    }
+
+    #[test]
+    fn test_mass_never_negative_without_dry_mass() {
+        // A two-stage burn far longer than the first stage's mass: the
+        // first stage cannot eat into the upper stage
+        let mut config = two_stage_config();
+        config.stages[0].thrust.burn_end_time = 100.0;
+        config.stages[0].thrust.forced_cutoff_time = 100.0;
+        let trajectory = run_config(config);
+        let first_stage: Vec<_> = trajectory.iter().filter(|s| s.stage == 1).collect();
+        assert!(first_stage.iter().all(|s| s.mass >= 300.0 - 1e-6));
+        assert!(trajectory.iter().all(|s| s.altitude.is_finite()));
+    }
+
+    #[test]
+    fn test_thrust_coefficient_keeps_total_impulse() {
+        // Thrust x2 burns the same propellant in half the time
+        let burned = |k: f64| {
+            let mut config = coast_config(2);
+            config.stages[0].thrust.thrust_coefficient = k;
+            let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+            sim.run();
+            let b = sim
+                .events
+                .iter()
+                .find(|e| e.kind == EventKind::Burnout)
+                .unwrap()
+                .clone();
+            (b.time_s, 1000.0 - b.mass_kg)
+        };
+        let (t1, m1) = burned(1.0);
+        let (t2, m2) = burned(2.0);
+        assert!((t1 - 5.0).abs() < 1e-9 && (t2 - 2.5).abs() < 1e-9);
+        assert!((m1 - m2).abs() < 1e-6, "{m1} vs {m2}");
+    }
+
+    #[test]
+    fn test_held_on_pad_until_thrust_exceeds_weight() {
+        // Thrust 5 kN for a 1000 kg vehicle: never lifts off
+        let mut config = coast_config(2);
+        config.stages[0].thrust.const_thrust_vac = 5_000.0;
+        config.calculate_condition.end_time = 10.0;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        assert_eq!(trajectory.last().unwrap().time, 10.0);
+        for s in &trajectory {
+            assert!(
+                s.altitude.abs() < 1e-6,
+                "altitude {} at {}",
+                s.altitude,
+                s.time
+            );
+            assert!(s.velocity_ecef_ned.magnitude() < 1e-6);
+        }
+        // Propellant still burns on the pad
+        assert!(trajectory.last().unwrap().mass < 1000.0);
+        assert!(sim.events.iter().all(|e| e.kind != EventKind::Liftoff));
+    }
+
+    #[test]
+    fn test_liftoff_when_thrust_ramps_up() {
+        // Thrust rises linearly from 0 to 20 kN over 2 s: lifts off when
+        // the thrust (less the exit pressure loss) exceeds the weight
+        let mut config = coast_config(2);
+        config.calculate_condition.end_time = 10.0;
+        let mut rocket = Rocket::new(config);
+        rocket.thrust_tables[0] = Some(TimeSeriesData::from_pairs([(0.0, 0.0), (2.0, 20_000.0)]));
+        let mut sim = Simulator::new(rocket).unwrap();
+        sim.run();
+        let liftoff = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Liftoff)
+            .expect("liftoff");
+        let exit_area = std::f64::consts::PI * 0.1f64.powi(2) / 4.0 * 5.0;
+        let thrust = |t: f64| 10_000.0 * t - exit_area * 101_325.0;
+        let weight = liftoff.mass_kg * 9.80;
+        // Along a rail at 83 deg elevation the weight component is W sin(83)
+        let needed = weight * 83f64.to_radians().sin();
+        assert!(
+            (thrust(liftoff.time_s) - needed).abs() < 0.01 * needed,
+            "liftoff at {} s: thrust {} vs {}",
+            liftoff.time_s,
+            thrust(liftoff.time_s),
+            needed
+        );
+    }
+
+    #[test]
+    fn test_rail_guides_the_vehicle() {
+        let mut config = coast_config(2);
+        config.launch.rail_length = 10.0;
+        config.launch.position_llh[2] = 0.0;
+        // Crosswind: off the rail the vehicle would drift sideways
+        config.wind.const_wind = [10.0, 23.0];
+        config.calculate_condition.time_step = 0.05;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        let kinds: Vec<EventKind> = sim.events.iter().map(|e| e.kind).collect();
+        assert_eq!(
+            &kinds[..3],
+            [EventKind::Ignition, EventKind::Liftoff, EventKind::RailExit]
+        );
+        let exit = &sim.events[2];
+        // On the rail the vehicle climbs at the rail elevation (83 deg)
+        assert!((exit.altitude_m - 10.0 * 83f64.to_radians().sin()).abs() < 1e-3);
+        for s in trajectory
+            .iter()
+            .filter(|s| s.time < exit.time_s && s.time > 0.0)
+        {
+            let v = s.velocity_ecef_ned;
+            let elevation = (-v.z).atan2(v.x.hypot(v.y)).to_degrees();
+            let azimuth = v.y.atan2(v.x).to_degrees();
+            assert!((elevation - 83.0).abs() < 1e-3, "elevation {elevation}");
+            assert!((azimuth - 113.0).abs() < 1e-3, "azimuth {azimuth}");
+        }
+        // Exit speed from the along-rail acceleration
+        let exit_area = std::f64::consts::PI * 0.1f64.powi(2) / 4.0 * 5.0;
+        let accel = (50_000.0 - exit_area * 101_325.0) / 1000.0 - 9.80 * 83f64.to_radians().sin();
+        let expected = (2.0 * accel * 10.0).sqrt();
+        assert!(
+            (exit.speed_mps / expected - 1.0).abs() < 0.02,
+            "{} vs {expected}",
+            exit.speed_mps
+        );
+    }
+
+    #[test]
+    fn test_normal_force_uses_total_angle() {
+        // CN table that saturates: CN(deg) = min(deg, 5) * 0.1
+        let mut rocket = Rocket::new(create_test_config());
+        let angles: Vec<f64> = (0..=10).map(|d| d as f64).collect();
+        rocket.cn_surface = Some(crate::rocket::SurfaceData2D {
+            x: vec![0.0, 5.0],
+            y: angles.clone(),
+            z: vec![angles.iter().map(|a| a.min(5.0) * 0.1).collect(); 2],
+        });
+        let sim = Simulator::new(rocket).unwrap();
+        let force = |alpha: f64, beta: f64| {
+            let (a, b) = (alpha.to_radians(), beta.to_radians());
+            let v = Vector3::new(100.0, 100.0 * b.tan(), 100.0 * a.tan());
+            sim.aero_force_body(0, 1.0, true, &v, 1.0)
+        };
+        // Pure pitch: CN(alpha) against the flow
+        assert!((force(3.0, 0.0).z + 0.3).abs() < 1e-9);
+        assert_eq!(force(3.0, 0.0).y, 0.0);
+        // 4 deg pitch + 4 deg yaw: one CN at the total angle (5.66 deg,
+        // saturated at 0.5), split along the crossflow
+        let f = force(4.0, 4.0);
+        assert!((f.y.hypot(f.z) - 0.5).abs() < 1e-3, "{f}");
+        assert!((f.y - f.z).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_no_negative_thrust_when_overexpanded() {
+        // 3 kN vacuum thrust from a nozzle that loses 4 kN at sea level
+        let mut config = coast_config(2);
+        config.stages[0].thrust.const_thrust_vac = 3_000.0;
+        config.calculate_condition.end_time = 2.0;
+        let trajectory = run_config(config);
+        assert!(trajectory.iter().all(|s| s.thrust >= 0.0));
+    }
+
+    #[test]
+    fn test_thrust_trim_balances_aerodynamic_moment() {
+        use crate::rocket::{NeutralityData, SurfaceData2D};
+        let mut config = create_test_config();
+        config.stages[0].attitude_neutrality.considering_neutrality = true;
+        let mut rocket = Rocket::new(config);
+        let flat = |v: f64| SurfaceData2D {
+            x: vec![0.0, 10.0],
+            y: vec![0.0, 90.0],
+            z: vec![vec![v, v]; 2],
+        };
+        rocket.cn_surface = Some(flat(0.1));
+        rocket.neutrality[0] = Some(NeutralityData {
+            cg: TimeSeriesData::from_pairs([(0.0, 5.0)]),
+            controller: TimeSeriesData::from_pairs([(0.0, 9.0)]),
+            cp: flat(6.0),
+        });
+        let sim = Simulator::new(rocket).unwrap();
+        let aero = Vector3::new(-500.0, 0.0, -2000.0);
+        let aoa = Vector3::new(0.05, 0.0, 0.05);
+        let (thrust, (pitch, yaw)) = sim.trimmed_thrust(0, 1.0, 50_000.0, 1.0, &aoa, &aero);
+        assert_eq!(yaw, 0.0);
+        assert!((thrust.magnitude() - 50_000.0).abs() < 1e-6);
+        // Pitch moment about the CG: thrust 4 m aft, normal force 1 m aft
+        let moment = thrust.z * (9.0 - 5.0) + aero.z * (6.0 - 5.0);
+        assert!(moment.abs() < 1e-6, "moment {moment}, pitch {pitch}");
+    }
+
+    #[test]
+    fn test_power_off_axial_coefficient_after_burnout() {
+        // Aerodynamically stable coast: the power-off CA applies after burnout
+        let flight = |power_off: Option<f64>| {
+            let mut config = coast_config(0);
+            config.stages[0].aero.const_axial_coefficient_power_off = power_off;
+            let trajectory = run_config(config);
+            let during = trajectory
+                .iter()
+                .find(|s| s.time == 3.0)
+                .unwrap()
+                .drag_force;
+            let after = trajectory.iter().find(|s| s.time == 20.0).unwrap();
+            (during, after.drag_force / after.dynamic_pressure)
+        };
+        let (during_same, after_same) = flight(None);
+        let (during_off, after_off) = flight(Some(1.0));
+        assert_eq!(during_same, during_off, "powered CA unchanged");
+        // drag / q = CA * S: doubles from 0.5 to 1.0
+        assert!((after_off / after_same - 2.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn client_config_multi_stage_progresses() {
         use crate::rocket::*;
 
@@ -2111,9 +2563,12 @@ mod tests {
                 duration_s: 60.0,
                 output_step_s: 1.0,
                 air_density_percent: 0.0,
+                air_density_profile: Vec::new(),
+                atmosphere_model: Default::default(),
                 integrator: ClientIntegrator {
                     method: IntegratorMethod::Rk4,
                     rk4_step_s: Some(0.5),
+                    ..Default::default()
                 },
             },
             launch: ClientLaunch {
@@ -2129,6 +2584,7 @@ mod tests {
                     minute: 0,
                     second: 0,
                 },
+                rail_length_m: 0.0,
             },
             stages: vec![stage1, stage2],
             stage: None,
@@ -2140,11 +2596,14 @@ mod tests {
                 ca_constant: 0.2,
                 ca_multiplier: 1.0,
                 ca_profile: Vec::new(),
+                ca_power_off_constant: None,
+                ca_power_off_profile: Vec::new(),
                 ballistic_coefficient: 120.0,
             },
             attitude: ClientAttitude {
                 elevation_deg: 85.0,
                 azimuth_deg: 113.0,
+                roll_deg: 0.0,
                 pitch_offset_deg: 0.0,
                 yaw_offset_deg: 0.0,
                 roll_offset_deg: 0.0,

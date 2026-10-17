@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import type { RunStatus } from '../hooks/useSimulation'
 import type { Track } from '../lib/trajectory'
 import { fmt } from '../lib/format'
@@ -8,6 +8,29 @@ import { tr } from '../lib/i18n'
 import type { DispersionOverlay } from './Globe'
 
 const Globe = lazy(() => import('./Globe'))
+
+const TELEMETRY_KEY = 'ot.telemetry.collapsed'
+
+/** Remembered per viewer; the card works without storage. */
+function useTelemetryCollapsed() {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(TELEMETRY_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggle = () =>
+    setCollapsed((v) => {
+      try {
+        localStorage.setItem(TELEMETRY_KEY, v ? '0' : '1')
+      } catch {
+        /* ignore */
+      }
+      return !v
+    })
+  return [collapsed, toggle] as const
+}
 
 /** The 3D view with its overlays: telemetry, stale-result and divergence notices. */
 export function GlobeStage({
@@ -25,6 +48,7 @@ export function GlobeStage({
   error: string | null
   compactTelemetry: boolean
 }) {
+  const [telemetryCollapsed, toggleTelemetry] = useTelemetryCollapsed()
   return (
     <div className="relative h-full w-full">
       <ErrorBoundary
@@ -60,7 +84,16 @@ export function GlobeStage({
       )}
       {track && (
         <div className="absolute left-3 top-3">
-          <Telemetry track={track} compact={compactTelemetry} />
+          <Telemetry track={track} compact={compactTelemetry} collapsed={telemetryCollapsed} onToggle={toggleTelemetry} />
+        </div>
+      )}
+      {track && status === 'running' && (
+        <div
+          role="status"
+          aria-label={tr('計算中', 'Computing')}
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5 overflow-hidden"
+        >
+          <div className="ot-progress h-full w-1/3 bg-signal" />
         </div>
       )}
       {track && (status === 'invalid' || status === 'error') && (

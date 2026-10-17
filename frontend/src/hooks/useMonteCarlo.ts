@@ -5,6 +5,8 @@ import type { ClientConfig } from '../lib/simulation'
 import {
   DEFAULT_DISPERSION,
   DISPERSION_KEYS,
+  ELLIPSE_LEVELS,
+  EXTRA_DISPERSION_KEYS,
   impactStatistics,
   startMonteCarlo,
   type CaseResult,
@@ -22,13 +24,16 @@ function loadSettings(): MonteCarloSettings {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<MonteCarloSettings> | null
     if (!raw) return DEFAULT_SETTINGS
     const dispersion = { ...DEFAULT_DISPERSION }
-    for (const k of DISPERSION_KEYS) {
+    for (const k of [...DISPERSION_KEYS, ...EXTRA_DISPERSION_KEYS]) {
       const v = raw.dispersion?.[k]
       if (typeof v === 'number' && Number.isFinite(v) && v >= 0) dispersion[k] = v
     }
+    if (raw.dispersion?.distribution === 'uniform') dispersion.distribution = 'uniform'
+    if (raw.dispersion?.independent_stages === true) dispersion.independent_stages = true
     const count = Number.isInteger(raw.count) ? Math.min(Math.max(raw.count!, 1), MAX_CASES) : DEFAULT_SETTINGS.count
     const seed = Number.isInteger(raw.seed) && raw.seed! >= 0 ? raw.seed! : DEFAULT_SETTINGS.seed
-    return { count, seed, dispersion }
+    const ellipse = ELLIPSE_LEVELS.find((l) => l === raw.ellipse)
+    return { count, seed, dispersion, ...(ellipse && { ellipse }) }
   } catch {
     return DEFAULT_SETTINGS
   }

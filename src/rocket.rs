@@ -2,6 +2,9 @@
 ///
 /// This module contains rocket configuration structures
 /// that are compatible with the existing JSON format.
+use crate::physics::atmosphere::AtmosphereKind;
+use crate::physics::coordinates::CoordinateTransform;
+use nalgebra::{Matrix3, UnitQuaternion, Vector3};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -185,6 +188,7 @@ impl<'de> Deserialize<'de> for RocketConfig {
             stage3: Option<StageConfig>,
             #[serde(rename = "stage", default)]
             stage: Option<StageConfig>,
+            #[serde(default)]
             wind: WindConfig,
         }
 
@@ -245,6 +249,18 @@ pub struct IntegratorSettings {
         skip_serializing_if = "Option::is_none"
     )]
     pub rk4_step: Option<f64>,
+
+    /// RK45 absolute error tolerance (all state components)
+    #[serde(rename = "rk45 absolute tolerance[-]", default = "default_rk45_tol")]
+    pub rk45_abs_tol: f64,
+
+    /// RK45 relative error tolerance
+    #[serde(rename = "rk45 relative tolerance[-]", default = "default_rk45_tol")]
+    pub rk45_rel_tol: f64,
+}
+
+fn default_rk45_tol() -> f64 {
+    1.0e-9
 }
 
 impl Default for IntegratorSettings {
@@ -252,6 +268,8 @@ impl Default for IntegratorSettings {
         Self {
             method: IntegratorMethod::Rk4,
             rk4_step: None,
+            rk45_abs_tol: default_rk45_tol(),
+            rk45_rel_tol: default_rk45_tol(),
         }
     }
 }
@@ -264,17 +282,24 @@ pub struct CalculateCondition {
     #[serde(rename = "time step for output[s]")]
     pub time_step: f64,
 
-    #[serde(rename = "air density variation file exist?(bool)")]
+    #[serde(rename = "air density variation file exist?(bool)", default)]
     pub air_density_file_exists: bool,
 
-    #[serde(rename = "air density variation file name(str)")]
+    #[serde(rename = "air density variation file name(str)", default)]
     pub air_density_file: String,
 
-    #[serde(rename = "variation ratio of air density[%](-100to100, default=0)")]
+    #[serde(
+        rename = "variation ratio of air density[%](-100to100, default=0)",
+        default
+    )]
     pub air_density_variation: f64,
 
     #[serde(default)]
     pub integrator: IntegratorSettings,
+
+    /// Standard atmosphere: "legacy" (C++-compatible, default) or "ussa1976"
+    #[serde(rename = "atmosphere model(str)", default)]
+    pub atmosphere_model: AtmosphereKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -282,41 +307,61 @@ pub struct LaunchCondition {
     #[serde(rename = "position LLH[deg,deg,m]")]
     pub position_llh: [f64; 3],
 
-    #[serde(rename = "velocity NED[m/s]")]
+    #[serde(rename = "velocity NED[m/s]", default)]
     pub velocity_ned: [f64; 3],
 
-    #[serde(rename = "time(UTC)[y,m,d,h,min,sec]")]
+    #[serde(rename = "time(UTC)[y,m,d,h,min,sec]", default = "default_launch_time")]
     pub launch_time: [i32; 6],
+
+    /// Launcher rail length [m], along the attitude at t = 0. Starting at
+    /// rest, the vehicle is held until the thrust lifts it and then slides
+    /// along the rail; 0 means a pad without rail.
+    #[serde(rename = "launcher rail length[m]", default)]
+    pub rail_length: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StageConfig {
-    #[serde(rename = "power flight mode(int)")]
+    #[serde(rename = "power flight mode(int)", default)]
     pub power_flight_mode: i32,
 
-    #[serde(rename = "free flight mode(int)")]
+    #[serde(rename = "free flight mode(int)", default = "default_free_mode")]
     pub free_flight_mode: i32,
 
     #[serde(rename = "mass initial[kg]")]
     pub mass_initial: f64,
 
+    /// Mass of the stage without propellant [kg]; the burn ends when the
+    /// propellant runs out. Unset: the whole stage mass may be burned.
+    #[serde(
+        rename = "mass dry[kg]",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub mass_dry: Option<f64>,
+
+    #[serde(default)]
     pub thrust: ThrustConfig,
+    #[serde(default)]
     pub aero: AeroConfig,
+    #[serde(default)]
     pub attitude: AttitudeConfig,
 
-    #[serde(rename = "dumping product")]
+    #[serde(rename = "dumping product", default)]
     pub dumping_product: DumpingProductConfig,
 
-    #[serde(rename = "attitude neutrality(3DoF)")]
+    #[serde(rename = "attitude neutrality(3DoF)", default)]
     pub attitude_neutrality: AttitudeNeutralityConfig,
 
-    #[serde(rename = "6DoF")]
+    #[serde(rename = "6DoF", default)]
     pub six_dof: SixDofConfig,
 
+    #[serde(default)]
     pub stage: StageTransitionConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ThrustConfig {
     #[serde(rename = "Isp vac file exist?(bool)")]
     pub isp_file_exists: bool,
@@ -362,6 +407,7 @@ pub struct ThrustConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AeroConfig {
     #[serde(rename = "body diameter[m]")]
     pub body_diameter: f64,
@@ -390,11 +436,24 @@ pub struct AeroConfig {
     #[serde(rename = "const axial coefficient[-]")]
     pub const_axial_coefficient: f64,
 
+    /// CA while the engine is off (base drag); unset: the powered CA
+    #[serde(
+        rename = "const axial coefficient power off[-]",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub const_axial_coefficient_power_off: Option<f64>,
+
+    /// CA(Mach) table while the engine is off (vehicle-wide, read from
+    /// stage 1; scaled by the axial multiplier)
+    #[serde(rename = "axial coefficient power off file name(str)")]
+    pub ca_power_off_file_name: String,
+
     #[serde(rename = "ballistic coefficient(ballistic flight mode)[kg/m2]")]
     pub ballistic_coefficient: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AttitudeConfig {
     #[serde(rename = "attitude file exist?(bool)")]
     pub attitude_file_exists: bool,
@@ -407,6 +466,9 @@ pub struct AttitudeConfig {
 
     #[serde(rename = "const azimuth[deg]")]
     pub const_azimuth: f64,
+
+    #[serde(rename = "const roll[deg]", default)]
+    pub const_roll: f64,
 
     #[serde(rename = "pitch offset[deg]")]
     pub pitch_offset: f64,
@@ -428,6 +490,7 @@ pub struct AttitudeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DumpingProductConfig {
     #[serde(rename = "dumping product exist?(bool)")]
     pub dumping_product_exists: bool,
@@ -445,19 +508,56 @@ pub struct DumpingProductConfig {
     pub additional_speed_at_dumping_ned: [f64; 3],
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Thrust vector trim that balances the aerodynamic moment (3DoF
+/// "neutrality", as in the C++ simulator). Positions are STA [m] (from the
+/// nose, aft positive); the offsets move CG, CP and the thrust point.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AttitudeNeutralityConfig {
     #[serde(rename = "considering neutrality?(bool)")]
     pub considering_neutrality: bool,
 
+    /// CSV: time [s], CG STA [m], controller (gimbal) STA [m]
     #[serde(rename = "CG, Controller position file(str)")]
     pub cg_controller_position_file: String,
 
+    /// CSV: CP STA [m] over Mach x angle of attack, laid out as the CN file
     #[serde(rename = "CP file(str)")]
     pub cp_file: String,
+
+    #[serde(rename = "Xcg offset[m]", default)]
+    pub xcg_offset: f64,
+    #[serde(rename = "Ycg offset[m]", default)]
+    pub ycg_offset: f64,
+    #[serde(rename = "Zcg offset[m]", default)]
+    pub zcg_offset: f64,
+    #[serde(rename = "Xcp offset[m]", default)]
+    pub xcp_offset: f64,
+    #[serde(rename = "Ycp offset[m]", default)]
+    pub ycp_offset: f64,
+    #[serde(rename = "Zcp offset[m]", default)]
+    pub zcp_offset: f64,
+    #[serde(rename = "Xt offset[m]", default)]
+    pub xt_offset: f64,
+    #[serde(rename = "Yt offset[m]", default)]
+    pub yt_offset: f64,
+    #[serde(rename = "Zt offset[m]", default)]
+    pub zt_offset: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Loaded tables of the thrust trim (see `AttitudeNeutralityConfig`)
+#[derive(Debug, Clone)]
+pub struct NeutralityData {
+    /// CG STA [m] over time [s]
+    pub cg: TimeSeriesData,
+    /// Controller (thrust point) STA [m] over time [s]
+    pub controller: TimeSeriesData,
+    /// CP STA [m] over Mach x angle [deg]
+    pub cp: SurfaceData2D,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SixDofConfig {
     #[serde(rename = "CG,CP,Controller position file(str)")]
     pub cg_cp_controller_position_file: String,
@@ -467,6 +567,7 @@ pub struct SixDofConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct StageTransitionConfig {
     #[serde(rename = "following stage exist?(bool)")]
     pub following_stage_exists: bool,
@@ -476,6 +577,7 @@ pub struct StageTransitionConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct WindConfig {
     #[serde(rename = "wind file exist?(bool)")]
     pub wind_file_exists: bool,
@@ -516,34 +618,41 @@ impl TimeSeriesData {
         ts
     }
 
-    /// Linear interpolation for given time
+    /// Linear interpolation for given time (clamped to the end values)
     pub fn interpolate(&self, t: f64) -> f64 {
-        if self.time.is_empty() {
-            return 0.0;
+        match bracket(&self.time, t) {
+            None => 0.0,
+            Some((i, a)) => match self.values.get(i + 1) {
+                Some(next) => self.values[i] + a * (next - self.values[i]),
+                None => self.values[i],
+            },
         }
-
-        // Handle boundary cases
-        if t <= self.time[0] {
-            return self.values[0];
-        }
-        if t >= self.time[self.time.len() - 1] {
-            return self.values[self.values.len() - 1];
-        }
-
-        // Find interval for interpolation
-        for i in 0..self.time.len() - 1 {
-            if t >= self.time[i] && t <= self.time[i + 1] {
-                let dt = self.time[i + 1] - self.time[i];
-                if dt.abs() < 1e-10 {
-                    return self.values[i];
-                }
-                let alpha = (t - self.time[i]) / dt;
-                return self.values[i] + alpha * (self.values[i + 1] - self.values[i]);
-            }
-        }
-
-        self.values[self.values.len() - 1]
     }
+}
+
+/// Interval of an ascending axis that contains `x`: `(i, a)` with
+/// `x ≈ axis[i] + a (axis[i+1] - axis[i])`, `a` in [0, 1]. Outside the
+/// axis the end point is returned (`a = 0`). `None` for an empty axis.
+pub(crate) fn bracket(axis: &[f64], x: f64) -> Option<(usize, f64)> {
+    let n = axis.len();
+    if n == 0 {
+        return None;
+    }
+    if n == 1 || x <= axis[0] {
+        return Some((0, 0.0));
+    }
+    if x >= axis[n - 1] {
+        return Some((n - 1, 0.0));
+    }
+    // First index with axis[i] > x, so axis[i-1] <= x < axis[i]
+    let i = axis.partition_point(|&v| v <= x) - 1;
+    let dx = axis[i + 1] - axis[i];
+    let a = if dx.abs() < 1e-10 {
+        0.0
+    } else {
+        (x - axis[i]) / dx
+    };
+    Some((i, a))
 }
 
 impl Default for TimeSeriesData {
@@ -578,8 +687,17 @@ pub struct Rocket {
     pub cn_data: Option<TimeSeriesData>,
     pub cn_surface: Option<SurfaceData2D>,
     pub ca_data: Option<TimeSeriesData>,
+    /// CA(Mach) while the engine is off
+    pub ca_power_off_data: Option<TimeSeriesData>,
     pub attitude_data: Option<Vec<(f64, f64, f64)>>, // (time, azimuth, elevation)
-    pub wind_data: Option<Vec<(f64, f64, f64)>>,     // (altitude, speed, direction)
+    /// Roll program [deg] over time (4th column of the attitude file)
+    pub attitude_roll: Option<TimeSeriesData>,
+    /// Air density variation [%] over altitude [m] (replaces the uniform
+    /// variation ratio, as in C++)
+    pub air_density_table: Option<TimeSeriesData>,
+    /// Thrust trim tables per stage (when "considering neutrality")
+    pub neutrality: Vec<Option<NeutralityData>>,
+    pub wind_data: Option<Vec<(f64, f64, f64)>>, // (altitude, speed, direction)
 }
 
 impl Rocket {
@@ -595,7 +713,11 @@ impl Rocket {
             cn_data: None,
             cn_surface: None,
             ca_data: None,
+            ca_power_off_data: None,
             attitude_data: None,
+            attitude_roll: None,
+            air_density_table: None,
+            neutrality: vec![None; stage_count],
             wind_data: None,
         }
     }
@@ -608,14 +730,21 @@ impl Rocket {
         &self.stage_configs[index]
     }
 
-    /// Get thrust for a specific stage at stage-relative time [N]
+    /// Vacuum thrust of a stage at stage-relative time [N]
+    ///
+    /// As in the C++ simulator, the thrust coefficient `k_T` scales the
+    /// thrust and compresses the profile in time (the burn lasts `1/k_T` as
+    /// long, so the total impulse is unchanged), and the Isp coefficient
+    /// `k_I` scales thrust and Isp together (same mass flow, `k_I` times
+    /// the impulse).
     pub fn thrust_at(&self, stage_index: usize, time: f64) -> f64 {
-        let stage = &self.stage_configs[stage_index];
-        if let Some(Some(data)) = self.thrust_tables.get(stage_index) {
-            data.interpolate(time) * stage.thrust.thrust_coefficient
-        } else {
-            stage.thrust.const_thrust_vac
-        }
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let scale = thrust.thrust_coefficient * thrust.isp_coefficient;
+        let base = match self.thrust_tables.get(stage_index) {
+            Some(Some(data)) => data.interpolate(time * thrust.thrust_coefficient),
+            _ => thrust.const_thrust_vac,
+        };
+        base * scale
     }
 
     /// Legacy helper (stage 0)
@@ -623,18 +752,67 @@ impl Rocket {
         self.thrust_at(0, time)
     }
 
-    /// Get specific impulse for a stage at stage-relative time [s]
+    /// Vacuum specific impulse of a stage at stage-relative time [s]
+    /// (see `thrust_at` for the coefficients)
     pub fn isp_at(&self, stage_index: usize, time: f64) -> f64 {
-        let stage = &self.stage_configs[stage_index];
-        if let Some(Some(data)) = self.isp_tables.get(stage_index) {
-            data.interpolate(time) * stage.thrust.isp_coefficient
-        } else {
-            stage.thrust.const_isp_vac
-        }
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let base = match self.isp_tables.get(stage_index) {
+            Some(Some(data)) => data.interpolate(time * thrust.thrust_coefficient),
+            _ => thrust.const_isp_vac,
+        };
+        base * thrust.isp_coefficient
     }
 
     pub fn isp_at_time(&self, time: f64) -> f64 {
         self.isp_at(0, time)
+    }
+
+    /// Stage-relative end of the burn [s]: the burn start plus the burn
+    /// duration divided by the thrust coefficient (as in C++)
+    pub fn burn_end_time(&self, stage_index: usize) -> f64 {
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let k = thrust.thrust_coefficient;
+        let duration = thrust.burn_end_time - thrust.burn_start_time;
+        if k > 0.0 {
+            thrust.burn_start_time + duration / k
+        } else {
+            thrust.burn_start_time
+        }
+    }
+
+    /// Propellant the stage may burn [kg]: initial minus dry mass
+    /// (the whole stage mass when no dry mass is given)
+    pub fn usable_propellant(&self, stage_index: usize) -> f64 {
+        let stage = &self.stage_configs[stage_index];
+        let dry = stage.mass_dry.unwrap_or(0.0).clamp(0.0, stage.mass_initial);
+        stage.mass_initial - dry
+    }
+
+    /// Propellant the programmed burn would use [kg] (mass flow integrated
+    /// over the burn window, ignoring depletion)
+    pub fn propellant_demand(&self, stage_index: usize) -> f64 {
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let start = thrust.burn_start_time;
+        let end = self
+            .burn_end_time(stage_index)
+            .min(thrust.forced_cutoff_time);
+        if end <= start {
+            return 0.0;
+        }
+        let n = 2000;
+        let h = (end - start) / n as f64;
+        let flow = |t: f64| {
+            let isp = self.isp_at(stage_index, t);
+            if isp > 0.0 {
+                self.thrust_at(stage_index, t).max(0.0) / (isp * crate::math::constants::G0)
+            } else {
+                0.0
+            }
+        };
+        // Trapezoidal rule
+        (0..n)
+            .map(|i| 0.5 * h * (flow(start + i as f64 * h) + flow(start + (i + 1) as f64 * h)))
+            .sum()
     }
 
     /// Get normal force coefficient at given Mach number for a stage
@@ -660,6 +838,21 @@ impl Rocket {
         }
     }
 
+    /// Axial force coefficient with the engine on or off: the power-off
+    /// table or constant when given, otherwise the powered CA
+    pub fn ca_at(&self, stage_index: usize, mach: f64, powered: bool) -> f64 {
+        if !powered {
+            let aero = &self.stage_configs[stage_index].aero;
+            if let Some(data) = &self.ca_power_off_data {
+                return data.interpolate(mach) * aero.axial_multiplier;
+            }
+            if let Some(ca) = aero.const_axial_coefficient_power_off {
+                return ca;
+            }
+        }
+        self.ca_at_mach(stage_index, mach)
+    }
+
     /// Get axial force coefficient at given Mach number for a stage
     pub fn ca_at_mach(&self, stage_index: usize, mach: f64) -> f64 {
         let stage = &self.stage_configs[stage_index];
@@ -672,101 +865,96 @@ impl Rocket {
 
     /// Get attitude angles at given time (azimuth, elevation) [deg]
     pub fn attitude_at_time(&self, time: f64) -> (f64, f64) {
-        if let Some(ref data) = self.attitude_data {
-            // Linear interpolation for attitude data
-            if data.is_empty() {
-                let default_attitude = &self.config.primary_stage().attitude;
+        let default_attitude = &self.config.primary_stage().attitude;
+        let data = match &self.attitude_data {
+            Some(data) if !data.is_empty() => data,
+            _ => {
                 return (
                     default_attitude.const_azimuth,
                     default_attitude.const_elevation,
                 );
             }
+        };
+        let times: Vec<f64> = data.iter().map(|d| d.0).collect();
+        let (i, a) = bracket(&times, time).unwrap_or((0, 0.0));
+        let p0 = data[i];
+        let p1 = data.get(i + 1).copied().unwrap_or(p0);
+        (p0.1 + a * (p1.1 - p0.1), p0.2 + a * (p1.2 - p0.2))
+    }
 
-            // Find appropriate interval
-            for i in 0..data.len() - 1 {
-                if time >= data[i].0 && time <= data[i + 1].0 {
-                    let dt = data[i + 1].0 - data[i].0;
-                    if dt.abs() < 1e-10 {
-                        return (data[i].1, data[i].2);
-                    }
-                    let alpha = (time - data[i].0) / dt;
-                    let azimuth = data[i].1 + alpha * (data[i + 1].1 - data[i].1);
-                    let elevation = data[i].2 + alpha * (data[i + 1].2 - data[i].2);
-                    return (azimuth, elevation);
-                }
-            }
-
-            if time <= data[0].0 {
-                (data[0].1, data[0].2)
-            } else {
-                let last = data.len() - 1;
-                (data[last].1, data[last].2)
-            }
-        } else {
-            let default_attitude = &self.config.primary_stage().attitude;
-            (
-                default_attitude.const_azimuth,
-                default_attitude.const_elevation,
-            )
+    /// Commanded roll angle at given time [deg]
+    pub fn roll_at_time(&self, time: f64) -> f64 {
+        match &self.attitude_roll {
+            Some(data) if !data.time.is_empty() => data.interpolate(time),
+            _ => self.config.primary_stage().attitude.const_roll,
         }
+    }
+
+    /// NED to body DCM and the attitude it represents (azimuth, elevation,
+    /// roll [deg]) at time `time`.
+    ///
+    /// As in the C++ simulator, the attitude program defines a navigation
+    /// frame; the body is rotated from it by the misalignment offsets
+    /// (yaw, pitch, roll) and by the drift of the gyro bias since t = 0.
+    pub fn attitude_dcm(&self, time: f64) -> (Matrix3<f64>, Vector3<f64>) {
+        use crate::math::deg2rad;
+        let (az, el) = self.attitude_at_time(time);
+        let roll = self.roll_at_time(time);
+        let navi =
+            CoordinateTransform::dcm_ned_to_body(deg2rad(az), deg2rad(el), Some(deg2rad(roll)));
+        let att = &self.config.primary_stage().attitude;
+        let bias = Vector3::new(att.gyro_bias_x, att.gyro_bias_y, att.gyro_bias_z)
+            .map(|b| deg2rad(b) / 3600.0);
+        if att.yaw_offset == 0.0
+            && att.pitch_offset == 0.0
+            && att.roll_offset == 0.0
+            && bias == Vector3::zeros()
+        {
+            return (navi, Vector3::new(az, el, roll));
+        }
+        let offset = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), deg2rad(att.yaw_offset))
+            * UnitQuaternion::from_axis_angle(&Vector3::y_axis(), deg2rad(att.pitch_offset))
+            * UnitQuaternion::from_axis_angle(&Vector3::x_axis(), deg2rad(att.roll_offset));
+        let drift = UnitQuaternion::from_scaled_axis(bias * time);
+        let dcm = (offset * drift).to_rotation_matrix().into_inner() * navi;
+        (
+            dcm,
+            CoordinateTransform::azimuth_elevation_roll(&dcm).map(f64::to_degrees),
+        )
     }
 
     /// Interpolated wind speed/direction at altitude [m]
+    ///
+    /// The profile is interpolated in north/east components (as in C++),
+    /// so directions across north (350 deg -> 10 deg) blend correctly.
     pub fn wind_at_altitude(&self, altitude: f64) -> (f64, f64) {
-        let default = (
-            self.config.wind.const_wind[0],
-            self.config.wind.const_wind[1],
-        );
-
         let data = match &self.wind_data {
             Some(data) if !data.is_empty() => data,
-            _ => return default,
-        };
-
-        if altitude <= data[0].0 {
-            return (data[0].1, data[0].2);
-        }
-
-        for pair in data.windows(2) {
-            let (alt0, speed0, dir0) = pair[0];
-            let (alt1, speed1, dir1) = pair[1];
-            if altitude >= alt0 && altitude <= alt1 {
-                let delta_alt = alt1 - alt0;
-                if delta_alt.abs() < 1e-10 {
-                    return (speed0, dir0);
-                }
-                let alpha = (altitude - alt0) / delta_alt;
-                let speed = speed0 + alpha * (speed1 - speed0);
-                let direction = dir0 + alpha * (dir1 - dir0);
-                return (speed, direction);
+            _ => {
+                let wind = self.config.wind.const_wind;
+                return (wind[0], wind[1]);
             }
+        };
+        let altitudes: Vec<f64> = data.iter().map(|d| d.0).collect();
+        let (i, a) = bracket(&altitudes, altitude).unwrap_or((0, 0.0));
+        let p0 = data[i];
+        let p1 = data.get(i + 1).copied().unwrap_or(p0);
+        if a == 0.0 {
+            return (p0.1, p0.2);
         }
-
-        let last = data.last().unwrap();
-        (last.1, last.2)
-    }
-
-    /// Get current stage mass [kg]
-    pub fn mass_at_time(&self, stage_index: usize, time: f64) -> f64 {
-        let stage_cfg = &self.stage_configs[stage_index];
-        let burn_start = stage_cfg.thrust.burn_start_time;
-        let burn_end = stage_cfg.thrust.burn_end_time;
-
-        if time < burn_start || time > burn_end {
-            return stage_cfg.mass_initial;
+        // Components of the velocity the wind blows toward
+        let uv = |speed: f64, dir: f64| {
+            let d = dir.to_radians();
+            (-speed * d.sin(), -speed * d.cos())
+        };
+        let (u0, v0) = uv(p0.1, p0.2);
+        let (u1, v1) = uv(p1.1, p1.2);
+        let (u, v) = (u0 + a * (u1 - u0), v0 + a * (v1 - v0));
+        let speed = u.hypot(v);
+        if speed < 1e-12 {
+            return (0.0, p0.2);
         }
-
-        let thrust = self.thrust_at(stage_index, time);
-        let isp = self.isp_at(stage_index, time);
-        let g0 = 9.80665; // Standard gravity
-
-        if isp > 0.0 {
-            let mass_flow_rate = thrust / (isp * g0);
-            let burn_time = time - burn_start;
-            stage_cfg.mass_initial - mass_flow_rate * burn_time
-        } else {
-            stage_cfg.mass_initial
-        }
+        (speed, (u.atan2(v).to_degrees() + 180.0).rem_euclid(360.0))
     }
 }
 
@@ -799,8 +987,19 @@ pub struct ClientSimulation {
     pub output_step_s: f64,
     #[serde(default)]
     pub air_density_percent: f64,
+    /// Density variation over altitude; replaces `air_density_percent`
+    #[serde(default)]
+    pub air_density_profile: Vec<ClientDensitySample>,
+    #[serde(default)]
+    pub atmosphere_model: AtmosphereKind,
     #[serde(default)]
     pub integrator: ClientIntegrator,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientDensitySample {
+    pub altitude_m: f64,
+    pub percent: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -809,6 +1008,10 @@ pub struct ClientIntegrator {
     pub method: IntegratorMethod,
     #[serde(default)]
     pub rk4_step_s: Option<f64>,
+    #[serde(default = "default_rk45_tol")]
+    pub rk45_abs_tol: f64,
+    #[serde(default = "default_rk45_tol")]
+    pub rk45_rel_tol: f64,
 }
 
 impl Default for ClientIntegrator {
@@ -816,6 +1019,8 @@ impl Default for ClientIntegrator {
         Self {
             method: IntegratorMethod::Rk4,
             rk4_step_s: None,
+            rk45_abs_tol: default_rk45_tol(),
+            rk45_rel_tol: default_rk45_tol(),
         }
     }
 }
@@ -829,6 +1034,9 @@ pub struct ClientLaunch {
     #[serde(default = "default_velocity_ned")]
     pub velocity_ned_mps: [f64; 3],
     pub datetime_utc: ClientDateTime,
+    /// Launcher rail length [m] (0: pad without rail)
+    #[serde(default)]
+    pub rail_length_m: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -849,6 +1057,9 @@ pub struct ClientStage {
     pub free_mode: i32,
     #[serde(default = "default_stage_mass")]
     pub mass_initial_kg: f64,
+    /// Mass without propellant [kg]; unset: the whole stage may be burned
+    #[serde(default)]
+    pub mass_dry_kg: Option<f64>,
     #[serde(default = "default_burn_start")]
     pub burn_start_s: f64,
     #[serde(default = "default_burn_end")]
@@ -909,6 +1120,8 @@ pub struct ClientStageAero {
     #[serde(default)]
     pub ca_multiplier: Option<f64>,
     #[serde(default)]
+    pub ca_power_off_constant: Option<f64>,
+    #[serde(default)]
     pub ballistic_coefficient: Option<f64>,
 }
 
@@ -918,6 +1131,7 @@ impl Default for ClientStage {
             power_mode: default_power_mode(),
             free_mode: default_free_mode(),
             mass_initial_kg: default_stage_mass(),
+            mass_dry_kg: None,
             burn_start_s: default_burn_start(),
             burn_end_s: default_burn_end(),
             forced_cutoff_s: default_forced_cutoff(),
@@ -953,6 +1167,11 @@ pub struct ClientAerodynamics {
     pub ca_multiplier: f64,
     #[serde(default)]
     pub ca_profile: Vec<ClientMachSample>,
+    /// CA with the engine off (unset: the powered CA)
+    #[serde(default)]
+    pub ca_power_off_constant: Option<f64>,
+    #[serde(default)]
+    pub ca_power_off_profile: Vec<ClientMachSample>,
     #[serde(default = "default_ballistic_coefficient")]
     pub ballistic_coefficient: f64,
 }
@@ -963,6 +1182,8 @@ pub struct ClientAttitude {
     pub elevation_deg: f64,
     #[serde(default = "default_attitude_azimuth")]
     pub azimuth_deg: f64,
+    #[serde(default)]
+    pub roll_deg: f64,
     #[serde(default)]
     pub pitch_offset_deg: f64,
     #[serde(default)]
@@ -1002,6 +1223,8 @@ pub struct ClientAttitudeSample {
     pub time: f64,
     pub azimuth_deg: f64,
     pub elevation_deg: f64,
+    #[serde(default)]
+    pub roll_deg: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -1009,6 +1232,102 @@ pub struct ClientWindSample {
     pub altitude_m: f64,
     pub speed_mps: f64,
     pub direction_deg: f64,
+}
+
+fn default_launch_time() -> [i32; 6] {
+    [2000, 1, 1, 0, 0, 0]
+}
+
+/// Defaults of a stage section left out of a legacy JSON: no file
+/// tables, coefficients of 1, no nozzle exit pressure loss, a vertical
+/// launch and no wind
+impl Default for ThrustConfig {
+    fn default() -> Self {
+        Self {
+            isp_file_exists: false,
+            isp_file_name: String::new(),
+            isp_coefficient: 1.0,
+            const_isp_vac: default_isp_constant(),
+            thrust_file_exists: false,
+            thrust_file_name: String::new(),
+            thrust_coefficient: 1.0,
+            const_thrust_vac: 0.0,
+            burn_start_time: 0.0,
+            burn_end_time: 0.0,
+            forced_cutoff_time: 1.0e9,
+            throat_diameter: 0.0,
+            nozzle_expansion_ratio: 1.0,
+            nozzle_exhaust_pressure: 0.0,
+        }
+    }
+}
+
+impl Default for AeroConfig {
+    fn default() -> Self {
+        Self {
+            body_diameter: default_body_diameter(),
+            cn_file_exists: false,
+            cn_file_name: String::new(),
+            normal_multiplier: 1.0,
+            const_normal_coefficient: 0.0,
+            ca_file_exists: false,
+            ca_file_name: String::new(),
+            axial_multiplier: 1.0,
+            const_axial_coefficient: 0.0,
+            const_axial_coefficient_power_off: None,
+            ca_power_off_file_name: String::new(),
+            ballistic_coefficient: default_ballistic_coefficient(),
+        }
+    }
+}
+
+impl Default for AttitudeConfig {
+    fn default() -> Self {
+        Self {
+            attitude_file_exists: false,
+            attitude_file_name: String::new(),
+            const_elevation: 90.0,
+            const_azimuth: 0.0,
+            const_roll: 0.0,
+            pitch_offset: 0.0,
+            yaw_offset: 0.0,
+            roll_offset: 0.0,
+            gyro_bias_x: 0.0,
+            gyro_bias_y: 0.0,
+            gyro_bias_z: 0.0,
+        }
+    }
+}
+
+impl Default for DumpingProductConfig {
+    fn default() -> Self {
+        Self {
+            dumping_product_exists: false,
+            dumping_product_separation_time: 0.0,
+            dumping_product_mass: 0.0,
+            dumping_product_ballistic_coefficient: default_ballistic_coefficient(),
+            additional_speed_at_dumping_ned: [0.0; 3],
+        }
+    }
+}
+
+impl Default for StageTransitionConfig {
+    fn default() -> Self {
+        Self {
+            following_stage_exists: false,
+            separation_time: 1.0e6,
+        }
+    }
+}
+
+impl Default for WindConfig {
+    fn default() -> Self {
+        Self {
+            wind_file_exists: false,
+            wind_file_name: String::new(),
+            const_wind: [0.0, 0.0],
+        }
+    }
 }
 
 fn default_duration_s() -> f64 {
@@ -1094,6 +1413,8 @@ impl ClientConfig {
         let integrator = IntegratorSettings {
             method: simulation.integrator.method,
             rk4_step: simulation.integrator.rk4_step_s,
+            rk45_abs_tol: simulation.integrator.rk45_abs_tol,
+            rk45_rel_tol: simulation.integrator.rk45_rel_tol,
         };
 
         let calc = CalculateCondition {
@@ -1103,6 +1424,7 @@ impl ClientConfig {
             air_density_file: String::new(),
             air_density_variation: simulation.air_density_percent,
             integrator,
+            atmosphere_model: simulation.atmosphere_model,
         };
 
         let launch = LaunchCondition {
@@ -1116,6 +1438,7 @@ impl ClientConfig {
                 launch.datetime_utc.minute as i32,
                 launch.datetime_utc.second as i32,
             ],
+            rail_length: launch.rail_length_m,
         };
 
         let mut stage_sources = if !stages.is_empty() {
@@ -1158,6 +1481,14 @@ impl ClientConfig {
         };
 
         let mut rocket = Rocket::new(rocket_config);
+        if !simulation.air_density_profile.is_empty() {
+            rocket.air_density_table = Some(TimeSeriesData::from_pairs(
+                simulation
+                    .air_density_profile
+                    .iter()
+                    .map(|p| (p.altitude_m, p.percent)),
+            ));
+        }
 
         for (idx, client_stage) in stage_sources.into_iter().enumerate() {
             if !client_stage.thrust_profile.is_empty() {
@@ -1188,6 +1519,14 @@ impl ClientConfig {
             ));
         }
 
+        if !aerodynamics.ca_power_off_profile.is_empty() {
+            rocket.ca_power_off_data = Some(TimeSeriesData::from_pairs(
+                aerodynamics
+                    .ca_power_off_profile
+                    .iter()
+                    .map(|p| (p.mach, p.value)),
+            ));
+        }
         if !aerodynamics.ca_profile.is_empty() {
             rocket.ca_data = Some(TimeSeriesData::from_pairs(
                 aerodynamics
@@ -1197,6 +1536,14 @@ impl ClientConfig {
             ));
         }
 
+        if !attitude.profile.is_empty() && attitude.profile.iter().all(|p| p.roll_deg.is_some()) {
+            rocket.attitude_roll = Some(TimeSeriesData::from_pairs(
+                attitude
+                    .profile
+                    .iter()
+                    .map(|p| (p.time, p.roll_deg.unwrap_or(0.0))),
+            ));
+        }
         if !attitude.profile.is_empty() {
             rocket.attitude_data = Some(
                 attitude
@@ -1254,6 +1601,10 @@ fn build_stage_config(
         ca_file_name: String::new(),
         axial_multiplier: own.ca_multiplier.unwrap_or(aerodynamics.ca_multiplier),
         const_axial_coefficient: own.ca_constant.unwrap_or(aerodynamics.ca_constant),
+        const_axial_coefficient_power_off: own
+            .ca_power_off_constant
+            .or(aerodynamics.ca_power_off_constant),
+        ca_power_off_file_name: String::new(),
         ballistic_coefficient: own
             .ballistic_coefficient
             .unwrap_or(aerodynamics.ballistic_coefficient),
@@ -1264,6 +1615,7 @@ fn build_stage_config(
         attitude_file_name: String::new(),
         const_elevation: attitude.elevation_deg,
         const_azimuth: attitude.azimuth_deg,
+        const_roll: attitude.roll_deg,
         pitch_offset: attitude.pitch_offset_deg,
         yaw_offset: attitude.yaw_offset_deg,
         roll_offset: attitude.roll_offset_deg,
@@ -1276,6 +1628,7 @@ fn build_stage_config(
         power_flight_mode: stage.power_mode,
         free_flight_mode: stage.free_mode,
         mass_initial: stage.mass_initial_kg,
+        mass_dry: stage.mass_dry_kg,
         thrust,
         aero,
         attitude: attitude_cfg,
@@ -1295,11 +1648,7 @@ fn build_stage_config(
                 additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
             },
         },
-        attitude_neutrality: AttitudeNeutralityConfig {
-            considering_neutrality: false,
-            cg_controller_position_file: String::new(),
-            cp_file: String::new(),
-        },
+        attitude_neutrality: AttitudeNeutralityConfig::default(),
         six_dof: SixDofConfig {
             cg_cp_controller_position_file: String::new(),
             moment_of_inertia_file_name: String::new(),
@@ -1380,5 +1729,67 @@ mod client_stage_aero_tests {
                 .dumping_product
                 .dumping_product_exists
         );
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    fn rocket() -> Rocket {
+        let json = r#"{
+            "name": "p",
+            "simulation": { "duration_s": 10, "output_step_s": 1 },
+            "launch": {
+                "latitude_deg": 31.25, "longitude_deg": 131.08,
+                "datetime_utc": { "year": 2020, "month": 1, "day": 1, "hour": 0, "minute": 0, "second": 0 }
+            },
+            "stages": [{ "mass_initial_kg": 100 }],
+            "attitude": { "elevation_deg": 80, "azimuth_deg": 90 }
+        }"#;
+        serde_json::from_str::<ClientConfig>(json)
+            .unwrap()
+            .into_rocket()
+    }
+
+    #[test]
+    fn wind_direction_interpolates_across_north() {
+        let mut rocket = rocket();
+        rocket.wind_data = Some(vec![(0.0, 10.0, 350.0), (1000.0, 10.0, 10.0)]);
+        let (speed, dir) = rocket.wind_at_altitude(500.0);
+        // Halfway between 350 and 10 deg is north, not south
+        assert!(dir < 1e-9 || dir > 360.0 - 1e-9, "direction {dir}");
+        assert!((speed - 10.0 * 10f64.to_radians().cos()).abs() < 1e-9);
+        assert_eq!(rocket.wind_at_altitude(0.0), (10.0, 350.0));
+        assert_eq!(rocket.wind_at_altitude(2000.0), (10.0, 10.0));
+    }
+
+    #[test]
+    fn attitude_offsets_rotate_the_body() {
+        let mut rocket = rocket();
+        let (dcm, att) = rocket.attitude_dcm(5.0);
+        assert_eq!(att, Vector3::new(90.0, 80.0, 0.0));
+        let program =
+            CoordinateTransform::dcm_ned_to_body(90f64.to_radians(), 80f64.to_radians(), None);
+        assert!((dcm - program).abs().max() < 1e-12);
+
+        // Pitch misalignment of 2 deg tilts the body axis by 2 deg
+        let attitude = &mut rocket.stage_configs[0].attitude;
+        attitude.pitch_offset = 2.0;
+        rocket.config.stages[0].attitude.pitch_offset = 2.0;
+        let (dcm, att) = rocket.attitude_dcm(5.0);
+        let axis = dcm.transpose() * Vector3::x();
+        let axis0 = program.transpose() * Vector3::x();
+        assert!((axis.angle(&axis0).to_degrees() - 2.0).abs() < 1e-9);
+        // C++ convention: the offset rotates the navigation frame about the
+        // body Y axis, so a positive pitch offset lowers the nose
+        assert!((att.y - 78.0).abs() < 1e-9, "elevation {}", att.y);
+
+        // Gyro bias: drift angle grows linearly with time
+        rocket.config.stages[0].attitude.pitch_offset = 0.0;
+        rocket.config.stages[0].attitude.gyro_bias_y = 3600.0; // 1 deg/s
+        let (dcm, _) = rocket.attitude_dcm(3.0);
+        let axis = dcm.transpose() * Vector3::x();
+        assert!((axis.angle(&axis0).to_degrees() - 3.0).abs() < 1e-9);
     }
 }

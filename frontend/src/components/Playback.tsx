@@ -1,18 +1,24 @@
 import { useRef } from 'react'
-import { Pause, Play, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronUp, Pause, Play, RotateCcw } from 'lucide-react'
 import { SPEEDS, playback, usePlayback } from '../lib/playback'
-import { sampleAt, type Track } from '../lib/trajectory'
+import { sampleAt, type FlightEvent, type Track } from '../lib/trajectory'
 import { cn } from '../lib/cn'
 import { fmt } from '../lib/format'
 import { stageColorVar } from '../lib/theme'
 import { eventLabel, eventShort, flightModeLabel } from '../lib/events'
 import { tr } from '../lib/i18n'
 
+/** Stage colour for stage events; neutral for the rest. */
+const eventColor = (e: FlightEvent) =>
+  (e.kind === 'burnout' || e.kind === 'separation' || e.kind === 'jettison') && e.stage !== undefined
+    ? stageColorVar(e.stage)
+    : 'var(--ink-3)'
+
 /** Event labels that would collide with the previous one are dropped. */
 function spacedLabels(track: Track, pct: (t: number) => number, minGap = 4.5) {
   let last = -Infinity
   return track.events
-    .filter((e) => e.kind !== 'liftoff' && e.kind !== 'end')
+    .filter((e) => e.kind !== 'liftoff' && e.kind !== 'end' && e.t > track.t0)
     .filter((e) => {
       const p = pct(e.t)
       if (p - last < minGap) return false
@@ -69,9 +75,11 @@ function Scrubber({ track }: { track: Track }) {
         <div
           key={`${e.kind}-${e.t}`}
           title={`${eventLabel(e)}  T+${fmt(e.t)} s`}
-          className="absolute top-0 h-2 w-px bg-ink-3"
+          className="absolute top-0 flex h-3 w-2.5 -translate-x-1/2 justify-center"
           style={{ left: `${pct(e.t)}%` }}
-        />
+        >
+          <span className="h-2 w-px" style={{ background: eventColor(e) }} />
+        </div>
       ))}
       {/* Track: stage segments, faint ahead of the playhead and solid behind it */}
       <div className="absolute inset-x-0 top-3 h-1.5 overflow-hidden rounded-full bg-line">
@@ -103,8 +111,9 @@ function Scrubber({ track }: { track: Track }) {
         {spacedLabels(track, pct).map((e) => (
           <span
             key={`l-${e.kind}-${e.t}`}
-            className="num absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none text-ink-3"
-            style={{ left: `${pct(e.t)}%` }}
+            title={`${eventLabel(e)}  T+${fmt(e.t)} s`}
+            className="num pointer-events-auto absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none"
+            style={{ left: `${pct(e.t)}%`, color: eventColor(e) }}
           >
             {eventShort(e)}
           </span>
@@ -160,7 +169,18 @@ export function PlaybackBar({ track }: { track: Track }) {
   )
 }
 
-export function Telemetry({ track, compact = false }: { track: Track; compact?: boolean }) {
+export function Telemetry({
+  track,
+  compact = false,
+  collapsed = false,
+  onToggle,
+}: {
+  track: Track
+  compact?: boolean
+  /** Show only the clock and stage. */
+  collapsed?: boolean
+  onToggle?: () => void
+}) {
   const t = usePlayback((s) => s.t)
   const s = sampleAt(track, t)
   const last = [...track.events].reverse().find((e) => e.t <= t + 1e-6)
@@ -182,10 +202,10 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
     <div
       className={cn(
         'pointer-events-none select-none rounded-[8px] bg-surface/95 text-ink ring-1 ring-line-strong shadow-[0_1px_3px_rgba(0,0,0,0.08)]',
-        compact ? 'px-2.5 py-2' : 'w-[13.5rem] px-3 py-2.5',
+        compact || collapsed ? 'px-2.5 py-2' : 'w-[13.5rem] px-3 py-2.5',
       )}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="num text-[15px] font-medium">
           <span className="text-ink-3">T+</span>
           {fmt(t, 1)}
@@ -194,26 +214,45 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
         <div className="flex items-center gap-1.5 text-[11px] text-ink-2">
           <span className="h-2 w-2 rounded-full" style={{ background: stageColorVar(s.stage) }} />
           {tr(`${s.stage}段`, `Stage ${s.stage}`)}
+          {onToggle && (
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? tr('テレメトリを開く', 'Expand telemetry') : tr('テレメトリをたたむ', 'Collapse telemetry')}
+              title={collapsed ? tr('テレメトリを開く', 'Expand telemetry') : tr('テレメトリをたたむ', 'Collapse telemetry')}
+              className="pointer-events-auto -mr-1 flex h-5 w-5 items-center justify-center rounded-[4px] text-ink-3 hover:bg-surface-2 hover:text-ink"
+            >
+              {collapsed ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
+            </button>
+          )}
         </div>
       </div>
-      {!compact && <div className="h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last)}</div>}
-      {!compact && (
-        <div className="mb-1.5 flex h-4 items-center gap-1.5 truncate text-[11px] text-ink-2">
-          <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.mode === 'power_3DoF' ? 'bg-signal' : 'bg-line-strong')} />
-          {flightModeLabel(s.mode)}
-        </div>
+      {collapsed ? null : (
+        <>
+          {!compact && <div className="h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last)}</div>}
+          {!compact && (
+            <div className="mb-1.5 flex h-4 items-center gap-1.5 truncate text-[11px] text-ink-2">
+              <span
+                aria-hidden
+                className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.mode === 'power_3DoF' ? 'bg-signal' : 'bg-line-strong')}
+              />
+              {flightModeLabel(s.mode)}
+            </div>
+          )}
+          <dl className={cn('grid gap-x-3', compact ? 'mt-1 grid-cols-3 gap-y-0.5' : 'grid-cols-1 gap-y-[3px]')}>
+            {(compact ? rows.slice(0, 3) : rows).map(([k, v, u]) => (
+              <div key={k} className={cn('flex items-baseline', compact ? 'flex-col' : 'justify-between')}>
+                <dt className="text-[11px] text-ink-3">{k}</dt>
+                <dd className="num text-[13px]">
+                  {v}
+                  {u && <span className="text-[10px] text-ink-3"> {u}</span>}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </>
       )}
-      <dl className={cn('grid gap-x-3', compact ? 'mt-1 grid-cols-3 gap-y-0.5' : 'grid-cols-1 gap-y-[3px]')}>
-        {(compact ? rows.slice(0, 3) : rows).map(([k, v, u]) => (
-          <div key={k} className={cn('flex items-baseline', compact ? 'flex-col' : 'justify-between')}>
-            <dt className="text-[11px] text-ink-3">{k}</dt>
-            <dd className="num text-[13px]">
-              {v}
-              {u && <span className="text-[10px] text-ink-3"> {u}</span>}
-            </dd>
-          </div>
-        ))}
-      </dl>
     </div>
   )
 }

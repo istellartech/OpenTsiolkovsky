@@ -10,7 +10,7 @@ import { AeroTab } from './inspector/AeroTab'
 import { FlightTab } from './inspector/FlightTab'
 import { SolverTab } from './inspector/SolverTab'
 
-export type InspectorTab = 'overview' | 'launch' | 'vehicle' | 'aero' | 'flight' | 'solver'
+export type InspectorTab = 'overview' | 'launch' | 'vehicle' | 'aero' | 'flight'
 
 export interface InspectorNav {
   tab: InspectorTab
@@ -27,7 +27,7 @@ const TABS: { id: InspectorTab; label: string }[] = [
   {
     id: 'launch',
     get label() {
-      return tr('発射', 'Launch')
+      return tr('発射・計算', 'Launch & run')
     },
   },
   {
@@ -48,12 +48,6 @@ const TABS: { id: InspectorTab; label: string }[] = [
       return tr('姿勢・風', 'Attitude & Wind')
     },
   },
-  {
-    id: 'solver',
-    get label() {
-      return tr('計算', 'Solver')
-    },
-  },
 ]
 
 /** Which tab (and stage) holds a validation field. */
@@ -63,7 +57,7 @@ export function navForField(field: string): InspectorNav {
   if (field.startsWith('launch.')) return { tab: 'launch', stage: 0 }
   if (field.startsWith('aerodynamics.')) return { tab: 'aero', stage: 0 }
   if (field.startsWith('attitude.') || field.startsWith('wind.')) return { tab: 'flight', stage: 0 }
-  if (field.startsWith('simulation.')) return { tab: 'solver', stage: 0 }
+  if (field.startsWith('simulation.')) return { tab: 'launch', stage: 0 }
   return { tab: 'overview', stage: 0 }
 }
 
@@ -107,13 +101,17 @@ export function Inspector({ config, patch, presetId, specs, nav, onNav, issueFie
       </div>
       <div className="flex-1 px-4 pb-10 pt-3">
         {nav.tab === 'overview' && <Overview config={config} patch={patch} presetId={presetId} specs={specs} onNav={onNav} />}
-        {nav.tab === 'launch' && <LaunchTab config={config} patch={patch} />}
+        {nav.tab === 'launch' && (
+          <>
+            <LaunchTab config={config} patch={patch} />
+            <SolverTab config={config} patch={patch} />
+          </>
+        )}
         {nav.tab === 'vehicle' && (
           <VehicleTab config={config} patch={patch} specs={specs} stage={nav.stage} onStage={(stage) => onNav({ tab: 'vehicle', stage })} />
         )}
         {nav.tab === 'aero' && <AeroTab config={config} patch={patch} />}
         {nav.tab === 'flight' && <FlightTab config={config} patch={patch} />}
-        {nav.tab === 'solver' && <SolverTab config={config} patch={patch} />}
       </div>
     </div>
   )

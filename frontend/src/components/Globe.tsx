@@ -30,8 +30,18 @@ import { Segmented } from './primitives'
 import { cssVar, readStageColor, useTheme, type Theme } from '../lib/theme'
 import { tr, useLang } from '../lib/i18n'
 import { fallBodyLabel, mcBodyLabel } from '../lib/events'
-import { bodyStage, ellipsePoints, type CaseResult, type ImpactStatistics } from '../lib/montecarlo'
+import {
+  bodyStage,
+  ellipseAxes,
+  ellipseLabel,
+  ellipsePoints,
+  type CaseResult,
+  type EllipseLevel,
+  type ImpactStatistics,
+} from '../lib/montecarlo'
 import { cn } from '../lib/cn'
+import { useDismiss } from '../hooks/useDismiss'
+import { Layers as LayersIcon } from 'lucide-react'
 
 ;(window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = CESIUM_BASE_URL
 
@@ -43,7 +53,7 @@ export interface Layers {
   iip: boolean
   /** Spent stages and dumping products */
   falls: boolean
-  /** Monte Carlo impact scatter and 3-sigma ellipses */
+  /** Monte Carlo impact scatter and error ellipses */
   dispersion: boolean
 }
 
@@ -55,6 +65,8 @@ export interface DispersionOverlay {
   statistics: ImpactStatistics[]
   /** Stage number of the vehicle's last stage (colours the vehicle's points) */
   lastStage: number
+  /** Error ellipse to draw */
+  ellipse: EllipseLevel
 }
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services'
@@ -346,7 +358,7 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null, layer
     for (const body of track.fallBodies) addFallBody(viewer, body, halo, ink)
   }
 
-  // Monte Carlo: every case's impact and each body's 3-sigma ellipse.
+  // Monte Carlo: every case's impact and each body's error ellipse.
   if (layers.dispersion && dispersion) addDispersion(viewer, dispersion, halo, ink)
 
   // Look at the arc side-on: heading perpendicular to the launch→end bearing.
@@ -424,20 +436,15 @@ function addDispersion(viewer: Viewer, mc: DispersionOverlay, halo: Color, ink: 
   for (const s of mc.statistics) {
     if (s.mean_latitude_deg === null || s.mean_longitude_deg === null || s.impacts < 2) continue
     const color = colorOf(s.body)
-    const outline = ellipsePoints(
-      s.mean_latitude_deg,
-      s.mean_longitude_deg,
-      3 * s.ellipse_major_m,
-      3 * s.ellipse_minor_m,
-      s.ellipse_azimuth_deg,
-    )
+    const { major, minor } = ellipseAxes(s, mc.ellipse)
+    const outline = ellipsePoints(s.mean_latitude_deg, s.mean_longitude_deg, major, minor, s.ellipse_azimuth_deg)
     for (const part of splitPath(outline)) {
       viewer.entities.add({ polyline: { positions: part, width: 2, clampToGround: true, material: color } })
     }
     viewer.entities.add({
       position: Cartesian3.fromDegrees(s.mean_longitude_deg, s.mean_latitude_deg, 0),
       label: {
-        text: tr(`${mcBodyLabel(s.body)} 3σ`, `${mcBodyLabel(s.body)} 3σ`),
+        text: `${mcBodyLabel(s.body)} ${ellipseLabel(mc.ellipse)}`,
         font: '500 11px "IBM Plex Sans JP", sans-serif',
         fillColor: ink,
         outlineColor: halo,
@@ -463,6 +470,8 @@ function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number) {
 
 function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
   viewer.trackedEntity = undefined
+  // A hidden canvas has no view to fit (Cesium throws on the zero-size frustum).
+  if (viewer.canvas.clientWidth === 0 || viewer.canvas.clientHeight === 0) return
   const radius = Math.max(built.sphere.radius, 20000)
   // Fit the whole trajectory into the narrower field of view, with margin.
   const frustum = viewer.camera.frustum as PerspectiveFrustum
@@ -591,6 +600,8 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth
       const h = el.clientHeight
+      // Hidden (another view is showing on phones/tablets): nothing to frame.
+      if (w === 0 || h === 0) return
       if (Math.abs(w - last.w) < 24 && Math.abs(h - last.h) < 24) return
       last = { w, h }
       window.clearTimeout(timer)
@@ -607,6 +618,35 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
     }
   }, [])
 
+  const [layersOpen, setLayersOpen] = useState(false)
+  const layersRef = useRef<HTMLDivElement>(null)
+  useDismiss(layersRef, layersOpen, () => setLayersOpen(false))
+  const overlays = (
+    [
+      {
+        key: 'iip',
+        label: tr('IIP（瞬間落下予測点）', 'IIP (instantaneous impact point)'),
+        title: tr(
+          '瞬間落下予測点：いまエンジンが止まったら落ちる地点（真空の楕円軌道）',
+          'Instantaneous impact point: where the vehicle would land if thrust stopped now (vacuum orbit)',
+        ),
+        show: hasIip,
+      },
+      {
+        key: 'falls',
+        label: tr('落下物', 'Falling bodies'),
+        title: tr('使用済みの段と投棄物の落下軌道・落下点', 'Fall paths and impact points of spent stages and jettisoned parts'),
+        show: hasFalls,
+      },
+      {
+        key: 'dispersion',
+        label: tr('分散解析', 'Dispersion'),
+        title: tr('分散解析の落下点と誤差楕円', 'Dispersion run impacts and error ellipses'),
+        show: !!dispersion && dispersion.cases.length > 0,
+      },
+    ] as const
+  ).filter((l) => l.show)
+
   const changeMode = (next: CameraMode) => {
     setMode(next)
     const viewer = viewerRef.current
@@ -619,7 +659,7 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
   return (
     <div className="relative h-full w-full overflow-hidden bg-bg">
       <div ref={containerRef} className="absolute inset-0" />
-      <div className="absolute bottom-7 left-3 flex flex-row items-end gap-1.5 md:bottom-auto md:left-auto md:right-3 md:top-3 md:flex-col">
+      <div className="absolute bottom-7 left-3 flex flex-row items-end gap-1.5 md:bottom-auto md:left-auto md:right-3 md:top-3 md:flex-row md:items-start">
         <Segmented
           tone="map"
           value={mode}
@@ -629,63 +669,57 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
             { value: 'follow', label: tr('追従', 'Follow'), title: tr('機体を追いかける視点', 'Follow the vehicle') },
           ]}
         />
-        <Segmented
-          tone="map"
-          size="sm"
-          value={basemap}
-          onChange={changeBasemap}
-          options={[
-            { value: 'map', label: tr('地図', 'Map') },
-            { value: 'terrain', label: tr('地形', 'Terrain') },
-            { value: 'satellite', label: tr('衛星', 'Satellite') },
-          ]}
-        />
-        <div
-          role="group"
-          aria-label={tr('表示する情報', 'Overlays')}
-          className="flex gap-0.5 rounded-[8px] bg-surface/95 p-0.5 ring-1 ring-line-strong shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
-        >
-          {(
-            [
-              {
-                key: 'iip',
-                label: 'IIP',
-                title: tr(
-                  '瞬間落下予測点：いまエンジンが止まったら落ちる地点（真空の楕円軌道）',
-                  'Instantaneous impact point: where the vehicle would land if thrust stopped now (vacuum orbit)',
-                ),
-                show: hasIip,
-              },
-              {
-                key: 'falls',
-                label: tr('落下物', 'Falls'),
-                title: tr('使用済みの段と投棄物の落下軌道・落下点', 'Fall paths and impact points of spent stages and jettisoned parts'),
-                show: hasFalls,
-              },
-              {
-                key: 'dispersion',
-                label: tr('分散', 'Dispersion'),
-                title: tr('分散解析の落下点と 3σ 楕円', 'Dispersion run impacts and 3-sigma ellipses'),
-                show: !!dispersion && dispersion.cases.length > 0,
-              },
-            ] as const
-          )
-            .filter((l) => l.show)
-            .map((l) => (
-              <button
-                key={l.key}
-                type="button"
-                aria-pressed={layers[l.key]}
-                title={l.title}
-                onClick={() => toggleLayer(l.key)}
-                className={cn(
-                  'h-6 rounded-[6px] px-2 text-[11px] font-medium',
-                  layers[l.key] ? 'bg-ink text-surface' : 'text-ink-3 hover:bg-surface-2 hover:text-ink',
-                )}
-              >
-                {l.label}
-              </button>
-            ))}
+        <div ref={layersRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setLayersOpen((v) => !v)}
+            aria-expanded={layersOpen}
+            aria-haspopup="dialog"
+            title={tr('背景地図と表示する情報', 'Basemap and overlays')}
+            className={cn(
+              'flex h-8 items-center gap-1 rounded-[7px] px-2 text-[12px] font-medium ring-1 ring-line-strong shadow-[0_1px_2px_rgba(0,0,0,0.06)]',
+              layersOpen ? 'bg-ink text-surface' : 'bg-surface text-ink-2 hover:text-ink',
+            )}
+          >
+            <LayersIcon className="h-3.5 w-3.5" />
+            {tr('表示', 'Layers')}
+          </button>
+          {layersOpen && (
+            <div
+              role="dialog"
+              aria-label={tr('背景地図と表示する情報', 'Basemap and overlays')}
+              className="absolute bottom-full left-0 z-10 mb-1.5 w-[13rem] rounded-[8px] bg-surface p-2.5 text-[12px] ring-1 ring-line-strong shadow-[0_6px_20px_-8px_rgba(0,0,0,0.3)] md:bottom-auto md:left-auto md:right-0 md:top-full md:mb-0 md:mt-1.5"
+            >
+              <p className="mb-1 text-[11px] text-ink-3">{tr('背景地図', 'Basemap')}</p>
+              <Segmented
+                size="sm"
+                value={basemap}
+                onChange={changeBasemap}
+                className="w-full"
+                options={[
+                  { value: 'map', label: tr('地図', 'Map') },
+                  { value: 'terrain', label: tr('地形', 'Terrain') },
+                  { value: 'satellite', label: tr('衛星', 'Satellite') },
+                ]}
+              />
+              {overlays.length > 0 && (
+                <>
+                  <p className="mb-0.5 mt-2.5 text-[11px] text-ink-3">{tr('表示する情報', 'Overlays')}</p>
+                  {overlays.map((l) => (
+                    <label key={l.key} title={l.title} className="flex min-h-8 cursor-pointer items-center gap-2 text-ink-2 hover:text-ink">
+                      <input
+                        type="checkbox"
+                        checked={layers[l.key]}
+                        onChange={() => toggleLayer(l.key)}
+                        className="h-3.5 w-3.5 accent-[var(--signal)]"
+                      />
+                      {l.label}
+                    </label>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

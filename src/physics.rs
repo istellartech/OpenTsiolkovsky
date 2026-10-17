@@ -1,12 +1,59 @@
 pub mod atmosphere {
     use crate::math::constants::*;
 
+    /// Which standard atmosphere `AtmosphereModel` evaluates
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum AtmosphereKind {
+        /// As the C++ simulator: the 1976 layers evaluated at the geometric
+        /// altitude, isothermal (186.95 K) above 84.852 km
+        #[default]
+        Legacy,
+        /// U.S. Standard Atmosphere 1976: layers in geopotential altitude
+        /// up to 86 km, tabulated values (log-linear) from 86 to 1000 km
+        #[serde(alias = "USSA1976", alias = "ussa76")]
+        Ussa1976,
+    }
+
+    /// U.S. Standard Atmosphere 1976 above 86 km: geometric altitude [m],
+    /// temperature [K], pressure [Pa], density [kg/m³]
+    const USSA1976_UPPER: [[f64; 4]; 23] = [
+        [86_000.0, 186.87, 3.7338e-1, 6.958e-6],
+        [90_000.0, 186.87, 1.8359e-1, 3.416e-6],
+        [95_000.0, 188.42, 7.5966e-2, 1.393e-6],
+        [100_000.0, 195.08, 3.2011e-2, 5.604e-7],
+        [110_000.0, 240.00, 7.1042e-3, 9.708e-8],
+        [120_000.0, 360.00, 2.5382e-3, 2.222e-8],
+        [130_000.0, 469.27, 1.2505e-3, 8.152e-9],
+        [140_000.0, 559.63, 7.2028e-4, 3.831e-9],
+        [150_000.0, 634.39, 4.5422e-4, 2.076e-9],
+        [160_000.0, 696.29, 3.0395e-4, 1.233e-9],
+        [180_000.0, 790.07, 1.5271e-4, 5.194e-10],
+        [200_000.0, 854.56, 8.4736e-5, 2.541e-10],
+        [250_000.0, 941.33, 2.4767e-5, 6.073e-11],
+        [300_000.0, 976.01, 8.7704e-6, 1.916e-11],
+        [350_000.0, 990.06, 3.4518e-6, 7.014e-12],
+        [400_000.0, 995.83, 1.4518e-6, 2.803e-12],
+        [450_000.0, 998.22, 6.4468e-7, 1.184e-12],
+        [500_000.0, 999.24, 3.0236e-7, 5.215e-13],
+        [600_000.0, 999.85, 8.2130e-8, 1.137e-13],
+        [700_000.0, 999.97, 3.1908e-8, 3.070e-14],
+        [800_000.0, 999.99, 1.7036e-8, 1.136e-14],
+        [900_000.0, 1000.0, 1.0873e-8, 5.759e-15],
+        [1_000_000.0, 1000.0, 7.5138e-9, 3.561e-15],
+    ];
+
+    /// Effective Earth radius of the geopotential altitude [m]
+    const R0_GEOPOTENTIAL: f64 = 6_356_766.0;
+
     /// International Standard Atmosphere (ISA) Model
     ///
-    /// Implements the standard atmosphere model up to 84.852 km altitude
-    /// with 8 atmospheric layers as per ISO 2533 standard.
+    /// The 1976 standard atmosphere layers (ISO 2533) up to 84.852 km
+    /// geopotential altitude; see `AtmosphereKind` for the altitude used
+    /// and the upper atmosphere.
     #[derive(Debug, Clone)]
     pub struct AtmosphereModel {
+        kind: AtmosphereKind,
         /// Height of atmospheric layers [m]
         height_layers: [f64; 8],
         /// Temperature lapse rates [K/m]  
@@ -37,9 +84,15 @@ pub mod atmosphere {
     }
 
     impl AtmosphereModel {
-        /// Create new standard atmosphere model
+        /// Create new standard atmosphere model (C++-compatible kind)
         pub fn new() -> Self {
+            Self::with_kind(AtmosphereKind::Legacy)
+        }
+
+        /// Standard atmosphere of the given kind
+        pub fn with_kind(kind: AtmosphereKind) -> Self {
             AtmosphereModel {
+                kind,
                 // Height of atmospheric layers [m]
                 height_layers: [
                     0.0, 11000.0, 20000.0, 32000.0, 47000.0, 51000.0, 71000.0, 84852.0,
@@ -68,7 +121,16 @@ pub mod atmosphere {
         /// Atmospheric conditions (temperature, pressure, density, speed of sound)
         pub fn conditions(&self, altitude: f64) -> AtmosphericConditions {
             // Handle negative altitude (below sea level) by using sea level conditions
-            let effective_altitude = if altitude < 0.0 { 0.0 } else { altitude };
+            let altitude = altitude.max(0.0);
+            let effective_altitude = match self.kind {
+                AtmosphereKind::Legacy => altitude,
+                AtmosphereKind::Ussa1976 if altitude >= USSA1976_UPPER[0][0] => {
+                    return self.upper_conditions(altitude);
+                }
+                AtmosphereKind::Ussa1976 => {
+                    R0_GEOPOTENTIAL * altitude / (R0_GEOPOTENTIAL + altitude)
+                }
+            };
 
             let layer_index = self.determine_layer(effective_altitude);
 
@@ -105,6 +167,28 @@ pub mod atmosphere {
             }
         }
 
+        /// USSA 1976 above 86 km: log-linear in pressure and density,
+        /// linear in temperature; extrapolated with the last segment
+        fn upper_conditions(&self, altitude: f64) -> AtmosphericConditions {
+            let t = &USSA1976_UPPER;
+            let n = t.len();
+            let i = t.partition_point(|row| row[0] <= altitude).clamp(1, n - 1) - 1;
+            let (a, b) = (t[i], t[i + 1]);
+            let f = (altitude - a[0]) / (b[0] - a[0]);
+            let temperature = if f <= 1.0 {
+                a[1] + f * (b[1] - a[1])
+            } else {
+                b[1]
+            };
+            let log_interp = |x0: f64, x1: f64| (x0.ln() + f * (x1.ln() - x0.ln())).exp();
+            AtmosphericConditions {
+                temperature,
+                pressure: log_interp(a[2], b[2]),
+                density: log_interp(a[3], b[3]),
+                speed_of_sound: (self.gamma * self.gas_constant * temperature).sqrt(),
+            }
+        }
+
         /// Calculate density at given altitude
         pub fn density(&self, altitude: f64) -> f64 {
             self.conditions(altitude).density
@@ -123,6 +207,17 @@ pub mod atmosphere {
         /// Calculate speed of sound at given altitude
         pub fn speed_of_sound(&self, altitude: f64) -> f64 {
             self.conditions(altitude).speed_of_sound
+        }
+
+        /// Conditions with the density scaled by `1 + percent / 100`
+        pub fn conditions_with_percent(
+            &self,
+            altitude: f64,
+            percent: f64,
+        ) -> AtmosphericConditions {
+            let mut conditions = self.conditions(altitude);
+            conditions.density *= 1.0 + percent / 100.0;
+            conditions
         }
 
         /// Calculate atmospheric conditions with density variation
@@ -312,6 +407,33 @@ pub mod atmosphere {
         }
 
         #[test]
+        fn test_ussa1976_geopotential_and_upper_atmosphere() {
+            let atm = AtmosphereModel::with_kind(AtmosphereKind::Ussa1976);
+            // USSA 1976 table values (geometric altitude)
+            for (z, t, p, rho) in [
+                (10_000.0, 223.252, 26_499.9, 0.413510),
+                (30_000.0, 226.509, 1_197.03, 1.84101e-2),
+                (50_000.0, 270.650, 79.7787, 1.02688e-3),
+                (80_000.0, 198.639, 1.05247, 1.84580e-5),
+                (100_000.0, 195.08, 3.2011e-2, 5.604e-7),
+                (300_000.0, 976.01, 8.7704e-6, 1.916e-11),
+            ] {
+                let c = atm.conditions(z);
+                assert_relative_eq!(c.temperature, t, max_relative = 2e-4);
+                assert_relative_eq!(c.pressure, p, max_relative = 2e-3);
+                assert_relative_eq!(c.density, rho, max_relative = 3e-3);
+            }
+            // Continuous across 86 km
+            let below = atm.conditions(85_999.0).density;
+            let above = atm.conditions(86_000.0).density;
+            assert_relative_eq!(below, above, max_relative = 2e-3);
+
+            // The legacy model evaluates the layers at the geometric altitude
+            let legacy = AtmosphereModel::new();
+            assert!(legacy.conditions(80_000.0).density < atm.conditions(80_000.0).density);
+        }
+
+        #[test]
         fn test_density_variation() {
             let atm = AtmosphereModel::new();
 
@@ -375,7 +497,8 @@ pub mod coordinates {
 
         /// Convert ECEF position to LLH (Latitude, Longitude, Height)
         ///
-        /// Uses iterative algorithm for accurate conversion from WGS84 ellipsoid
+        /// Bowring's closed-form latitude (sub-millimetre near the Earth);
+        /// the height formula holds at the poles too
         ///
         /// # Arguments
         /// * `pos_ecef` - ECEF position [m]
@@ -388,7 +511,6 @@ pub mod coordinates {
             let z = pos_ecef.z;
 
             let a = WGS84_A;
-            let _one_f = 1.0 / WGS84_F;
             let b = a * (1.0 - WGS84_F);
             let e2 = WGS84_E2;
             let ed2 = e2 * a * a / (b * b); // Second eccentricity squared
@@ -400,8 +522,9 @@ pub mod coordinates {
                 (z + ed2 * b * theta.sin().powi(3)).atan2(p - e2 * a * theta.cos().powi(3));
             let lon_rad = y.atan2(x);
 
-            let n = a / (1.0 - e2 * lat_rad.sin().powi(2)).sqrt();
-            let height = p / lat_rad.cos() - n;
+            // h = p cos(lat) + z sin(lat) - a sqrt(1 - e² sin²(lat))
+            let (sin_lat, cos_lat) = lat_rad.sin_cos();
+            let height = p * cos_lat + z * sin_lat - a * (1.0 - e2 * sin_lat * sin_lat).sqrt();
 
             Vector3::new(rad2deg(lat_rad), rad2deg(lon_rad), height)
         }
@@ -510,6 +633,16 @@ pub mod coordinates {
             )
         }
 
+        /// Azimuth, elevation and roll [rad] of a NED to body DCM (inverse
+        /// of `dcm_ned_to_body`); azimuth in [0, 2π)
+        pub fn azimuth_elevation_roll(dcm_ned_to_body: &Matrix3<f64>) -> Vector3<f64> {
+            let d = dcm_ned_to_body;
+            let elevation = (-d[(0, 2)]).clamp(-1.0, 1.0).asin();
+            let azimuth = d[(0, 1)].atan2(d[(0, 0)]).rem_euclid(std::f64::consts::TAU);
+            let roll = d[(1, 2)].atan2(d[(2, 2)]);
+            Vector3::new(azimuth, elevation, roll)
+        }
+
         /// Calculate wind velocity in NED frame
         ///
         /// # Arguments
@@ -533,24 +666,19 @@ pub mod coordinates {
             dcm_ned_to_body * (vel_ecef_ned - vel_wind_ned)
         }
 
-        /// Calculate angle of attack from air velocity in body frame
+        /// Angles of the airflow from air velocity in body frame
         ///
         /// # Returns
-        /// Vector3 [alpha, beta, gamma] in radians
-        /// - alpha: Angle of attack
-        /// - beta: Sideslip angle  
-        /// - gamma: Bank angle (always 0 for this simplified calculation)
+        /// Vector3 [alpha, beta, gamma] in radians (as in the C++ simulator)
+        /// - alpha: angle of attack in the body X-Z plane, `atan2(w, u)`
+        /// - beta: sideslip in the body X-Y plane, `atan2(v, u)`
+        /// - gamma: total angle between the body axis and the airflow
         pub fn angle_of_attack(vel_air_body: &Vector3<f64>) -> Vector3<f64> {
-            let vel_magnitude = vel_air_body.magnitude();
-
-            if vel_magnitude < 0.01 || vel_air_body.x.abs() < 0.001 {
+            let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
+            if vel_air_body.magnitude() < 0.01 || u.abs() < 0.001 {
                 return Vector3::zeros();
             }
-
-            let alpha = (vel_air_body.z / vel_air_body.x).atan(); // pitch AoA
-            let beta = (vel_air_body.y / vel_air_body.x).atan(); // yaw sideslip
-
-            Vector3::new(alpha, beta, 0.0)
+            Vector3::new(w.atan2(u), v.atan2(u), v.hypot(w).atan2(u))
         }
 
         /// Initialize ECI position from LLH at launch
@@ -726,6 +854,24 @@ pub mod coordinates {
             assert_relative_eq!(ecef.x, expected_x, epsilon = 1.0);
             assert_relative_eq!(ecef.y, 0.0, epsilon = 1.0);
             assert_relative_eq!(ecef.z, 0.0, epsilon = 1.0);
+        }
+
+        #[test]
+        fn test_llh_round_trip_including_poles() {
+            for llh in [
+                [35.0, 139.0, 0.0],
+                [-60.0, -120.0, 400_000.0],
+                [89.9999, 10.0, 1_000.0],
+                [90.0, 0.0, 250.0],
+                [-90.0, 0.0, 100_000.0],
+            ] {
+                let llh = Vector3::from(llh);
+                let back = CoordinateTransform::pos_ecef_to_llh(
+                    &CoordinateTransform::pos_llh_to_ecef(&llh),
+                );
+                assert_relative_eq!(back.x, llh.x, epsilon = 1e-8);
+                assert_relative_eq!(back.z, llh.z, epsilon = 1e-3);
+            }
         }
 
         #[test]
@@ -1106,3 +1252,193 @@ pub mod gravity {
 }
 
 pub use coordinates::CoordinateTransform;
+
+pub mod orbit {
+    //! Keplerian elements of an inertial state
+
+    use crate::math::constants::{MU_EARTH, WGS84_A};
+    use nalgebra::Vector3;
+    use serde::{Deserialize, Serialize};
+
+    /// Osculating Keplerian elements (point-mass Earth)
+    #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+    pub struct OrbitalElements {
+        /// Semi-major axis [m] (negative for a hyperbolic trajectory)
+        pub semi_major_axis_m: f64,
+        pub eccentricity: f64,
+        pub inclination_deg: f64,
+        /// Right ascension of the ascending node [deg], from the vernal
+        /// equinox (Greenwich mean sidereal time at launch applied)
+        pub raan_deg: f64,
+        pub argument_of_perigee_deg: f64,
+        pub true_anomaly_deg: f64,
+        /// Perigee radius minus the equatorial radius [m]
+        pub perigee_altitude_m: f64,
+        /// Apogee radius minus the equatorial radius [m]; `None` when the
+        /// trajectory is not closed
+        pub apogee_altitude_m: Option<f64>,
+        /// Orbital period [s]; `None` when the trajectory is not closed
+        pub period_s: Option<f64>,
+        /// Specific orbital energy [J/kg]
+        pub specific_energy_j_kg: f64,
+    }
+
+    /// Elements of the ECI state `(r, v)`. The simulator's ECI frame is
+    /// aligned with ECEF at t = 0, i.e. rotated by `frame_angle_rad` (the
+    /// sidereal angle of Greenwich at launch) from the equinox frame.
+    pub fn elements(r: &Vector3<f64>, v: &Vector3<f64>, frame_angle_rad: f64) -> OrbitalElements {
+        let mu = MU_EARTH;
+        let rn = r.magnitude();
+        let energy = 0.5 * v.magnitude_squared() - mu / rn;
+        let h = r.cross(v);
+        let hn = h.magnitude();
+        let node = Vector3::z().cross(&h);
+        let e_vec = ((v.magnitude_squared() - mu / rn) * r - r.dot(v) * v) / mu;
+        let e = e_vec.magnitude();
+        let a = -mu / (2.0 * energy);
+        let p = hn * hn / mu;
+        let inclination = (h.z / hn).clamp(-1.0, 1.0).acos();
+
+        let tau = std::f64::consts::TAU;
+        let angle = |a: &Vector3<f64>, b: &Vector3<f64>| {
+            (a.dot(b) / (a.magnitude() * b.magnitude()))
+                .clamp(-1.0, 1.0)
+                .acos()
+        };
+        const EPS: f64 = 1e-10;
+        let equatorial = node.magnitude() < EPS * hn;
+        let circular = e < EPS;
+        let raan = if equatorial {
+            0.0
+        } else {
+            node.y.atan2(node.x)
+        };
+        // Reference direction in the orbit plane for the angles
+        let reference = if equatorial { Vector3::x() } else { node };
+        let argp = if circular {
+            0.0
+        } else if equatorial {
+            // Longitude of perigee, measured in the direction of motion
+            let w = e_vec.y.atan2(e_vec.x).rem_euclid(tau);
+            if h.z < 0.0 {
+                (tau - w).rem_euclid(tau)
+            } else {
+                w
+            }
+        } else {
+            let w = angle(&node, &e_vec);
+            if e_vec.z < 0.0 { tau - w } else { w }
+        };
+        let from = if circular { reference } else { e_vec };
+        let mut nu = angle(&from, r);
+        if h.cross(&from).dot(r) < 0.0 {
+            nu = tau - nu;
+        }
+
+        let closed = e < 1.0;
+        OrbitalElements {
+            semi_major_axis_m: a,
+            eccentricity: e,
+            inclination_deg: inclination.to_degrees(),
+            raan_deg: (raan + frame_angle_rad).rem_euclid(tau).to_degrees(),
+            argument_of_perigee_deg: argp.to_degrees(),
+            true_anomaly_deg: nu.to_degrees(),
+            perigee_altitude_m: p / (1.0 + e) - WGS84_A,
+            apogee_altitude_m: closed.then(|| p / (1.0 - e) - WGS84_A),
+            period_s: closed.then(|| tau * (a.powi(3) / mu).sqrt()),
+            specific_energy_j_kg: energy,
+        }
+    }
+
+    /// Greenwich mean sidereal time [rad] at a UTC date and time (IAU 1982,
+    /// UT1 taken as UTC)
+    pub fn gmst_rad(utc: [i32; 6]) -> f64 {
+        let [year, month, day, hour, minute, second] = utc;
+        let (y, m) = if month <= 2 {
+            (year - 1, month + 12)
+        } else {
+            (year, month)
+        };
+        let a = (y as f64 / 100.0).floor();
+        let b = 2.0 - a + (a / 4.0).floor();
+        let jd0 = (365.25 * (y as f64 + 4716.0)).floor()
+            + (30.6001 * (m as f64 + 1.0)).floor()
+            + day as f64
+            + b
+            - 1524.5;
+        let jd = jd0 + (hour as f64 + minute as f64 / 60.0 + second as f64 / 3600.0) / 24.0;
+        let t = (jd - 2_451_545.0) / 36_525.0;
+        let seconds =
+            67_310.548_41 + (876_600.0 * 3600.0 + 8_640_184.812_866) * t + 0.093_104 * t * t
+                - 6.2e-6 * t * t * t;
+        (seconds.rem_euclid(86_400.0) / 86_400.0) * std::f64::consts::TAU
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use approx::assert_relative_eq;
+
+        #[test]
+        fn circular_inclined_orbit() {
+            let r0 = WGS84_A + 400_000.0;
+            let v0 = (MU_EARTH / r0).sqrt();
+            let inc = 51.6f64.to_radians();
+            let r = Vector3::new(r0, 0.0, 0.0);
+            let v = Vector3::new(0.0, v0 * inc.cos(), v0 * inc.sin());
+            let el = elements(&r, &v, 0.0);
+            assert_relative_eq!(el.semi_major_axis_m, r0, max_relative = 1e-12);
+            assert!(el.eccentricity < 1e-9);
+            assert_relative_eq!(el.inclination_deg, 51.6, epsilon = 1e-9);
+            assert_relative_eq!(el.raan_deg, 0.0, epsilon = 1e-9);
+            assert_relative_eq!(el.perigee_altitude_m, 400_000.0, epsilon = 1e-3);
+            assert_relative_eq!(el.apogee_altitude_m.unwrap(), 400_000.0, epsilon = 1e-3);
+            assert_relative_eq!(
+                el.period_s.unwrap(),
+                std::f64::consts::TAU * (r0.powi(3) / MU_EARTH).sqrt(),
+                max_relative = 1e-12
+            );
+            // The frame angle shifts only the node
+            let shifted = elements(&r, &v, 0.5);
+            assert_relative_eq!(shifted.raan_deg, 0.5f64.to_degrees(), epsilon = 1e-9);
+        }
+
+        #[test]
+        fn elliptic_orbit_angles() {
+            // Perigee 200 km on +X, apogee 2000 km; state 90 deg after perigee
+            let (rp, ra) = (WGS84_A + 200_000.0, WGS84_A + 2_000_000.0);
+            let a = 0.5 * (rp + ra);
+            let e = (ra - rp) / (ra + rp);
+            let p = a * (1.0 - e * e);
+            let r_mag = p; // at nu = 90 deg
+            let vr = (MU_EARTH / p).sqrt() * e;
+            let vt = (MU_EARTH / p).sqrt();
+            let r = Vector3::new(0.0, r_mag, 0.0);
+            let v = Vector3::new(-vt, vr, 0.0);
+            let el = elements(&r, &v, 0.0);
+            assert_relative_eq!(el.eccentricity, e, max_relative = 1e-9);
+            assert_relative_eq!(el.true_anomaly_deg, 90.0, epsilon = 1e-7);
+            // 0 deg (equatorial: longitude of perigee), possibly as 360 - tiny
+            let argp = (el.argument_of_perigee_deg + 180.0).rem_euclid(360.0) - 180.0;
+            assert_relative_eq!(argp, 0.0, epsilon = 1e-7);
+            assert_relative_eq!(el.perigee_altitude_m, 200_000.0, epsilon = 1e-3);
+            assert_relative_eq!(el.apogee_altitude_m.unwrap(), 2_000_000.0, epsilon = 1e-2);
+        }
+
+        #[test]
+        fn gmst_reference_values() {
+            // J2000.0 epoch (2000-01-01 12:00 UT): 280.46062 deg
+            assert_relative_eq!(
+                gmst_rad([2000, 1, 1, 12, 0, 0]).to_degrees(),
+                280.460_618_37,
+                epsilon = 1e-6
+            );
+            // Vallado example 3-5: 1992-08-20 12:14 UT1 -> 152.578788 deg
+            assert_relative_eq!(
+                gmst_rad([1992, 8, 20, 12, 14, 0]).to_degrees(),
+                152.578_787_8,
+                epsilon = 1e-5
+            );
+        }
+    }
+}

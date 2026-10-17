@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useRef, useState } from 'react'
-import { Redo2, SlidersHorizontal, Undo2 } from 'lucide-react'
+import { Redo2, Undo2 } from 'lucide-react'
 import type { RunStatus } from '../hooks/useSimulation'
 import { useDismiss } from '../hooks/useDismiss'
 import type { ValidationIssue } from '../lib/validation'
@@ -21,8 +21,6 @@ export function Header(props: {
   error: string | null
   issues: ValidationIssue[]
   onIssue: (i: ValidationIssue) => void
-  showDrawerToggle: boolean
-  onToggleDrawer: () => void
   compact: boolean
   history: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void }
   /** Extra buttons placed before the file menu */
@@ -31,11 +29,6 @@ export function Header(props: {
   const mod = navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl+'
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-2 sm:px-3">
-      {props.showDrawerToggle && (
-        <IconButton label={tr('パラメータ', 'Parameters')} onClick={props.onToggleDrawer}>
-          <SlidersHorizontal className="h-4 w-4" />
-        </IconButton>
-      )}
       <div className="hidden shrink-0 items-baseline gap-2 pl-1 sm:flex">
         <span className="text-[14px] font-semibold tracking-tight">OpenTsiolkovsky</span>
       </div>

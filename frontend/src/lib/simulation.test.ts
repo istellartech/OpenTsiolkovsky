@@ -34,6 +34,8 @@ describe.skipIf(!existsSync(wasmPath))('WASM solver', () => {
     expect(stats.map((s) => s.body)).toEqual(['vehicle', 'stage1', 'stage2'])
     expect(stats[1].impacts).toBe(3)
     expect(stats[1].ellipse_major_m).toBeGreaterThan(0)
+    expect(stats[1].ellipse_95_major_m! / stats[1].ellipse_major_m).toBeCloseTo(2.4477, 3)
+    expect(stats[1].ellipse_99_minor_m! / stats[1].ellipse_minor_m).toBeCloseTo(3.0349, 3)
   })
 
   it.each(PRESET_OPTIONS.map((p) => [p.id, p] as const))('flies %s', async (id, preset) => {
@@ -45,6 +47,11 @@ describe.skipIf(!existsSync(wasmPath))('WASM solver', () => {
     // Every spent stage is propagated from its separation
     expect(track.fallBodies.filter((b) => b.kind === 'stage')).toHaveLength(config.stages.length - 1)
     for (const body of track.fallBodies) expect(body.samples[0]?.t ?? body.releaseTime).toBeCloseTo(body.releaseTime, 6)
+    // Events come from the solver: separations at the exact release times, not on output samples
+    const seps = track.events.filter((e) => e.kind === 'separation')
+    const releases = track.fallBodies.filter((b) => b.kind === 'stage').map((b) => b.releaseTime)
+    expect(seps.map((e) => e.t)).toEqual(releases)
+    expect(seps.every((e) => e.at)).toBe(true)
     // Powered at liftoff, with an impact point under the vehicle
     expect(track.samples[1].mode).toBe('power_3DoF')
     expect(track.samples[1].iipLat).not.toBeNull()

@@ -688,7 +688,7 @@ export function ChartGrid({ track, reference = null }: { track: Track; reference
 }
 
 export function EventList({ track }: { track: Track }) {
-  const rows = useMemo(() => track.events.map((e) => ({ e, s: sampleAt(track, e.t) })), [track])
+  const rows = useMemo(() => track.events.map((e) => ({ e, s: e.at ?? sampleAt(track, e.t) })), [track])
   const [active, setActive] = useState(-1)
   useEffect(() => {
     const update = () => {
@@ -712,7 +712,12 @@ export function EventList({ track }: { track: Track }) {
           <th className="py-1.5 pr-3 font-normal">{tr('時刻', 'Time')}</th>
           <th className="py-1.5 pr-3 font-normal">{tr('イベント', 'Event')}</th>
           <th className="py-1.5 pr-3 text-right font-normal">{tr('高度', 'Altitude')}</th>
-          <th className="py-1.5 pr-3 text-right font-normal">{tr('速度', 'Velocity')}</th>
+          <th
+            className="py-1.5 pr-3 text-right font-normal"
+            title={tr('地球に対する速度（自転による速度を含まない）', 'Speed relative to the rotating Earth')}
+          >
+            {tr('対地速度', 'Ground speed')}
+          </th>
           <th className="hidden py-1.5 pr-3 text-right font-normal sm:table-cell">{tr('マッハ', 'Mach')}</th>
           <th className="hidden py-1.5 text-right font-normal sm:table-cell">{tr('ダウンレンジ', 'Downrange')}</th>
         </tr>
@@ -730,7 +735,7 @@ export function EventList({ track }: { track: Track }) {
             </td>
             <td className="py-1.5 pr-3">{eventLabel(e)}</td>
             <td className="num py-1.5 pr-3 text-right">{fmt(s.alt / 1000, 1)} km</td>
-            <td className="num py-1.5 pr-3 text-right">{fmt(s.speed, 0)} m/s</td>
+            <td className="num py-1.5 pr-3 text-right">{fmt(s.groundSpeed, 0)} m/s</td>
             <td className="num hidden py-1.5 pr-3 text-right sm:table-cell">{fmt(s.mach, 2)}</td>
             <td className="num hidden py-1.5 text-right sm:table-cell">{fmt(s.downrange, 1)} km</td>
           </tr>

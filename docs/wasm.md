@@ -40,10 +40,10 @@ WASM側（`src/wasm.rs` の `WasmSimulator`）は、Webの設定形式と CLI �
 | 関数 | 内容 |
 | --- | --- |
 | `WasmSimulator.run()` | 機体の時系列（`SimulationState[]`）の JSON |
-| `WasmSimulator.run_with_fall_bodies()` | `{ trajectory, fall_bodies }`。`fall_bodies` は使用済みの段・投棄物ごとの分離時刻・質量・落下点・時系列 |
+| `WasmSimulator.run_with_fall_bodies()` | `{ trajectory, fall_bodies, events }`。`fall_bodies` は使用済みの段・投棄物ごとの分離時刻・質量・落下点・時系列、`events` は根探索で求めた飛行イベント（[出力ファイル](output.md#イベント)） |
 | `default_dispersion()` | 分散解析の既定の 1σ 値 |
 | `monte_carlo_case(config, dispersion, seed, index)` | 分散解析の 1 ケース（`seed` と `index` から乱数を決めるので再現可能） |
-| `monte_carlo_statistics(cases)` | ケースの配列から物体ごとの平均落下点と誤差楕円 |
+| `monte_carlo_statistics(cases)` | ケースの配列から物体ごとの平均落下点と誤差楕円（1σ・95 %・99 %） |
 
 分散解析は `frontend/src/workers/montecarlo.worker.ts` を複数起動してケースを分担し、`frontend/src/hooks/useMonteCarlo.ts` が進み具合と集計を管理します。
 

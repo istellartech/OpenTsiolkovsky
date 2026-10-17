@@ -1,6 +1,6 @@
 // Turns raw simulator output into a flight "track": geodetic positions,
 // derived quantities, flight events and an interpolator for playback.
-import type { FallBodyJson, FlightModeName, ImpactPointJson, SimulationOutput, SimulationState } from './simulation'
+import type { FallBodyJson, FlightEventJson, FlightModeName, ImpactPointJson, SimulationOutput, SimulationState } from './simulation'
 import { vec3ToObject } from './simulation'
 import { G0, haversineDistanceKm, posEciToLlh } from './geo'
 
@@ -40,7 +40,17 @@ export interface TrackSample {
   iipLon: number | null
 }
 
-export type FlightEventKind = 'liftoff' | 'maxq' | 'burnout' | 'separation' | 'jettison' | 'apogee' | 'end'
+export type FlightEventKind =
+  | 'ignition'
+  | 'liftoff'
+  | 'railexit'
+  | 'mach1'
+  | 'maxq'
+  | 'burnout'
+  | 'separation'
+  | 'jettison'
+  | 'apogee'
+  | 'end'
 
 export interface FlightEvent {
   kind: FlightEventKind
@@ -51,6 +61,8 @@ export interface FlightEvent {
   nextStage?: number
   /** For 'end': the vehicle reached the ground */
   landed?: boolean
+  /** Vehicle state at the event, when the solver located it (otherwise read it from the samples) */
+  at?: Pick<TrackSample, 'alt' | 'groundSpeed' | 'mach' | 'downrange'>
 }
 
 export interface ImpactPoint {
@@ -166,10 +178,44 @@ function buildFallTrack(body: FallBodyJson, baseLat: number, baseLon: number): F
 
 /** Track from the solver's full output (vehicle plus falling bodies). */
 export function trackFromOutput(output: SimulationOutput): Track | null {
-  return buildTrack(output.trajectory, output.fall_bodies)
+  return buildTrack(output.trajectory, output.fall_bodies, output.events)
 }
 
-export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] = []): Track | null {
+const SOLVER_EVENT_KINDS = {
+  ignition: 'ignition',
+  liftoff: 'liftoff',
+  rail_exit: 'railexit',
+  burnout: 'burnout',
+  separation: 'separation',
+  dump: 'jettison',
+  mach1: 'mach1',
+  max_q: 'maxq',
+  apogee: 'apogee',
+  impact: 'end',
+} as const satisfies Record<FlightEventJson['kind'], FlightEventKind>
+
+/** Events located by the solver, up to `tEnd`; an 'end' is added when the vehicle did not come down. */
+function solverEvents(input: FlightEventJson[], tEnd: number, landed: boolean): FlightEvent[] {
+  const events: FlightEvent[] = []
+  for (const e of input) {
+    if (e.time_s > tEnd + 1e-9) continue
+    const kind = SOLVER_EVENT_KINDS[e.kind]
+    if (!kind) continue
+    const ev: FlightEvent = {
+      kind,
+      t: e.time_s,
+      at: { alt: e.altitude_m, groundSpeed: e.speed_mps, mach: e.mach, downrange: e.downrange_m / 1000 },
+    }
+    if (kind === 'end') ev.landed = true
+    else if (kind === 'separation') Object.assign(ev, { stage: e.stage, nextStage: e.stage + 1 })
+    else if (kind === 'ignition' || kind === 'burnout' || kind === 'jettison') ev.stage = e.stage
+    events.push(ev)
+  }
+  if (!events.some((e) => e.kind === 'end')) events.push({ kind: 'end', t: tEnd, landed })
+  return events.sort((a, b) => a.t - b.t)
+}
+
+export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] = [], solverEventsJson?: FlightEventJson[]): Track | null {
   if (!input || input.length < 2) return null
   // Keep everything up to the first non-physical sample.
   const cut = input.findIndex(isNonPhysical)
@@ -247,39 +293,12 @@ export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] 
     maxAccel = Math.max(maxAccel, Math.abs(s.accelAxial))
   }
 
-  // Events
-  const events: FlightEvent[] = [{ kind: 'liftoff', t: first.t }]
-
-  // Max-Q only means something inside the atmosphere during powered ascent.
-  const maxQSample = samples[maxQIdx]
-  if (maxQSample.q > 0 && maxQIdx > 0) {
-    events.push({ kind: 'maxq', t: maxQSample.t })
-  }
-
-  for (let i = 1; i < samples.length; i++) {
-    const prev = samples[i - 1]
-    const cur = samples[i]
-    if (cur.stage !== prev.stage) {
-      events.push({ kind: 'separation', t: cur.t, stage: prev.stage, nextStage: cur.stage })
-    } else if (prev.thrust > 0 && cur.thrust <= 0) {
-      events.push({ kind: 'burnout', t: cur.t, stage: cur.stage })
-    }
-  }
-
   const falls = fallBodies.map((b) => buildFallTrack(b, baseLat, baseLon))
-  for (const f of falls) {
-    if (f.kind === 'dump' && f.releaseTime <= last.t) events.push({ kind: 'jettison', t: f.releaseTime, stage: f.stage })
-  }
-
-  const apogee = samples[apogeeIdx]
-  const descends = apogeeIdx < samples.length - 1 && last.alt < apogee.alt - 1
-  if (descends) {
-    events.push({ kind: 'apogee', t: apogee.t })
-  }
-
   const landed = last.alt <= 1
-  events.push({ kind: 'end', t: last.t, landed })
-  events.sort((a, b) => a.t - b.t)
+  const apogee = samples[apogeeIdx]
+  const events = solverEventsJson
+    ? solverEvents(solverEventsJson, last.t, landed)
+    : sampleEvents(samples, maxQIdx, apogeeIdx, falls, landed)
 
   return {
     samples,
@@ -295,14 +314,55 @@ export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] 
       apogeeTime: apogee.t,
       maxSpeed,
       maxMach,
-      maxQ: maxQSample.q,
-      maxQTime: maxQSample.t,
+      maxQ: samples[maxQIdx].q,
+      maxQTime: samples[maxQIdx].t,
       maxAccel,
       range: last.downrange,
       duration: last.t - first.t,
       landed,
     },
   }
+}
+
+/** Events detected from the output samples, for outputs without solver events (old runs, CSV imports). */
+function sampleEvents(samples: TrackSample[], maxQIdx: number, apogeeIdx: number, falls: FallTrack[], landed: boolean): FlightEvent[] {
+  const first = samples[0]
+  const last = samples[samples.length - 1]
+  const events: FlightEvent[] = [{ kind: 'liftoff', t: first.t }]
+
+  // Max-Q only means something inside the atmosphere during powered ascent.
+  const maxQSample = samples[maxQIdx]
+  if (maxQSample.q > 0 && maxQIdx > 0) {
+    events.push({ kind: 'maxq', t: maxQSample.t })
+  }
+
+  for (let i = 1; i < samples.length; i++) {
+    const prev = samples[i - 1]
+    const cur = samples[i]
+    if (cur.stage !== prev.stage) {
+      // The spent stage's release time is exact; the sample after it can lag by an output interval.
+      const release = falls.find((f) => f.kind === 'stage' && f.stage === prev.stage)?.releaseTime
+      const t = release !== undefined && release > prev.t - 1e-9 && release <= cur.t + 1e-9 ? release : cur.t
+      // A stage still burning up to separation burns out there too.
+      if (prev.thrust > 0) events.push({ kind: 'burnout', t, stage: prev.stage })
+      events.push({ kind: 'separation', t, stage: prev.stage, nextStage: cur.stage })
+    } else if (prev.thrust > 0 && cur.thrust <= 0) {
+      events.push({ kind: 'burnout', t: cur.t, stage: cur.stage })
+    }
+  }
+
+  for (const f of falls) {
+    if (f.kind === 'dump' && f.releaseTime <= last.t) events.push({ kind: 'jettison', t: f.releaseTime, stage: f.stage })
+  }
+
+  const apogee = samples[apogeeIdx]
+  const descends = apogeeIdx < samples.length - 1 && last.alt < apogee.alt - 1
+  if (descends) {
+    events.push({ kind: 'apogee', t: apogee.t })
+  }
+
+  events.push({ kind: 'end', t: last.t, landed })
+  return events.sort((a, b) => a.t - b.t)
 }
 
 /** Index of the last sample with time <= t. */

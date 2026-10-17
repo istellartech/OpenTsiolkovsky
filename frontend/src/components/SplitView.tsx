@@ -75,9 +75,9 @@ export function LayoutSwitch({ layout, onRatio }: { layout: LayoutValue; onRatio
         value: l.value as LayoutValue,
         title: l.title,
         label: (
-          <span className="flex items-center gap-1">
+          <span className="flex items-center">
             <LayoutGlyph ratio={l.ratio} />
-            {l.label}
+            <span className="sr-only">{l.label}</span>
           </span>
         ),
       }))}

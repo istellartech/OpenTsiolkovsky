@@ -174,3 +174,4 @@ ehthumbs.db
 secret_*
 test_*.csv
 SS-520*.pdf
+.vercel

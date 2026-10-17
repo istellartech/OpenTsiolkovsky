@@ -2,11 +2,11 @@
 use clap::Parser;
 use openTsiolkovsky::{
     io::{
-        IoError, config_warnings, create_rocket_from_config, load_dispersion, save_monte_carlo_csv,
-        save_monte_carlo_summary, save_summary_json, save_trajectory_csv,
+        IoError, config_warnings, create_rocket_from_config, load_dispersion, rocket_warnings,
+        save_monte_carlo_csv, save_monte_carlo_summary, save_summary_json, save_trajectory_csv,
     },
     montecarlo::{Dispersion, impact_statistics, run_cases},
-    simulator::{FallBodyKind, SimError, Simulator, impact_point},
+    simulator::{EventKind, FallBodyKind, SimError, Simulator, impact_point},
 };
 
 #[derive(Parser)]
@@ -57,7 +57,10 @@ fn main() -> Result<()> {
     // Load rocket configuration and data
     let rocket = create_rocket_from_config(&args.config)?;
 
-    for warning in config_warnings(&rocket.config) {
+    for warning in config_warnings(&rocket.config)
+        .into_iter()
+        .chain(rocket_warnings(&rocket))
+    {
         eprintln!("Warning: {}", warning);
     }
 
@@ -129,6 +132,44 @@ fn main() -> Result<()> {
                 );
             }
         }
+        println!("\nEvents:");
+        for e in &simulator.events {
+            println!(
+                "  T+{:8.2} s  {:<10} stage {}  alt {:10.1} m  speed {:8.1} m/s  Mach {:5.2}  q {:9.1} Pa",
+                e.time_s,
+                serde_json::to_value(e.kind)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default(),
+                e.stage,
+                e.altitude_m,
+                e.speed_mps,
+                e.mach,
+                e.dynamic_pressure_pa
+            );
+        }
+        if let Some(orbit) = simulator
+            .events
+            .iter()
+            .rev()
+            .find_map(|e| (e.kind == EventKind::Burnout).then_some(e.orbit).flatten())
+        {
+            println!(
+                "  Orbit at last burnout: perigee {:.1} km, apogee {} km, inclination {:.2} deg, e {:.4}",
+                orbit.perigee_altitude_m / 1e3,
+                orbit
+                    .apogee_altitude_m
+                    .map_or("-".to_string(), |a| format!("{:.1}", a / 1e3)),
+                orbit.inclination_deg,
+                orbit.eccentricity
+            );
+        }
+        if simulator.forced_steps > 0 {
+            println!(
+                "  Warning: {} RK45 steps were accepted at the minimum step size above tolerance",
+                simulator.forced_steps
+            );
+        }
         println!();
     }
 
@@ -139,7 +180,13 @@ fn main() -> Result<()> {
     let cpp_csv_file = format!("{}_dynamics_cpp.csv", output_base);
 
     save_trajectory_csv(&trajectory, &trajectory_file)?;
-    save_summary_json(&trajectory, &fall_bodies, &rocket.config, &summary_file)?;
+    save_summary_json(
+        &trajectory,
+        &fall_bodies,
+        &simulator.events,
+        &rocket.config,
+        &summary_file,
+    )?;
     // Write C++-compatible CSV
     save_cpp_telemetry(&simulator.telemetry_cpp, &cpp_csv_file)?;
     let mut fall_files = Vec::new();
@@ -197,14 +244,14 @@ fn main() -> Result<()> {
         save_monte_carlo_summary(&cases, &dispersion, args.seed, &mc_summary)?;
         for s in impact_statistics(&cases) {
             println!(
-                "{}: {}/{} impacts, mean {:.6} {:.6} [deg], 3-sigma ellipse {:.0} x {:.0} m (azimuth {:.0} deg)",
+                "{}: {}/{} impacts, mean {:.6} {:.6} [deg], 99% ellipse {:.0} x {:.0} m (azimuth {:.0} deg)",
                 s.body,
                 s.impacts,
                 s.cases,
                 s.mean_latitude_deg,
                 s.mean_longitude_deg,
-                3.0 * s.ellipse_major_m,
-                3.0 * s.ellipse_minor_m,
+                s.ellipse_99_major_m,
+                s.ellipse_99_minor_m,
                 s.ellipse_azimuth_deg
             );
         }

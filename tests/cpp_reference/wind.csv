@@ -1,0 +1,5 @@
+altitude[m],wind_speed[m/s],direction[deg]
+0,5,350
+5000,30,10
+15000,50,40
+30000,10,200
