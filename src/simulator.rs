@@ -857,17 +857,12 @@ impl Simulator {
         let ca = self.rocket.ca_at_mach(stage_idx, self.state.mach_number);
         let ref_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
         let drag = ca * q * ref_area;
-        let cn_pitch = alpha.signum()
-            * self
-                .rocket
-                .cn_at(stage_idx, self.state.mach_number, alpha.to_degrees().abs());
-        let cn_yaw = beta.signum()
-            * self
-                .rocket
-                .cn_at(stage_idx, self.state.mach_number, beta.to_degrees().abs());
-        let force_normal_pitch = cn_pitch * q * ref_area;
-        let force_normal_yaw = cn_yaw * q * ref_area;
-        let aero_body = Vector3::new(-drag, -force_normal_yaw, -force_normal_pitch);
+        let aero_body = self.aero_force_body(
+            stage_idx,
+            self.state.mach_number,
+            &vel_air_body,
+            q * ref_area,
+        );
         let aero_eci = dcm_body_to_eci * aero_body;
 
         // Thrust
@@ -1158,15 +1153,11 @@ impl Simulator {
             &vel_air_ned,
             &Vector3::zeros(),
         );
-        let angles = CoordinateTransform::angle_of_attack(&vel_air_body);
-        let alpha = angles.x;
-        let beta = angles.y;
 
         let stage_idx = self.stage_index_for_time(t);
         let stage_cfg = self.rocket.stage_config(stage_idx);
         let stage_info = &self.stage_runtime[stage_idx];
         let reference_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
-        let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
 
         // Recompute dynamic_pressure based on air-relative speed
         let atm_density = self.atmosphere.conditions(pos_llh.z).density;
@@ -1184,22 +1175,45 @@ impl Simulator {
         }
 
         // Otherwise use aerodynamic coefficients (CA, CN from Mach x |angle| table)
-        let alpha_deg = alpha.to_degrees().abs();
-        let beta_deg = beta.to_degrees().abs();
-        let cn_pitch = alpha.signum() * self.rocket.cn_at(stage_idx, mach_number, alpha_deg);
-        let cn_yaw = beta.signum() * self.rocket.cn_at(stage_idx, mach_number, beta_deg);
-
-        let drag_magnitude = ca * q * reference_area;
-        let force_normal_pitch = cn_pitch * q * reference_area;
-        let force_normal_yaw = cn_yaw * q * reference_area;
-        let drag_body = Vector3::new(-drag_magnitude, 0.0, 0.0);
-        let normal_body = Vector3::new(0.0, -force_normal_yaw, -force_normal_pitch);
-
-        let total_aero_body = drag_body + normal_body;
+        let total_aero_body =
+            self.aero_force_body(stage_idx, mach_number, &vel_air_body, q * reference_area);
         let dcm_body_to_ned = dcm_ned_to_body.transpose();
         let aero_force_ned = dcm_body_to_ned * total_aero_body;
         let dcm_ned_to_eci = dcm_eci_to_ned.transpose();
         dcm_ned_to_eci * aero_force_ned
+    }
+
+    /// Aerodynamic force in the body frame from CA and CN.
+    ///
+    /// `vel_air_body` is the vehicle's air-relative velocity in body axes and
+    /// `q_area` is dynamic pressure × reference area. Each component opposes
+    /// the matching velocity component, with the flow angle measured from the
+    /// body axis line (0–90°). For normal flight (u > 0) this is the usual
+    /// axial drag along −X and normal force from α/β; when the flow comes
+    /// from behind (|AoA| > 90°, e.g. re-entry with a fixed commanded
+    /// attitude) the body is treated as symmetric, so the force still
+    /// opposes the air-relative velocity and never adds energy.
+    fn aero_force_body(
+        &self,
+        stage_idx: usize,
+        mach_number: f64,
+        vel_air_body: &Vector3<f64>,
+        q_area: f64,
+    ) -> Vector3<f64> {
+        let sign = |x: f64| if x == 0.0 { 0.0 } else { x.signum() };
+        let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
+        let alpha_deg = w.abs().atan2(u.abs()).to_degrees();
+        let beta_deg = v.abs().atan2(u.abs()).to_degrees();
+
+        let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
+        let cn_pitch = self.rocket.cn_at(stage_idx, mach_number, alpha_deg);
+        let cn_yaw = self.rocket.cn_at(stage_idx, mach_number, beta_deg);
+
+        Vector3::new(
+            -sign(u) * ca * q_area,
+            -sign(v) * cn_yaw * q_area,
+            -sign(w) * cn_pitch * q_area,
+        )
     }
 }
 
@@ -1379,6 +1393,53 @@ mod tests {
             final_state.altitude <= 0.1,
             "Final altitude {} is too high - simulation should end at ground level",
             final_state.altitude
+        );
+    }
+
+    #[test]
+    fn test_fixed_attitude_reentry_decelerates() {
+        // Unpowered re-entry with the body pointing against the flight
+        // direction (AoA ≈ 180°): aerodynamics must slow the vehicle down.
+        let mut config = create_test_config();
+        config.calculate_condition.end_time = 2000.0;
+        config.launch.position_llh = [35.0, 139.0, 100_000.0];
+        config.launch.velocity_ned = [7000.0, 0.0, 300.0];
+        let stage = &mut config.stages[0];
+        stage.free_flight_mode = 1;
+        stage.aero.body_diameter = 2.0;
+        stage.attitude.const_azimuth = 180.0;
+        stage.attitude.const_elevation = 0.0;
+
+        let rocket = Rocket::new(config);
+        let mut simulator = Simulator::new(rocket).unwrap();
+        let trajectory = simulator.run();
+
+        let max_q = trajectory
+            .iter()
+            .map(|s| s.dynamic_pressure)
+            .fold(0.0, f64::max);
+        assert!(max_q > 50_000.0, "re-entry too gentle: max q {max_q}");
+
+        // While drag clearly dominates gravity, speed must not increase.
+        for pair in trajectory.windows(2) {
+            if pair[0].dynamic_pressure > 50_000.0 && pair[1].dynamic_pressure > 50_000.0 {
+                assert!(
+                    pair[1].velocity_magnitude <= pair[0].velocity_magnitude,
+                    "speed rose from {} to {} m/s at t = {} s (q = {} Pa)",
+                    pair[0].velocity_magnitude,
+                    pair[1].velocity_magnitude,
+                    pair[1].time,
+                    pair[1].dynamic_pressure
+                );
+            }
+        }
+
+        let final_state = trajectory.last().unwrap();
+        assert!(final_state.altitude <= 0.1, "did not reach the ground");
+        assert!(
+            final_state.velocity_magnitude < 2000.0,
+            "impact speed {} m/s",
+            final_state.velocity_magnitude
         );
     }
 
