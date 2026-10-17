@@ -6,9 +6,9 @@
 //  - stage times are measured from that stage's start (previous separation);
 //  - thrust = F_vac − A_exit · p_ambient, mass flow = F_vac / (Isp_vac · g0).
 import type { ClientConfig, ClientStageConfig } from '../lib/simulation'
+import { G0 } from '../lib/geo'
 import { createDefaultStage } from './defaults'
 
-const G0 = 9.80665
 const P0 = 101325
 
 export interface StageInput {

@@ -1,30 +1,8 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { TableSummary } from './TableEditor'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/cn'
 
 /* ------------------------------------------------------------------ Buttons */
-
-type ButtonVariant = 'primary' | 'plain' | 'quiet'
-
-export function Button({
-  variant = 'plain',
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        'inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] px-3 text-[13px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40',
-        variant === 'primary' && 'bg-signal text-signal-ink hover:brightness-95',
-        variant === 'plain' && 'border border-line-strong bg-surface text-ink hover:bg-surface-2',
-        variant === 'quiet' && 'text-ink-2 hover:bg-surface-2 hover:text-ink',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
 
 export function IconButton({
   label,

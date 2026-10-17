@@ -3,6 +3,7 @@ import { Chart, type ChartConfiguration, type Plugin } from 'chart.js/auto'
 import { Download, Maximize2, RotateCcw, X } from 'lucide-react'
 import { readStageColor, sampleAt, type Track, type TrackSample } from '../lib/trajectory'
 import { playback } from '../lib/playback'
+import { fmt } from '../lib/format'
 
 interface Series {
   label: string
@@ -67,9 +68,6 @@ function themeColors() {
   const v = (name: string) => css.getPropertyValue(name).trim()
   return { ink: v('--ink'), ink2: v('--ink-2'), ink3: v('--ink-3'), line: v('--line'), surface: v('--surface') }
 }
-
-const fmt = (v: number, digits = 1) =>
-  Number.isFinite(v) ? v.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '—'
 
 /** Hairlines at stage separations and burnouts. */
 const eventLines = (track: Track, color: string): Plugin<'line'> => ({

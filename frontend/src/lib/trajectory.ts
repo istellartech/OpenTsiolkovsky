@@ -2,9 +2,7 @@
 // derived quantities, flight events and an interpolator for playback.
 import type { SimulationState } from './simulation'
 import { vec3ToObject } from './simulation'
-import { haversineDistanceKm, posEciToLlh } from './utils'
-
-const G0 = 9.80665
+import { G0, haversineDistanceKm, posEciToLlh } from './geo'
 
 export interface TrackSample {
   t: number

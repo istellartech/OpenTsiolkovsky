@@ -3,7 +3,7 @@
 // number box per cell.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownUp, Copy, FileUp, X } from 'lucide-react'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/cn'
 
 export interface TableColumn {
   key: string

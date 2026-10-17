@@ -8,9 +8,11 @@ import { FieldContext, IconButton, Segmented } from './components/primitives'
 import { PlaybackBar, Telemetry } from './components/Playback'
 import { playback, suggestedSpeed } from './lib/playback'
 import { trackToCsv, type Track } from './lib/trajectory'
-import { computeSpecs, fmtForce, fmtMass } from './lib/specs'
-import { generateKML, cn } from './lib/utils'
-import type { ValidationIssue } from './utils/validation'
+import { computeSpecs } from './lib/specs'
+import { fmt, fmtForce, fmtMass } from './lib/format'
+import { generateKML } from './lib/kml'
+import { cn } from './lib/cn'
+import type { ValidationIssue } from './lib/validation'
 
 const Globe = lazy(() => import('./components/Globe'))
 const ChartGrid = lazy(() => import('./components/Charts').then((m) => ({ default: m.ChartGrid })))
@@ -26,8 +28,6 @@ function useMediaQuery(query: string) {
   }, [query])
   return match
 }
-
-const fmt = (v: number, d = 1) => v.toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d })
 
 function saveFile(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
@@ -120,7 +120,7 @@ export default function App() {
     saveJson: () => saveFile(`${base}.json`, JSON.stringify(config, null, 2), 'application/json'),
     saveCsv: () => track && saveFile(`${base}_trajectory.csv`, trackToCsv(track), 'text/csv'),
     saveKml: () =>
-      result && saveFile(`${base}_trajectory.kml`, generateKML({ trajectory: result.states, config: result.config }), 'application/vnd.google-earth.kml+xml'),
+      track && saveFile(`${base}_trajectory.kml`, generateKML(track, config.name), 'application/vnd.google-earth.kml+xml'),
   }
 
   // Drop a settings file anywhere on the window to open it.

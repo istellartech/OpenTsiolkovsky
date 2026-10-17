@@ -6,8 +6,9 @@ import { PRESET_OPTIONS } from '../config/presets'
 import { LAUNCH_SITES, findSite } from '../config/sites'
 import { NumberField, ProfileTable, SelectField, TextInputField, Toggle, VectorField } from './primitives'
 import { stageColorVar } from '../lib/trajectory'
-import { fmtForce, fmtMass, type VehicleSpec } from '../lib/specs'
-import { cn } from '../lib/utils'
+import type { VehicleSpec } from '../lib/specs'
+import { fmt, fmtForce, fmtMass } from '../lib/format'
+import { cn } from '../lib/cn'
 
 type Patch = (fn: (c: ClientConfig) => ClientConfig) => void
 
@@ -39,7 +40,6 @@ export function navForField(field: string): InspectorNav {
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
-const fmt = (v: number, d = 1) => v.toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d })
 
 /** Validation keys: the first stage is `stage.*`, later ones `stage[n].*` (1-based). */
 const stagePath = (i: number, key: keyof ClientStageConfig) => (i === 0 ? `stage.${key}` : `stage[${i + 1}].${key}`)

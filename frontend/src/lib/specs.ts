@@ -7,8 +7,7 @@
 //  - burn / cutoff / separation times and thrust/Isp tables are measured from
 //    the start of that stage, which is the previous stage's separation.
 import type { ClientConfig, ClientStageConfig, ClientTimeSample } from './simulation'
-
-const G0 = 9.80665
+import { G0 } from './geo'
 
 export interface StageSpec {
   index: number
@@ -145,11 +144,3 @@ export function computeSpecs(config: ClientConfig): VehicleSpec {
     warnings,
   }
 }
-
-export const fmtMass = (kg: number) =>
-  kg >= 10000 ? `${(kg / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 1 })} t` : `${Math.round(kg).toLocaleString('ja-JP')} kg`
-
-export const fmtForce = (n: number) =>
-  n >= 1e6
-    ? `${(n / 1e6).toLocaleString('ja-JP', { maximumFractionDigits: 2 })} MN`
-    : `${(n / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 1 })} kN`

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ClientConfig, SimulationState } from '../lib/simulation'
 import { runSimulation } from '../lib/simulation'
 import { PRESET_OPTIONS, createBlankConfig } from '../config/presets'
-import { isValidClientConfig, validateConfig } from '../utils/validation'
+import { isValidClientConfig, validateConfig } from '../lib/validation'
 import { buildTrack, type Track } from '../lib/trajectory'
 import { baseName, fromLegacyParamFile, isLegacyParamFile } from '../lib/legacy'
 

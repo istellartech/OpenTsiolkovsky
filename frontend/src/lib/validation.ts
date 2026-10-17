@@ -1,49 +1,30 @@
-import type { ClientConfig } from '../lib/simulation'
-import { createDefaultStage } from '../config/defaults'
-import { POWER_MODE_OPTIONS, FREE_MODE_OPTIONS } from '../config/defaults'
+import type { ClientConfig, ClientMachSample, ClientStageConfig, ClientTimeSample } from './simulation'
+import { FREE_MODE_OPTIONS, POWER_MODE_OPTIONS, createDefaultStage } from '../config/defaults'
 
 export interface ValidationIssue {
   field: string
   message: string
 }
 
-export const VALIDATION_ERROR_MESSAGE = '入力値に問題があります。リストを確認して修正してください。'
+type Json = Record<string, unknown>
 
+const isObject = (v: unknown): v is Json => !!v && typeof v === 'object' && !Array.isArray(v)
+const hasKeys = (o: Json, keys: string[]) => keys.every((k) => k in o)
+
+/** Shape check for a config saved from this app (values are validated separately). */
 export function isValidClientConfig(obj: unknown): obj is ClientConfig {
-  if (!obj || typeof obj !== 'object') return false
-
-  const config = obj as any
-
-  // Check required top-level properties
-  const requiredTopLevel = ['simulation', 'launch', 'aerodynamics', 'attitude', 'wind']
-  for (const key of requiredTopLevel) {
-    if (!config[key] || typeof config[key] !== 'object') return false
-  }
-
-  // Check simulation properties
-  if (!config.simulation.hasOwnProperty('duration_s') ||
-      !config.simulation.hasOwnProperty('output_step_s') ||
-      !config.simulation.hasOwnProperty('air_density_percent')) return false
-
-  // Check launch properties
-  if (!config.launch.hasOwnProperty('latitude_deg') ||
-      !config.launch.hasOwnProperty('longitude_deg') ||
-      !config.launch.hasOwnProperty('altitude_m') ||
-      !Array.isArray(config.launch.velocity_ned_mps) ||
-      !config.launch.datetime_utc) return false
-
-  // Check launch datetime
-  const dt = config.launch.datetime_utc
-  if (!dt.hasOwnProperty('year') || !dt.hasOwnProperty('month') ||
-      !dt.hasOwnProperty('day') || !dt.hasOwnProperty('hour') ||
-      !dt.hasOwnProperty('minute') || !dt.hasOwnProperty('second')) return false
-
-  return true
-}
-
-export function numberFromInput(value: string): number {
-  const num = Number(value)
-  return Number.isFinite(num) ? num : 0
+  if (!isObject(obj)) return false
+  const { simulation, launch, aerodynamics, attitude, wind } = obj
+  if (![simulation, launch, aerodynamics, attitude, wind].every(isObject)) return false
+  const sim = simulation as Json
+  const l = launch as Json
+  return (
+    hasKeys(sim, ['duration_s', 'output_step_s', 'air_density_percent']) &&
+    hasKeys(l, ['latitude_deg', 'longitude_deg', 'altitude_m']) &&
+    Array.isArray(l.velocity_ned_mps) &&
+    isObject(l.datetime_utc) &&
+    hasKeys(l.datetime_utc, ['year', 'month', 'day', 'hour', 'minute', 'second'])
+  )
 }
 
 export function isFiniteNumber(value: unknown): value is number {
@@ -166,7 +147,7 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
 }
 
 function validateStage(
-  stage: any,
+  stage: ClientStageConfig,
   push: (field: string, message: string) => void,
   prefix: string,
   stageNum?: number
@@ -233,7 +214,7 @@ function validateStage(
   }
 
   // Profile validations
-  if (stage.thrust_profile?.length > 0) {
+  if (stage.thrust_profile?.length) {
     validateTimeSeriesProfile(stage.thrust_profile, push, `${fieldPrefix}thrust_profile`, '推力プロファイル', {
       timeMin: 0,
       valueMin: 0,
@@ -241,7 +222,7 @@ function validateStage(
     })
   }
 
-  if (stage.isp_profile?.length > 0) {
+  if (stage.isp_profile?.length) {
     validateTimeSeriesProfile(stage.isp_profile, push, `${fieldPrefix}isp_profile`, 'Ispプロファイル', {
       timeMin: 0,
       valueMin: 0.01,
@@ -251,7 +232,7 @@ function validateStage(
   }
 }
 
-function validateAerodynamics(aerodynamics: any, push: (field: string, message: string) => void) {
+function validateAerodynamics(aerodynamics: ClientConfig['aerodynamics'], push: (field: string, message: string) => void) {
   if (!isFiniteNumber(aerodynamics.body_diameter_m) || aerodynamics.body_diameter_m <= 0) {
     push('aerodynamics.body_diameter_m', '機体径は正の値にしてください。')
   }
@@ -285,7 +266,7 @@ function validateAerodynamics(aerodynamics: any, push: (field: string, message: 
   }
 }
 
-function validateAttitude(attitude: any, push: (field: string, message: string) => void) {
+function validateAttitude(attitude: ClientConfig['attitude'], push: (field: string, message: string) => void) {
   if (!isFiniteNumber(attitude.azimuth_deg) || attitude.azimuth_deg < 0 || attitude.azimuth_deg >= 360) {
     push('attitude.azimuth_deg', '方位角は0〜360度未満で指定してください。')
   }
@@ -305,7 +286,7 @@ function validateAttitude(attitude: any, push: (field: string, message: string) 
   }
 
   const gyroMax = 100
-  attitude.gyro_bias_deg_h?.forEach((bias: any, idx: number) => {
+  attitude.gyro_bias_deg_h?.forEach((bias, idx) => {
     if (!isFiniteNumber(bias) || Math.abs(bias) > gyroMax) {
       push(`attitude.gyro_bias_deg_h[${idx}]`, `ジャイロバイアスは±${gyroMax} deg/h以内にしてください。`)
     }
@@ -335,7 +316,7 @@ function validateAttitude(attitude: any, push: (field: string, message: string) 
   }
 }
 
-function validateWind(wind: any, push: (field: string, message: string) => void) {
+function validateWind(wind: ClientConfig['wind'], push: (field: string, message: string) => void) {
   if (!isFiniteNumber(wind.speed_mps) || wind.speed_mps < 0) {
     push('wind.speed_mps', '風速は0以上で指定してください。')
   }
@@ -369,7 +350,7 @@ function validateWind(wind: any, push: (field: string, message: string) => void)
 }
 
 function validateTimeSeriesProfile(
-  profile: any[],
+  profile: ClientTimeSample[],
   push: (field: string, message: string) => void,
   fieldName: string,
   profileName: string,
@@ -406,7 +387,7 @@ function validateTimeSeriesProfile(
 }
 
 function validateMachProfile(
-  profile: any[],
+  profile: ClientMachSample[],
   push: (field: string, message: string) => void,
   fieldName: string,
   profileName: string,

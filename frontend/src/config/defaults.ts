@@ -40,13 +40,3 @@ export function createDefaultStage(): ClientStageConfig {
     isp_profile: [],
   }
 }
-
-export function cloneStage(stage: ClientStageConfig): ClientStageConfig {
-  return {
-    ...stage,
-    cg_position_m: [...stage.cg_position_m],
-    rotational_inertia_kgm2: [...stage.rotational_inertia_kgm2],
-    thrust_profile: stage.thrust_profile ? stage.thrust_profile.map(sample => ({ ...sample })) : [],
-    isp_profile: stage.isp_profile ? stage.isp_profile.map(sample => ({ ...sample })) : [],
-  }
-}
