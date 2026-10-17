@@ -17,15 +17,14 @@ This guide helps Claude Code work effectively with the OpenTsiolkovsky project, 
 - Rust: `cargo build` or `cargo build --release`.
   - CLI: `cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --verbose`.
   - WASM: `wasm-pack build --target web --features wasm`.
-- Frontend: `cd frontend && bun install && bun run dev` (build: `bun run build`).
+- Frontend (Vite+ toolchain, `vp` from `frontend/node_modules/.bin`): `cd frontend && bun install && bun run dev` (build: `bun run build`; frontend only: `bunx vp build`).
 - Legacy C++ build: `cd legacy_cpp && make` (outputs `legacy_cpp/bin/OpenTsiolkovsky`), clean: `make clean`.
 - Legacy C++ run: `./legacy_cpp/bin/OpenTsiolkovsky examples/param_sample_01.json`.
 - Flight script: `python legacy_cpp/test/test_flight.py` (expects built C++ binary).
 
 ## Lint and Type Check Commands
 - Rust: `cargo fmt && cargo clippy -D warnings`
-- TypeScript: `cd frontend && bunx tsc --noEmit`
-- Frontend lint: ESLint not configured (consider adding to package.json scripts)
+- Frontend: `cd frontend && bunx vp check` (Oxfmt format check + Oxlint + type check; `bunx vp check --fix` to format)
 
 ## Testing Guidelines
 - Rust: `cargo test` (unit tests live alongside modules). Prefer numeric assertions with tolerances (e.g., `approx`).
@@ -40,7 +39,7 @@ This guide helps Claude Code work effectively with the OpenTsiolkovsky project, 
 ## Claude Code Specific Instructions
 - Always run appropriate lint and type check commands after making changes
 - When making changes to Rust code, run `cargo test` to ensure tests pass
-- For frontend changes, run type checking with `bunx tsc --noEmit`
+- For frontend changes, run `bunx vp check` and `bunx vp test run` in `frontend/`
 - When altering CLI flags or output schema, update README/docs and examples
 - Ensure C++ and Rust outputs remain comparable when making changes
 - Keep changes minimal and focused; match existing patterns
@@ -49,6 +48,6 @@ This guide helps Claude Code work effectively with the OpenTsiolkovsky project, 
 
 ## Common Task Patterns
 - For Rust development: Build → Test → Lint → Type check
-- For frontend development: Install (bun install) → Build → Type check
+- For frontend development: Install (bun install) → `vp check` → `vp test run` → `vp build`
 - For legacy C++ development: `cd legacy_cpp` → Build → Test manually
 - Always verify outputs after changes to simulation logic

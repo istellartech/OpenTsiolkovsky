@@ -18,12 +18,16 @@ Rust ソルバーを WebAssembly にしてブラウザだけで動く、ロケ�
 
 ## 開発
 
+ツールチェーンは [Vite+](https://viteplus.dev/)（`vp`：Vite 8 / Rolldown・Vitest・Oxlint・Oxfmt）です。設定は `vite.config.ts` にまとまっています。`vp` は `node_modules/.bin` に入るので、グローバルに入れていなければ `bunx vp …` で実行します。
+
 ```bash
 cd frontend
 bun install
 bun run dev      # src/wasm が無ければ先に scripts/wasm_build.sh を実行（wasm-pack が必要）
-bun run build    # WASM ビルド → 型チェック → 本番ビルド（dist/）
-bunx tsc --noEmit
+bun run build    # WASM ビルド → vp check → 本番ビルド（dist/）
+bunx vp check    # Oxfmt・Oxlint・型チェック（--fix で整形）
+bunx vp test run # Vitest（src/wasm があれば全サンプル機体を WASM で計算）
+bunx vp build    # WASM を作り直さずに本番ビルド
 ```
 
 WASM だけ作り直すときは、リポジトリ直下で `bash scripts/wasm_build.sh` を実行します（[docs/wasm.md](../docs/wasm.md)）。

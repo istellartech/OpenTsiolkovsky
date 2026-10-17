@@ -41,13 +41,12 @@ cd frontend
 echo "[VERCEL BUILD] Installing frontend dependencies..."
 bun install
 
-# Type check
-echo "[VERCEL BUILD] Running TypeScript type check..."
-bunx tsc --noEmit
+# Format, lint and type check, then build with Vite+ (vp from node_modules)
+echo "[VERCEL BUILD] Running vp check..."
+bunx vp check
 
-# Build frontend with Vite
-echo "[VERCEL BUILD] Building frontend with Vite..."
-bun run build
+echo "[VERCEL BUILD] Building frontend with Vite+..."
+bunx vp build
 
 echo "[VERCEL BUILD] Build completed successfully!"
 echo "[VERCEL BUILD] Frontend output available in frontend/dist/"
