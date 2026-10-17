@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ClientConfig, SimulationState } from '../lib/simulation'
 import { runSimulation } from '../lib/simulation'
-import { PRESET_OPTIONS, createDefaultConfig } from '../config/defaults'
+import { PRESET_OPTIONS } from '../config/presets'
 import { isValidClientConfig, validateConfig } from '../utils/validation'
 import { buildTrack, type Track } from '../lib/trajectory'
 
@@ -44,7 +44,7 @@ export interface SimulationResult {
 }
 
 export function useSimulation() {
-  const initial = useMemo(() => loadStored() ?? { config: createDefaultConfig(), presetId: 'sample' }, [])
+  const initial = useMemo(() => loadStored() ?? { config: PRESET_OPTIONS[0].create(), presetId: PRESET_OPTIONS[0].id }, [])
   const [config, setConfigState] = useState<ClientConfig>(initial.config)
   const [presetId, setPresetId] = useState(initial.presetId)
   const [status, setStatus] = useState<RunStatus>('running')

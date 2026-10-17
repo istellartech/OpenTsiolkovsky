@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Download, Globe as GlobeIcon, LineChart, SlidersHorizontal, Upload, X } from 'lucide-react'
 import { useSimulation, type RunStatus } from './hooks/useSimulation'
-import { PRESET_OPTIONS } from './config/defaults'
+import { PRESET_CATEGORIES, PRESET_OPTIONS } from './config/presets'
 import { Inspector, navForField, type InspectorNav } from './components/Inspector'
 import { FieldContext, IconButton, Segmented } from './components/primitives'
 import { PlaybackBar, Telemetry } from './components/Playback'
@@ -139,6 +139,13 @@ export default function App() {
       {track && (
         <div className="absolute left-3 top-3">
           <Telemetry track={track} compact={isMobile || split.ratio < 0.35} />
+        </div>
+      )}
+      {track && (sim.status === 'invalid' || sim.status === 'error') && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-10 flex justify-center px-3 md:bottom-auto md:top-3">
+          <p className="rounded-full bg-surface px-3 py-1 text-[12px] text-danger shadow-[0_1px_3px_rgba(0,0,0,0.12)] ring-1 ring-danger/30">
+            {sim.status === 'invalid' ? '入力エラーのため、前回の計算結果を表示しています' : '計算エラーのため、前回の計算結果を表示しています'}
+          </p>
         </div>
       )}
       {!track && sim.status !== 'running' && (
@@ -689,37 +696,44 @@ function VehiclePicker({ name, presetId, onPreset }: { name: string; presetId: s
           aria-label="機体を選ぶ"
           className="fixed inset-x-2 top-12 z-50 rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.3)] sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-[26rem]"
         >
-          <p className="px-2.5 pb-1.5 pt-1 text-[11px] text-ink-3">
-            サンプル機体{presetId === 'custom' ? ' — 選ぶと現在の編集内容は置き換わります' : ''}
-          </p>
-          {PRESET_SPECS.map(({ preset, specs }) => {
-            const active = preset.id === presetId
-            return (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => {
-                  setOpen(false)
-                  onPreset(preset.id)
-                }}
-                className={cn('block w-full rounded-[7px] px-2.5 py-2 text-left hover:bg-surface-2', active && 'bg-surface-2')}
-              >
-                <span className="flex items-baseline gap-2">
-                  <span className="text-[13px] font-semibold">{preset.label}</span>
-                  <span className="text-[12px] text-ink-2">{preset.kind}</span>
-                  {active && <Check className="ml-auto h-3.5 w-3.5 self-center text-ink" />}
-                </span>
-                <span className="num mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-2">
-                  <span>{specs.stages.length}段</span>
-                  <span>{fmtMass(specs.liftoffMass)}</span>
-                  <span>推力 {fmtForce(specs.liftoffThrust)}</span>
-                  <span>Δv {(specs.dvTotal / 1000).toFixed(1)} km/s</span>
-                  <span className="text-ink-3">{preset.site}</span>
-                </span>
-                <span className="mt-1 block text-[11px] leading-relaxed text-ink-3">{preset.description}</span>
-              </button>
-            )
-          })}
+          {presetId === 'custom' && (
+            <p className="px-2.5 pb-1 pt-1 text-[11px] text-ink-3">選ぶと現在の編集内容は置き換わります</p>
+          )}
+          <div className="scroll-quiet max-h-[min(70vh,600px)] overflow-y-auto">
+            {PRESET_CATEGORIES.map((cat) => (
+              <div key={cat.id} className="mb-1">
+                <p className="sticky top-0 bg-surface px-2.5 pb-1 pt-2 text-[11px] font-semibold text-ink-2">{cat.label}</p>
+              {PRESET_SPECS.filter(({ preset }) => preset.category === cat.id).map(({ preset, specs }) => {
+                const active = preset.id === presetId
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setOpen(false)
+                      onPreset(preset.id)
+                    }}
+                    className={cn('block w-full rounded-[7px] px-2.5 py-2 text-left hover:bg-surface-2', active && 'bg-surface-2')}
+                  >
+                    <span className="flex items-baseline gap-2">
+                      <span className="text-[13px] font-semibold">{preset.label}</span>
+                      <span className="text-[12px] text-ink-2">{preset.kind}</span>
+                      {active && <Check className="ml-auto h-3.5 w-3.5 self-center text-ink" />}
+                    </span>
+                    <span className="num mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-2">
+                      <span>{specs.stages.length}段</span>
+                      <span>{fmtMass(specs.liftoffMass)}</span>
+                      <span>推力 {fmtForce(specs.liftoffThrust)}</span>
+                      <span>Δv {(specs.dvTotal / 1000).toFixed(1)} km/s</span>
+                      <span className="text-ink-3">{preset.site}</span>
+                    </span>
+                    <span className="mt-1 block text-[11px] leading-relaxed text-ink-3">{preset.description}</span>
+                  </button>
+                )
+              })}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

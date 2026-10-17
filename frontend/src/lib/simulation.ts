@@ -578,13 +578,23 @@ export function initWasm(): Promise<any> {
   return modPromise
 }
 
+// Each WasmSimulator owns WASM heap memory that JS garbage collection does not
+// reclaim; free it explicitly or repeated runs exhaust the heap and abort.
+async function runOnce(mod: any, payload: string): Promise<string> {
+  const sim = new mod.WasmSimulator(payload)
+  try {
+    return await sim.run()
+  } finally {
+    sim.free?.()
+  }
+}
+
 // Main simulation function - now using WASM only
 export async function runSimulation(config: ClientConfig): Promise<SimulationState[]> {
   const mod = await initWasm()
   // WasmSimulator accepts the client config JSON and performs conversion internally
   try {
-    const sim = new mod.WasmSimulator(JSON.stringify(config))
-    const json = await sim.run()
+    const json = await runOnce(mod, JSON.stringify(config))
     const result = JSON.parse(json) as SimulationState[]
 
     augmentAerodynamicAngles(result, config)
@@ -600,8 +610,7 @@ export async function runSimulation(config: ClientConfig): Promise<SimulationSta
     }
 
     const legacyPayload = toLegacyRocketConfig(config)
-    const sim = new mod.WasmSimulator(JSON.stringify(legacyPayload))
-    const json = await sim.run()
+    const json = await runOnce(mod, JSON.stringify(legacyPayload))
     const result = JSON.parse(json) as SimulationState[]
 
     augmentAerodynamicAngles(result, config)

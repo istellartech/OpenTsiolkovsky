@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { ClientConfig, ClientStageConfig } from '../lib/simulation'
-import { FREE_MODE_OPTIONS, MAX_STAGE_COUNT, POWER_MODE_OPTIONS, PRESET_OPTIONS, createDefaultStage } from '../config/defaults'
+import { FREE_MODE_OPTIONS, MAX_STAGE_COUNT, POWER_MODE_OPTIONS, createDefaultStage } from '../config/defaults'
+import { PRESET_OPTIONS } from '../config/presets'
 import { NumberField, ProfileTable, SelectField, TextInputField, Toggle, VectorField } from './primitives'
 import { stageColorVar } from '../lib/trajectory'
 import { fmtForce, fmtMass, type VehicleSpec } from '../lib/specs'
@@ -217,6 +218,28 @@ function Overview({
             : `${config.attitude.azimuth_deg}° · 仰角 ${config.attitude.elevation_deg}°`}
         </dd>
       </dl>
+
+      {preset && (preset.sources.length > 0 || preset.modelNotes.length > 0) && (
+        <>
+          <h3 className="mb-1 mt-5 text-[12px] font-semibold">数値の根拠</h3>
+          {preset.modelNotes.length > 0 && (
+            <ul className="mb-2 list-disc space-y-0.5 pl-4 text-[11px] leading-relaxed text-ink-2">
+              {preset.modelNotes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          )}
+          <ul className="space-y-0.5 text-[11px] leading-relaxed">
+            {preset.sources.map((src) => (
+              <li key={src.url}>
+                <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink hover:decoration-ink">
+                  {src.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   )
 }
