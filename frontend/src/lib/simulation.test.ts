@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // End-to-end: every sample vehicle through the real WASM solver. Needs the
 // wasm-pack bundle in src/wasm (scripts/wasm_build.sh); skipped without it.
 import { existsSync, readFileSync } from 'node:fs'
