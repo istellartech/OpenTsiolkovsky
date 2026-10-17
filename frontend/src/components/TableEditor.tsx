@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDownUp, Copy, FileUp, X } from 'lucide-react'
 import { cn } from '../lib/cn'
+import { getLang, locale, tr } from '../lib/i18n'
 
 export interface TableColumn {
   key: string
@@ -37,12 +38,15 @@ export function parseTable(text: string, n: number): { rows: number[][]; issues:
     } else if (rows.length === 0 && nums.some((v) => !Number.isFinite(v))) {
       // header line before any data
     } else {
-      issues.push({ line: i + 1, message: tokens.length < n ? `数値が${n}つ必要です` : '数値として読めない値があります' })
+      issues.push({ line: i + 1, message: tokens.length < n ? tr(`数値が${n}つ必要です`, `Expected ${n} numbers`) : tr('数値として読めない値があります', 'Contains a value that is not a number') })
     }
   })
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] < rows[i - 1][0]) {
-      issues.push({ line: -1, message: `1列目が小さくなっている行があります（${rows[i - 1][0]} → ${rows[i][0]}）。「並べ替え」で直せます` })
+      issues.push({ line: -1, message: tr(
+          `1列目が小さくなっている行があります（${rows[i - 1][0]} → ${rows[i][0]}）。「並べ替え」で直せます`,
+          `First column decreases (${rows[i - 1][0]} → ${rows[i][0]}). Use "Sort" to fix`,
+        ), })
       break
     }
   }
@@ -56,7 +60,7 @@ export function formatTable(columns: TableColumn[], rows: number[][]): string {
 }
 
 const compact = (v: number) =>
-  Math.abs(v) >= 1e5 ? `${(v / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 0 })}k` : v.toLocaleString('ja-JP', { maximumFractionDigits: 3 })
+  Math.abs(v) >= 1e5 ? `${(v / 1000).toLocaleString(locale(), { maximumFractionDigits: 0 })}k` : v.toLocaleString(locale(), { maximumFractionDigits: 3 })
 
 /* ------------------------------------------------------------------- Plot */
 
@@ -132,16 +136,21 @@ export function TableSummary({
   const replace = (text: string, source: string) => {
     const { rows: parsed } = parseTable(text, columns.length)
     if (!parsed.length) {
-      setNotice(`${source}から数値の行が見つかりませんでした（${columns.length}列の数値が必要です）。`)
+      setNotice(
+        tr(
+          `${source}から数値の行が見つかりませんでした（${columns.length}列の数値が必要です）。`,
+          `No numeric rows found in ${source} (${columns.length} numeric columns required).`,
+        ),
+      )
       return
     }
     onChange(parsed)
-    setNotice(`${source}から ${parsed.length} 行を読み込みました。`)
+    setNotice(tr(`${source}から ${parsed.length} 行を読み込みました。`, `Loaded ${parsed.length} rows from ${source}.`))
   }
   const copy = () =>
     navigator.clipboard?.writeText(formatTable(columns, rows).replace(/^# /, '')).then(
-      () => setNotice('表をコピーしました（表計算ソフトに貼り付けられます）。'),
-      () => setNotice('コピーできませんでした。'),
+      () => setNotice(tr('表をコピーしました（表計算ソフトに貼り付けられます）。', 'Table copied (ready to paste into a spreadsheet).')),
+      () => setNotice(tr('コピーできませんでした。', 'Could not copy.')),
     )
 
   const xs = rows.map((r) => r[0])
@@ -152,19 +161,19 @@ export function TableSummary({
         ref={registerRef as (el: HTMLDivElement | null) => void}
         tabIndex={0}
         role="group"
-        aria-label={`${title}（${rows.length}行）`}
+        aria-label={tr(`${title}（${rows.length}行）`, `${title} (${rows.length} rows)`)}
         onPaste={(e) => {
           const text = e.clipboardData.getData('text')
           if (!/[\n\t,]/.test(text.trim())) return
           e.preventDefault()
-          replace(text, '貼り付けた表')
+          replace(text, tr('貼り付けた表', 'the pasted table'))
         }}
         onDoubleClick={() => setOpen(true)}
         className={cn(
           'cursor-pointer rounded-[6px] border bg-surface-2 px-2.5 py-2 outline-none hover:border-line-strong focus:border-signal',
           error ? 'border-danger' : 'border-line',
         )}
-        title="ダブルクリックで編集。表計算ソフトからの貼り付けもできます"
+        title={tr('ダブルクリックで編集。表計算ソフトからの貼り付けもできます', 'Double-click to edit. You can also paste from a spreadsheet')}
       >
         {rows.length >= 2 ? (
           <div className="space-y-1">
@@ -178,17 +187,17 @@ export function TableSummary({
             ))}
           </div>
         ) : (
-          <p className="py-1 text-[11px] text-ink-3">2行以上入力するとグラフが表示されます</p>
+          <p className="py-1 text-[11px] text-ink-3">{tr('2行以上入力するとグラフが表示されます', 'Enter at least 2 rows to see a plot')}</p>
         )}
         <p className="num mt-1.5 text-[11px] text-ink-2">
-          {rows.length} 行
+          {tr(`${rows.length} 行`, `${rows.length} rows`)}
           {rows.length > 0 && (
             <>
               {' · '}
-              {columns[0].label} {compact(Math.min(...xs))}〜{compact(Math.max(...xs))}
+              {columns[0].label} {compact(Math.min(...xs))}{tr('〜', '–')}{compact(Math.max(...xs))}
               {columns.slice(1).map((c, j) => {
                 const v = rows.map((r) => r[j + 1])
-                return ` · ${c.label} ${compact(Math.min(...v))}〜${compact(Math.max(...v))}`
+                return ` · ${c.label} ${compact(Math.min(...v))}${tr('〜', '–')}${compact(Math.max(...v))}`
               })}
             </>
           )}
@@ -196,13 +205,13 @@ export function TableSummary({
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-x-1">
         <button type="button" onClick={() => setOpen(true)} className="flex h-7 items-center gap-1 rounded-[5px] border border-line-strong bg-surface px-2 text-[12px] font-medium text-ink hover:bg-surface-2">
-          表を編集
+          {tr('表を編集', 'Edit table')}
         </button>
         <button type="button" onClick={() => fileRef.current?.click()} className={btn}>
-          <FileUp className="h-3.5 w-3.5" /> CSVを読み込む
+          <FileUp className="h-3.5 w-3.5" /> {tr('CSVを読み込む', 'Import CSV')}
         </button>
         <button type="button" onClick={copy} className={btn}>
-          <Copy className="h-3.5 w-3.5" /> コピー
+          <Copy className="h-3.5 w-3.5" /> {tr('コピー', 'Copy')}
         </button>
         <input
           ref={fileRef}
@@ -212,11 +221,11 @@ export function TableSummary({
           onChange={async (e) => {
             const f = e.target.files?.[0]
             e.target.value = ''
-            if (f) replace(await f.text(), `「${f.name}」`)
+            if (f) replace(await f.text(), tr(`「${f.name}」`, `"${f.name}"`))
           }}
         />
       </div>
-      <p className="text-[10px] leading-snug text-ink-3">{notice ?? '表計算ソフトでコピーした表を、上の枠を選んで貼り付けても置き換えられます。'}</p>
+      <p className="text-[10px] leading-snug text-ink-3">{notice ?? tr('表計算ソフトでコピーした表を、上の枠を選んで貼り付けても置き換えられます。', 'You can also replace it by selecting the box above and pasting a table copied from a spreadsheet.')}</p>
       {error && <p className="text-[11px] text-danger">{error}</p>}
       {open && <TableEditorDialog title={title} columns={columns} rows={rows} onApply={onChange} onClose={() => setOpen(false)} />}
     </div>
@@ -263,49 +272,50 @@ function TableEditorDialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`${title}を編集`}
+        aria-label={tr(`${title}を編集`, `Edit ${title}`)}
         onClick={(e) => e.stopPropagation()}
         className="flex h-[min(780px,94vh)] w-[min(1100px,100%)] flex-col rounded-[10px] border border-line bg-surface shadow-[0_20px_50px_-20px_rgba(0,0,0,0.4)]"
       >
         <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
           <h2 className="text-[14px] font-semibold">{title}</h2>
           <span className="text-[12px] text-ink-3">{columns.map((c) => c.label).join(' · ')}</span>
-          <button type="button" onClick={onClose} aria-label="閉じる (Esc)" className="ml-auto flex h-8 w-8 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
+          <button type="button" onClick={onClose} aria-label={tr('閉じる (Esc)', 'Close (Esc)')} className="ml-auto flex h-8 w-8 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2 text-[12px] text-ink-2">
           <span className="flex items-center gap-1">
-            {columns[0].label}を
-            <input aria-label="ずらす量" className={smallInput} value={shift} onChange={(e) => setShift(e.target.value)} inputMode="decimal" />
-            ずらす
+            {tr(`${columns[0].label}を`, `Shift ${columns[0].label} by`)}
+            <input aria-label={tr('ずらす量', 'Shift amount')} className={smallInput} value={shift} onChange={(e) => setShift(e.target.value)} inputMode="decimal" />
+            {getLang() === 'ja' && 'ずらす'}
             <button type="button" className={tool} disabled={!Number.isFinite(Number(shift)) || !parsed.rows.length} onClick={() => transform((r) => [r[0] + Number(shift), ...r.slice(1)])}>
-              実行
+              {tr('実行', 'Apply')}
             </button>
           </span>
           <span className="mx-1 h-5 w-px bg-line" />
           <span className="flex items-center gap-1">
-            <select aria-label="倍率をかける列" value={scaleCol} onChange={(e) => setScaleCol(Number(e.target.value))} className="h-8 rounded-[6px] border border-line bg-surface-2 px-1.5 text-[12px]">
+            {getLang() === 'en' && 'Multiply'}
+            <select aria-label={tr('倍率をかける列', 'Column to scale')} value={scaleCol} onChange={(e) => setScaleCol(Number(e.target.value))} className="h-8 rounded-[6px] border border-line bg-surface-2 px-1.5 text-[12px]">
               {columns.map((c, i) => (
                 <option key={c.key} value={i}>
                   {c.label}
                 </option>
               ))}
             </select>
-            に
-            <input aria-label="倍率" className={smallInput} value={scale} onChange={(e) => setScale(e.target.value)} inputMode="decimal" />
-            倍
+            {tr('に', 'by')}
+            <input aria-label={tr('倍率', 'Factor')} className={smallInput} value={scale} onChange={(e) => setScale(e.target.value)} inputMode="decimal" />
+            {getLang() === 'ja' && '倍'}
             <button type="button" className={tool} disabled={!Number.isFinite(Number(scale)) || !parsed.rows.length} onClick={() => transform((r) => r.map((v, i) => (i === scaleCol ? v * Number(scale) : v)))}>
-              実行
+              {tr('実行', 'Apply')}
             </button>
           </span>
           <span className="mx-1 h-5 w-px bg-line" />
           <button type="button" className={tool} disabled={!parsed.rows.length} onClick={() => setText(formatTable(columns, [...parsed.rows].sort((a, b) => a[0] - b[0])))}>
-            <ArrowDownUp className="h-3.5 w-3.5" /> 並べ替え
+            <ArrowDownUp className="h-3.5 w-3.5" /> {tr('並べ替え', 'Sort')}
           </button>
           <button type="button" className={tool} onClick={() => fileRef.current?.click()}>
-            <FileUp className="h-3.5 w-3.5" /> CSVを読み込む
+            <FileUp className="h-3.5 w-3.5" /> {tr('CSVを読み込む', 'Import CSV')}
           </button>
           <input
             ref={fileRef}
@@ -323,7 +333,10 @@ function TableEditorDialog({
         <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 p-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:grid-rows-1">
           <div className="flex min-h-0 flex-col">
             <label htmlFor="table-text" className="mb-1 text-[11px] text-ink-3">
-              1行に1点。タブ・カンマ・空白区切り。表計算ソフトからそのまま貼り付けられます（# で始まる行は無視）。
+              {tr(
+                '1行に1点。タブ・カンマ・空白区切り。表計算ソフトからそのまま貼り付けられます（# で始まる行は無視）。',
+                'One point per line, separated by tabs, commas or spaces. Paste straight from a spreadsheet (lines starting with # are ignored).',
+              )}
             </label>
             <textarea
               id="table-text"
@@ -342,22 +355,22 @@ function TableEditorDialog({
                 </div>
               ))
             ) : (
-              <p className="rounded-[6px] border border-dashed border-line p-6 text-center text-[12px] text-ink-3">2行以上あるとグラフが表示されます</p>
+              <p className="rounded-[6px] border border-dashed border-line p-6 text-center text-[12px] text-ink-3">{tr('2行以上あるとグラフが表示されます', 'A plot appears once there are at least 2 rows')}</p>
             )}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t border-line px-4 py-2.5">
-          <span className="num text-[12px] text-ink-2">{parsed.rows.length} 行</span>
+          <span className="num text-[12px] text-ink-2">{tr(`${parsed.rows.length} 行`, `${parsed.rows.length} rows`)}</span>
           {parsed.issues.length > 0 && (
-            <span className="min-w-0 flex-1 truncate text-[12px] text-danger" title={parsed.issues.map((i) => (i.line > 0 ? `${i.line}行目: ` : '') + i.message).join('\n')}>
-              {parsed.issues.slice(0, 2).map((i) => (i.line > 0 ? `${i.line}行目: ${i.message}` : i.message)).join(' / ')}
-              {parsed.issues.length > 2 && ` ほか${parsed.issues.length - 2}件`}
+            <span className="min-w-0 flex-1 truncate text-[12px] text-danger" title={parsed.issues.map((i) => (i.line > 0 ? tr(`${i.line}行目: `, `Line ${i.line}: `) : '') + i.message).join('\n')}>
+              {parsed.issues.slice(0, 2).map((i) => (i.line > 0 ? tr(`${i.line}行目: ${i.message}`, `Line ${i.line}: ${i.message}`) : i.message)).join(' / ')}
+              {parsed.issues.length > 2 && tr(` ほか${parsed.issues.length - 2}件`, ` and ${parsed.issues.length - 2} more`)}
             </span>
           )}
           <div className="ml-auto flex gap-2">
             <button type="button" onClick={onClose} className="h-8 rounded-[6px] border border-line-strong px-3 text-[12px] text-ink hover:bg-surface-2">
-              キャンセル
+              {tr('キャンセル', 'Cancel')}
             </button>
             <button
               type="button"
@@ -368,7 +381,7 @@ function TableEditorDialog({
               }}
               className="h-8 rounded-[6px] bg-ink px-4 text-[12px] font-medium text-surface hover:opacity-90 disabled:opacity-40"
             >
-              適用（{parsed.rows.length} 行）
+              {tr(`適用（${parsed.rows.length} 行）`, `Apply (${parsed.rows.length} rows)`)}
             </button>
           </div>
         </div>

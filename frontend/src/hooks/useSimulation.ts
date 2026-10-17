@@ -6,6 +6,7 @@ import { isValidClientConfig, validateConfig } from '../lib/validation'
 import type { Track } from '../lib/trajectory'
 import { baseName, fromLegacyParamFile, isLegacyParamFile } from '../lib/legacy'
 import { commit, initHistory, redo as redoHistory, undo as undoHistory, type History } from '../lib/history'
+import { tr, useLang } from '../lib/i18n'
 
 const LOCALSTORAGE_KEY = 'openTsiolkovsky_config'
 const LOCALSTORAGE_PRESET_KEY = 'openTsiolkovsky_preset'
@@ -65,7 +66,10 @@ export function useSimulation() {
   const [result, setResult] = useState<SimulationResult | null>(null)
   const runSeq = useRef(0)
 
-  const issues = useMemo(() => validateConfig(config), [config])
+  // Messages are localized, so re-validate when the language changes.
+  const lang = useLang()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const issues = useMemo(() => validateConfig(config), [config, lang])
   const issueMap = useMemo(() => new Map(issues.map((i) => [i.field, i.message])), [issues])
 
   /** Edit the config. Rapid successive edits become a single undo step. */
@@ -99,7 +103,12 @@ export function useSimulation() {
       try {
         const track = await solver.run(config)
         if (seq !== runSeq.current) return
-        if (!track) throw new Error('計算結果のデータ点が不足しています。計算時間や出力間隔を確認してください。')
+        if (!track) throw new Error(
+            tr(
+              '計算結果のデータ点が不足しています。計算時間や出力間隔を確認してください。',
+              'Not enough output data points. Check the simulation time and output interval.',
+            ),
+          )
         setResult({ track, ms: Math.round(performance.now() - t0) })
         setError(null)
         setStatus('ok')
@@ -133,16 +142,21 @@ export function useSimulation() {
     const jsonFiles = files.filter((f) => /\.json$/i.test(f.name) || f.type === 'application/json')
     const csvFiles = files.filter((f) => /\.csv$/i.test(f.name))
     if (jsonFiles.length === 0) {
-      return { ok: false, message: csvFiles.length ? 'CSV だけでは開けません。設定の .json ファイルも一緒に選んでください。' : '.json ファイルを選んでください。' }
+      return {
+        ok: false,
+        message: csvFiles.length
+          ? tr('CSV だけでは開けません。設定の .json ファイルも一緒に選んでください。', 'CSV files alone cannot be opened. Select the configuration .json file as well.')
+          : tr('.json ファイルを選んでください。', 'Select a .json file.'),
+      }
     }
-    if (jsonFiles.length > 1) return { ok: false, message: '設定の .json ファイルは1つだけ選んでください。' }
+    if (jsonFiles.length > 1) return { ok: false, message: tr('設定の .json ファイルは1つだけ選んでください。', 'Select only one configuration .json file.') }
     const file = jsonFiles[0]
 
     let parsed: unknown
     try {
       parsed = JSON.parse(await file.text())
     } catch {
-      return { ok: false, message: `「${file.name}」はJSONとして読めませんでした。` }
+      return { ok: false, message: tr(`「${file.name}」はJSONとして読めませんでした。`, `Could not parse "${file.name}" as JSON.`) }
     }
 
     if (isLegacyParamFile(parsed)) {
@@ -152,23 +166,45 @@ export function useSimulation() {
       try {
         imported = fromLegacyParamFile(parsed, csv)
       } catch (err) {
-        return { ok: false, message: `「${file.name}」を変換できませんでした：${err instanceof Error ? err.message : String(err)}` }
+        const reason = err instanceof Error ? err.message : String(err)
+        return { ok: false, message: tr(`「${file.name}」を変換できませんでした：${reason}`, `Could not convert "${file.name}": ${reason}`) }
       }
       load(imported.config)
       const notes: string[] = []
       if (imported.missing.length) {
-        notes.push(`参照しているCSVが見つからないため定数値を使っています（${imported.missing.join('、')}）。JSONと一緒に選ぶかドロップしてください。`)
+        notes.push(
+          tr(
+            `参照しているCSVが見つからないため定数値を使っています（${imported.missing.join('、')}）。JSONと一緒に選ぶかドロップしてください。`,
+            `Referenced CSV files not found, so constant values are used (${imported.missing.join(', ')}). Select or drop them together with the JSON.`,
+          ),
+        )
       }
-      if (imported.unsupported.length) notes.push(`この画面では扱えない設定は無視しました：${imported.unsupported.join('、')}。`)
-      const used = csvFiles.length ? `（CSV ${csvFiles.length}件）` : ''
-      return { ok: imported.missing.length === 0, message: [`CLI用の「${file.name}」${used}を読み込みました。`, ...notes].join(' ') }
+      if (imported.unsupported.length) {
+        notes.push(
+          tr(
+            `この画面では扱えない設定は無視しました：${imported.unsupported.join('、')}。`,
+            `Ignored settings not supported here: ${imported.unsupported.join(', ')}.`,
+          ),
+        )
+      }
+      const n = csvFiles.length
+      const loaded = n
+        ? tr(`CLI用の「${file.name}」（CSV ${n}件）を読み込みました。`, `Loaded CLI file "${file.name}" (${n} CSV file${n === 1 ? '' : 's'}).`)
+        : tr(`CLI用の「${file.name}」を読み込みました。`, `Loaded CLI file "${file.name}".`)
+      return { ok: imported.missing.length === 0, message: [loaded, ...notes].join(' ') }
     }
 
     if (!isValidClientConfig(parsed)) {
-      return { ok: false, message: `「${file.name}」は設定ファイルとして読めませんでした（このアプリで保存した設定か、CLI用の param_*.json を選んでください）。` }
+      return {
+        ok: false,
+        message: tr(
+          `「${file.name}」は設定ファイルとして読めませんでした（このアプリで保存した設定か、CLI用の param_*.json を選んでください）。`,
+          `Could not read "${file.name}" as a configuration file. Select a configuration saved from this app or a CLI param_*.json file.`,
+        ),
+      }
     }
     load(parsed)
-    return { ok: true, message: `「${file.name}」を読み込みました。` }
+    return { ok: true, message: tr(`「${file.name}」を読み込みました。`, `Loaded "${file.name}".`) }
   }, [load])
 
   return {

@@ -8,6 +8,7 @@ import { cn } from '../lib/cn'
 import { IconButton } from './primitives'
 import { VehiclePicker } from './VehiclePicker'
 import { FileMenu, type FileActions } from './FileMenu'
+import { tr } from '../lib/i18n'
 
 export function Header(props: {
   name: string
@@ -31,7 +32,7 @@ export function Header(props: {
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-2 sm:px-3">
       {props.showDrawerToggle && (
-        <IconButton label="パラメータ" onClick={props.onToggleDrawer}>
+        <IconButton label={tr('パラメータ', 'Parameters')} onClick={props.onToggleDrawer}>
           <SlidersHorizontal className="h-4 w-4" />
         </IconButton>
       )}
@@ -41,10 +42,10 @@ export function Header(props: {
       <div className="mx-1 hidden h-5 w-px shrink-0 bg-line sm:block" />
       <VehiclePicker name={props.name} presetId={props.presetId} onPreset={props.onPreset} onBlank={props.onBlank} />
       <div className="hidden shrink-0 items-center sm:flex">
-        <IconButton label={`元に戻す (${mod}Z)`} onClick={props.history.undo} disabled={!props.history.canUndo}>
+        <IconButton label={tr(`元に戻す (${mod}Z)`, `Undo (${mod}Z)`)} onClick={props.history.undo} disabled={!props.history.canUndo}>
           <Undo2 className="h-4 w-4" />
         </IconButton>
-        <IconButton label={`やり直す (${mod}⇧Z)`} onClick={props.history.redo} disabled={!props.history.canRedo}>
+        <IconButton label={tr(`やり直す (${mod}⇧Z)`, `Redo (${mod}⇧Z)`)} onClick={props.history.redo} disabled={!props.history.canRedo}>
           <Redo2 className="h-4 w-4" />
         </IconButton>
       </div>
@@ -82,12 +83,12 @@ function StatusIndicator({
     status === 'ok'
       ? compact
         ? ''
-        : '計算済み'
+        : tr('計算済み', 'Up to date')
       : status === 'running'
-        ? '計算中'
+        ? tr('計算中', 'Computing')
         : status === 'invalid'
-          ? `入力エラー ${issues.length}件`
-          : '計算エラー'
+          ? tr(`入力エラー ${issues.length}件`, `${issues.length} input error${issues.length === 1 ? '' : 's'}`)
+          : tr('計算エラー', 'Solver error')
 
   const body = (
     <span className="flex items-center gap-1.5 text-[12px] text-ink-2">
@@ -108,7 +109,7 @@ function StatusIndicator({
         items={
           status === 'invalid'
             ? issues.map((i) => ({ label: i.message, onSelect: () => onIssue(i) }))
-            : [{ label: error ?? '不明なエラー', onSelect: () => {} }]
+            : [{ label: error ?? tr('不明なエラー', 'Unknown error'), onSelect: () => {} }]
         }
         wide
       />

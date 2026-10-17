@@ -28,6 +28,7 @@ import { indexAt, sampleAt, type Track } from '../lib/trajectory'
 import { playback } from '../lib/playback'
 import { Segmented } from './primitives'
 import { cssVar, readStageColor, useTheme, type Theme } from '../lib/theme'
+import { tr, useLang } from '../lib/i18n'
 
 ;(window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = CESIUM_BASE_URL
 
@@ -247,8 +248,8 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null): Buil
 
   const first = samples[0]
   const last = samples[samples.length - 1]
-  marker(first, '発射点')
-  if (track.summary.landed) marker(last, '落下点')
+  marker(first, tr('発射点', 'Launch site'))
+  if (track.summary.landed) marker(last, tr('落下点', 'Impact point'))
 
   // Look at the arc side-on: heading perpendicular to the launch→end bearing.
   const from = Cartesian3.fromDegrees(first.lon, first.lat)
@@ -296,6 +297,7 @@ export default function Globe({ track, reference = null }: GlobeProps) {
   const launchKeyRef = useRef<string>('')
   const [mode, setMode] = useState<CameraMode>('overview')
   const theme = useTheme()
+  const lang = useLang()
   const themeRef = useRef(theme)
   themeRef.current = theme
   const [basemap, setBasemapState] = useState<Basemap>(() => {
@@ -348,7 +350,7 @@ export default function Globe({ track, reference = null }: GlobeProps) {
       viewer.trackedEntity = built.vehicle
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track, reference, theme])
+  }, [track, reference, theme, lang])
 
   // Restyle the scene when the colour theme changes (track entities are rebuilt above).
   const basemapRef = useRef(basemap)
@@ -408,8 +410,8 @@ export default function Globe({ track, reference = null }: GlobeProps) {
           value={mode}
           onChange={changeMode}
           options={[
-            { value: 'overview', label: '全体', title: '軌道全体が見える視点' },
-            { value: 'follow', label: '追従', title: '機体を追いかける視点' },
+            { value: 'overview', label: tr('全体', 'Overview'), title: tr('軌道全体が見える視点', 'Show the whole trajectory') },
+            { value: 'follow', label: tr('追従', 'Follow'), title: tr('機体を追いかける視点', 'Follow the vehicle') },
           ]}
         />
         <Segmented
@@ -418,9 +420,9 @@ export default function Globe({ track, reference = null }: GlobeProps) {
           value={basemap}
           onChange={changeBasemap}
           options={[
-            { value: 'map', label: '地図' },
-            { value: 'terrain', label: '地形' },
-            { value: 'satellite', label: '衛星' },
+            { value: 'map', label: tr('地図', 'Map') },
+            { value: 'terrain', label: tr('地形', 'Terrain') },
+            { value: 'satellite', label: tr('衛星', 'Satellite') },
           ]}
         />
       </div>

@@ -5,6 +5,7 @@ import { useDismiss } from '../hooks/useDismiss'
 import { computeSpecs } from '../lib/specs'
 import { fmtForce, fmtMass } from '../lib/format'
 import { cn } from '../lib/cn'
+import { tr } from '../lib/i18n'
 
 const PRESET_SPECS = PRESET_OPTIONS.map((p) => ({ preset: p, specs: computeSpecs(p.create()) }))
 
@@ -25,18 +26,20 @@ export function VehiclePicker({ name, presetId, onPreset, onBlank }: { name: str
         onClick={() => setOpen((v) => !v)}
         className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[6px] px-2 text-left hover:bg-surface-2 sm:w-auto"
       >
-        <span className="min-w-0 truncate text-[13px] font-medium">{current ? current.label : name || 'カスタム'}</span>
-        <span className="hidden truncate text-[12px] text-ink-3 md:inline">{current ? current.kind : '編集中の設定'}</span>
+        <span className="min-w-0 truncate text-[13px] font-medium">{current ? current.label : name || tr('カスタム', 'Custom')}</span>
+        <span className="hidden truncate text-[12px] text-ink-3 md:inline">{current ? current.kind : tr('編集中の設定', 'Edited settings')}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-3" />
       </button>
       {open && (
         <div
           role="dialog"
-          aria-label="機体を選ぶ"
+          aria-label={tr('機体を選ぶ', 'Choose a vehicle')}
           className="fixed inset-x-2 top-12 z-50 rounded-[10px] border border-line bg-surface p-1.5 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.3)] sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-1 sm:w-[26rem]"
         >
           {presetId === 'custom' && (
-            <p className="px-2.5 pb-1 pt-1 text-[11px] text-ink-3">選ぶと現在の編集内容は置き換わります</p>
+            <p className="px-2.5 pb-1 pt-1 text-[11px] text-ink-3">
+              {tr('選ぶと現在の編集内容は置き換わります（元に戻すで復元できます）', 'Choosing one replaces your edits (Undo brings them back)')}
+            </p>
           )}
           <div className="scroll-quiet max-h-[min(70vh,600px)] overflow-y-auto">
             {PRESET_CATEGORIES.map((cat) => (
@@ -60,9 +63,11 @@ export function VehiclePicker({ name, presetId, onPreset, onBlank }: { name: str
                       {active && <Check className="ml-auto h-3.5 w-3.5 self-center text-ink" />}
                     </span>
                     <span className="num mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-2">
-                      <span>{specs.stages.length}段</span>
+                      <span>{tr(`${specs.stages.length}段`, `${specs.stages.length} stage${specs.stages.length === 1 ? '' : 's'}`)}</span>
                       <span>{fmtMass(specs.liftoffMass)}</span>
-                      <span>推力 {fmtForce(specs.liftoffThrust)}</span>
+                      <span>
+                        {tr('推力', 'Thrust')} {fmtForce(specs.liftoffThrust)}
+                      </span>
                       <span>Δv {(specs.dvTotal / 1000).toFixed(1)} km/s</span>
                       <span className="text-ink-3">{preset.site}</span>
                     </span>
@@ -83,9 +88,12 @@ export function VehiclePicker({ name, presetId, onPreset, onBlank }: { name: str
               >
                 <Plus className="mt-0.5 h-4 w-4 shrink-0 text-ink-2" />
                 <span>
-                  <span className="block text-[13px] font-semibold">白紙から作る</span>
+                  <span className="block text-[13px] font-semibold">{tr('白紙から作る', 'Start from scratch')}</span>
                   <span className="block text-[11px] leading-relaxed text-ink-3">
-                    1段・1 t・推力 20 kN の最小構成から始めます。発射地点と日時はいまの設定を引き継ぎます。
+                    {tr(
+                      '1段・1 t・推力 20 kN の最小構成から始めます。発射地点と日時はいまの設定を引き継ぎます。',
+                      'A minimal one-stage, 1 t, 20 kN vehicle. Keeps the current launch site and time.',
+                    )}
                   </span>
                 </span>
               </button>

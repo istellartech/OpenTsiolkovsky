@@ -16,6 +16,7 @@ import { BottomPanel, MobileResults, type CompareProps, type PanelTab, type Refe
 import { GlobeStage } from './components/GlobeStage'
 import { Toast, useToast } from './components/Toast'
 import { ThemeToggle } from './components/ThemeToggle'
+import { LangToggle } from './components/LangToggle'
 import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { trackToCsv } from './lib/trajectory'
 import { computeSpecs } from './lib/specs'
@@ -24,10 +25,13 @@ import { fileBase, saveFile } from './lib/download'
 import { buildShareUrl } from './lib/share'
 import { cn } from './lib/cn'
 import type { ValidationIssue } from './lib/validation'
+import { tr, useLang } from './lib/i18n'
 
 type MobileView = 'params' | 'globe' | 'charts'
 
 export default function App() {
+  // Every string is picked at render time, so re-render the tree on a language switch.
+  const lang = useLang()
   const sim = useSimulation()
   const { config, result } = sim
   const track = result?.track ?? null
@@ -49,7 +53,7 @@ export default function App() {
   const [reference, setReference] = useState<Reference | null>(null)
   const compare: CompareProps = {
     reference,
-    onPin: () => track && setReference({ track, label: config.name || 'カスタム' }),
+    onPin: () => track && setReference({ track, label: config.name || tr('カスタム', 'Custom') }),
     onUnpin: () => setReference(null),
   }
 
@@ -65,7 +69,8 @@ export default function App() {
   const fieldCtx = useMemo(() => ({ issues: sim.issueMap, register }), [sim.issueMap, register])
 
   const [nav, setNav] = useState<InspectorNav>({ tab: 'overview', stage: 0 })
-  const specs = useMemo(() => computeSpecs(config), [config])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- warnings are worded in the UI language
+  const specs = useMemo(() => computeSpecs(config), [config, lang])
 
   /** Bring the parameter panel into view on any layout. */
   const revealParams = () => {
@@ -93,9 +98,14 @@ export default function App() {
       try {
         const url = await buildShareUrl(window.location.href, config, sim.presetId)
         await navigator.clipboard.writeText(url)
-        showToast(url.length > 8000 ? '共有リンクをコピーしました（長いため、使う場所によっては途中で切れることがあります）。' : '共有リンクをコピーしました。', 'ok')
+        showToast(
+          url.length > 8000
+            ? tr('共有リンクをコピーしました（長いため、使う場所によっては途中で切れることがあります）。', 'Share link copied. It is long, so some apps may cut it off.')
+            : tr('共有リンクをコピーしました。', 'Share link copied.'),
+          'ok',
+        )
       } catch {
-        showToast('共有リンクをコピーできませんでした。', 'error')
+        showToast(tr('共有リンクをコピーできませんでした。', 'Could not copy the share link.'), 'error')
       }
     },
     saveCsv: () => track && saveFile(`${base}_trajectory.csv`, trackToCsv(track), 'text/csv'),
@@ -146,10 +156,11 @@ export default function App() {
         actions={
           <>
             {!isMobile && (
-              <IconButton label="キーボードショートカット (?)" onClick={() => setHelpOpen(true)}>
+              <IconButton label={tr('キーボードショートカット (?)', 'Keyboard shortcuts (?)')} onClick={() => setHelpOpen(true)}>
                 <Keyboard className="h-4 w-4" />
               </IconButton>
             )}
+            <LangToggle />
             <ThemeToggle />
           </>
         }
@@ -165,8 +176,8 @@ export default function App() {
             <div className="absolute inset-0 z-20 bg-black/25" onClick={() => setDrawerOpen(false)} />
             <aside className="scroll-quiet absolute inset-y-0 left-0 z-30 w-[380px] max-w-[92vw] overflow-y-auto border-r border-line bg-surface shadow-[8px_0_24px_-12px_rgba(0,0,0,0.25)]">
               <div className="flex h-10 items-center justify-between border-b border-line px-4">
-                <span className="text-[13px] font-semibold">パラメータ</span>
-                <IconButton label="閉じる" onClick={() => setDrawerOpen(false)}>
+                <span className="text-[13px] font-semibold">{tr('パラメータ', 'Parameters')}</span>
+                <IconButton label={tr('閉じる', 'Close')} onClick={() => setDrawerOpen(false)}>
                   <X className="h-4 w-4" />
                 </IconButton>
               </div>
@@ -202,7 +213,7 @@ export default function App() {
                     compare={compare}
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-ink-3">{sim.status === 'running' ? '計算中…' : ''}</div>
+                  <div className="flex h-full items-center justify-center text-ink-3">{sim.status === 'running' ? tr('計算中…', 'Computing…') : ''}</div>
                 )
               }
             />
@@ -216,8 +227,10 @@ export default function App() {
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-6">
           <div className="rounded-[12px] border-2 border-dashed border-ink-3 bg-surface px-8 py-6 text-center">
             <FolderOpen className="mx-auto mb-2 h-6 w-6 text-ink-2" />
-            <p className="text-[14px] font-semibold">ドロップして設定ファイルを開く</p>
-            <p className="mt-1 text-[12px] text-ink-3">このアプリの設定 .json、または CLI 用 param_*.json と CSV をまとめて</p>
+            <p className="text-[14px] font-semibold">{tr('ドロップして設定ファイルを開く', 'Drop to open a settings file')}</p>
+            <p className="mt-1 text-[12px] text-ink-3">
+              {tr('このアプリの設定 .json、または CLI 用 param_*.json と CSV をまとめて', 'A .json saved from this app, or a CLI param_*.json together with its CSV files')}
+            </p>
           </div>
         </div>
       )}
@@ -226,9 +239,9 @@ export default function App() {
         <nav className="grid grid-cols-3 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
           {(
             [
-              ['params', 'パラメータ', SlidersHorizontal],
-              ["globe", "3D", GlobeIcon],
-              ["charts", "グラフ", LineChart],
+              ['params', tr('パラメータ', 'Parameters'), SlidersHorizontal],
+              ['globe', '3D', GlobeIcon],
+              ['charts', tr('グラフ', 'Charts'), LineChart],
             ] as const
           ).map(([id, label, Icon]) => (
             <button
@@ -242,7 +255,7 @@ export default function App() {
             >
               <Icon className="h-4 w-4" />
               {label}
-              {id === 'params' && sim.issues.length > 0 && <span className="sr-only">（入力エラーあり）</span>}
+              {id === 'params' && sim.issues.length > 0 && <span className="sr-only">{tr('（入力エラーあり）', ' (has input errors)')}</span>}
             </button>
           ))}
         </nav>

@@ -6,6 +6,7 @@ import { playback } from '../lib/playback'
 import { fmt } from '../lib/format'
 import { cssVar, readStageColor, useTheme } from '../lib/theme'
 import { eventLabel } from '../lib/events'
+import { tr, useLang } from '../lib/i18n'
 
 interface Series {
   label: string
@@ -23,46 +24,46 @@ export interface ChartSpec {
 }
 
 export const CHARTS: ChartSpec[] = [
-  { id: 'altitude', title: '高度', unit: 'km', x: 'time', digits: 1, series: [{ label: '高度', get: (s) => s.alt / 1000 }] },
+  { id: 'altitude', get title() { return tr('高度', 'Altitude') }, unit: 'km', x: 'time', digits: 1, series: [{ get label() { return tr('高度', 'Altitude') }, get: (s) => s.alt / 1000 }] },
   {
-    id: 'velocity', title: '速度', unit: 'm/s', x: 'time', digits: 0,
+    id: 'velocity', get title() { return tr('速度', 'Velocity') }, unit: 'm/s', x: 'time', digits: 0,
     series: [
-      { label: '慣性', get: (s) => s.speed },
-      { label: '対地', get: (s) => s.groundSpeed, secondary: true },
+      { get label() { return tr('慣性', 'Inertial') }, get: (s) => s.speed },
+      { get label() { return tr('対地', 'Ground-relative') }, get: (s) => s.groundSpeed, secondary: true },
     ],
   },
-  { id: 'mach', title: 'マッハ数', unit: '', x: 'time', digits: 2, series: [{ label: 'Mach', get: (s) => s.mach }] },
-  { id: 'q', title: '動圧', unit: 'kPa', x: 'time', digits: 1, series: [{ label: '動圧', get: (s) => s.q / 1000 }] },
+  { id: 'mach', get title() { return tr('マッハ数', 'Mach number') }, unit: '', x: 'time', digits: 2, series: [{ label: 'Mach', get: (s) => s.mach }] },
+  { id: 'q', get title() { return tr('動圧', 'Dynamic pressure') }, unit: 'kPa', x: 'time', digits: 1, series: [{ get label() { return tr('動圧', 'Dynamic pressure') }, get: (s) => s.q / 1000 }] },
   {
-    id: 'force', title: '推力・抗力', unit: 'kN', x: 'time', digits: 1,
+    id: 'force', get title() { return tr('推力・抗力', 'Thrust and drag') }, unit: 'kN', x: 'time', digits: 1,
     series: [
-      { label: '推力', get: (s) => s.thrust / 1000 },
-      { label: '抗力', get: (s) => s.drag / 1000, secondary: true },
-    ],
-  },
-  {
-    id: 'accel', title: '加速度', unit: 'G', x: 'time', digits: 2,
-    series: [
-      { label: '機軸 (センサ)', get: (s) => s.accelAxial },
-      { label: '慣性 |a|', get: (s) => s.accel, secondary: true },
-    ],
-  },
-  { id: 'mass', title: '質量', unit: 'kg', x: 'time', digits: 0, series: [{ label: '質量', get: (s) => s.mass }] },
-  {
-    id: 'attitude', title: '姿勢', unit: '°', x: 'time', digits: 1,
-    series: [
-      { label: '仰角', get: (s) => s.elevation },
-      { label: '方位角', get: (s) => s.azimuth, secondary: true },
+      { get label() { return tr('推力', 'Thrust') }, get: (s) => s.thrust / 1000 },
+      { get label() { return tr('抗力', 'Drag') }, get: (s) => s.drag / 1000, secondary: true },
     ],
   },
   {
-    id: 'aoa', title: '迎角・横滑り角', unit: '°', x: 'time', digits: 2,
+    id: 'accel', get title() { return tr('加速度', 'Acceleration') }, unit: 'G', x: 'time', digits: 2,
     series: [
-      { label: '迎角', get: (s) => s.aoa },
-      { label: '横滑り角', get: (s) => s.sideslip, secondary: true },
+      { get label() { return tr('機軸 (センサ)', 'Axial (sensed)') }, get: (s) => s.accelAxial },
+      { get label() { return tr('慣性 |a|', 'Inertial |a|') }, get: (s) => s.accel, secondary: true },
     ],
   },
-  { id: 'profile', title: '高度 × ダウンレンジ', unit: 'km', x: 'downrange', digits: 1, series: [{ label: '高度', get: (s) => s.alt / 1000 }] },
+  { id: 'mass', get title() { return tr('質量', 'Mass') }, unit: 'kg', x: 'time', digits: 0, series: [{ get label() { return tr('質量', 'Mass') }, get: (s) => s.mass }] },
+  {
+    id: 'attitude', get title() { return tr('姿勢', 'Attitude') }, unit: '°', x: 'time', digits: 1,
+    series: [
+      { get label() { return tr('仰角', 'Elevation') }, get: (s) => s.elevation },
+      { get label() { return tr('方位角', 'Azimuth') }, get: (s) => s.azimuth, secondary: true },
+    ],
+  },
+  {
+    id: 'aoa', get title() { return tr('迎角・横滑り角', 'Angle of attack and sideslip') }, unit: '°', x: 'time', digits: 2,
+    series: [
+      { get label() { return tr('迎角', 'Angle of attack') }, get: (s) => s.aoa },
+      { get label() { return tr('横滑り角', 'Sideslip') }, get: (s) => s.sideslip, secondary: true },
+    ],
+  },
+  { id: 'profile', get title() { return tr('高度 × ダウンレンジ', 'Altitude vs downrange') }, unit: 'km', x: 'downrange', digits: 1, series: [{ get label() { return tr('高度', 'Altitude') }, get: (s) => s.alt / 1000 }] },
 ]
 
 function themeColors() {
@@ -133,6 +134,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
   const [zoomed, setZoomed] = useState(false)
   // Colours are read from CSS when the chart is built, so rebuild on theme change.
   const theme = useTheme()
+  const lang = useLang()
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -160,7 +162,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
     if (reference) {
       const ref = spec.series[0]
       datasets.push({
-        label: `比較: ${ref.label}`,
+        label: tr(`比較: ${ref.label}`, `Pinned: ${ref.label}`),
         data: reference.samples.map((s) => ({ x: xOf(s), y: ref.get(s), stage: s.stage })),
         borderWidth: large ? 1.75 : 1.5,
         borderColor: c.ink3,
@@ -213,7 +215,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
             grid: { color: c.line, drawTicks: false },
             ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 12 : 6, padding: 4, includeBounds: false },
             title: large
-              ? { display: true, text: spec.x === 'time' ? '打上げからの時間 [s]' : 'ダウンレンジ [km]', color: c.ink3, font: { size: 11 } }
+              ? { display: true, text: spec.x === 'time' ? tr('打上げからの時間 [s]', 'Time since launch [s]') : tr('ダウンレンジ [km]', 'Downrange [km]'), color: c.ink3, font: { size: 11 } }
               : undefined,
           },
           y: {
@@ -289,7 +291,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
       chart.destroy()
       chartRef.current = null
     }
-  }, [spec, track, reference, large, theme])
+  }, [spec, track, reference, large, theme, lang])
 
   const setRange = (x0?: number, x1?: number) => {
     const chart = chartRef.current
@@ -381,20 +383,20 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
         <span ref={valueRef} className={`num ml-auto whitespace-nowrap text-ink ${large ? 'text-[14px]' : 'text-[12px]'}`} />
         {large && zoomed && (
           <button type="button" onClick={() => setRange()} className="flex h-7 items-center gap-1 rounded-[6px] border border-line px-2 text-[12px] text-ink-2 hover:bg-surface-2">
-            <RotateCcw className="h-3 w-3" /> 全体を表示
+            <RotateCcw className="h-3 w-3" /> {tr('全体を表示', 'Show all')}
           </button>
         )}
         <button
           type="button"
           onClick={download}
-          aria-label={`${spec.title}をPNGで保存`}
-          title="PNGで保存"
+          aria-label={tr(`${spec.title}をPNGで保存`, `Save ${spec.title} as PNG`)}
+          title={tr('PNGで保存', 'Save as PNG')}
           className={`${iconBtn} ${large ? '' : `-mr-1 ${revealOnHover}`}`}
         >
           <Download className="h-3.5 w-3.5" />
         </button>
         {!large && onExpand && (
-          <button type="button" onClick={onExpand} aria-label={`${spec.title}を拡大`} title="拡大（ダブルクリックでも開きます）" className={`${iconBtn} -mr-1 ${revealOnHover}`}>
+          <button type="button" onClick={onExpand} aria-label={tr(`${spec.title}を拡大`, `Enlarge ${spec.title}`)} title={tr('拡大（ダブルクリックでも開きます）', 'Enlarge (or double-click)')} className={`${iconBtn} -mr-1 ${revealOnHover}`}>
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
         )}
@@ -413,7 +415,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
       </div>
       {large && (
         <p className="pt-1 text-[11px] text-ink-3">
-          横にドラッグで範囲を拡大 · ダブルクリックで全体に戻す · クリックでその時刻へ移動
+          {tr('横にドラッグで範囲を拡大 · ダブルクリックで全体に戻す · クリックでその時刻へ移動', 'Drag across to zoom · double-click to reset · click to jump to that time')}
         </p>
       )}
     </figure>
@@ -449,7 +451,7 @@ function ChartDialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`${spec.title}（拡大表示）`}
+        aria-label={tr(`${spec.title}（拡大表示）`, `${spec.title} (enlarged)`)}
         onClick={(e) => e.stopPropagation()}
         className="flex h-[min(760px,92vh)] w-[min(1200px,100%)] flex-col rounded-[10px] border border-line bg-surface p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.4)] sm:p-4"
       >
@@ -466,7 +468,7 @@ function ChartDialog({
               </button>
             ))}
           </div>
-          <button type="button" onClick={onClose} aria-label="閉じる (Esc)" title="閉じる (Esc)" className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
+          <button type="button" onClick={onClose} aria-label={tr('閉じる (Esc)', 'Close (Esc)')} title={tr('閉じる (Esc)', 'Close (Esc)')} className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -514,12 +516,12 @@ export function EventList({ track }: { track: Track }) {
     <table className="w-full border-collapse text-left text-[12px]">
       <thead>
         <tr className="text-[11px] text-ink-3">
-          <th className="py-1.5 pr-3 font-normal">時刻</th>
-          <th className="py-1.5 pr-3 font-normal">イベント</th>
-          <th className="py-1.5 pr-3 text-right font-normal">高度</th>
-          <th className="py-1.5 pr-3 text-right font-normal">速度</th>
-          <th className="hidden py-1.5 pr-3 text-right font-normal sm:table-cell">マッハ</th>
-          <th className="hidden py-1.5 text-right font-normal sm:table-cell">ダウンレンジ</th>
+          <th className="py-1.5 pr-3 font-normal">{tr('時刻', 'Time')}</th>
+          <th className="py-1.5 pr-3 font-normal">{tr('イベント', 'Event')}</th>
+          <th className="py-1.5 pr-3 text-right font-normal">{tr('高度', 'Altitude')}</th>
+          <th className="py-1.5 pr-3 text-right font-normal">{tr('速度', 'Velocity')}</th>
+          <th className="hidden py-1.5 pr-3 text-right font-normal sm:table-cell">{tr('マッハ', 'Mach')}</th>
+          <th className="hidden py-1.5 text-right font-normal sm:table-cell">{tr('ダウンレンジ', 'Downrange')}</th>
         </tr>
       </thead>
       <tbody>

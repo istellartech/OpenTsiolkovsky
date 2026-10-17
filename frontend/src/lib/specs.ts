@@ -8,6 +8,7 @@
 //    the start of that stage, which is the previous stage's separation.
 import type { ClientConfig, ClientStageConfig, ClientTimeSample } from './simulation'
 import { G0 } from './geo'
+import { locale, tr } from './i18n'
 
 export interface StageSpec {
   index: number
@@ -109,7 +110,13 @@ export function computeSpecs(config: ClientConfig): VehicleSpec {
     const isp = prop > 0 ? impulse / (prop * G0) : ispAt(stage, b0)
     let dv = 0
     if (prop >= stage.mass_initial_kg) {
-      warnings.push(`${i + 1}段: 燃焼で消費する推進剤 ${Math.round(prop).toLocaleString('ja-JP')} kg が段の質量を超えています`)
+      const propKg = Math.round(prop).toLocaleString(locale())
+      warnings.push(
+        tr(
+          `${i + 1}段: 燃焼で消費する推進剤 ${propKg} kg が段の質量を超えています`,
+          `Stage ${i + 1}: propellant burned (${propKg} kg) exceeds the stage mass`,
+        ),
+      )
     } else if (burnout > 0) {
       dv = isp * G0 * Math.log(stackMass / burnout)
     }

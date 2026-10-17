@@ -1,14 +1,42 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '../lib/cn'
 import { Segmented } from './primitives'
+import { tr } from '../lib/i18n'
 
 const SPLIT_KEY = 'ot.split'
 
 /** Share of the main area given to the map; the rest goes to charts. */
 const LAYOUTS = [
-  { value: 'map', label: '地図', ratio: 0.68, title: '地図を大きく' },
-  { value: 'even', label: '半々', ratio: 0.5, title: '地図とグラフを半分ずつ' },
-  { value: 'charts', label: 'グラフ', ratio: 0.22, title: 'グラフを大きく' },
+  {
+    value: 'map',
+    ratio: 0.68,
+    get label() {
+      return tr('地図', 'Map')
+    },
+    get title() {
+      return tr('地図を大きく', 'Larger map')
+    },
+  },
+  {
+    value: 'even',
+    ratio: 0.5,
+    get label() {
+      return tr('半々', 'Even')
+    },
+    get title() {
+      return tr('地図とグラフを半分ずつ', 'Split map and charts evenly')
+    },
+  },
+  {
+    value: 'charts',
+    ratio: 0.22,
+    get label() {
+      return tr('グラフ', 'Charts')
+    },
+    get title() {
+      return tr('グラフを大きく', 'Larger charts')
+    },
+  },
 ] as const
 type LayoutValue = (typeof LAYOUTS)[number]['value'] | 'custom'
 
@@ -92,11 +120,11 @@ export function SplitView({
         role="separator"
         tabIndex={0}
         aria-orientation="horizontal"
-        aria-label="地図とグラフの境界（上下キーで調整）"
+        aria-label={tr('地図とグラフの境界（上下キーで調整）', 'Map/charts divider (adjust with arrow keys)')}
         aria-valuenow={Math.round(ratio * 100)}
         aria-valuemin={15}
         aria-valuemax={85}
-        title="ドラッグで地図とグラフの比率を調整"
+        title={tr('ドラッグで地図とグラフの比率を調整', 'Drag to resize map and charts')}
         className="group relative z-10 flex h-2 shrink-0 cursor-row-resize touch-none items-center justify-center border-t border-line bg-surface hover:bg-surface-2"
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)

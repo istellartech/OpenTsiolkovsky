@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '../lib/cn'
+import { tr } from '../lib/i18n'
 
 export type ToastKind = 'ok' | 'error'
 
@@ -33,7 +34,7 @@ export function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismis
         )}
       >
         <span className="flex-1">{toast.text}</span>
-        <button type="button" onClick={onDismiss} aria-label="閉じる" className="-mr-1 shrink-0 rounded p-0.5 text-ink-3 hover:text-ink">
+        <button type="button" onClick={onDismiss} aria-label={tr('閉じる', 'Close')} className="-mr-1 shrink-0 rounded p-0.5 text-ink-3 hover:text-ink">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
