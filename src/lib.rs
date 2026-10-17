@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 pub mod io;
 pub mod math;
+pub mod montecarlo;
 pub mod physics;
 pub mod rocket;
 pub mod simulator;
