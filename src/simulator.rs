@@ -1,4 +1,9 @@
-use crate::math::{RungeKutta4, constants::G0, deg2rad, integrator::DormandPrince54};
+use crate::math::{
+    RungeKutta4,
+    constants::{G0, OMEGA_EARTH},
+    deg2rad,
+    integrator::DormandPrince54,
+};
 use crate::physics::{
     atmosphere::AtmosphereModel, coordinates::CoordinateTransform, gravity::GravityModel,
 };
@@ -923,6 +928,11 @@ impl Simulator {
         );
         let downrange = CT::distance_surface(&launch_llh, &pos_llh);
 
+        // Instantaneous impact point (zeros when none exists, as in the C++ output)
+        let omega_vec = Vector3::new(0.0, 0.0, OMEGA_EARTH);
+        let vel_ecef = CT::dcm_eci_to_ecef(t) * (vel - omega_vec.cross(&pos));
+        let iip_llh = CT::pos_llh_iip(&pos_ecef, &vel_ecef).unwrap_or_else(Vector3::zeros);
+
         // Determine event label based on current state
         let event_label = self.determine_event_label(t, stage_idx, is_powered, stage_local_time);
 
@@ -954,8 +964,8 @@ impl Simulator {
             wind_speed,
             wind_dir_deg: wind_dir,
             downrange,
-            iip_lat_deg: 0.0,
-            iip_lon_deg: 0.0,
+            iip_lat_deg: iip_llh.x,
+            iip_lon_deg: iip_llh.y,
             dcm_body_to_eci,
             inertial_speed: vel.magnitude(),
             kinetic_energy_ned: 0.5 * mass * vel_ned.magnitude().powi(2),
