@@ -159,3 +159,23 @@ input[type='number'] {
 .cesium-widget-credits {
   font-family: var(--font-sans);
 }
+
+/* Thin "working" bar shown while a re-run is in flight. */
+@keyframes ot-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+.ot-progress {
+  animation: ot-indeterminate 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ot-progress {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}

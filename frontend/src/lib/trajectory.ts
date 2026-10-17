@@ -256,17 +256,23 @@ export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] 
     events.push({ kind: 'maxq', t: maxQSample.t })
   }
 
+  const falls = fallBodies.map((b) => buildFallTrack(b, baseLat, baseLon))
+
   for (let i = 1; i < samples.length; i++) {
     const prev = samples[i - 1]
     const cur = samples[i]
     if (cur.stage !== prev.stage) {
-      events.push({ kind: 'separation', t: cur.t, stage: prev.stage, nextStage: cur.stage })
+      // The spent stage's release time is exact; the sample after it can lag by an output interval.
+      const release = falls.find((f) => f.kind === 'stage' && f.stage === prev.stage)?.releaseTime
+      const t = release !== undefined && release > prev.t - 1e-9 && release <= cur.t + 1e-9 ? release : cur.t
+      // A stage still burning up to separation burns out there too.
+      if (prev.thrust > 0) events.push({ kind: 'burnout', t, stage: prev.stage })
+      events.push({ kind: 'separation', t, stage: prev.stage, nextStage: cur.stage })
     } else if (prev.thrust > 0 && cur.thrust <= 0) {
       events.push({ kind: 'burnout', t: cur.t, stage: cur.stage })
     }
   }
 
-  const falls = fallBodies.map((b) => buildFallTrack(b, baseLat, baseLon))
   for (const f of falls) {
     if (f.kind === 'dump' && f.releaseTime <= last.t) events.push({ kind: 'jettison', t: f.releaseTime, stage: f.stage })
   }

@@ -10,7 +10,7 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
   return (
     <>
       <Group
-        title={tr('時間', 'Time')}
+        title={tr('計算時間', 'Run length')}
         note={tr('着地するか計算時間に達すると終了します。', 'The run ends at impact or when the duration is reached.')}
       >
         <NumberField
@@ -28,7 +28,12 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
           onChange={(v) => set({ output_step_s: v })}
         />
       </Group>
-      <Group title={tr('数値積分', 'Integration')}>
+      <Group
+        collapsible
+        defaultOpen={integrator.method !== 'rk45'}
+        badge={integrator.method === 'rk4' ? 'RK4' : 'RK45'}
+        title={tr('数値積分', 'Integration')}
+      >
         <SelectField
           label={tr('積分法', 'Integrator')}
           path="simulation.integrator.method"
@@ -56,7 +61,15 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
           />
         )}
       </Group>
-      <Group title={tr('大気', 'Atmosphere')}>
+      <Group
+        collapsible
+        defaultOpen={s.air_density_percent !== 0}
+        badge={tr(
+          `密度 ${s.air_density_percent > 0 ? '+' : ''}${s.air_density_percent}%`,
+          `density ${s.air_density_percent > 0 ? '+' : ''}${s.air_density_percent}%`,
+        )}
+        title={tr('大気', 'Atmosphere')}
+      >
         <NumberField
           label={tr('密度の変動', 'Density variation')}
           unit="%"

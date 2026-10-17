@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { FolderOpen, Globe as GlobeIcon, Keyboard, LineChart, SlidersHorizontal, X } from 'lucide-react'
+import { FolderOpen, Globe as GlobeIcon, Keyboard, LineChart, SlidersHorizontal } from 'lucide-react'
 import { useSimulation } from './hooks/useSimulation'
 import { useMonteCarlo } from './hooks/useMonteCarlo'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -39,8 +39,9 @@ export default function App() {
   const track = result?.track ?? null
 
   const isDesktop = useMediaQuery('(min-width: 1024px)')
-  const isMobile = useMediaQuery('(max-width: 767px)')
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const isPhone = useMediaQuery('(max-width: 767px)')
+  // Phones and tablets share one layout: a single view at a time, picked from the bottom bar.
+  const isMobile = !isDesktop
   const [mobileView, setMobileView] = useState<MobileView>('globe')
   const [panelTab, setPanelTab] = useState<PanelTab>('charts')
   const split = useSplitRatio()
@@ -77,7 +78,6 @@ export default function App() {
   /** Bring the parameter panel into view on any layout. */
   const revealParams = () => {
     if (isMobile) setMobileView('params')
-    else if (!isDesktop) setDrawerOpen(true)
   }
 
   const focusIssue = (issue: ValidationIssue) => {
@@ -154,7 +154,7 @@ export default function App() {
       dispersion={dispersion}
       status={sim.status}
       error={sim.error}
-      compactTelemetry={isMobile || split.ratio < 0.35}
+      compactTelemetry={isPhone || split.ratio < 0.35}
     />
   )
 
@@ -178,13 +178,11 @@ export default function App() {
         error={sim.error}
         issues={sim.issues}
         onIssue={focusIssue}
-        showDrawerToggle={!isDesktop && !isMobile}
-        onToggleDrawer={() => setDrawerOpen((v) => !v)}
-        compact={isMobile}
+        compact={isPhone}
         history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
         actions={
           <>
-            {!isMobile && (
+            {!isPhone && (
               <IconButton label={tr('キーボードショートカット (?)', 'Keyboard shortcuts (?)')} onClick={() => setHelpOpen(true)}>
                 <Keyboard className="h-4 w-4" />
               </IconButton>
@@ -200,22 +198,10 @@ export default function App() {
         {isDesktop && (
           <aside className="scroll-quiet w-[372px] shrink-0 overflow-y-auto border-r border-line bg-surface">{inspector}</aside>
         )}
-        {!isDesktop && !isMobile && drawerOpen && (
-          <>
-            <div className="absolute inset-0 z-20 bg-black/25" onClick={() => setDrawerOpen(false)} />
-            <aside className="scroll-quiet absolute inset-y-0 left-0 z-30 w-[380px] max-w-[92vw] overflow-y-auto border-r border-line bg-surface shadow-[8px_0_24px_-12px_rgba(0,0,0,0.25)]">
-              <div className="flex h-10 items-center justify-between border-b border-line px-4">
-                <span className="text-[13px] font-semibold">{tr('パラメータ', 'Parameters')}</span>
-                <IconButton label={tr('閉じる', 'Close')} onClick={() => setDrawerOpen(false)}>
-                  <X className="h-4 w-4" />
-                </IconButton>
-              </div>
-              {inspector}
-            </aside>
-          </>
-        )}
         {isMobile && mobileView === 'params' && (
-          <div className="scroll-quiet absolute inset-0 z-10 overflow-y-auto bg-surface">{inspector}</div>
+          <div className="scroll-quiet absolute inset-0 z-10 overflow-y-auto bg-surface">
+            <div className="mx-auto max-w-[36rem]">{inspector}</div>
+          </div>
         )}
 
         {/* Main stage */}

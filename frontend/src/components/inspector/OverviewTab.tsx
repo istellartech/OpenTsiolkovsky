@@ -79,11 +79,11 @@ export function Overview({
           <thead>
             <tr className="text-[11px] text-ink-3">
               <th className="py-1 pr-2 text-left font-normal">{tr('段', 'Stage')}</th>
-              <th className="py-1 pr-2 text-right font-normal">{tr('質量', 'Mass')}</th>
-              <th className="py-1 pr-2 text-right font-normal">{tr('推進剤', 'Propellant')}</th>
-              <th className="py-1 pr-2 text-right font-normal">{tr('推力', 'Thrust')}</th>
-              <th className="py-1 pr-2 text-right font-normal">Isp</th>
-              <th className="py-1 text-right font-normal">Δv</th>
+              <th className="py-1 pr-2 text-right font-normal">{tr('質量 t', 'Mass t')}</th>
+              <th className="py-1 pr-2 text-right font-normal">{tr('推進剤 t', 'Prop. t')}</th>
+              <th className="py-1 pr-2 text-right font-normal">{tr('推力 kN', 'Thrust kN')}</th>
+              <th className="py-1 pr-2 text-right font-normal">Isp s</th>
+              <th className="whitespace-nowrap py-1 text-right font-normal">Δv km/s</th>
             </tr>
           </thead>
           <tbody>
@@ -101,10 +101,10 @@ export function Overview({
                   />
                   {s.index + 1}
                 </td>
-                <td className="num py-1.5 pr-2 text-right">{fmtMass(s.ownMass)}</td>
-                <td className="num py-1.5 pr-2 text-right">{fmtMass(s.propellant)}</td>
-                <td className="num py-1.5 pr-2 text-right">{fmtForce(s.thrustMax)}</td>
-                <td className="num py-1.5 pr-2 text-right">{fmt(s.isp, 0)} s</td>
+                <td className="num py-1.5 pr-2 text-right">{fmt(s.ownMass / 1000, 1)}</td>
+                <td className="num py-1.5 pr-2 text-right">{fmt(s.propellant / 1000, 1)}</td>
+                <td className="num py-1.5 pr-2 text-right">{fmt(s.thrustMax / 1000, 0)}</td>
+                <td className="num py-1.5 pr-2 text-right">{fmt(s.isp, 0)}</td>
                 <td className="num py-1.5 text-right">{fmt(s.dv / 1000, 2)}</td>
               </tr>
             ))}
@@ -113,8 +113,8 @@ export function Overview({
       </div>
       <p className="mt-1 text-[11px] text-ink-3">
         {tr(
-          '質量は各段単体（推進剤込み）。推進剤は燃焼時間と推力・Ispから計算。Δv は km/s。',
-          'Mass is each stage alone, including propellant. Propellant is computed from burn time, thrust and Isp. Δv in km/s.',
+          '質量は各段単体（推進剤込み）。推進剤は燃焼時間と推力・Ispから計算。',
+          'Mass is each stage alone, including propellant. Propellant is computed from burn time, thrust and Isp.',
         )}
       </p>
 

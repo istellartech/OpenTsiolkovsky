@@ -76,6 +76,17 @@ describe('buildTrack', () => {
     expect(track.events.find((e) => e.kind === 'separation')).toMatchObject({ stage: 1, nextStage: 2 })
   })
 
+  it('adds a burnout at separation and takes the exact release time', () => {
+    // Stage 1 burns right up to a release at 9.5 s, between the 9 s and 10 s samples.
+    const states = hop().map((s) => ({ ...s, thrust: s.time < 10 || (s.time >= 10 && s.time < 15) ? 1000 : 0 }))
+    const bodies = falls().map((b) => (b.kind === 'stage' ? { ...b, release_time_s: 9.5 } : b))
+    const t = buildTrack(states, bodies)!
+    expect(t.events.filter((e) => e.t === 9.5).map((e) => [e.kind, e.stage])).toEqual([
+      ['burnout', 1],
+      ['separation', 1],
+    ])
+  })
+
   it('keeps flight mode, IIP and falling bodies', () => {
     expect(track.samples[0].mode).toBe('power_3DoF')
     expect(track.samples[6].mode).toBe('free_ballistic')

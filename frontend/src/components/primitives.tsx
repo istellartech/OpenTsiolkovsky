@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
+import { createContext, useContext, useId, useState, type ReactNode } from 'react'
+import { Info } from 'lucide-react'
 import { TableSummary } from './TableEditor'
 import { cn } from '../lib/cn'
 import { fmtInput, unitHint } from '../lib/format'
@@ -75,6 +76,33 @@ export function Segmented<T extends string | number>({
   )
 }
 
+/* --------------------------------------------------------------- Info tip */
+
+/** Small ⓘ toggle; the explanation it controls is rendered by the caller while `open`. */
+export function InfoButton({ open, onToggle, controls, label }: { open: boolean; onToggle: () => void; controls: string; label: string }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-controls={controls}
+      aria-label={label}
+      title={label}
+      onClick={(e) => {
+        // Inside a <label> or <summary>: do not focus the field or fold the group.
+        e.preventDefault()
+        e.stopPropagation()
+        onToggle()
+      }}
+      className={cn(
+        'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full align-[-2px] transition-colors pointer-coarse:h-6 pointer-coarse:w-6',
+        open ? 'text-ink' : 'text-ink-3 hover:text-ink',
+      )}
+    >
+      <Info className="h-3 w-3" />
+    </button>
+  )
+}
+
 /* ----------------------------------------------------- Validation context */
 
 interface FieldContextValue {
@@ -110,23 +138,35 @@ function FieldRow({
   error?: string
   children: ReactNode
 }) {
+  const [showHint, setShowHint] = useState(false)
+  const hintId = useId()
   return (
     <div className="py-[3px]">
       <label className="flex min-h-8 items-center gap-3">
         <span className="min-w-0 flex-1 leading-tight text-ink-2">
           {label}
+          {hint && (
+            <>
+              {' '}
+              <InfoButton open={showHint} onToggle={() => setShowHint((v) => !v)} controls={hintId} label={hint} />
+            </>
+          )}
           {note && <span className="num block text-[10px] text-ink-3">{note}</span>}
-          {hint && <span className="block text-[10px] leading-snug text-ink-3">{hint}</span>}
         </span>
         {children}
       </label>
+      {hint && showHint && (
+        <p id={hintId} className="mb-1 mt-0.5 rounded-[6px] bg-surface-2 px-2 py-1 text-[11px] leading-snug text-ink-2">
+          {hint}
+        </p>
+      )}
       {error && <p className="mt-0.5 text-right text-[11px] leading-tight text-danger">{error}</p>}
     </div>
   )
 }
 
 const inputBase =
-  'h-8 w-full rounded-[6px] border border-line bg-surface-2 text-ink outline-none transition-colors hover:border-line-strong focus:border-signal focus:bg-surface'
+  'h-8 w-full rounded-[6px] border border-line bg-surface-2 text-ink outline-none transition-colors hover:border-line-strong focus:border-signal focus:bg-surface pointer-coarse:h-10 pointer-coarse:text-[16px]'
 
 /**
  * Numeric input that keeps the raw text while typing ("-", "1.", "") and commits valid numbers.
