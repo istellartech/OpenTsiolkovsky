@@ -28,7 +28,7 @@ OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core i
 ### Web app ([details](frontend/README.md))
 - **Live:** results follow every input change. The solver runs in a Web Worker, so the page stays responsive.
 - **Visual:** a 3D globe (CesiumJS, Esri basemaps), charts, an event table and telemetry, all on a shared playback timeline.
-- **Impact analysis:** fall paths and impact points of spent stages and jettisoned parts, the IIP track and an optional ILL (IIP limit line) check, the flight mode, and a Monte Carlo "Dispersion" tab that draws impact scatter and 3-sigma ellipses on the globe.
+- **Impact analysis:** fall paths and impact points of spent stages and jettisoned parts, the IIP track, the flight mode, and a Monte Carlo "Dispersion" tab that draws impact scatter and 3-sigma ellipses on the globe.
 - **Sample vehicles** built from published data: MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3, Saturn V and Ariane 5. Each comes with sources and modelling notes.
 - **Files:**
   - Opens CLI `param_*.json` files together with their CSV tables; results match the CLI.

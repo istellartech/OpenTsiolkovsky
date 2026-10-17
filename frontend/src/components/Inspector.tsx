@@ -60,7 +60,7 @@ const TABS: { id: InspectorTab; label: string }[] = [
 export function navForField(field: string): InspectorNav {
   const m = field.match(/^stage(?:\[(\d+)\])?\./)
   if (m) return { tab: 'vehicle', stage: m[1] ? Number(m[1]) - 1 : 0 }
-  if (field.startsWith('launch.') || field === 'ill') return { tab: 'launch', stage: 0 }
+  if (field.startsWith('launch.')) return { tab: 'launch', stage: 0 }
   if (field.startsWith('aerodynamics.')) return { tab: 'aero', stage: 0 }
   if (field.startsWith('attitude.') || field.startsWith('wind.')) return { tab: 'flight', stage: 0 }
   if (field.startsWith('simulation.')) return { tab: 'solver', stage: 0 }

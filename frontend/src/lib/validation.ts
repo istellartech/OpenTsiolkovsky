@@ -161,8 +161,6 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
   // Wind validation
   validateWind(wind, push)
 
-  validateIll(config.ill, push)
-
   return issues
 }
 
@@ -424,18 +422,6 @@ function validateWind(wind: ClientConfig['wind'], push: (field: string, message:
       }
       prevAlt = sample.altitude_m
     }
-  }
-}
-
-function validateIll(ill: ClientConfig['ill'], push: (field: string, message: string) => void) {
-  if (!ill || ill.length === 0) return
-  if (ill.length < 3) {
-    push('ill', tr('ILLは3点以上で指定してください。', 'An ILL needs at least 3 points.'))
-  } else if (ill.some((p) => !isFiniteNumber(p.lat_deg) || Math.abs(p.lat_deg) > 90 || !isFiniteNumber(p.lon_deg))) {
-    push(
-      'ill',
-      tr('ILLの緯度は-90〜90度、経度は数値で指定してください。', 'ILL latitudes must be within ±90° and longitudes must be numbers.'),
-    )
   }
 }
 

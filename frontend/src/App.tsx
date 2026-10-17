@@ -28,7 +28,6 @@ import { buildShareUrl } from './lib/share'
 import { cn } from './lib/cn'
 import type { ValidationIssue } from './lib/validation'
 import { tr, useLang } from './lib/i18n'
-import { withIll } from './lib/ill'
 
 type MobileView = 'params' | 'globe' | 'charts'
 
@@ -37,7 +36,7 @@ export default function App() {
   const lang = useLang()
   const sim = useSimulation()
   const { config, result } = sim
-  const track = useMemo(() => (result ? withIll(result.track, config.ill) : null), [result, config.ill])
+  const track = result?.track ?? null
 
   const isDesktop = useMediaQuery('(min-width: 1024px)')
   const isMobile = useMediaQuery('(max-width: 767px)')

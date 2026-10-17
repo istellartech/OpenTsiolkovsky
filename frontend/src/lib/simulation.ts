@@ -1,6 +1,5 @@
 // Types shared with the Rust/WASM solver, and the call into it.
 import type { Vec3 } from './geo'
-import type { IllPoint } from './ill'
 
 export type Vec3Json = { x: number; y: number; z: number } | [number, number, number]
 
@@ -186,11 +185,6 @@ export type ClientConfig = {
     direction_deg: number
     profile: ClientWindSample[]
   }
-  /**
-   * Instantaneous impact point limit line: a closed polygon the IIP must stay
-   * inside. Checked on the result only; the solver ignores it.
-   */
-  ill?: IllPoint[]
 }
 
 type WasmModule = typeof import('../wasm/openTsiolkovsky.js')

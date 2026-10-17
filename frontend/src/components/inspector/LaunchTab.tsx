@@ -1,9 +1,8 @@
 import type { ClientConfig } from '../../lib/simulation'
 import { LAUNCH_SITES, findSite } from '../../config/sites'
-import { NumberField, ProfileTable, TextInputField, Toggle, VectorField } from '../primitives'
+import { NumberField, TextInputField, VectorField } from '../primitives'
 import { pad2, Group, type Patch } from './shared'
 import { tr } from '../../lib/i18n'
-import { defaultIll } from '../../lib/ill'
 
 export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
   const { launch } = config
@@ -96,38 +95,6 @@ export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patc
           value={launch.velocity_ned_mps}
           onChange={(v) => setLaunch({ velocity_ned_mps: v })}
         />
-      </Group>
-      <Group
-        title={tr('ILL（IIP限界線）', 'ILL (IIP limit line)')}
-        note={tr(
-          'IIPが留まるべき範囲を緯度・経度の多角形で指定します。IIPが外に出た時刻をイベントに、線を地図に表示します。',
-          'A latitude/longitude polygon the IIP must stay inside. The time the IIP leaves it is shown as an event, and the line on the map.',
-        )}
-      >
-        <Toggle
-          label={tr('ILLを設定', 'Set an ILL')}
-          checked={!!config.ill?.length}
-          onChange={(on) =>
-            patch((c) => ({
-              ...c,
-              ill: on
-                ? defaultIll(c.launch.latitude_deg, c.launch.longitude_deg, c.attitude.profile[0]?.azimuth_deg ?? c.attitude.azimuth_deg)
-                : undefined,
-            }))
-          }
-        />
-        {!!config.ill?.length && (
-          <ProfileTable
-            path="ill"
-            title={tr('ILLの頂点', 'ILL vertices')}
-            columns={[
-              { key: 'lat_deg', label: tr('緯度 °', 'Latitude °') },
-              { key: 'lon_deg', label: tr('経度 °', 'Longitude °') },
-            ]}
-            rows={config.ill}
-            onChange={(rows) => patch((c) => ({ ...c, ill: rows }))}
-          />
-        )}
       </Group>
     </>
   )

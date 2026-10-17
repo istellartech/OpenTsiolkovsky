@@ -341,34 +341,6 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null, layer
     })
   }
 
-  // IIP limit line, and where the IIP first crosses it.
-  if (layers.iip && track.ill) {
-    const danger = Color.fromCssColorString(cssVar('--danger') || '#c62828')
-    const { points, violation } = track.ill
-    const ring = [...points, points[0]].map((p) => ({ lat: p.lat_deg, lon: p.lon_deg }))
-    for (const part of splitPath(ring)) {
-      viewer.entities.add({ polyline: { positions: part, width: 2, clampToGround: true, material: danger } })
-    }
-    if (violation) {
-      viewer.entities.add({
-        position: Cartesian3.fromDegrees(violation.lon, violation.lat, 0),
-        point: { pixelSize: 9, color: danger, outlineColor: halo, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-        label: {
-          text: tr(`ILL越境 T+${violation.t.toFixed(1)} s`, `ILL crossed T+${violation.t.toFixed(1)} s`),
-          font: '600 11px "IBM Plex Sans JP", sans-serif',
-          fillColor: danger,
-          outlineColor: halo,
-          outlineWidth: 4,
-          style: LabelStyle.FILL_AND_OUTLINE,
-          horizontalOrigin: HorizontalOrigin.LEFT,
-          verticalOrigin: VerticalOrigin.CENTER,
-          pixelOffset: new Cartesian2(9, 0),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      })
-    }
-  }
-
   // Spent stages and dumping products: fall path, moving point, impact point.
   if (layers.falls) {
     for (const body of track.fallBodies) addFallBody(viewer, body, halo, ink)
@@ -553,7 +525,7 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
     }
   }
   const hasFalls = !!track && track.fallBodies.length > 0
-  const hasIip = !!track && (!!track.ill || track.samples.some((s) => s.iipLat !== null))
+  const hasIip = !!track && track.samples.some((s) => s.iipLat !== null)
 
   const changeBasemap = (next: Basemap) => {
     setBasemapState(next)
