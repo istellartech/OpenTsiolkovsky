@@ -78,8 +78,17 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
   const stages: ClientStageConfig[] = rawStages.map((st, i) => {
     const t = obj(st.thrust)
     const hasNext = i < rawStages.length - 1
-    if (bool(obj(st['dumping product'])['dumping product exist?(bool)']))
-      unsupported.push(tr(`${i + 1}段の投棄物（dumping product）`, `stage ${i + 1} dumping product`))
+    const d = obj(st['dumping product'])
+    const v = d['additional speed at dumping NED[m/s,m/s,m/s]']
+    const dumpVel = Array.isArray(v) ? v : []
+    const dumping_product = bool(d['dumping product exist?(bool)'])
+      ? {
+          separation_time_s: num(d['dumping product separation time[s]']),
+          mass_kg: num(d['dumping product mass[kg]']),
+          ballistic_coefficient: num(d['dumping product ballistic coefficient[kg/m2]'], 100),
+          additional_velocity_ned_mps: [num(dumpVel[0]), num(dumpVel[1]), num(dumpVel[2])] as [number, number, number],
+        }
+      : undefined
     if (bool(obj(st['attitude neutrality(3DoF)'])['considering neutrality?(bool)']))
       unsupported.push(tr(`${i + 1}段の姿勢中立性（3DoF）`, `stage ${i + 1} attitude neutrality (3DoF)`))
     return {
@@ -103,6 +112,7 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
       isp_profile: timeSeries(table(t['Isp vac file exist?(bool)'], t['Isp vac file name(str)'], 2)),
       cg_position_m: [0, 0, 0],
       rotational_inertia_kgm2: [0, 0, 0],
+      ...(dumping_product && { dumping_product }),
     }
   })
 

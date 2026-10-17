@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
-import type { ClientConfig, ClientStageConfig } from '../../lib/simulation'
+import type { ClientConfig, ClientDumpingProduct, ClientStageConfig } from '../../lib/simulation'
 import { FREE_MODE_OPTIONS, MAX_STAGE_COUNT, POWER_MODE_OPTIONS, createDefaultStage } from '../../config/defaults'
-import { NumberField, ProfileTable, SelectField, Toggle } from '../primitives'
+import { NumberField, ProfileTable, SelectField, Toggle, VectorField } from '../primitives'
 
-import type { VehicleSpec } from '../../lib/specs'
+import { burnEndForPropellant, type VehicleSpec } from '../../lib/specs'
 import { fmt, fmtMass } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { stagePath, Readout, Group, type Patch } from './shared'
@@ -64,8 +65,12 @@ export function VehicleTab({
   const p = (k: keyof ClientStageConfig) => stagePath(idx, k)
   const abs = (t: number) => `T+${fmt(spec.start + t)} s`
 
-  // Propellant ⇄ burn time (constant thrust and Isp only).
-  const canEditPropellant = (stage.thrust_profile ?? []).length === 0 && (stage.isp_profile ?? []).length === 0
+  // Propellant ⇄ burn time, following the thrust and Isp tables when present.
+  const usesTables = (stage.thrust_profile ?? []).length > 0 || (stage.isp_profile ?? []).length > 0
+  // Kept per stage so switching stages does not carry the message over
+  const [propellantIssue, setPropellantIssue] = useState<{ stage: number; message: string } | null>(null)
+  const propellantError = propellantIssue?.stage === idx ? propellantIssue.message : null
+  const setPropellantError = (message: string | null) => setPropellantIssue(message ? { stage: idx, message } : null)
   const setBurnEnd = (end: number, s: ClientStageConfig = stage): Partial<ClientStageConfig> => {
     const out: Partial<ClientStageConfig> = { burn_end_s: end }
     // Keep a forced cutoff that sat at the burn end (the usual case) moving with it.
@@ -74,12 +79,22 @@ export function VehicleTab({
     return out
   }
   const setPropellant = (kg: number) => {
-    const thrust = stage.thrust_constant * stage.thrust_multiplier
-    const isp = stage.isp_constant * stage.isp_multiplier
-    if (thrust <= 0 || isp <= 0 || kg <= 0) return
-    const burn = (kg * isp * 9.80665) / thrust
-    setStage(setBurnEnd(Math.round((stage.burn_start_s + burn) * 100) / 100))
+    if (!(kg > 0)) return
+    const end = burnEndForPropellant(stage, kg)
+    if (end === null) {
+      setPropellantError(
+        usesTables
+          ? tr('推力テーブルの範囲では、この量を燃やしきれません。', 'The thrust table ends before this much propellant is burned.')
+          : tr('推力と比推力を正の値にしてください。', 'Set a positive thrust and Isp first.'),
+      )
+      return
+    }
+    setPropellantError(null)
+    setStage(setBurnEnd(Math.round(end * 100) / 100))
   }
+  const dump = stage.dumping_product
+  const setDump = (d: Partial<ClientDumpingProduct>) => dump && setStage({ dumping_product: { ...dump, ...d } })
+  const dumpPath = (k: keyof ClientDumpingProduct) => `${p('dumping_product')}.${k}`
   const thrustProfile = stage.thrust_profile ?? []
   const ispProfile = stage.isp_profile ?? []
 
@@ -129,25 +144,22 @@ export function VehicleTab({
           value={stage.mass_initial_kg}
           onChange={(v) => setStage({ mass_initial_kg: v })}
         />
-        {canEditPropellant ? (
-          <NumberField
-            label={tr('推進剤', 'Propellant')}
-            hint={tr('燃焼で消費する量', 'Mass consumed during the burn')}
-            unit="kg"
-            value={Math.round(spec.propellant * 10) / 10}
-            onChange={setPropellant}
-          />
-        ) : (
-          <div className="flex min-h-8 items-center justify-between py-[3px] text-ink-2">
-            <span>
-              {tr('推進剤', 'Propellant')}
-              <span className="block text-[10px] leading-snug text-ink-3">
-                {tr('推力・Ispのテーブルから計算', 'Computed from thrust and Isp tables')}
-              </span>
-            </span>
-            <span className="num w-[9.5rem] pr-2 text-right text-[13px] text-ink">{fmtMass(spec.propellant)}</span>
-          </div>
-        )}
+        <NumberField
+          key={`propellant-${idx}`}
+          label={tr('推進剤', 'Propellant')}
+          hint={
+            usesTables
+              ? tr(
+                  '燃焼で消費する量。推力・Ispのテーブルに沿って燃焼終了時刻を決めます。',
+                  'Mass consumed during the burn; sets the burnout time along the thrust and Isp tables.',
+                )
+              : tr('燃焼で消費する量', 'Mass consumed during the burn')
+          }
+          unit="kg"
+          value={Math.round(spec.propellant * 10) / 10}
+          onChange={setPropellant}
+        />
+        {propellantError && <p className="mb-1 text-right text-[11px] text-danger">{propellantError}</p>}
         <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 rounded-[6px] bg-surface-2 px-2.5 py-2 text-[11px]">
           <Readout k={tr('燃焼時間', 'Burn time')} v={`${fmt(spec.burnTime)} s`} />
           <Readout
@@ -299,7 +311,75 @@ export function VehicleTab({
         )}
       </Group>
 
-      <Group title={tr('飛行モード・補正', 'Flight modes & corrections')}>
+      <Group
+        title={tr('投棄物', 'Jettisoned part')}
+        note={tr(
+          'フェアリングなど、この段の飛行中に切り離す物体です。切り離した質量は機体から減り、物体は弾道係数で落下点まで計算します。',
+          'A part released while this stage flies, such as a fairing. Its mass leaves the vehicle, and it is flown to the ground with its ballistic coefficient.',
+        )}
+      >
+        <Toggle
+          label={tr('この段で投棄物を切り離す', 'Jettison a part during this stage')}
+          checked={!!dump}
+          onChange={(on) =>
+            setStage({
+              dumping_product: on
+                ? {
+                    separation_time_s:
+                      Math.round(Math.min(stage.burn_end_s + 5, isLast ? Infinity : stage.separation_time_s - 1) * 10) / 10,
+                    mass_kg: Math.max(Math.round(stage.mass_initial_kg * 0.02), 1),
+                    ballistic_coefficient: 30,
+                    additional_velocity_ned_mps: [0, 0, 0],
+                  }
+                : undefined,
+            })
+          }
+        />
+        {dump && (
+          <>
+            <NumberField
+              label={tr('切り離し', 'Release')}
+              note={abs(dump.separation_time_s)}
+              hint={tr('この段の開始からの秒', 'Seconds from the start of this stage')}
+              unit="s"
+              path={dumpPath('separation_time_s')}
+              value={dump.separation_time_s}
+              onChange={(v) => setDump({ separation_time_s: v })}
+            />
+            <NumberField
+              label={tr('質量', 'Mass')}
+              unit="kg"
+              path={dumpPath('mass_kg')}
+              value={dump.mass_kg}
+              onChange={(v) => setDump({ mass_kg: v })}
+            />
+            <NumberField
+              label={tr('弾道係数', 'Ballistic coefficient')}
+              hint={tr('質量 ÷（抗力係数 × 面積）。小さいほど減速しやすい', 'Mass ÷ (drag coefficient × area); smaller slows down faster')}
+              unit="kg/m²"
+              path={dumpPath('ballistic_coefficient')}
+              value={dump.ballistic_coefficient}
+              onChange={(v) => setDump({ ballistic_coefficient: v })}
+            />
+            <VectorField
+              label={tr('切り離し時の追加速度', 'Release velocity')}
+              axes={['N', 'E', 'D']}
+              unit="m/s"
+              path={dumpPath('additional_velocity_ned_mps')}
+              value={dump.additional_velocity_ned_mps}
+              onChange={(v) => setDump({ additional_velocity_ned_mps: v })}
+            />
+          </>
+        )}
+      </Group>
+
+      <Group
+        title={tr('飛行モード・補正', 'Flight modes & corrections')}
+        note={tr(
+          '慣性飛行のモードは、燃焼後のこの段（上段が載っている間）の飛び方です。分離後に落ちていく使用済みの段は姿勢制御がないため、「指定姿勢」は「空力安定」として計算します。',
+          'The coast mode sets how this stage flies after burnout while it still carries the upper stages. A spent stage falling after separation has no attitude control, so "commanded attitude" is flown as "aerodynamically stable".',
+        )}
+      >
         <SelectField
           label={tr('動力飛行', 'Powered flight')}
           path={p('power_mode')}
