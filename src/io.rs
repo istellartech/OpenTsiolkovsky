@@ -1,7 +1,7 @@
 /// Input/Output handling for OpenTsiolkovsky
 ///
 /// Handles JSON configuration files and CSV data files
-use crate::rocket::{Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
+use crate::rocket::{NeutralityData, Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
 use crate::simulator::{FallBody, FlightEvent, SimulationState, impact_point};
 use serde_json;
 use std::fs;
@@ -436,6 +436,25 @@ pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
     }
 
     for (i, stage) in config.stages.iter().enumerate() {
+        if stage.power_flight_mode != 0 {
+            warnings.push(format!(
+                "ステージ{}: 動力飛行モード '{}' は未対応のため 3DoF(0) で計算します",
+                i + 1,
+                stage.power_flight_mode
+            ));
+        }
+        let six_dof = &stage.six_dof;
+        if !six_dof.cg_cp_controller_position_file.is_empty()
+            || !six_dof.moment_of_inertia_file_name.is_empty()
+        {
+            warnings.push(format!(
+                "ステージ{}: 6DoF の設定ファイルは未対応のため使われません",
+                i + 1
+            ));
+        }
+    }
+
+    for (i, stage) in config.stages.iter().enumerate() {
         let dump = &stage.dumping_product;
         if !dump.dumping_product_exists {
             continue;
@@ -481,6 +500,19 @@ pub fn rocket_warnings(rocket: &Rocket) -> Vec<String> {
             ));
         }
         let stage = rocket.stage_config(i);
+        if stage.attitude_neutrality.considering_neutrality {
+            if rocket.neutrality[i].is_none() {
+                warnings.push(format!(
+                    "ステージ{}: 推力トリム(neutrality)の CG/CP ファイルが読めないため、トリムは無視されます",
+                    i + 1
+                ));
+            } else if rocket.cn_surface.is_none() {
+                warnings.push(format!(
+                    "ステージ{}: 推力トリム(neutrality)には CN の Mach×迎角テーブルが必要なため、トリムは無視されます",
+                    i + 1
+                ));
+            }
+        }
         if let Some(dry) = stage.mass_dry
             && !(0.0..=stage.mass_initial).contains(&dry)
         {
@@ -692,6 +724,23 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
             &thrust_cfg.isp_file_name,
             |p| load_time_series(p),
         )?;
+    }
+
+    for idx in 0..rocket.stage_count() {
+        let n = rocket.stage_config(idx).attitude_neutrality.clone();
+        if !n.considering_neutrality {
+            continue;
+        }
+        let cg_path = resolve_data_path(base, true, &n.cg_controller_position_file);
+        let cp_path = resolve_data_path(base, true, &n.cp_file);
+        if let (Some(cg_path), Some(cp_path)) = (cg_path, cp_path) {
+            let rows = load_csv_rows::<_, 3>(&cg_path)?;
+            rocket.neutrality[idx] = Some(NeutralityData {
+                cg: TimeSeriesData::from_pairs(rows.iter().map(|r| (r[0], r[1]))),
+                controller: TimeSeriesData::from_pairs(rows.iter().map(|r| (r[0], r[2]))),
+                cp: load_cn_surface(&cp_path)?,
+            });
+        }
     }
 
     let primary_stage = rocket.config.primary_stage();

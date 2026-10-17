@@ -484,16 +484,51 @@ pub struct DumpingProductConfig {
     pub additional_speed_at_dumping_ned: [f64; 3],
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Thrust vector trim that balances the aerodynamic moment (3DoF
+/// "neutrality", as in the C++ simulator). Positions are STA [m] (from the
+/// nose, aft positive); the offsets move CG, CP and the thrust point.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AttitudeNeutralityConfig {
     #[serde(rename = "considering neutrality?(bool)")]
     pub considering_neutrality: bool,
 
+    /// CSV: time [s], CG STA [m], controller (gimbal) STA [m]
     #[serde(rename = "CG, Controller position file(str)")]
     pub cg_controller_position_file: String,
 
+    /// CSV: CP STA [m] over Mach x angle of attack, laid out as the CN file
     #[serde(rename = "CP file(str)")]
     pub cp_file: String,
+
+    #[serde(rename = "Xcg offset[m]", default)]
+    pub xcg_offset: f64,
+    #[serde(rename = "Ycg offset[m]", default)]
+    pub ycg_offset: f64,
+    #[serde(rename = "Zcg offset[m]", default)]
+    pub zcg_offset: f64,
+    #[serde(rename = "Xcp offset[m]", default)]
+    pub xcp_offset: f64,
+    #[serde(rename = "Ycp offset[m]", default)]
+    pub ycp_offset: f64,
+    #[serde(rename = "Zcp offset[m]", default)]
+    pub zcp_offset: f64,
+    #[serde(rename = "Xt offset[m]", default)]
+    pub xt_offset: f64,
+    #[serde(rename = "Yt offset[m]", default)]
+    pub yt_offset: f64,
+    #[serde(rename = "Zt offset[m]", default)]
+    pub zt_offset: f64,
+}
+
+/// Loaded tables of the thrust trim (see `AttitudeNeutralityConfig`)
+#[derive(Debug, Clone)]
+pub struct NeutralityData {
+    /// CG STA [m] over time [s]
+    pub cg: TimeSeriesData,
+    /// Controller (thrust point) STA [m] over time [s]
+    pub controller: TimeSeriesData,
+    /// CP STA [m] over Mach x angle [deg]
+    pub cp: SurfaceData2D,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -630,6 +665,8 @@ pub struct Rocket {
     /// Air density variation [%] over altitude [m] (replaces the uniform
     /// variation ratio, as in C++)
     pub air_density_table: Option<TimeSeriesData>,
+    /// Thrust trim tables per stage (when "considering neutrality")
+    pub neutrality: Vec<Option<NeutralityData>>,
     pub wind_data: Option<Vec<(f64, f64, f64)>>, // (altitude, speed, direction)
 }
 
@@ -649,6 +686,7 @@ impl Rocket {
             attitude_data: None,
             attitude_roll: None,
             air_density_table: None,
+            neutrality: vec![None; stage_count],
             wind_data: None,
         }
     }
@@ -1449,11 +1487,7 @@ fn build_stage_config(
                 additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
             },
         },
-        attitude_neutrality: AttitudeNeutralityConfig {
-            considering_neutrality: false,
-            cg_controller_position_file: String::new(),
-            cp_file: String::new(),
-        },
+        attitude_neutrality: AttitudeNeutralityConfig::default(),
         six_dof: SixDofConfig {
             cg_cp_controller_position_file: String::new(),
             moment_of_inertia_file_name: String::new(),

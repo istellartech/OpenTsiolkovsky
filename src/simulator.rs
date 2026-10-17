@@ -363,6 +363,8 @@ struct Forces {
     thrust: f64,
     mass_flow: f64,
     thrust_body: Vector3<f64>,
+    /// Thrust trim angles (pitch, yaw) [rad]
+    gimbal_rad: (f64, f64),
     aero_body: Vector3<f64>,
     gravity_eci: Vector3<f64>,
     acc_eci: Vector3<f64>,
@@ -1231,6 +1233,7 @@ impl Simulator {
         rocket.stage_configs = vec![stage.clone()];
         rocket.thrust_tables = vec![None];
         rocket.isp_tables = vec![None];
+        rocket.neutrality = vec![None];
         rocket.config.stages = vec![stage];
         rocket.config.calculate_condition.end_time = release.time + FALL_MAX_DURATION_S;
 
@@ -1396,7 +1399,6 @@ impl Simulator {
                 thrust = (thrust_vac - exit_area * atm.pressure).max(0.0);
             }
         }
-        let thrust_body = Vector3::new(thrust, 0.0, 0.0);
 
         // Aerodynamics in body axes
         let reference_area = std::f64::consts::PI * (stage_cfg.aero.body_diameter / 2.0).powi(2);
@@ -1419,6 +1421,12 @@ impl Simulator {
                 // Aerodynamic coefficients (CA, CN from Mach x |angle| table)
                 _ => self.aero_force_body(stage_idx, mach, &vel_air_body, q * reference_area),
             }
+        };
+
+        let (thrust_body, gimbal_rad) = if is_powered {
+            self.trimmed_thrust(stage_idx, t, thrust, mach, &aoa, &aero_body)
+        } else {
+            (Vector3::new(thrust, 0.0, 0.0), (0.0, 0.0))
         };
 
         let gravity_eci = self.gravity.gravity_eci(&position);
@@ -1466,6 +1474,7 @@ impl Simulator {
             thrust,
             mass_flow,
             thrust_body,
+            gimbal_rad,
             aero_body,
             gravity_eci,
             acc_eci,
@@ -1533,8 +1542,8 @@ impl Simulator {
             q_pa: f.q,
             aero_body: f.aero_body,
             thrust_body: f.thrust_body,
-            gimbal_pitch_deg: 0.0,
-            gimbal_yaw_deg: 0.0,
+            gimbal_pitch_deg: f.gimbal_rad.0.to_degrees(),
+            gimbal_yaw_deg: f.gimbal_rad.1.to_degrees(),
             wind_speed: f.wind_speed,
             wind_dir_deg: f.wind_dir_deg,
             downrange,
@@ -1550,6 +1559,69 @@ impl Simulator {
             is_separated: (f.stage_idx > 0) as i32,
             stage_number: (f.stage_idx + 1) as u8,
         }
+    }
+
+    /// Thrust vector in body axes and its trim angles (pitch, yaw) [rad].
+    ///
+    /// With "considering neutrality" the thrust is gimballed so that its
+    /// moment about the CG balances the aerodynamic moment (C++
+    /// `power_flight_3dof`); otherwise, or when no trim exists, it lies
+    /// along the body axis.
+    fn trimmed_thrust(
+        &self,
+        stage_idx: usize,
+        t: f64,
+        thrust: f64,
+        mach: f64,
+        aoa: &Vector3<f64>,
+        aero_body: &Vector3<f64>,
+    ) -> (Vector3<f64>, (f64, f64)) {
+        let along = (Vector3::new(thrust, 0.0, 0.0), (0.0, 0.0));
+        let cfg = &self.rocket.stage_config(stage_idx).attitude_neutrality;
+        let Some(Some(data)) = self.rocket.neutrality.get(stage_idx) else {
+            return along;
+        };
+        if !cfg.considering_neutrality || self.rocket.cn_surface.is_none() || thrust <= 0.0 {
+            return along;
+        }
+        // STA positions: +X body = -STA
+        let pos_cg = data.cg.interpolate(t) - cfg.xcg_offset;
+        let pos_ctrl = data.controller.interpolate(t) - cfg.xt_offset;
+        let cp =
+            |angle: f64| data.cp.interpolate_cxx(mach, angle.to_degrees().abs()) - cfg.xcp_offset;
+        let (dxt, dyt, dzt) = (
+            pos_ctrl - pos_cg,
+            cfg.ycg_offset - cfg.yt_offset,
+            cfg.zcg_offset - cfg.zt_offset,
+        );
+        let (dxp_pitch, dxp_yaw) = (pos_cg - cp(aoa.x), pos_cg - cp(aoa.y));
+        let (dyp, dzp) = (
+            cfg.ycp_offset - cfg.ycg_offset,
+            cfg.zcp_offset - cfg.zcg_offset,
+        );
+        let f = aero_body;
+        let term_yaw = (-f.y * dxp_yaw + f.x * dyp) / thrust / dxt.hypot(dyt);
+        let term_pitch = (-f.z * dxp_pitch + f.x * dzp) / thrust / dxt.hypot(dzt);
+        if !(term_yaw.abs() < 1.0 && term_pitch.abs() < 1.0) {
+            return along;
+        }
+        let yaw0 = term_yaw.asin() - dyt.atan2(dxt);
+        let pitch = term_pitch.asin() - dzt.atan2(dxt);
+        let half_pi = std::f64::consts::FRAC_PI_2;
+        if !(yaw0.abs() < half_pi && pitch.abs() < half_pi) {
+            return along;
+        }
+        // Compound angle
+        let yaw = (yaw0.tan() * pitch.cos()).atan();
+        (
+            thrust
+                * Vector3::new(
+                    yaw.cos() * pitch.cos(),
+                    -yaw.sin(),
+                    -yaw.cos() * pitch.sin(),
+                ),
+            (pitch, yaw),
+        )
     }
 
     /// Aerodynamic force in the body frame from CA and CN.
@@ -1662,11 +1734,7 @@ mod tests {
                 dumping_product_ballistic_coefficient: 100.0,
                 additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
             },
-            attitude_neutrality: AttitudeNeutralityConfig {
-                considering_neutrality: false,
-                cg_controller_position_file: "".to_string(),
-                cp_file: "".to_string(),
-            },
+            attitude_neutrality: AttitudeNeutralityConfig::default(),
             six_dof: SixDofConfig {
                 cg_cp_controller_position_file: "".to_string(),
                 moment_of_inertia_file_name: "".to_string(),
@@ -2385,6 +2453,34 @@ mod tests {
         config.calculate_condition.end_time = 2.0;
         let trajectory = run_config(config);
         assert!(trajectory.iter().all(|s| s.thrust >= 0.0));
+    }
+
+    #[test]
+    fn test_thrust_trim_balances_aerodynamic_moment() {
+        use crate::rocket::{NeutralityData, SurfaceData2D};
+        let mut config = create_test_config();
+        config.stages[0].attitude_neutrality.considering_neutrality = true;
+        let mut rocket = Rocket::new(config);
+        let flat = |v: f64| SurfaceData2D {
+            x: vec![0.0, 10.0],
+            y: vec![0.0, 90.0],
+            z: vec![vec![v, v]; 2],
+        };
+        rocket.cn_surface = Some(flat(0.1));
+        rocket.neutrality[0] = Some(NeutralityData {
+            cg: TimeSeriesData::from_pairs([(0.0, 5.0)]),
+            controller: TimeSeriesData::from_pairs([(0.0, 9.0)]),
+            cp: flat(6.0),
+        });
+        let sim = Simulator::new(rocket).unwrap();
+        let aero = Vector3::new(-500.0, 0.0, -2000.0);
+        let aoa = Vector3::new(0.05, 0.0, 0.05);
+        let (thrust, (pitch, yaw)) = sim.trimmed_thrust(0, 1.0, 50_000.0, 1.0, &aoa, &aero);
+        assert_eq!(yaw, 0.0);
+        assert!((thrust.magnitude() - 50_000.0).abs() < 1e-6);
+        // Pitch moment about the CG: thrust 4 m aft, normal force 1 m aft
+        let moment = thrust.z * (9.0 - 5.0) + aero.z * (6.0 - 5.0);
+        assert!(moment.abs() < 1e-6, "moment {moment}, pitch {pitch}");
     }
 
     #[test]
