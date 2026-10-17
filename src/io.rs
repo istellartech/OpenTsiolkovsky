@@ -1044,6 +1044,12 @@ pub fn save_monte_carlo_csv<P: AsRef<Path>>(
         header.push(format!("{body}_impact_lat[deg]"));
         header.push(format!("{body}_impact_lon[deg]"));
     }
+    // Added later: appended so the earlier columns keep their place
+    header.extend(
+        ["normal[%]", "separation_time[s]", "wind_speed_scale[%]"]
+            .iter()
+            .map(|s| s.to_string()),
+    );
     wtr.write_record(&header)?;
 
     for case in cases {
@@ -1079,6 +1085,11 @@ pub fn save_monte_carlo_csv<P: AsRef<Path>>(
                 None => row.extend([String::new(), String::new(), String::new()]),
             }
         }
+        row.extend([
+            p.normal_percent.to_string(),
+            p.separation_time_s.to_string(),
+            p.wind_speed_percent.to_string(),
+        ]);
         wtr.write_record(&row)?;
     }
     wtr.flush()?;

@@ -244,14 +244,14 @@ fn main() -> Result<()> {
         save_monte_carlo_summary(&cases, &dispersion, args.seed, &mc_summary)?;
         for s in impact_statistics(&cases) {
             println!(
-                "{}: {}/{} impacts, mean {:.6} {:.6} [deg], 3-sigma ellipse {:.0} x {:.0} m (azimuth {:.0} deg)",
+                "{}: {}/{} impacts, mean {:.6} {:.6} [deg], 99% ellipse {:.0} x {:.0} m (azimuth {:.0} deg)",
                 s.body,
                 s.impacts,
                 s.cases,
                 s.mean_latitude_deg,
                 s.mean_longitude_deg,
-                3.0 * s.ellipse_major_m,
-                3.0 * s.ellipse_minor_m,
+                s.ellipse_99_major_m,
+                s.ellipse_99_minor_m,
                 s.ellipse_azimuth_deg
             );
         }
