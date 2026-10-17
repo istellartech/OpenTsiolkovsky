@@ -173,6 +173,19 @@ export const LAUNCH_SITES: LaunchSite[] = [
     lon: 63.5643,
     alt: 100,
   },
+  {
+    id: 'xichang-lc2',
+    get name() {
+      return tr('西昌 2号射点（長征3B）', 'Xichang LC-2 (Long March 3B)')
+    },
+    get region() {
+      return tr('中国', 'China')
+    },
+    // LM-3A Series User's Manual (2011): 28.25° N, 102.025° E, 1,825 m
+    lat: 28.2455,
+    lon: 102.0267,
+    alt: 1825,
+  },
 ]
 
 export const siteById = (id: string) => LAUNCH_SITES.find((s) => s.id === id)!

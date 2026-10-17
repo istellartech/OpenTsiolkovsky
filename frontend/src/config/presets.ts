@@ -12,12 +12,17 @@ export interface PresetSource {
 
 export type PresetCategory = 'sounding' | 'orbital'
 
+export type PresetCountry = 'jp' | 'us' | 'eu' | 'ru' | 'cn'
+
 export interface PresetOption {
   id: string
   label: string
   /** What kind of vehicle / flight this is */
   kind: string
   category: PresetCategory
+  country: PresetCountry
+  /** Other names the picker's search matches (native spellings, designations) */
+  aliases?: string[]
   site: string
   description: string
   /** Simplifications and estimates made when modelling */
@@ -41,6 +46,39 @@ export const PRESET_CATEGORIES: { id: PresetCategory; label: string }[] = [
   },
 ]
 
+export const PRESET_COUNTRIES: { id: PresetCountry; label: string }[] = [
+  {
+    id: 'jp',
+    get label() {
+      return tr('日本', 'Japan')
+    },
+  },
+  {
+    id: 'us',
+    get label() {
+      return tr('米国', 'USA')
+    },
+  },
+  {
+    id: 'eu',
+    get label() {
+      return tr('欧州', 'Europe')
+    },
+  },
+  {
+    id: 'ru',
+    get label() {
+      return tr('ロシア', 'Russia')
+    },
+  },
+  {
+    id: 'cn',
+    get label() {
+      return tr('中国', 'China')
+    },
+  },
+]
+
 /* ------------------------------------------------------------ Launch sites */
 
 const SITES = {
@@ -50,6 +88,9 @@ const SITES = {
   taiki: siteById('taiki'),
   uchinouraMV: siteById('uchinoura-m'),
   yoshinobu: siteById('tanegashima'),
+  slc40: siteById('ccsfs-40'),
+  baikonur31: siteById('baikonur-31'),
+  xichang: siteById('xichang-lc2'),
 }
 
 /* ---------------------------------------------------------- Sounding rockets */
@@ -85,6 +126,44 @@ export const CAL = {
   ] as [number, number][], // GTO 250 × 35,786 km
   ariane5Azimuth: 90,
   ariane5Cutoff: 978, // full ESC-A burn
+  soyuzAzimuth: 65.48,
+  soyuzPitch: [
+    [20, 68.22],
+    [60, 46.66],
+    [118, 30.06],
+    [200, 25.97],
+    [287, 23.69],
+    [400, 9.26],
+    [530, -3.4],
+  ] as [number, number][], // Progress MS-30 insertion orbit 193 × 240 km, 51.67°
+  falcon9Azimuth: 191.43,
+  falcon9S2Cutoff: 355.61, // stage 2 burn to SECO-1 at full thrust
+  falcon9Pitch: [
+    [20, 80.54],
+    [60, 77.75],
+    [139, 67.49],
+    [200, 62.64],
+    [300, 41.28],
+    [400, 4.5],
+    [450, -19.56],
+    [520, -20.01],
+  ] as [number, number][], // PACE 676.5 km circular, 98°
+  lm3bAzimuth: 97.5, // manual: 97.5°
+  // Heading at stage 3 second ignition / cutoff, ~7,000 km downrange
+  lm3bAzimuth2: [119.63, 123.57] as [number, number],
+  lm3bCutoff: 1092.6, // stage 3 time from first ignition to guidance cutoff
+  lm3bPitch: [
+    [20, 88.79],
+    [60, 38.49],
+    [141, 28.86],
+    [159, 27.72],
+    [250, 8.71],
+    [345, 1.69],
+    [500, -0.81],
+    [630, -1.88],
+    [1276, -2.67],
+    [1470, 6.82],
+  ] as [number, number][], // standard GTO 200 × 35,958 km, 28.5°
 }
 
 function s310(): ClientConfig {
@@ -594,6 +673,219 @@ function h3_22s(): ClientConfig {
   })
 }
 
+/* ---------------------------------------------------------------- Falcon 9 */
+
+function falcon9(): ClientConfig {
+  // NASA PACE, 2024-02-08 from SLC-40, booster returned to LZ-1. Timeline
+  // (SpaceX / NASA, approximate): MECO 2:19, stage separation 2:23, SES-1
+  // 2:30, fairing deploy 4:15, SECO-1 10:20.
+  const meco = 139
+  const sep = 143
+  // 9× Merlin 1D: 8,227 kN vacuum / 7,607 kN sea level (SpaceX), Isp 311 s
+  // vacuum. Burning all 410.9 t at full thrust would take ~152 s; the rest is
+  // kept for the boostback, entry and landing burns.
+  const s1prop = 410900
+  const s1burn = (s1prop * 311 * 9.80665) / 8227e3
+  const ses1 = 150
+  const s2prop = 107500
+  const payload = 1700
+  const fairing = 2000
+  const s2 = stage({
+    // Stage 2 111.5 t + fairing + PACE
+    mass: 111500 + fairing + payload,
+    propellant: s2prop,
+    isp: 348,
+    ignition: ses1 - sep,
+    // MVac at full thrust (981 kN), shut down on reaching orbit
+    burn: (s2prop * 348 * 9.80665) / 981e3,
+    cutoff: CAL.falcon9S2Cutoff,
+    exitArea: exitAreaFromDiameter(3.3),
+    freeMode: 1,
+  })
+  return vehicle({
+    name: tr('ファルコン9（PACE）', 'Falcon 9 (PACE)'),
+    site: SITES.slc40,
+    date: [2024, 2, 8, 6, 33, 32],
+    stages: [
+      stage({
+        mass: 433100,
+        propellant: s1prop,
+        isp: 311,
+        burn: s1burn,
+        cutoff: meco,
+        separation: sep,
+        exitArea: exitAreaFromThrust(8227e3, 7607e3),
+        freeMode: 1,
+      }),
+      {
+        ...s2,
+        dumping_product: {
+          separation_time_s: 255 - sep,
+          mass_kg: fairing,
+          ballistic_coefficient: 50,
+          additional_velocity_ned_mps: [0, 0, 0],
+        },
+      },
+    ],
+    diameter: 3.66,
+    ca: CA_SLENDER,
+    attitude: pitchProgram(CAL.falcon9Azimuth, CAL.falcon9Pitch),
+    duration: 2400,
+    step: 2,
+  })
+}
+
+/* ------------------------------------------------------------------- Soyuz */
+
+function soyuz21a(): ClientConfig {
+  // Progress MS-30, 2025-02-27 from Baikonur Site 31. Telemetry times after
+  // liftoff: booster separation 117.85, core separation 287.42, third-stage
+  // cutoff 525.45, spacecraft separation 528.75 s.
+  const jettison = 117.85
+  const coreSep = 287.42
+  // RD-107A / RD-108A: vacuum / sea-level thrust 1021.3 / 838.5 kN and
+  // 990.2 / 792.5 kN, both at Isp 319 s vacuum (Soyuz user's manual)
+  const boosterExit = exitAreaFromThrust(1021.3e3, 838.5e3)
+  const coreExit = exitAreaFromThrust(990.2e3, 792.5e3)
+  const { phase, coreUsed } = parallelPhase({
+    booster: { mass: 4 * 44413, propellant: 4 * 39160, isp: 319, burn: 118, exitArea: 4 * boosterExit },
+    core: { propellant: 90100, isp: 319, burn: coreSep, exitArea: coreExit },
+    jettison,
+  })
+  // Block I (RD-0110): 297.9 kN, Isp 325 s, burning from core separation to cutoff
+  const s3burn = 525.45 - coreSep
+  const s3prop = (297900 * s3burn) / (325 * 9.80665)
+  const payload = 7280
+  return vehicle({
+    name: tr('ソユーズ2.1a（プログレスMS-30）', 'Soyuz-2.1a (Progress MS-30)'),
+    site: SITES.baikonur31,
+    date: [2025, 2, 27, 21, 24, 27],
+    stages: [
+      stage({ ...phase, freeMode: 1 }),
+      stage({
+        // Block A 99.8 t + fairing 1.7 t carried until core separation
+        mass: 99765 + 1700 - coreUsed,
+        propellant: 90100 - coreUsed,
+        isp: 319,
+        burn: coreSep - jettison,
+        separation: coreSep - jettison,
+        exitArea: coreExit,
+        freeMode: 1,
+      }),
+      stage({
+        mass: 25300 + payload,
+        propellant: s3prop,
+        isp: 325,
+        burn: s3burn,
+        exitArea: 4 * exitAreaFromDiameter(0.5),
+        freeMode: 1,
+      }),
+    ],
+    diameter: 2.95,
+    ca: CA_SLENDER,
+    attitude: pitchProgram(CAL.soyuzAzimuth, CAL.soyuzPitch),
+    duration: 2400,
+    step: 2,
+  })
+}
+
+/* ------------------------------------------------------------- Long March */
+
+function longMarch3b(): ClientConfig {
+  // LM-3B/E standard GTO mission (LM-3A Series User's Manual, Table 3-7).
+  // Times after liftoff: booster cutoff 140.1 / separation 141.6, stage 1
+  // cutoff 157.5 / separation 159.0, stage 2 main cutoff 339.4, vernier cutoff
+  // 344.4, stage 3 burns 345.4–628.6 and 1276.1–1470.5 s.
+  const g0 = 9.80665
+  // First-stage engines: the manual gives ground thrust and Isp only. Vacuum
+  // Isp assumed 289 s (YF-20 family); vacuum thrust follows from the flow.
+  const ispVac = 289
+  const boosterFlow = 740.4e3 / 2556.2
+  const coreFlow = 2961.6e3 / 2556.5
+  const boosterExit = exitAreaFromThrust(boosterFlow * ispVac * g0, 740.4e3)
+  const coreExit = exitAreaFromThrust(coreFlow * ispVac * g0, 2961.6e3)
+  const jettison = 141.6
+  const sep1 = 159.0
+  const { phase, coreUsed } = parallelPhase({
+    booster: { mass: 4 * 44300, propellant: 4 * 41100, isp: ispVac, burn: 140.1, exitArea: 4 * boosterExit },
+    core: { propellant: 186200, isp: ispVac, burn: 157.5, exitArea: coreExit },
+    jettison,
+  })
+  // Stage 2: YF-24E main chamber 742 kN (2922.57 N·s/kg) + verniers 47.1 kN
+  // (2910.5 N·s/kg); the verniers run 5 s longer.
+  const mainBurn = 339.4 - sep1
+  const s2burn = 344.4 - sep1
+  const mainFlow = 742e3 / 2922.57
+  const vernFlow = 47.1e3 / 2910.5
+  const s2prop = (mainFlow + vernFlow) * mainBurn + vernFlow * (s2burn - mainBurn)
+  const s2isp = (742e3 * mainBurn + 47.1e3 * s2burn) / (s2prop * g0)
+  // Stage 3: 2×YF-75, Isp 4295 N·s/kg, 18.2 t burned over two burns with a coast
+  const s3ign = 345.4
+  const span = 1470.5 - s3ign
+  const b1 = (628.6 - s3ign) / span
+  const b2 = (1276.1 - s3ign) / span
+  const payload = 5500
+  return vehicle({
+    name: tr('長征3B/E（標準GTOミッション）', 'Long March 3B/E (standard GTO mission)'),
+    site: SITES.xichang,
+    date: [2024, 3, 1, 16, 0, 0],
+    stages: [
+      stage({ ...phase, freeMode: 1 }),
+      stage({
+        mass: 198800 - coreUsed,
+        propellant: 186200 - coreUsed,
+        isp: ispVac,
+        burn: 157.5 - jettison,
+        separation: sep1 - jettison,
+        exitArea: coreExit,
+        freeMode: 1,
+      }),
+      stage({
+        // Stage 2 53.5 t + 4.0 m fairing 1.5 t carried until stage separation
+        mass: 53453 + 1500,
+        propellant: s2prop,
+        isp: s2isp,
+        burn: s2burn,
+        separation: s3ign - sep1,
+        exitArea: exitAreaFromDiameter(1.5),
+        shape: [
+          [0, 789.1],
+          [mainBurn / s2burn, 789.1],
+          [mainBurn / s2burn + 0.0005, 47.1],
+          [1, 47.1],
+        ],
+        freeMode: 1,
+      }),
+      stage({
+        mass: 20933 + payload,
+        propellant: 18200,
+        isp: 4295 / g0,
+        burn: span,
+        cutoff: CAL.lm3bCutoff,
+        exitArea: 2 * exitAreaFromDiameter(0.8),
+        // First burn, coast (no thrust), second burn
+        shape: [
+          [0, 1],
+          [b1, 1],
+          [b1 + 0.0005, 0],
+          [b2 - 0.0005, 0],
+          [b2, 1],
+          [1, 1],
+        ],
+        freeMode: 1,
+      }),
+    ],
+    diameter: 3.35,
+    ca: CA_SLENDER,
+    // The heading has turned by the second burn far downrange: steer it on its own
+    attitude: pitchProgram(CAL.lm3bAzimuth, CAL.lm3bPitch).map(([t, az, el]): [number, number, number] =>
+      t < 1276 ? [t, az, el] : [t, CAL.lm3bAzimuth2[t < 1470 ? 0 : 1], el],
+    ),
+    duration: 2400,
+    step: 2,
+  })
+}
+
 /* ---------------------------------------------------------------- Registry */
 
 /** A source whose label is shown in the current language. */
@@ -718,6 +1010,75 @@ const JAXA_H3_LEAFLET = src(
   'https://www.jaxa.jp/projects/pr/model/files/p_h3_2025.pdf',
 )
 
+const SPACEX_F9 = src(
+  'SpaceX Falcon 9（推力・全備質量）',
+  'SpaceX, Falcon 9 (thrust, liftoff mass)',
+  'https://www.spacex.com/vehicles/falcon-9/',
+)
+const SPACEX_UG = src(
+  "SpaceX Falcon User's Guide（2025年5月版）",
+  "SpaceX Falcon User's Guide (May 2025)",
+  'https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf',
+)
+const SPACEX_PACE = src(
+  'SpaceX PACE ミッションページ（タイムライン、打上げ前の版）',
+  'SpaceX PACE mission page (timeline, pre-launch version)',
+  'https://web.archive.org/web/20240205020817/https://content.spacex.com/api/spacex-website/missions/pace',
+)
+const NASA_PACE_TIMELINE = src(
+  'NASA PACE ブログ: 打上げの主要イベント',
+  'NASA PACE blog: key milestones for launch',
+  'https://science.nasa.gov/blogs/pace/2024/02/08/key-milestones-for-launch-of-tonights-pace-mission-from-florida',
+)
+const NASA_PACE_SC = src(
+  'NASA PACE ブログ: 衛星と観測機器（衛星質量）',
+  'NASA PACE blog: spacecraft and instruments (spacecraft mass)',
+  'https://science.nasa.gov/blogs/pace/2024/02/08/meet-nasas-pace-spacecraft-science-instruments/',
+)
+const NASA_PACE_ORBIT = src(
+  'NASA PACE ミッション（目標軌道）',
+  'NASA PACE mission (target orbit)',
+  'https://pace.oceansciences.org/gallery_more.htm?id=2084',
+)
+const WP_F9B5 = src(
+  'Wikipedia: Falcon 9 Block 5（各段の質量の推定値）',
+  'Wikipedia: Falcon 9 Block 5 (stage mass estimates)',
+  'https://en.wikipedia.org/wiki/Falcon_9_Block_5',
+)
+
+const SOYUZ_UM_CSG = src(
+  "Arianespace Soyuz at the Guiana Space Centre User's Manual Issue 2 Rev 0（1.5章 機体諸元）",
+  "Arianespace Soyuz at the Guiana Space Centre User's Manual Issue 2 Rev 0 (Sec. 1.5, vehicle data)",
+  'https://courses.edx.org/asset-v1:DelftX+AEASM1x+1T2023+type@asset+block/Soyuz-Users-Manual-March-2012.pdf',
+)
+const SOYUZ_UM_STARSEM = src(
+  "Starsem Soyuz User's Manual Issue 3（Table 1-3、RD-0110 第3段）",
+  "Starsem Soyuz User's Manual Issue 3 (Table 1-3, RD-0110 third stage)",
+  'https://www.starsem.com/services/images/soyuz_users_manual_190401.pdf',
+)
+const RSW_PROGRESS_MS30 = src(
+  'RussianSpaceWeb: Progress MS-30（飛行シーケンス・投入軌道）',
+  'RussianSpaceWeb: Progress MS-30 (flight sequence, insertion orbit)',
+  'https://russianspaceweb.com/progress-ms-30.html',
+)
+const WP_PROGRESS_MS30 = src(
+  'Wikipedia: Progress MS-30（打上げ日時・宇宙船質量）',
+  'Wikipedia: Progress MS-30 (launch time, spacecraft mass)',
+  'https://en.wikipedia.org/wiki/Progress_MS-30',
+)
+
+const CALT_LM3A_UM = src(
+  "CALT／中国長城工業 LM-3A Series Launch Vehicle User's Manual Issue 2011（2章 諸元、3章 標準GTO・飛行シーケンス）",
+  "CALT / CGWIC LM-3A Series Launch Vehicle User's Manual Issue 2011 (Ch. 2 specifications, Ch. 3 standard GTO and flight sequence)",
+  'https://web.archive.org/web/20161220124025/http://www.cgwic.com/LaunchServices/Download/manual/LM-3A%20Series%20Launch%20Vehicles%20User%27s%20Manual%20Issue%202011.pdf',
+)
+const CGWIC_LM3B = src('中国長城工業 LM-3B（主要諸元）', 'CGWIC, LM-3B (specifications)', 'https://cgwic.com/Launchservice/LM3B.html')
+const SF_LM3BE = src(
+  'Spaceflight101: Long March 3B/E（各段の質量・フェアリング質量）',
+  'Spaceflight101: Long March 3B/E (stage masses, fairing mass)',
+  'https://web.archive.org/web/20151012065826/http://spaceflight101.com/spacerockets/long-march-3be/',
+)
+
 const orbitalNotes = () => [
   tr(
     'ノズル出口面積（地上での推力低下に効く）は公開値が見当たらないため推定値です。',
@@ -737,6 +1098,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('単段 液体 観測ロケット', 'Single-stage liquid sounding rocket')
     },
     category: 'sounding',
+    country: 'jp',
+    aliases: ['モモ'],
     get site() {
       return tr('北海道 大樹町', 'Taiki, Hokkaido')
     },
@@ -772,6 +1135,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('単段 固体 観測ロケット', 'Single-stage solid sounding rocket')
     },
     category: 'sounding',
+    country: 'jp',
+    aliases: ['S310'],
     get site() {
       return tr('鹿児島 内之浦', 'Uchinoura, Kagoshima')
     },
@@ -804,6 +1169,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('単段 固体 観測ロケット', 'Single-stage solid sounding rocket')
     },
     category: 'sounding',
+    country: 'jp',
+    aliases: ['S520'],
     get site() {
       return tr('鹿児島 内之浦', 'Uchinoura, Kagoshima')
     },
@@ -833,6 +1200,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('3段 固体 超小型衛星打上げ', 'Three-stage solid nanosatellite launcher')
     },
     category: 'orbital',
+    country: 'jp',
+    aliases: ['SS520', 'TRICOM-1R'],
     get site() {
       return tr('鹿児島 内之浦', 'Uchinoura, Kagoshima')
     },
@@ -875,6 +1244,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('3段式 固体ロケット', 'Three-stage solid launch vehicle')
     },
     category: 'orbital',
+    country: 'jp',
+    aliases: ['Epsilon', 'イプシロン'],
     get site() {
       return tr('鹿児島 内之浦', 'Uchinoura, Kagoshima')
     },
@@ -915,6 +1286,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('2段式 液体ロケット + 固体ブースタ2本', 'Two-stage liquid launch vehicle + 2 solid boosters')
     },
     category: 'orbital',
+    country: 'jp',
+    aliases: ['H2A', 'H-2A', 'いぶきGW', 'GOSAT-GW'],
     get site() {
       return tr('鹿児島 種子島', 'Tanegashima, Kagoshima')
     },
@@ -952,6 +1325,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('2段式 液体ロケット + 固体ブースタ2本', 'Two-stage liquid launch vehicle + 2 solid boosters')
     },
     category: 'orbital',
+    country: 'jp',
+    aliases: ['H3', 'ALOS-3'],
     get site() {
       return tr('鹿児島 種子島', 'Tanegashima, Kagoshima')
     },
@@ -998,6 +1373,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('3段式 液体ロケット（アポロ11号）', 'Three-stage liquid launch vehicle (Apollo 11)')
     },
     category: 'orbital',
+    country: 'us',
+    aliases: ['Saturn V', 'サターン', 'Apollo 11', 'アポロ'],
     get site() {
       return tr('米国 ケネディ宇宙センター', 'Kennedy Space Center, USA')
     },
@@ -1047,6 +1424,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
       return tr('2段式 液体ロケット + 固体ブースタ2本', 'Two-stage liquid launch vehicle + 2 solid boosters')
     },
     category: 'orbital',
+    country: 'eu',
+    aliases: ['Ariane 5', 'アリアン', 'VA247'],
     get site() {
       return tr('仏領ギアナ ギアナ宇宙センター', 'Guiana Space Centre, French Guiana')
     },
@@ -1083,6 +1462,154 @@ export const PRESET_OPTIONS: PresetOption[] = [
     },
     sources: [A5_UM, A5_VA247],
     create: ariane5,
+  },
+  {
+    id: 'falcon9',
+    get label() {
+      return tr('ファルコン9', 'Falcon 9')
+    },
+    get kind() {
+      return tr('2段式 液体ロケット（1段回収）', 'Two-stage liquid launch vehicle (reusable first stage)')
+    },
+    category: 'orbital',
+    country: 'us',
+    aliases: ['Falcon 9', 'F9', 'SpaceX', 'スペースX', 'PACE', 'Block 5'],
+    get site() {
+      return tr('米国 ケープカナベラル', 'Cape Canaveral, USA')
+    },
+    get description() {
+      return tr(
+        'スペースXの再使用型ロケット（ブロック5）。NASAの海洋・大気観測衛星 PACE（2024年、約1.7 t）を高度 676.5 km・傾斜角 98° の太陽同期軌道へ送った打上げを、公式の推力・タイムラインで構成。第1段は射場に戻って着陸したため、燃焼を早めに終えています。',
+        "SpaceX's reusable launcher (Block 5). The 2024 launch of NASA's ocean and atmosphere satellite PACE (about 1.7 t) to a 676.5 km, 98° sun-synchronous orbit, built from official thrust figures and the mission timeline. The first stage flew back to the launch site, so it shuts down early.",
+      )
+    },
+    get modelNotes() {
+      return [
+        tr(
+          '推力（第1段 真空 8,227 kN／海面 7,607 kN、第2段 981 kN）・比推力（Merlin 1D 真空 311 s、MVac 348 s）・タイムライン・衛星質量・目標軌道は公式値です（Merlin 1D の比推力は2013年時点の公表値）。各段の質量（第1段 433.1 t・推進薬 410.9 t、第2段 111.5 t）は公式発表がないため二次資料の推定値、フェアリング 2 t も推定値です。',
+          'Thrust (stage 1 8,227 kN vacuum / 7,607 kN sea level, stage 2 981 kN), Isp (Merlin 1D 311 s vacuum, MVac 348 s), the timeline, satellite mass and target orbit are official (the Merlin 1D Isp is the 2013 published figure). Stage masses (stage 1 433.1 t with 410.9 t propellant, stage 2 111.5 t) are not published and are secondary-source estimates, as is the 2 t fairing.',
+        ),
+        tr(
+          '第1段は全推力で燃焼し、MECO（T+139 s）で停止します。残る約36 tの推進薬は帰還用で、機体とともに分離されます。Max-Q付近のスロットリングと、帰還飛行（ブーストバック・着陸燃焼）は扱っていません。',
+          'Stage 1 runs at full thrust and shuts down at MECO (T+139 s); the roughly 36 t of propellant left for the return flight is separated with it. Throttling around max-Q and the return flight (boostback and landing burns) are not modelled.',
+        ),
+        tr(
+          '第2段は全推力（981 kN）で燃焼し、目標軌道に達した T+506 s で停止します（公表の SECO-1 は T+620 s）。実機は軽い衛星に合わせて推力を絞って長く燃焼していると考えられますが、推力履歴は公開されていません。停止時には約5 tの推進薬が残ります。',
+          'Stage 2 burns at full thrust (981 kN) and shuts down at T+506 s on reaching the target orbit (published SECO-1: T+620 s). The real stage likely throttles down and burns longer with such a light satellite, but its thrust history is not published. About 5 t of propellant remains at shutdown.',
+        ),
+        tr(
+          '姿勢プログラムと方位角（191.4°）は目標軌道に合うよう調整したもので、射場帰還のため第1段は高めに上昇します（計算上の MECO は高度 91 km・2.14 km/s、Max-Q は T+61 s で公表 T+67 s）。計算上の軌道は 671 × 676 km・傾斜角 98.00°（目標 676.5 km 円軌道・98°）です。',
+          'The attitude program and azimuth (191.4°) are tuned to the target orbit; stage 1 climbs steeply, as for a return to the launch site (simulated MECO at 91 km and 2.14 km/s; max-Q at T+61 s, published T+67 s). The simulated orbit is 671 × 676 km at 98.00° (target 676.5 km circular, 98°).',
+        ),
+        tr(
+          'フェアリングは公表の分離時刻（T+255 s）に投棄物として切り離しています。',
+          'The fairing is released as a jettisoned product at the published deploy time (T+255 s).',
+        ),
+        tr(
+          '実機はフロリダ東岸沿いに南下する軌道をとりますが、本モデルは一定の方位角で直接南へ打ち上げています。',
+          'The real vehicle flies south along the Florida coast; this model launches directly south at a constant azimuth.',
+        ),
+        ...orbitalNotes(),
+      ]
+    },
+    sources: [SPACEX_F9, SPACEX_UG, SPACEX_PACE, NASA_PACE_TIMELINE, NASA_PACE_SC, NASA_PACE_ORBIT, WP_F9B5],
+    create: falcon9,
+  },
+  {
+    id: 'soyuz-2.1a',
+    get label() {
+      return tr('ソユーズ2.1a', 'Soyuz-2.1a')
+    },
+    get kind() {
+      return tr('3段式 液体ロケット（ブースタ4本）', 'Three-stage liquid launch vehicle (4 strap-on boosters)')
+    },
+    category: 'orbital',
+    country: 'ru',
+    aliases: ['Soyuz', 'Союз', 'ソユーズ', 'Progress', 'プログレス', 'R-7'],
+    get site() {
+      return tr('カザフスタン バイコヌール', 'Baikonur, Kazakhstan')
+    },
+    get description() {
+      return tr(
+        'R-7 の系譜を引くロシアの主力ロケット。国際宇宙ステーションへの補給船プログレスMS-30（2025年）の打上げを、ユーザーズマニュアルの各段諸元とテレメトリによる飛行シーケンスで構成し、近地点 193 km × 遠地点 240 km・傾斜角 51.67° の軌道へ。',
+        "Russia's workhorse, descended from the R-7. The 2025 launch of the Progress MS-30 cargo ship to the ISS, built from user's manual stage data and the telemetry flight sequence, to a 193 × 240 km orbit at 51.67°.",
+      )
+    },
+    get modelNotes() {
+      return [
+        tr(
+          '第1・2段（ブースタ 各44.4 t・推進薬 39.2 t／コア 99.8 t・推進薬 90.1 t、いずれも真空比推力 319 s）はクールー版ユーザーズマニュアルの値です。ブースタとコアの同時燃焼は「ブースタ分離（117.85 s）までの段」として近似し、ノズル出口面積は真空／海面推力の差から求めています。',
+          "Stages 1 and 2 (boosters 44.4 t each with 39.2 t propellant; core 99.8 t with 90.1 t; both 319 s vacuum Isp) are from the Kourou user's manual. The combined booster and core burn is approximated as a separate stage ending at booster separation (117.85 s); nozzle exit areas come from the vacuum / sea-level thrust difference.",
+        ),
+        tr(
+          '2.1a の第3段（RD-0110、297.9 kN・325 s、全備 25.3 t）は Starsem 版マニュアル（Soyuz/ST）の値で、推進薬はコア分離から第3段停止（287.4〜525.5 s）までの燃焼量としています。実機のホットステージング（コア停止の約2 s前に点火）と後部スカートの投棄は省略しています。',
+          'The 2.1a third stage (RD-0110, 297.9 kN, 325 s, 25.3 t gross) uses the Starsem manual (Soyuz/ST) figures; its propellant is what burns from core separation to third-stage cutoff (287.4–525.5 s). Hot staging (ignition about 2 s before core shutdown) and the aft skirt jettison are omitted.',
+        ),
+        tr(
+          'プログレス用フェアリングの質量は公開値が見当たらないため、商業用 ST フェアリングの 1.7 t をコア分離まで含めています。宇宙船質量 7,280 kg は二次資料の値です。地上での約20 sの予備燃焼は含めていません。',
+          'No published mass was found for the Progress fairing, so the 1.7 t commercial ST fairing is carried until core separation. The 7,280 kg spacecraft mass is from a secondary source. The roughly 20 s of engine running on the pad before liftoff is not included.',
+        ),
+        tr(
+          '姿勢プログラムと方位角（65.5°）は投入軌道とブースタ分離・コア分離時の高度（約43 km・約143 km）に合うよう調整したものです。計算上はブースタ分離 40 km、コア分離 145 km・4.04 km/s、軌道 193 × 240 km・傾斜角 51.67°（実績 193.1 × 240.0 km・51.67°）です。',
+          'The attitude program and azimuth (65.5°) are tuned to the insertion orbit and to the altitudes at booster and core separation (about 43 km and 143 km). Simulated: booster separation at 40 km, core separation at 145 km and 4.04 km/s, orbit 193 × 240 km at 51.67° (actual 193.1 × 240.0 km, 51.67°).',
+        ),
+        ...orbitalNotes(),
+      ]
+    },
+    sources: [SOYUZ_UM_CSG, SOYUZ_UM_STARSEM, RSW_PROGRESS_MS30, WP_PROGRESS_MS30],
+    create: soyuz21a,
+  },
+  {
+    id: 'long-march-3b',
+    get label() {
+      return tr('長征3B/E', 'Long March 3B/E')
+    },
+    get kind() {
+      return tr('3段式 液体ロケット（ブースタ4本）', 'Three-stage liquid launch vehicle (4 strap-on boosters)')
+    },
+    category: 'orbital',
+    country: 'cn',
+    aliases: ['CZ-3B', 'LM-3B', '长征三号乙', '長征三号乙', 'Chang Zheng'],
+    get site() {
+      return tr('中国 西昌', 'Xichang, China')
+    },
+    get description() {
+      return tr(
+        '中国の静止衛星打上げの主力。中国長城工業の公式ユーザーズマニュアル（2011年版）にある標準の静止トランスファ軌道ミッション（近地点 200 km × 遠地点 35,958 km・傾斜角 28.5°、衛星 5.5 t）を、その飛行シーケンスで再現。第3段は2回燃焼です。',
+        "China's workhorse for geostationary launches. The standard geostationary transfer mission in the official CGWIC user's manual (2011): 200 × 35,958 km at 28.5° with a 5.5 t satellite, flown with the manual's flight sequence. The third stage fires twice.",
+      )
+    },
+    get modelNotes() {
+      return [
+        tr(
+          '推進薬量・推力・比推力・飛行シーケンスはマニュアルの値です。各段の全備質量（ブースタ 44.3 t、第1段 198.8 t、第2段 53.5 t、第3段 20.9 t）とフェアリング質量 1.5 t はマニュアルにないため二次資料（Spaceflight101）の値です。',
+          'Propellant masses, thrust, Isp and the flight sequence are from the manual. Stage gross masses (boosters 44.3 t, stage 1 198.8 t, stage 2 53.5 t, stage 3 20.9 t) and the 1.5 t fairing are not in the manual and come from a secondary source (Spaceflight101).',
+        ),
+        tr(
+          'ブースタと第1段のエンジンはマニュアルに地上推力・地上比推力しかないため、真空比推力を YF-20 系の 289 s と仮定し、真空推力とノズル出口面積を推進薬流量から求めています。ブースタと第1段の同時燃焼は「ブースタ分離（141.6 s）までの段」として近似しています。',
+          'For the booster and first-stage engines the manual gives only ground thrust and Isp, so vacuum Isp is assumed to be 289 s (YF-20 family) and vacuum thrust and nozzle exit area follow from the propellant flow. The combined booster and first-stage burn is approximated as a separate stage ending at booster separation (141.6 s).',
+        ),
+        tr(
+          '第2段は主エンジン停止後に補助エンジン（47.1 kN）だけが5秒燃える推力履歴にしています。第3段は推力履歴に推力ゼロの区間を入れて、1回目の燃焼・慣性飛行・2回目の燃焼を表しています。推進薬 18.2 t をマニュアルの燃焼時間で使い切るため、平均推力は 163.6 kN（マニュアル 167.2 kN）になります。最後の20秒の速度調整は省略しています。',
+          "Stage 2's thrust curve has the verniers (47.1 kN) burning alone for 5 s after main engine cutoff. Stage 3's thrust curve has a zero-thrust stretch for the first burn, coast and second burn. Burning 18.2 t over the manual's burn times gives a mean thrust of 163.6 kN (manual 167.2 kN). The final 20 s velocity adjustment is omitted.",
+        ),
+        tr(
+          '打上げ方位角はマニュアルの 97.5° です。姿勢プログラムと2回目燃焼の方位角（遠方で進行方向が変わるため別に与える）は、標準GTOとマニュアルの軌道上の高度（ブースタ分離 57 km、1/2段分離 72 km、3段1回目停止 178.8 km）に合うよう調整しました。計算上はそれぞれ 53 km・71 km・179 km で、軌道は 200 × 35,916 km・傾斜角 28.50° です。',
+          "The launch azimuth is the manual's 97.5°. The attitude program and the second-burn heading (given separately, as the direction of travel has turned that far downrange) are tuned to the standard GTO and to the manual's altitudes (booster separation 57 km, stage 1/2 separation 72 km, end of the first stage 3 burn 178.8 km). Simulated: 53 km, 71 km and 179 km, and an orbit of 200 × 35,916 km at 28.50°.",
+        ),
+        tr(
+          '本モデルは性能に余裕があるため、第3段の2回目燃焼は目標軌道に達した T+1,438 s で停止しています（マニュアルでは T+1,470.5 s）。',
+          'The model has some performance to spare, so the second stage 3 burn is cut off at T+1,438 s on reaching the target orbit (manual: T+1,470.5 s).',
+        ),
+        tr(
+          '打上げ日時は例示です（マニュアルの標準ミッションで、特定の打上げではありません）。',
+          "The launch date is illustrative: this is the manual's standard mission, not a particular launch.",
+        ),
+        ...orbitalNotes(),
+      ]
+    },
+    sources: [CALT_LM3A_UM, CGWIC_LM3B, SF_LM3BE],
+    create: longMarch3b,
   },
 ]
 
