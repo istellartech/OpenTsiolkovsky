@@ -887,7 +887,14 @@ impl Simulator {
 
         // The body flies on as an unpowered single-stage vehicle with its own
         // aerodynamics; a dumping product always uses its ballistic coefficient.
+        // A spent stage has no attitude control, so the attitude program
+        // (free flight mode 1) is replaced by an aerodynamically stable body:
+        // holding the commanded attitude through re-entry is not physical and
+        // makes the dynamics stiff (the airflow swings past 90 deg).
         let mut stage = self.rocket.stage_config(release.stage_idx).clone();
+        if stage.free_flight_mode == 1 {
+            stage.free_flight_mode = 0;
+        }
         stage.mass_initial = release.mass;
         stage.thrust.const_thrust_vac = 0.0;
         stage.thrust.burn_start_time = 0.0;
