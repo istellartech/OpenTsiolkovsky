@@ -15,6 +15,7 @@ use crate::physics::{
     atmosphere::{AtmosphereModel, AtmosphericConditions},
     coordinates::CoordinateTransform,
     gravity::GravityModel,
+    orbit::{OrbitalElements, elements, gmst_rad},
 };
 use crate::rocket::{IntegratorMethod, Rocket, RocketConfig};
 use nalgebra::{Matrix3, Vector3};
@@ -234,10 +235,11 @@ pub struct ImpactPoint {
     pub speed_mps: f64,
 }
 
-/// Impact point of a trajectory that ends on the ground
+/// Impact point of a trajectory that ends on the ground (a vehicle still
+/// resting on the pad has none)
 pub fn impact_point(trajectory: &[SimulationState]) -> Option<ImpactPoint> {
     let last = trajectory.last()?;
-    if trajectory.len() < 2 || last.altitude > 1.0 {
+    if trajectory.len() < 2 || last.altitude > 1.0 || last.velocity_ecef_ned.magnitude() < 1e-3 {
         return None;
     }
     let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&last.position, last.time);
@@ -295,6 +297,9 @@ pub struct FlightEvent {
     pub mach: f64,
     pub dynamic_pressure_pa: f64,
     pub mass_kg: f64,
+    /// Osculating orbit at burnout and separation events
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orbit: Option<OrbitalElements>,
 }
 
 /// A spent stage or dumping product propagated from its release to the ground
@@ -830,7 +835,18 @@ impl Simulator {
             mach: state.mach_number,
             dynamic_pressure_pa: state.dynamic_pressure,
             mass_kg: state.mass,
+            orbit: matches!(kind, EventKind::Burnout | EventKind::Separation)
+                .then(|| self.orbit_of(state)),
         }
+    }
+
+    /// Osculating orbit of a state, node measured from the vernal equinox
+    pub fn orbit_of(&self, state: &SimulationState) -> OrbitalElements {
+        elements(
+            &state.position,
+            &state.velocity,
+            gmst_rad(self.config.launch.launch_time),
+        )
     }
 
     /// Record an event at the current state

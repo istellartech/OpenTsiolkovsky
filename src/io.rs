@@ -1,8 +1,9 @@
+use crate::physics::coordinates::CoordinateTransform;
 /// Input/Output handling for OpenTsiolkovsky
 ///
 /// Handles JSON configuration files and CSV data files
 use crate::rocket::{NeutralityData, Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
-use crate::simulator::{FallBody, FlightEvent, SimulationState, impact_point};
+use crate::simulator::{EventKind, FallBody, FlightEvent, SimulationState, impact_point};
 use serde_json;
 use std::fs;
 use std::io::Read;
@@ -121,16 +122,6 @@ fn validate_calculate_condition(
             "計算条件: 出力時間刻み '{:.6}秒' は正の有限値である必要があります",
             calc.time_step
         ));
-    } else if calc.time_step > calc.end_time / 10.0 {
-        errors.push(format!(
-            "計算条件: 出力時間刻み '{:.3}秒' が終了時間 '{:.1}秒' に対して大きすぎます (推奨: <{:.3}秒)",
-            calc.time_step, calc.end_time, calc.end_time / 100.0
-        ));
-    } else if calc.time_step < 0.001 {
-        errors.push(format!(
-            "計算条件: 出力時間刻み '{:.6}秒' が小さすぎて大量の出力データが生成される可能性があります",
-            calc.time_step
-        ));
     }
 
     // Validate air density variation
@@ -146,28 +137,33 @@ fn validate_calculate_condition(
     // Validate integrator settings
     match calc.integrator.method {
         crate::rocket::IntegratorMethod::Rk4 => {
-            if let Some(step) = calc.integrator.rk4_step {
-                if !step.is_finite() || step <= 0.0 {
-                    errors.push(format!(
-                        "積分器設定: RK4ステップサイズ '{:.6}秒' は正の有限値である必要があります",
-                        step
-                    ));
-                } else if step > 1.0 {
-                    errors.push(format!(
-                        "積分器設定: RK4ステップサイズ '{:.3}秒' が大きすぎます (推奨: <1.0秒)",
-                        step
-                    ));
-                } else if step < 1e-6 {
-                    errors.push(format!(
-                        "積分器設定: RK4ステップサイズ '{:.6}秒' が小さすぎて計算時間が過大になる可能性があります",
-                        step
-                    ));
-                }
+            if let Some(step) = calc.integrator.rk4_step
+                && (!step.is_finite() || step <= 0.0)
+            {
+                errors.push(format!(
+                    "積分器設定: RK4ステップサイズ '{:.6}秒' は正の有限値である必要があります",
+                    step
+                ));
             }
         }
         crate::rocket::IntegratorMethod::Rk45 => {
-            // RK45 doesn't have explicit tolerance settings in this implementation
-            // The adaptive algorithm handles tolerance internally
+            for (name, tol) in [
+                ("絶対", calc.integrator.rk45_abs_tol),
+                ("相対", calc.integrator.rk45_rel_tol),
+            ] {
+                if !tol.is_finite() || tol < 0.0 {
+                    errors.push(format!(
+                        "積分器設定: RK45の{}許容誤差 '{:e}' は非負の有限値である必要があります",
+                        name, tol
+                    ));
+                }
+            }
+            if calc.integrator.rk45_abs_tol <= 0.0 && calc.integrator.rk45_rel_tol <= 0.0 {
+                errors.push(
+                    "積分器設定: RK45の許容誤差は少なくとも一方が正である必要があります"
+                        .to_string(),
+                );
+            }
         }
     }
 }
@@ -197,24 +193,13 @@ fn validate_launch_condition(launch: &crate::rocket::LaunchCondition, errors: &m
         ));
     } else if alt < -500.0 {
         errors.push(format!("打ち上げ条件: 高度 '{:.1}m' が海面下すぎます", alt));
-    } else if alt > 10000.0 {
-        errors.push(format!(
-            "打ち上げ条件: 高度 '{:.1}m' が高すぎます (通常の発射台は10km未満)",
-            alt
-        ));
     }
 
     // Validate velocity NED
     let [vn, ve, vd] = launch.velocity_ned;
-    let velocity_mag = (vn * vn + ve * ve + vd * vd).sqrt();
 
     if !vn.is_finite() || !ve.is_finite() || !vd.is_finite() {
         errors.push("打ち上げ条件: 初期速度成分は有限値である必要があります".to_string());
-    } else if velocity_mag > 100.0 {
-        errors.push(format!(
-            "打ち上げ条件: 初期速度 '{:.1}m/s' が大きすぎます (通常は地面からの静止状態)",
-            velocity_mag
-        ));
     }
 
     // Validate launch time
@@ -269,13 +254,6 @@ fn validate_stages(stages: &[crate::rocket::StageConfig], errors: &mut Vec<Strin
         return;
     }
 
-    if stages.len() > 10 {
-        errors.push(format!(
-            "ステージ設定: ステージ数 '{}個' が多すぎます (通常は1-4個)",
-            stages.len()
-        ));
-    }
-
     for (i, stage) in stages.iter().enumerate() {
         let stage_num = i + 1;
         validate_single_stage(stage, stage_num, errors);
@@ -296,11 +274,6 @@ fn validate_single_stage(
             "ステージ{}: 初期質量 '{:.1}kg' は正の有限値である必要があります",
             stage_num, stage.mass_initial
         ));
-    } else if stage.mass_initial > 1000000.0 {
-        errors.push(format!(
-            "ステージ{}: 初期質量 '{:.0}kg' が大きすぎます (通常は100万kg未満)",
-            stage_num, stage.mass_initial
-        ));
     }
 
     // Validate thrust timing
@@ -318,9 +291,9 @@ fn validate_single_stage(
         ));
     }
 
-    if stage.thrust.burn_end_time <= stage.thrust.burn_start_time {
+    if stage.thrust.burn_end_time < stage.thrust.burn_start_time {
         errors.push(format!(
-            "ステージ{}: 燃焼終了時刻 '{:.3}秒' は燃焼開始時刻 '{:.3}秒' より後である必要があります",
+            "ステージ{}: 燃焼終了時刻 '{:.3}秒' は燃焼開始時刻 '{:.3}秒' 以降である必要があります",
             stage_num, stage.thrust.burn_end_time, stage.thrust.burn_start_time
         ));
     }
@@ -331,11 +304,6 @@ fn validate_single_stage(
             "ステージ{}: 真空推力 '{:.1}N' は非負の有限値である必要があります",
             stage_num, stage.thrust.const_thrust_vac
         ));
-    } else if stage.thrust.const_thrust_vac > 50000000.0 {
-        errors.push(format!(
-            "ステージ{}: 真空推力 '{:.0}N' が大きすぎます (通常は50MN未満)",
-            stage_num, stage.thrust.const_thrust_vac
-        ));
     }
 
     // Validate ISP
@@ -344,22 +312,12 @@ fn validate_single_stage(
             "ステージ{}: 真空比推力 '{:.1}秒' は正の有限値である必要があります",
             stage_num, stage.thrust.const_isp_vac
         ));
-    } else if stage.thrust.const_isp_vac > 500.0 {
-        errors.push(format!(
-            "ステージ{}: 真空比推力 '{:.1}秒' が高すぎます (通常は500秒未満)",
-            stage_num, stage.thrust.const_isp_vac
-        ));
-    } else if stage.thrust.const_isp_vac < 100.0 {
-        errors.push(format!(
-            "ステージ{}: 真空比推力 '{:.1}秒' が低すぎます (通常は100秒以上)",
-            stage_num, stage.thrust.const_isp_vac
-        ));
     }
 
     // Validate engine geometry
-    if !stage.thrust.throat_diameter.is_finite() || stage.thrust.throat_diameter <= 0.0 {
+    if !stage.thrust.throat_diameter.is_finite() || stage.thrust.throat_diameter < 0.0 {
         errors.push(format!(
-            "ステージ{}: スロート直径 '{:.4}m' は正の有限値である必要があります",
+            "ステージ{}: スロート直径 '{:.4}m' は非負の有限値である必要があります",
             stage_num, stage.thrust.throat_diameter
         ));
     }
@@ -376,11 +334,6 @@ fn validate_single_stage(
     if !stage.aero.body_diameter.is_finite() || stage.aero.body_diameter <= 0.0 {
         errors.push(format!(
             "ステージ{}: 機体直径 '{:.3}m' は正の有限値である必要があります",
-            stage_num, stage.aero.body_diameter
-        ));
-    } else if stage.aero.body_diameter > 50.0 {
-        errors.push(format!(
-            "ステージ{}: 機体直径 '{:.1}m' が大きすぎます (通常は50m未満)",
             stage_num, stage.aero.body_diameter
         ));
     }
@@ -412,6 +365,60 @@ fn validate_stage_separation_timing(
 /// be unintended.
 pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
     let mut warnings = Vec::new();
+
+    // Unusual but valid values (an air launch, a restart in flight, ...)
+    let calc = &config.calculate_condition;
+    if calc.time_step.is_finite() && calc.time_step > calc.end_time / 10.0 {
+        warnings.push(format!(
+            "計算条件: 出力時間刻み '{:.3}秒' が終了時間 '{:.1}秒' に対して大きく、出力点が10点未満です",
+            calc.time_step, calc.end_time
+        ));
+    } else if calc.time_step < 0.001 {
+        warnings.push(format!(
+            "計算条件: 出力時間刻み '{:.6}秒' が小さく、出力データが大量になります",
+            calc.time_step
+        ));
+    }
+    if let Some(step) = calc.integrator.rk4_step
+        && calc.integrator.method == crate::rocket::IntegratorMethod::Rk4
+        && step.is_finite()
+        && step > 1.0
+    {
+        warnings.push(format!(
+            "積分器設定: RK4ステップサイズ '{:.3}秒' は大きく、精度が落ちる可能性があります (推奨: 1秒以下)",
+            step
+        ));
+    }
+    let alt = config.launch.position_llh[2];
+    if alt > 10_000.0 {
+        warnings.push(format!(
+            "打ち上げ条件: 高度 '{:.1}m' から開始します (空中発射または飛行途中からの再開)",
+            alt
+        ));
+    }
+    let speed = config
+        .launch
+        .velocity_ned
+        .iter()
+        .map(|v| v * v)
+        .sum::<f64>()
+        .sqrt();
+    if speed > 100.0 {
+        warnings.push(format!(
+            "打ち上げ条件: 初期速度 '{:.1}m/s' から開始します (発射台での保持・レール拘束は行いません)",
+            speed
+        ));
+    }
+    for (i, stage) in config.stages.iter().enumerate() {
+        let isp = stage.thrust.const_isp_vac;
+        if !stage.thrust.isp_file_exists && isp.is_finite() && !(100.0..=500.0).contains(&isp) {
+            warnings.push(format!(
+                "ステージ{}: 真空比推力 '{:.1}秒' は通常の範囲 (100〜500秒) の外です",
+                i + 1,
+                isp
+            ));
+        }
+    }
 
     let end_time = config.calculate_condition.end_time;
     if end_time.is_finite() && end_time > 3600.0 {
@@ -834,10 +841,24 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
         "flight_mode",
         "IIP_lat[deg]",
         "IIP_lon[deg]",
+        "latitude[deg]",
+        "longitude[deg]",
+        "downrange[m]",
+        "stage",
     ])?;
+
+    let llh_of = |s: &SimulationState| {
+        CoordinateTransform::pos_ecef_to_llh(&CoordinateTransform::pos_eci_to_ecef(
+            &s.position,
+            s.time,
+        ))
+    };
+    let origin = trajectory.first().map(llh_of);
 
     // Write data
     for state in trajectory {
+        let llh = llh_of(state);
+        let downrange = origin.map_or(0.0, |o| CoordinateTransform::distance_surface(&o, &llh));
         wtr.write_record([
             state.time.to_string(),
             state.position.x.to_string(),
@@ -862,6 +883,10 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
             state.flight_mode.as_str().to_string(),
             state.iip_lat_deg.map_or(String::new(), |v| v.to_string()),
             state.iip_lon_deg.map_or(String::new(), |v| v.to_string()),
+            llh.x.to_string(),
+            llh.y.to_string(),
+            downrange.to_string(),
+            state.stage.to_string(),
         ])?;
     }
 
@@ -912,6 +937,25 @@ pub fn save_summary_json<P: AsRef<Path>>(
         })
         .unwrap();
     let final_state = trajectory.last().unwrap();
+    let max_speed_state = trajectory
+        .iter()
+        .max_by(|a, b| {
+            a.velocity_ecef_ned
+                .magnitude()
+                .total_cmp(&b.velocity_ecef_ned.magnitude())
+        })
+        .unwrap();
+    let max_accel_state = trajectory
+        .iter()
+        .max_by(|a, b| a.acc_body.magnitude().total_cmp(&b.acc_body.magnitude()))
+        .unwrap();
+    let find_event = |kind: EventKind| events.iter().rev().find(|e| e.kind == kind);
+    let max_q = find_event(EventKind::MaxQ);
+    let final_orbit = crate::physics::orbit::elements(
+        &final_state.position,
+        &final_state.velocity,
+        crate::physics::orbit::gmst_rad(config.launch.launch_time),
+    );
 
     let summary = serde_json::json!({
         "rocket_name": config.name,
@@ -922,6 +966,15 @@ pub fn save_summary_json<P: AsRef<Path>>(
         "max_velocity_time_s": max_velocity_state.time,
         "max_mach_number": max_mach_state.mach_number,
         "max_mach_time_s": max_mach_state.time,
+        "max_speed_earth_relative_ms": max_speed_state.velocity_ecef_ned.magnitude(),
+        "max_speed_earth_relative_time_s": max_speed_state.time,
+        "max_dynamic_pressure_pa": max_q.map(|e| e.dynamic_pressure_pa),
+        "max_dynamic_pressure_time_s": max_q.map(|e| e.time_s),
+        "max_acceleration_ms2": max_accel_state.acc_body.magnitude(),
+        "max_acceleration_g": max_accel_state.acc_body.magnitude() / crate::math::constants::G0,
+        "max_acceleration_time_s": max_accel_state.time,
+        "burnout": find_event(EventKind::Burnout),
+        "final_orbit": final_orbit,
         "final_position_eci_m": [
             final_state.position.x,
             final_state.position.y,
@@ -1119,6 +1172,44 @@ mod tests {
         assert_eq!(ts.time.len(), 3);
         assert_eq!(ts.values[1], 20.0);
         Ok(())
+    }
+
+    #[test]
+    fn test_minimal_legacy_config_uses_defaults() {
+        let json = r#"{
+            "name(str)": "simple_test",
+            "calculate condition": { "end time[s]": 300, "time step for output[s]": 1 },
+            "launch": { "position LLH[deg,deg,m]": [35.0, 139.0, 0.0] },
+            "stage1": {
+                "mass initial[kg]": 1000,
+                "thrust": {
+                    "const thrust vac[N]": 30000,
+                    "burn end time(time of each stage)[s]": 20
+                }
+            }
+        }"#;
+        let config: RocketConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(validate_config(&config), Ok(()));
+        let stage = &config.stages[0];
+        assert_eq!(stage.attitude.const_elevation, 90.0);
+        assert_eq!(stage.thrust.const_isp_vac, 200.0);
+        assert_eq!(config.wind.const_wind, [0.0, 0.0]);
+        let trajectory = crate::simulator::Simulator::new(Rocket::new(config))
+            .unwrap()
+            .run();
+        let apogee = trajectory.iter().map(|s| s.altitude).fold(0.0, f64::max);
+        assert!(apogee > 1000.0, "apogee {apogee}");
+    }
+
+    #[test]
+    fn test_air_launch_is_a_warning_not_an_error() {
+        let mut config = load_ss520_config();
+        config.launch.position_llh[2] = 12_000.0;
+        config.launch.velocity_ned = [200.0, 0.0, 0.0];
+        assert_eq!(validate_config(&config), Ok(()));
+        let warnings = config_warnings(&config);
+        assert!(warnings.iter().any(|w| w.contains("空中発射")));
+        assert!(warnings.iter().any(|w| w.contains("初期速度")));
     }
 
     fn load_ss520_config() -> RocketConfig {

@@ -188,6 +188,7 @@ impl<'de> Deserialize<'de> for RocketConfig {
             stage3: Option<StageConfig>,
             #[serde(rename = "stage", default)]
             stage: Option<StageConfig>,
+            #[serde(default)]
             wind: WindConfig,
         }
 
@@ -281,13 +282,16 @@ pub struct CalculateCondition {
     #[serde(rename = "time step for output[s]")]
     pub time_step: f64,
 
-    #[serde(rename = "air density variation file exist?(bool)")]
+    #[serde(rename = "air density variation file exist?(bool)", default)]
     pub air_density_file_exists: bool,
 
-    #[serde(rename = "air density variation file name(str)")]
+    #[serde(rename = "air density variation file name(str)", default)]
     pub air_density_file: String,
 
-    #[serde(rename = "variation ratio of air density[%](-100to100, default=0)")]
+    #[serde(
+        rename = "variation ratio of air density[%](-100to100, default=0)",
+        default
+    )]
     pub air_density_variation: f64,
 
     #[serde(default)]
@@ -303,10 +307,10 @@ pub struct LaunchCondition {
     #[serde(rename = "position LLH[deg,deg,m]")]
     pub position_llh: [f64; 3],
 
-    #[serde(rename = "velocity NED[m/s]")]
+    #[serde(rename = "velocity NED[m/s]", default)]
     pub velocity_ned: [f64; 3],
 
-    #[serde(rename = "time(UTC)[y,m,d,h,min,sec]")]
+    #[serde(rename = "time(UTC)[y,m,d,h,min,sec]", default = "default_launch_time")]
     pub launch_time: [i32; 6],
 
     /// Launcher rail length [m], along the attitude at t = 0. Starting at
@@ -318,10 +322,10 @@ pub struct LaunchCondition {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StageConfig {
-    #[serde(rename = "power flight mode(int)")]
+    #[serde(rename = "power flight mode(int)", default)]
     pub power_flight_mode: i32,
 
-    #[serde(rename = "free flight mode(int)")]
+    #[serde(rename = "free flight mode(int)", default = "default_free_mode")]
     pub free_flight_mode: i32,
 
     #[serde(rename = "mass initial[kg]")]
@@ -336,23 +340,28 @@ pub struct StageConfig {
     )]
     pub mass_dry: Option<f64>,
 
+    #[serde(default)]
     pub thrust: ThrustConfig,
+    #[serde(default)]
     pub aero: AeroConfig,
+    #[serde(default)]
     pub attitude: AttitudeConfig,
 
-    #[serde(rename = "dumping product")]
+    #[serde(rename = "dumping product", default)]
     pub dumping_product: DumpingProductConfig,
 
-    #[serde(rename = "attitude neutrality(3DoF)")]
+    #[serde(rename = "attitude neutrality(3DoF)", default)]
     pub attitude_neutrality: AttitudeNeutralityConfig,
 
-    #[serde(rename = "6DoF")]
+    #[serde(rename = "6DoF", default)]
     pub six_dof: SixDofConfig,
 
+    #[serde(default)]
     pub stage: StageTransitionConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ThrustConfig {
     #[serde(rename = "Isp vac file exist?(bool)")]
     pub isp_file_exists: bool,
@@ -398,6 +407,7 @@ pub struct ThrustConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AeroConfig {
     #[serde(rename = "body diameter[m]")]
     pub body_diameter: f64,
@@ -431,6 +441,7 @@ pub struct AeroConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AttitudeConfig {
     #[serde(rename = "attitude file exist?(bool)")]
     pub attitude_file_exists: bool,
@@ -467,6 +478,7 @@ pub struct AttitudeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DumpingProductConfig {
     #[serde(rename = "dumping product exist?(bool)")]
     pub dumping_product_exists: bool,
@@ -488,6 +500,7 @@ pub struct DumpingProductConfig {
 /// "neutrality", as in the C++ simulator). Positions are STA [m] (from the
 /// nose, aft positive); the offsets move CG, CP and the thrust point.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AttitudeNeutralityConfig {
     #[serde(rename = "considering neutrality?(bool)")]
     pub considering_neutrality: bool,
@@ -531,7 +544,8 @@ pub struct NeutralityData {
     pub cp: SurfaceData2D,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SixDofConfig {
     #[serde(rename = "CG,CP,Controller position file(str)")]
     pub cg_cp_controller_position_file: String,
@@ -541,6 +555,7 @@ pub struct SixDofConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct StageTransitionConfig {
     #[serde(rename = "following stage exist?(bool)")]
     pub following_stage_exists: bool,
@@ -550,6 +565,7 @@ pub struct StageTransitionConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct WindConfig {
     #[serde(rename = "wind file exist?(bool)")]
     pub wind_file_exists: bool,
@@ -1179,6 +1195,100 @@ pub struct ClientWindSample {
     pub altitude_m: f64,
     pub speed_mps: f64,
     pub direction_deg: f64,
+}
+
+fn default_launch_time() -> [i32; 6] {
+    [2000, 1, 1, 0, 0, 0]
+}
+
+/// Defaults of a stage section left out of a legacy JSON: no file
+/// tables, coefficients of 1, no nozzle exit pressure loss, a vertical
+/// launch and no wind
+impl Default for ThrustConfig {
+    fn default() -> Self {
+        Self {
+            isp_file_exists: false,
+            isp_file_name: String::new(),
+            isp_coefficient: 1.0,
+            const_isp_vac: default_isp_constant(),
+            thrust_file_exists: false,
+            thrust_file_name: String::new(),
+            thrust_coefficient: 1.0,
+            const_thrust_vac: 0.0,
+            burn_start_time: 0.0,
+            burn_end_time: 0.0,
+            forced_cutoff_time: 1.0e9,
+            throat_diameter: 0.0,
+            nozzle_expansion_ratio: 1.0,
+            nozzle_exhaust_pressure: 0.0,
+        }
+    }
+}
+
+impl Default for AeroConfig {
+    fn default() -> Self {
+        Self {
+            body_diameter: default_body_diameter(),
+            cn_file_exists: false,
+            cn_file_name: String::new(),
+            normal_multiplier: 1.0,
+            const_normal_coefficient: 0.0,
+            ca_file_exists: false,
+            ca_file_name: String::new(),
+            axial_multiplier: 1.0,
+            const_axial_coefficient: 0.0,
+            ballistic_coefficient: default_ballistic_coefficient(),
+        }
+    }
+}
+
+impl Default for AttitudeConfig {
+    fn default() -> Self {
+        Self {
+            attitude_file_exists: false,
+            attitude_file_name: String::new(),
+            const_elevation: 90.0,
+            const_azimuth: 0.0,
+            const_roll: 0.0,
+            pitch_offset: 0.0,
+            yaw_offset: 0.0,
+            roll_offset: 0.0,
+            gyro_bias_x: 0.0,
+            gyro_bias_y: 0.0,
+            gyro_bias_z: 0.0,
+        }
+    }
+}
+
+impl Default for DumpingProductConfig {
+    fn default() -> Self {
+        Self {
+            dumping_product_exists: false,
+            dumping_product_separation_time: 0.0,
+            dumping_product_mass: 0.0,
+            dumping_product_ballistic_coefficient: default_ballistic_coefficient(),
+            additional_speed_at_dumping_ned: [0.0; 3],
+        }
+    }
+}
+
+impl Default for StageTransitionConfig {
+    fn default() -> Self {
+        Self {
+            following_stage_exists: false,
+            separation_time: 1.0e6,
+        }
+    }
+}
+
+impl Default for WindConfig {
+    fn default() -> Self {
+        Self {
+            wind_file_exists: false,
+            wind_file_name: String::new(),
+            const_wind: [0.0, 0.0],
+        }
+    }
 }
 
 fn default_duration_s() -> f64 {

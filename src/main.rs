@@ -6,7 +6,7 @@ use openTsiolkovsky::{
         save_monte_carlo_csv, save_monte_carlo_summary, save_summary_json, save_trajectory_csv,
     },
     montecarlo::{Dispersion, impact_statistics, run_cases},
-    simulator::{FallBodyKind, SimError, Simulator, impact_point},
+    simulator::{EventKind, FallBodyKind, SimError, Simulator, impact_point},
 };
 
 #[derive(Parser)]
@@ -146,6 +146,22 @@ fn main() -> Result<()> {
                 e.speed_mps,
                 e.mach,
                 e.dynamic_pressure_pa
+            );
+        }
+        if let Some(orbit) = simulator
+            .events
+            .iter()
+            .rev()
+            .find_map(|e| (e.kind == EventKind::Burnout).then_some(e.orbit).flatten())
+        {
+            println!(
+                "  Orbit at last burnout: perigee {:.1} km, apogee {} km, inclination {:.2} deg, e {:.4}",
+                orbit.perigee_altitude_m / 1e3,
+                orbit
+                    .apogee_altitude_m
+                    .map_or("-".to_string(), |a| format!("{:.1}", a / 1e3)),
+                orbit.inclination_deg,
+                orbit.eccentricity
             );
         }
         if simulator.forced_steps > 0 {
