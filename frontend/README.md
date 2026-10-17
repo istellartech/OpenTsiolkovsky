@@ -18,6 +18,12 @@ Rust ソルバーを WebAssembly にしてブラウザだけで動く、ロケ�
 | 再生                | `Space` 再生/停止、`←` `→` ±1 秒（`Shift` で ±10 秒）。`?` でショートカット一覧                                                                                                                                                                                                        |
 | 表示                | 配色（OS に合わせる / ライト / ダーク）と言語（日本語 / English）はヘッダー右端で切り替え                                                                                                                                                                                              |
 
+## AI・外部ツールとの連携
+
+- 設定は URL のフラグメント（`#preset=` / `#c=`）で受け取れます。CLI の `share` や MCP の `create_share_link` が作るリンクで、AI が用意した設定（CSV 同梱）をそのまま開けます。
+- サイトの `/llms.txt`（`public/llms.txt`）に、AI 向けにリンクの形式とドキュメントの場所を書いています。
+- 画面そのものを AI が操作する仕組み（WebMCP など）はまだありません。計算を AI に任せるときは CLI か MCP サーバーを使います（[AI エージェントからの利用](../docs/ai.md)）。
+
 ## 開発
 
 ツールチェーンは [Vite+](https://viteplus.dev/)（`vp`：Vite 8 / Rolldown・Vitest・Oxlint・Oxfmt）です。設定は `vite.config.ts` にまとまっています。`vp` は `node_modules/.bin` に入るので、グローバルに入れていなければ `bunx vp …` で実行します。

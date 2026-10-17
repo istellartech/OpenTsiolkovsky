@@ -1,9 +1,12 @@
 # Claude Code Guidelines
 
+> To *use* the simulator (fly vehicles, validate configs, run Monte Carlo, make web links) rather than develop it, read `docs/ai.md`: `openTsiolkovsky-cli run --json`, `validate --json`, `schema`, `share`, and the MCP server (`.mcp.json`). Claude Code also has the `rocket-sim` skill.
+
 This guide helps Claude Code work effectively with the OpenTsiolkovsky project, now with Rust as the primary implementation.
 
 ## Project Structure & Module Organization
 - `src/` Main Rust simulator with CLI binary and WASM library for physics simulation.
+  - `src/agent.rs` / `src/mcp.rs`: machine-readable interface for AI agents (`--json`, `schema`, `share`, MCP server); spec and current status in `docs/ai.md`.
 - `tests/` Rust integration tests (`cpp_reference.rs` compares against stored legacy C++ output; `conservation.rs` checks energy/angular momentum).
 - `tools/compare_cpp.py` Runs the Rust CLI and the C++ binary on one parameter file and reports the largest differences.
 - `examples/` Configuration files and sample data (e.g., `param_sample_01.json`, `SS-520-4/`).

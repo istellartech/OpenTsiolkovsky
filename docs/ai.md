@@ -10,6 +10,24 @@ OpenTsiolkovsky は、AI エージェントやスクリプトから次の 3 つ�
 
 どれも同じ Rust コア（`src/agent.rs`）を呼ぶので、結果は同じです。
 
+## 対応状況（v0.5.0 時点）
+
+| 項目 | 状況 |
+| --- | --- |
+| 設定ファイルの JSON Schema（`schema`、MCP `get_config_schema`） | ✅ CLI の `param_*.json` と分散ファイル。Web アプリ形式（`ClientConfig`）の Schema はまだありません（[設定ファイルガイド](configuration.md#webアプリの設定形式-clientconfig) を参照） |
+| 設定の検証（`validate`） | ✅ 解析エラー・値の検証・警告・見つからない CSV |
+| 1 回の飛行（`run --json`、MCP `run_simulation`） | ✅ 概要・イベント・落下点・間引いた軌跡。全時系列は CSV ファイルで |
+| 分散解析（`--monte-carlo`、MCP `run_monte_carlo`） | ✅ 1 回 10000 ケースまで（全 CPU コアで並列） |
+| Web アプリで開くリンク（`share`、MCP `create_share_link`） | ✅ CSV を同梱。リンクを開くのは人（AI に結果は返りません） |
+| 入力形式 | ✅ CLI の `param_*.json` と Web アプリの `ClientConfig`（どちらも CLI・MCP で読めます） |
+| MCP の通信方式 | ✅ 標準入出力（ローカル）のみ。HTTP（リモート MCP）は未対応 |
+| MCP の機能 | ✅ ツールのみ。リソース・プロンプト・進捗通知は未対応 |
+| Web アプリを AI が直接操作する | ❌ 未対応（WebMCP などのブラウザ内ツールはなし）。URL で設定を渡すことだけできます |
+| Web サイトの AI 向け案内 | ✅ `/llms.txt`（共有リンクの形式とドキュメントへのリンク） |
+| Claude Code 用スキル | ✅ `.claude/skills/rocket-sim/`（このリポジトリで開いたとき） |
+
+物理モデルの範囲（3DoF のみなど）は CLI と同じです（[物理モデル](physics.md)）。
+
 ## 進め方
 
 1. 設定ファイルの形式を知る: `openTsiolkovsky-cli schema`（JSON Schema）、または [設定ファイルガイド](configuration.md)
@@ -214,3 +232,18 @@ $B share -c examples/SS-520-4/param_SS520-4.json
 ```
 
 既定のリンク先は公開サイト（`https://open-tsiolkovsky.vercel.app/`）です。`--base-url`（MCP では `base_url`）か環境変数 `OPENTSIOLKOVSKY_WEB_URL` で、ローカルの開発サーバー（`http://localhost:5173/`）などに変えられます。CSV の大きい設定ではリンクが長くなります（SS-520-4 で約 1.7 kB）。
+
+## 実装の場所（開発者・AI 向け）
+
+| ファイル | 役割 |
+| --- | --- |
+| `src/agent.rs` | 共通の処理（Schema・検証・飛行・分散解析・共有リンク）とエラーの種類。CLI と MCP の両方が呼びます |
+| `src/mcp.rs` | MCP サーバー（JSON-RPC の処理とツール定義）。外部の SDK は使っていません |
+| `src/main.rs` | CLI（サブコマンド、`--json`、終了ステータス） |
+| `src/rocket.rs` | 設定の型。`///` コメントが JSON Schema の説明になります |
+| `frontend/src/lib/share.ts`, `frontend/src/hooks/useShareLink.ts` | Web アプリ側の共有リンクの読み込み |
+| `frontend/public/llms.txt` | Web サイトの AI 向け案内 |
+| `.mcp.json`, `.claude/skills/rocket-sim/SKILL.md` | Claude Code 用の設定とスキル |
+
+`agent.rs` と `mcp.rs` はネイティブ専用で、WASM には入りません。テストは各ファイルの `#[cfg(test)]` と `frontend/src/lib/share.test.ts` にあります。JSON のキー・エラーの種類・終了ステータスを変えるときは、このページも更新してください。
+

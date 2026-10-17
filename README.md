@@ -27,11 +27,12 @@ OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core i
 - Writes `<name>_dynamics_cpp_<N>_fall.csv` / `<name>_dynamics_cpp_<N>_dump.csv` for each spent stage / dumping product and prints every impact point
 - `--monte-carlo N` runs a dispersion analysis on all CPU cores (`--dispersion FILE`, `--seed S`) and writes `<name>_montecarlo.csv` and `<name>_montecarlo_summary.json`
 
-### For AI agents ([details](docs/ai.md))
+### For AI agents ([details and current status](docs/ai.md#対応状況v050-時点))
 - `run --json` / `validate --json`: one JSON document on stdout, stable error kinds and exit status (3 = invalid configuration)
 - `schema`: JSON Schema of the parameter file (units, defaults) and of the dispersion file
 - `mcp`: a Model Context Protocol server on stdio with tools to validate, fly, run Monte Carlo and create web app links — for Claude Code, Claude Desktop and other MCP clients
 - `share`: a link that opens a parameter file, with its CSV tables, in the web app
+- Not yet: remote (HTTP) MCP, and AI control of the web app itself — agents hand configurations to the web app only through links (`/llms.txt` on the site describes the format)
 
 ### Web app ([details](frontend/README.md))
 - **Live:** results follow every input change. The solver runs in a Web Worker, so the page stays responsive.
@@ -110,7 +111,7 @@ bash scripts/wasm_build.sh   # outputs to frontend/src/wasm
 ## Project Structure
 ```
 OpenTsiolkovsky/
-├── src/              # Rust simulation core, CLI (main.rs) and WASM bindings (wasm.rs)
+├── src/              # Rust simulation core, CLI (main.rs), agent/MCP interface (agent.rs, mcp.rs) and WASM bindings (wasm.rs)
 ├── tests/            # Rust integration tests (incl. regression against the C++ output)
 ├── examples/         # CLI parameter files and CSV tables
 ├── frontend/         # Web app (React + TypeScript, Vite+, CesiumJS, Chart.js)

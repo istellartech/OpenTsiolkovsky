@@ -1,9 +1,12 @@
 # Repository Guidelines
 
+> To *use* the simulator (fly vehicles, validate configs, run Monte Carlo, make web links) rather than develop it, read `docs/ai.md`: `openTsiolkovsky-cli run --json`, `validate --json`, `schema`, `share`, and the MCP server (`.mcp.json`). Claude Code also has the `rocket-sim` skill.
+
 This guide helps contributors work effectively across the Rust core, legacy C++ reference, and frontend.
 
 ## Project Structure & Module Organization
 - `src/` Main Rust simulator with CLI binary and WASM library for physics simulation.
+  - `src/agent.rs` / `src/mcp.rs`: machine-readable interface for AI agents (`--json`, `schema`, `share`, MCP server); spec and current status in `docs/ai.md`.
 - `tests/` Rust integration tests.
 - `examples/` Configuration files and sample data (e.g., `param_sample_01.json`, `SS-520-4/`).
 - `frontend/` Vite + React + TypeScript UI for the web API.

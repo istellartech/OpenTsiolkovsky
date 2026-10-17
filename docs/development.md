@@ -7,6 +7,13 @@
 ```
 OpenTsiolkovsky/
 ├── src/              # メインRust実装
+│   ├── simulator.rs / physics.rs / rocket.rs / math.rs   # 計算コア・設定の型
+│   ├── io.rs          # 設定・CSV の読み込み、出力ファイル
+│   ├── montecarlo.rs  # 分散解析
+│   ├── main.rs        # CLI
+│   ├── agent.rs       # AI・スクリプト向けの共通処理（--json、Schema、共有リンク）
+│   ├── mcp.rs         # MCP サーバー
+│   └── wasm.rs        # Web アプリ用の WASM バインディング
 ├── tests/            # Rust統合テスト（旧C++版の出力との回帰テストを含む）
 ├── examples/         # 設定ファイルとサンプルデータ
 ├── frontend/         # React/TypeScript Webインターフェース
@@ -69,6 +76,19 @@ bunx vp check      # --fix で整形
 # テスト（src/wasm があれば WASM での全サンプル機体の計算も含む）
 bunx vp test run
 ```
+
+### AI 向けインターフェース
+
+`run --json`・`validate`・`schema`・`share`・`mcp` の仕様は [AI エージェントからの利用](ai.md) にまとめています（対応状況と実装の場所も）。MCP サーバーは標準入出力に JSON を流して試せます。
+
+```bash
+cargo build --release
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_simulation","arguments":{"config_path":"examples/param_momo.json","trajectory_points":3}}}' \
+  | ./target/release/openTsiolkovsky-cli mcp
+```
+
+JSON のキー・エラーの種類・終了ステータスは外部のエージェントが頼りにするので、変えるときは `docs/ai.md` も更新してください。
 
 ## 技術スタック
 
