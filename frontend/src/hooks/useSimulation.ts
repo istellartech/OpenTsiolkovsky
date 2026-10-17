@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ClientConfig, SimulationState } from '../lib/simulation'
-import { runSimulation } from '../lib/simulation'
+import type { ClientConfig } from '../lib/simulation'
+import { SolverCancelled, solver } from '../lib/solver'
 import { PRESET_OPTIONS, createBlankConfig } from '../config/presets'
 import { isValidClientConfig, validateConfig } from '../lib/validation'
-import { buildTrack, type Track } from '../lib/trajectory'
+import type { Track } from '../lib/trajectory'
 import { baseName, fromLegacyParamFile, isLegacyParamFile } from '../lib/legacy'
 
 const LOCALSTORAGE_KEY = 'openTsiolkovsky_config'
@@ -43,9 +43,8 @@ export interface ImportResult {
 }
 
 export interface SimulationResult {
-  states: SimulationState[]
   track: Track
-  config: ClientConfig
+  /** Wall-clock solve time [ms] */
   ms: number
 }
 
@@ -79,15 +78,14 @@ export function useSimulation() {
     const timer = window.setTimeout(async () => {
       const t0 = performance.now()
       try {
-        const states = await runSimulation(config)
+        const track = await solver.run(config)
         if (seq !== runSeq.current) return
-        const track = buildTrack(states)
         if (!track) throw new Error('計算結果のデータ点が不足しています。計算時間や出力間隔を確認してください。')
-        setResult({ states, track, config, ms: Math.round(performance.now() - t0) })
+        setResult({ track, ms: Math.round(performance.now() - t0) })
         setError(null)
         setStatus('ok')
       } catch (err) {
-        if (seq !== runSeq.current) return
+        if (err instanceof SolverCancelled || seq !== runSeq.current) return
         setError(err instanceof Error ? err.message : String(err))
         setStatus('error')
       }

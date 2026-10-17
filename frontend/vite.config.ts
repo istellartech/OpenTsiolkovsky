@@ -22,6 +22,9 @@ export default defineConfig({
   define: {
     CESIUM_BASE_URL: JSON.stringify(`/${cesiumBaseUrl}`),
   },
+  worker: {
+    format: 'es',
+  },
   build: {
     chunkSizeWarningLimit: 6000,
     rollupOptions: {
