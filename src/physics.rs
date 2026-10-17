@@ -1,12 +1,59 @@
 pub mod atmosphere {
     use crate::math::constants::*;
 
+    /// Which standard atmosphere `AtmosphereModel` evaluates
+    #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+    #[serde(rename_all = "lowercase")]
+    pub enum AtmosphereKind {
+        /// As the C++ simulator: the 1976 layers evaluated at the geometric
+        /// altitude, isothermal (186.95 K) above 84.852 km
+        #[default]
+        Legacy,
+        /// U.S. Standard Atmosphere 1976: layers in geopotential altitude
+        /// up to 86 km, tabulated values (log-linear) from 86 to 1000 km
+        #[serde(alias = "USSA1976", alias = "ussa76")]
+        Ussa1976,
+    }
+
+    /// U.S. Standard Atmosphere 1976 above 86 km: geometric altitude [m],
+    /// temperature [K], pressure [Pa], density [kg/m³]
+    const USSA1976_UPPER: [[f64; 4]; 23] = [
+        [86_000.0, 186.87, 3.7338e-1, 6.958e-6],
+        [90_000.0, 186.87, 1.8359e-1, 3.416e-6],
+        [95_000.0, 188.42, 7.5966e-2, 1.393e-6],
+        [100_000.0, 195.08, 3.2011e-2, 5.604e-7],
+        [110_000.0, 240.00, 7.1042e-3, 9.708e-8],
+        [120_000.0, 360.00, 2.5382e-3, 2.222e-8],
+        [130_000.0, 469.27, 1.2505e-3, 8.152e-9],
+        [140_000.0, 559.63, 7.2028e-4, 3.831e-9],
+        [150_000.0, 634.39, 4.5422e-4, 2.076e-9],
+        [160_000.0, 696.29, 3.0395e-4, 1.233e-9],
+        [180_000.0, 790.07, 1.5271e-4, 5.194e-10],
+        [200_000.0, 854.56, 8.4736e-5, 2.541e-10],
+        [250_000.0, 941.33, 2.4767e-5, 6.073e-11],
+        [300_000.0, 976.01, 8.7704e-6, 1.916e-11],
+        [350_000.0, 990.06, 3.4518e-6, 7.014e-12],
+        [400_000.0, 995.83, 1.4518e-6, 2.803e-12],
+        [450_000.0, 998.22, 6.4468e-7, 1.184e-12],
+        [500_000.0, 999.24, 3.0236e-7, 5.215e-13],
+        [600_000.0, 999.85, 8.2130e-8, 1.137e-13],
+        [700_000.0, 999.97, 3.1908e-8, 3.070e-14],
+        [800_000.0, 999.99, 1.7036e-8, 1.136e-14],
+        [900_000.0, 1000.0, 1.0873e-8, 5.759e-15],
+        [1_000_000.0, 1000.0, 7.5138e-9, 3.561e-15],
+    ];
+
+    /// Effective Earth radius of the geopotential altitude [m]
+    const R0_GEOPOTENTIAL: f64 = 6_356_766.0;
+
     /// International Standard Atmosphere (ISA) Model
     ///
-    /// Implements the standard atmosphere model up to 84.852 km altitude
-    /// with 8 atmospheric layers as per ISO 2533 standard.
+    /// The 1976 standard atmosphere layers (ISO 2533) up to 84.852 km
+    /// geopotential altitude; see `AtmosphereKind` for the altitude used
+    /// and the upper atmosphere.
     #[derive(Debug, Clone)]
     pub struct AtmosphereModel {
+        kind: AtmosphereKind,
         /// Height of atmospheric layers [m]
         height_layers: [f64; 8],
         /// Temperature lapse rates [K/m]  
@@ -37,9 +84,15 @@ pub mod atmosphere {
     }
 
     impl AtmosphereModel {
-        /// Create new standard atmosphere model
+        /// Create new standard atmosphere model (C++-compatible kind)
         pub fn new() -> Self {
+            Self::with_kind(AtmosphereKind::Legacy)
+        }
+
+        /// Standard atmosphere of the given kind
+        pub fn with_kind(kind: AtmosphereKind) -> Self {
             AtmosphereModel {
+                kind,
                 // Height of atmospheric layers [m]
                 height_layers: [
                     0.0, 11000.0, 20000.0, 32000.0, 47000.0, 51000.0, 71000.0, 84852.0,
@@ -68,7 +121,16 @@ pub mod atmosphere {
         /// Atmospheric conditions (temperature, pressure, density, speed of sound)
         pub fn conditions(&self, altitude: f64) -> AtmosphericConditions {
             // Handle negative altitude (below sea level) by using sea level conditions
-            let effective_altitude = if altitude < 0.0 { 0.0 } else { altitude };
+            let altitude = altitude.max(0.0);
+            let effective_altitude = match self.kind {
+                AtmosphereKind::Legacy => altitude,
+                AtmosphereKind::Ussa1976 if altitude >= USSA1976_UPPER[0][0] => {
+                    return self.upper_conditions(altitude);
+                }
+                AtmosphereKind::Ussa1976 => {
+                    R0_GEOPOTENTIAL * altitude / (R0_GEOPOTENTIAL + altitude)
+                }
+            };
 
             let layer_index = self.determine_layer(effective_altitude);
 
@@ -105,6 +167,28 @@ pub mod atmosphere {
             }
         }
 
+        /// USSA 1976 above 86 km: log-linear in pressure and density,
+        /// linear in temperature; extrapolated with the last segment
+        fn upper_conditions(&self, altitude: f64) -> AtmosphericConditions {
+            let t = &USSA1976_UPPER;
+            let n = t.len();
+            let i = t.partition_point(|row| row[0] <= altitude).clamp(1, n - 1) - 1;
+            let (a, b) = (t[i], t[i + 1]);
+            let f = (altitude - a[0]) / (b[0] - a[0]);
+            let temperature = if f <= 1.0 {
+                a[1] + f * (b[1] - a[1])
+            } else {
+                b[1]
+            };
+            let log_interp = |x0: f64, x1: f64| (x0.ln() + f * (x1.ln() - x0.ln())).exp();
+            AtmosphericConditions {
+                temperature,
+                pressure: log_interp(a[2], b[2]),
+                density: log_interp(a[3], b[3]),
+                speed_of_sound: (self.gamma * self.gas_constant * temperature).sqrt(),
+            }
+        }
+
         /// Calculate density at given altitude
         pub fn density(&self, altitude: f64) -> f64 {
             self.conditions(altitude).density
@@ -123,6 +207,17 @@ pub mod atmosphere {
         /// Calculate speed of sound at given altitude
         pub fn speed_of_sound(&self, altitude: f64) -> f64 {
             self.conditions(altitude).speed_of_sound
+        }
+
+        /// Conditions with the density scaled by `1 + percent / 100`
+        pub fn conditions_with_percent(
+            &self,
+            altitude: f64,
+            percent: f64,
+        ) -> AtmosphericConditions {
+            let mut conditions = self.conditions(altitude);
+            conditions.density *= 1.0 + percent / 100.0;
+            conditions
         }
 
         /// Calculate atmospheric conditions with density variation
@@ -312,6 +407,33 @@ pub mod atmosphere {
         }
 
         #[test]
+        fn test_ussa1976_geopotential_and_upper_atmosphere() {
+            let atm = AtmosphereModel::with_kind(AtmosphereKind::Ussa1976);
+            // USSA 1976 table values (geometric altitude)
+            for (z, t, p, rho) in [
+                (10_000.0, 223.252, 26_499.9, 0.413510),
+                (30_000.0, 226.509, 1_197.03, 1.84101e-2),
+                (50_000.0, 270.650, 79.7787, 1.02688e-3),
+                (80_000.0, 198.639, 1.05247, 1.84580e-5),
+                (100_000.0, 195.08, 3.2011e-2, 5.604e-7),
+                (300_000.0, 976.01, 8.7704e-6, 1.916e-11),
+            ] {
+                let c = atm.conditions(z);
+                assert_relative_eq!(c.temperature, t, max_relative = 2e-4);
+                assert_relative_eq!(c.pressure, p, max_relative = 2e-3);
+                assert_relative_eq!(c.density, rho, max_relative = 3e-3);
+            }
+            // Continuous across 86 km
+            let below = atm.conditions(85_999.0).density;
+            let above = atm.conditions(86_000.0).density;
+            assert_relative_eq!(below, above, max_relative = 2e-3);
+
+            // The legacy model evaluates the layers at the geometric altitude
+            let legacy = AtmosphereModel::new();
+            assert!(legacy.conditions(80_000.0).density < atm.conditions(80_000.0).density);
+        }
+
+        #[test]
         fn test_density_variation() {
             let atm = AtmosphereModel::new();
 
@@ -375,7 +497,8 @@ pub mod coordinates {
 
         /// Convert ECEF position to LLH (Latitude, Longitude, Height)
         ///
-        /// Uses iterative algorithm for accurate conversion from WGS84 ellipsoid
+        /// Bowring's closed-form latitude (sub-millimetre near the Earth);
+        /// the height formula holds at the poles too
         ///
         /// # Arguments
         /// * `pos_ecef` - ECEF position [m]
@@ -388,7 +511,6 @@ pub mod coordinates {
             let z = pos_ecef.z;
 
             let a = WGS84_A;
-            let _one_f = 1.0 / WGS84_F;
             let b = a * (1.0 - WGS84_F);
             let e2 = WGS84_E2;
             let ed2 = e2 * a * a / (b * b); // Second eccentricity squared
@@ -400,8 +522,9 @@ pub mod coordinates {
                 (z + ed2 * b * theta.sin().powi(3)).atan2(p - e2 * a * theta.cos().powi(3));
             let lon_rad = y.atan2(x);
 
-            let n = a / (1.0 - e2 * lat_rad.sin().powi(2)).sqrt();
-            let height = p / lat_rad.cos() - n;
+            // h = p cos(lat) + z sin(lat) - a sqrt(1 - e² sin²(lat))
+            let (sin_lat, cos_lat) = lat_rad.sin_cos();
+            let height = p * cos_lat + z * sin_lat - a * (1.0 - e2 * sin_lat * sin_lat).sqrt();
 
             Vector3::new(rad2deg(lat_rad), rad2deg(lon_rad), height)
         }
@@ -508,6 +631,16 @@ pub mod coordinates {
                 sa * se * cr - ca * sr,
                 ce * cr,
             )
+        }
+
+        /// Azimuth, elevation and roll [rad] of a NED to body DCM (inverse
+        /// of `dcm_ned_to_body`); azimuth in [0, 2π)
+        pub fn azimuth_elevation_roll(dcm_ned_to_body: &Matrix3<f64>) -> Vector3<f64> {
+            let d = dcm_ned_to_body;
+            let elevation = (-d[(0, 2)]).clamp(-1.0, 1.0).asin();
+            let azimuth = d[(0, 1)].atan2(d[(0, 0)]).rem_euclid(std::f64::consts::TAU);
+            let roll = d[(1, 2)].atan2(d[(2, 2)]);
+            Vector3::new(azimuth, elevation, roll)
         }
 
         /// Calculate wind velocity in NED frame
@@ -721,6 +854,24 @@ pub mod coordinates {
             assert_relative_eq!(ecef.x, expected_x, epsilon = 1.0);
             assert_relative_eq!(ecef.y, 0.0, epsilon = 1.0);
             assert_relative_eq!(ecef.z, 0.0, epsilon = 1.0);
+        }
+
+        #[test]
+        fn test_llh_round_trip_including_poles() {
+            for llh in [
+                [35.0, 139.0, 0.0],
+                [-60.0, -120.0, 400_000.0],
+                [89.9999, 10.0, 1_000.0],
+                [90.0, 0.0, 250.0],
+                [-90.0, 0.0, 100_000.0],
+            ] {
+                let llh = Vector3::from(llh);
+                let back = CoordinateTransform::pos_ecef_to_llh(
+                    &CoordinateTransform::pos_llh_to_ecef(&llh),
+                );
+                assert_relative_eq!(back.x, llh.x, epsilon = 1e-8);
+                assert_relative_eq!(back.z, llh.z, epsilon = 1e-3);
+            }
         }
 
         #[test]

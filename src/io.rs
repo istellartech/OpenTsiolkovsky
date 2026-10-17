@@ -621,6 +621,15 @@ pub fn load_attitude_data<P: AsRef<Path>>(path: P) -> Result<Vec<(f64, f64, f64)
         .collect())
 }
 
+/// Roll column of an attitude CSV (time, azimuth, elevation, roll), if
+/// every row has one
+pub fn load_attitude_roll<P: AsRef<Path>>(path: P) -> Result<Option<TimeSeriesData>> {
+    let rows4 = load_csv_rows::<_, 4>(&path)?;
+    let rows3 = load_csv_rows::<_, 3>(&path)?;
+    Ok((!rows4.is_empty() && rows4.len() == rows3.len())
+        .then(|| TimeSeriesData::from_pairs(rows4.into_iter().map(|r| (r[0], r[3])))))
+}
+
 /// Parse attitude data CSV from string content (time, azimuth, elevation)
 pub fn parse_attitude_from_str(content: &str) -> Result<Vec<(f64, f64, f64)>> {
     Ok(parse_csv_rows_from_str::<3>(content)?
@@ -708,6 +717,21 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
         attitude.attitude_file_exists,
         &attitude.attitude_file_name,
         |p| load_attitude_data(p),
+    )?;
+    rocket.attitude_roll = maybe_load(
+        base,
+        attitude.attitude_file_exists,
+        &attitude.attitude_file_name,
+        |p| load_attitude_roll(p),
+    )?
+    .flatten();
+
+    let calc = &rocket.config.calculate_condition;
+    rocket.air_density_table = maybe_load(
+        base,
+        calc.air_density_file_exists,
+        &calc.air_density_file,
+        |p| load_time_series(p),
     )?;
 
     let wind = &rocket.config.wind;

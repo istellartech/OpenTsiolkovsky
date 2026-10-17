@@ -2,6 +2,9 @@
 ///
 /// This module contains rocket configuration structures
 /// that are compatible with the existing JSON format.
+use crate::physics::atmosphere::AtmosphereKind;
+use crate::physics::coordinates::CoordinateTransform;
+use nalgebra::{Matrix3, UnitQuaternion, Vector3};
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -289,6 +292,10 @@ pub struct CalculateCondition {
 
     #[serde(default)]
     pub integrator: IntegratorSettings,
+
+    /// Standard atmosphere: "legacy" (C++-compatible, default) or "ussa1976"
+    #[serde(rename = "atmosphere model(str)", default)]
+    pub atmosphere_model: AtmosphereKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -436,6 +443,9 @@ pub struct AttitudeConfig {
 
     #[serde(rename = "const azimuth[deg]")]
     pub const_azimuth: f64,
+
+    #[serde(rename = "const roll[deg]", default)]
+    pub const_roll: f64,
 
     #[serde(rename = "pitch offset[deg]")]
     pub pitch_offset: f64,
@@ -615,7 +625,12 @@ pub struct Rocket {
     pub cn_surface: Option<SurfaceData2D>,
     pub ca_data: Option<TimeSeriesData>,
     pub attitude_data: Option<Vec<(f64, f64, f64)>>, // (time, azimuth, elevation)
-    pub wind_data: Option<Vec<(f64, f64, f64)>>,     // (altitude, speed, direction)
+    /// Roll program [deg] over time (4th column of the attitude file)
+    pub attitude_roll: Option<TimeSeriesData>,
+    /// Air density variation [%] over altitude [m] (replaces the uniform
+    /// variation ratio, as in C++)
+    pub air_density_table: Option<TimeSeriesData>,
+    pub wind_data: Option<Vec<(f64, f64, f64)>>, // (altitude, speed, direction)
 }
 
 impl Rocket {
@@ -632,6 +647,8 @@ impl Rocket {
             cn_surface: None,
             ca_data: None,
             attitude_data: None,
+            attitude_roll: None,
+            air_density_table: None,
             wind_data: None,
         }
     }
@@ -781,39 +798,79 @@ impl Rocket {
         (p0.1 + a * (p1.1 - p0.1), p0.2 + a * (p1.2 - p0.2))
     }
 
-    /// Interpolated wind speed/direction at altitude [m]
-    pub fn wind_at_altitude(&self, altitude: f64) -> (f64, f64) {
-        let default = (
-            self.config.wind.const_wind[0],
-            self.config.wind.const_wind[1],
-        );
+    /// Commanded roll angle at given time [deg]
+    pub fn roll_at_time(&self, time: f64) -> f64 {
+        match &self.attitude_roll {
+            Some(data) if !data.time.is_empty() => data.interpolate(time),
+            _ => self.config.primary_stage().attitude.const_roll,
+        }
+    }
 
+    /// NED to body DCM and the attitude it represents (azimuth, elevation,
+    /// roll [deg]) at time `time`.
+    ///
+    /// As in the C++ simulator, the attitude program defines a navigation
+    /// frame; the body is rotated from it by the misalignment offsets
+    /// (yaw, pitch, roll) and by the drift of the gyro bias since t = 0.
+    pub fn attitude_dcm(&self, time: f64) -> (Matrix3<f64>, Vector3<f64>) {
+        use crate::math::deg2rad;
+        let (az, el) = self.attitude_at_time(time);
+        let roll = self.roll_at_time(time);
+        let navi =
+            CoordinateTransform::dcm_ned_to_body(deg2rad(az), deg2rad(el), Some(deg2rad(roll)));
+        let att = &self.config.primary_stage().attitude;
+        let bias = Vector3::new(att.gyro_bias_x, att.gyro_bias_y, att.gyro_bias_z)
+            .map(|b| deg2rad(b) / 3600.0);
+        if att.yaw_offset == 0.0
+            && att.pitch_offset == 0.0
+            && att.roll_offset == 0.0
+            && bias == Vector3::zeros()
+        {
+            return (navi, Vector3::new(az, el, roll));
+        }
+        let offset = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), deg2rad(att.yaw_offset))
+            * UnitQuaternion::from_axis_angle(&Vector3::y_axis(), deg2rad(att.pitch_offset))
+            * UnitQuaternion::from_axis_angle(&Vector3::x_axis(), deg2rad(att.roll_offset));
+        let drift = UnitQuaternion::from_scaled_axis(bias * time);
+        let dcm = (offset * drift).to_rotation_matrix().into_inner() * navi;
+        (
+            dcm,
+            CoordinateTransform::azimuth_elevation_roll(&dcm).map(f64::to_degrees),
+        )
+    }
+
+    /// Interpolated wind speed/direction at altitude [m]
+    ///
+    /// The profile is interpolated in north/east components (as in C++),
+    /// so directions across north (350 deg -> 10 deg) blend correctly.
+    pub fn wind_at_altitude(&self, altitude: f64) -> (f64, f64) {
         let data = match &self.wind_data {
             Some(data) if !data.is_empty() => data,
-            _ => return default,
-        };
-
-        if altitude <= data[0].0 {
-            return (data[0].1, data[0].2);
-        }
-
-        for pair in data.windows(2) {
-            let (alt0, speed0, dir0) = pair[0];
-            let (alt1, speed1, dir1) = pair[1];
-            if altitude >= alt0 && altitude <= alt1 {
-                let delta_alt = alt1 - alt0;
-                if delta_alt.abs() < 1e-10 {
-                    return (speed0, dir0);
-                }
-                let alpha = (altitude - alt0) / delta_alt;
-                let speed = speed0 + alpha * (speed1 - speed0);
-                let direction = dir0 + alpha * (dir1 - dir0);
-                return (speed, direction);
+            _ => {
+                let wind = self.config.wind.const_wind;
+                return (wind[0], wind[1]);
             }
+        };
+        let altitudes: Vec<f64> = data.iter().map(|d| d.0).collect();
+        let (i, a) = bracket(&altitudes, altitude).unwrap_or((0, 0.0));
+        let p0 = data[i];
+        let p1 = data.get(i + 1).copied().unwrap_or(p0);
+        if a == 0.0 {
+            return (p0.1, p0.2);
         }
-
-        let last = data.last().unwrap();
-        (last.1, last.2)
+        // Components of the velocity the wind blows toward
+        let uv = |speed: f64, dir: f64| {
+            let d = dir.to_radians();
+            (-speed * d.sin(), -speed * d.cos())
+        };
+        let (u0, v0) = uv(p0.1, p0.2);
+        let (u1, v1) = uv(p1.1, p1.2);
+        let (u, v) = (u0 + a * (u1 - u0), v0 + a * (v1 - v0));
+        let speed = u.hypot(v);
+        if speed < 1e-12 {
+            return (0.0, p0.2);
+        }
+        (speed, (u.atan2(v).to_degrees() + 180.0).rem_euclid(360.0))
     }
 }
 
@@ -846,8 +903,19 @@ pub struct ClientSimulation {
     pub output_step_s: f64,
     #[serde(default)]
     pub air_density_percent: f64,
+    /// Density variation over altitude; replaces `air_density_percent`
+    #[serde(default)]
+    pub air_density_profile: Vec<ClientDensitySample>,
+    #[serde(default)]
+    pub atmosphere_model: AtmosphereKind,
     #[serde(default)]
     pub integrator: ClientIntegrator,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ClientDensitySample {
+    pub altitude_m: f64,
+    pub percent: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1024,6 +1092,8 @@ pub struct ClientAttitude {
     #[serde(default = "default_attitude_azimuth")]
     pub azimuth_deg: f64,
     #[serde(default)]
+    pub roll_deg: f64,
+    #[serde(default)]
     pub pitch_offset_deg: f64,
     #[serde(default)]
     pub yaw_offset_deg: f64,
@@ -1062,6 +1132,8 @@ pub struct ClientAttitudeSample {
     pub time: f64,
     pub azimuth_deg: f64,
     pub elevation_deg: f64,
+    #[serde(default)]
+    pub roll_deg: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -1165,6 +1237,7 @@ impl ClientConfig {
             air_density_file: String::new(),
             air_density_variation: simulation.air_density_percent,
             integrator,
+            atmosphere_model: simulation.atmosphere_model,
         };
 
         let launch = LaunchCondition {
@@ -1221,6 +1294,14 @@ impl ClientConfig {
         };
 
         let mut rocket = Rocket::new(rocket_config);
+        if !simulation.air_density_profile.is_empty() {
+            rocket.air_density_table = Some(TimeSeriesData::from_pairs(
+                simulation
+                    .air_density_profile
+                    .iter()
+                    .map(|p| (p.altitude_m, p.percent)),
+            ));
+        }
 
         for (idx, client_stage) in stage_sources.into_iter().enumerate() {
             if !client_stage.thrust_profile.is_empty() {
@@ -1260,6 +1341,14 @@ impl ClientConfig {
             ));
         }
 
+        if !attitude.profile.is_empty() && attitude.profile.iter().all(|p| p.roll_deg.is_some()) {
+            rocket.attitude_roll = Some(TimeSeriesData::from_pairs(
+                attitude
+                    .profile
+                    .iter()
+                    .map(|p| (p.time, p.roll_deg.unwrap_or(0.0))),
+            ));
+        }
         if !attitude.profile.is_empty() {
             rocket.attitude_data = Some(
                 attitude
@@ -1327,6 +1416,7 @@ fn build_stage_config(
         attitude_file_name: String::new(),
         const_elevation: attitude.elevation_deg,
         const_azimuth: attitude.azimuth_deg,
+        const_roll: attitude.roll_deg,
         pitch_offset: attitude.pitch_offset_deg,
         yaw_offset: attitude.yaw_offset_deg,
         roll_offset: attitude.roll_offset_deg,
@@ -1444,5 +1534,67 @@ mod client_stage_aero_tests {
                 .dumping_product
                 .dumping_product_exists
         );
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    fn rocket() -> Rocket {
+        let json = r#"{
+            "name": "p",
+            "simulation": { "duration_s": 10, "output_step_s": 1 },
+            "launch": {
+                "latitude_deg": 31.25, "longitude_deg": 131.08,
+                "datetime_utc": { "year": 2020, "month": 1, "day": 1, "hour": 0, "minute": 0, "second": 0 }
+            },
+            "stages": [{ "mass_initial_kg": 100 }],
+            "attitude": { "elevation_deg": 80, "azimuth_deg": 90 }
+        }"#;
+        serde_json::from_str::<ClientConfig>(json)
+            .unwrap()
+            .into_rocket()
+    }
+
+    #[test]
+    fn wind_direction_interpolates_across_north() {
+        let mut rocket = rocket();
+        rocket.wind_data = Some(vec![(0.0, 10.0, 350.0), (1000.0, 10.0, 10.0)]);
+        let (speed, dir) = rocket.wind_at_altitude(500.0);
+        // Halfway between 350 and 10 deg is north, not south
+        assert!(dir < 1e-9 || dir > 360.0 - 1e-9, "direction {dir}");
+        assert!((speed - 10.0 * 10f64.to_radians().cos()).abs() < 1e-9);
+        assert_eq!(rocket.wind_at_altitude(0.0), (10.0, 350.0));
+        assert_eq!(rocket.wind_at_altitude(2000.0), (10.0, 10.0));
+    }
+
+    #[test]
+    fn attitude_offsets_rotate_the_body() {
+        let mut rocket = rocket();
+        let (dcm, att) = rocket.attitude_dcm(5.0);
+        assert_eq!(att, Vector3::new(90.0, 80.0, 0.0));
+        let program =
+            CoordinateTransform::dcm_ned_to_body(90f64.to_radians(), 80f64.to_radians(), None);
+        assert!((dcm - program).abs().max() < 1e-12);
+
+        // Pitch misalignment of 2 deg tilts the body axis by 2 deg
+        let attitude = &mut rocket.stage_configs[0].attitude;
+        attitude.pitch_offset = 2.0;
+        rocket.config.stages[0].attitude.pitch_offset = 2.0;
+        let (dcm, att) = rocket.attitude_dcm(5.0);
+        let axis = dcm.transpose() * Vector3::x();
+        let axis0 = program.transpose() * Vector3::x();
+        assert!((axis.angle(&axis0).to_degrees() - 2.0).abs() < 1e-9);
+        // C++ convention: the offset rotates the navigation frame about the
+        // body Y axis, so a positive pitch offset lowers the nose
+        assert!((att.y - 78.0).abs() < 1e-9, "elevation {}", att.y);
+
+        // Gyro bias: drift angle grows linearly with time
+        rocket.config.stages[0].attitude.pitch_offset = 0.0;
+        rocket.config.stages[0].attitude.gyro_bias_y = 3600.0; // 1 deg/s
+        let (dcm, _) = rocket.attitude_dcm(3.0);
+        let axis = dcm.transpose() * Vector3::x();
+        assert!((axis.angle(&axis0).to_degrees() - 3.0).abs() < 1e-9);
     }
 }

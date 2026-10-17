@@ -453,7 +453,7 @@ impl Simulator {
     /// Create new simulator from configuration
     pub fn new(rocket: Rocket) -> Result<Self, SimError> {
         let config = rocket.config.clone();
-        let atmosphere = AtmosphereModel::new();
+        let atmosphere = AtmosphereModel::with_kind(config.calculate_condition.atmosphere_model);
         let gravity = GravityModel::new();
         let integrator_settings = config.calculate_condition.integrator.clone();
         let integration = match integrator_settings.method {
@@ -488,9 +488,8 @@ impl Simulator {
         let velocity = CoordinateTransform::vel_eci_init(&vel_ned, &pos_llh);
 
         // Launcher: a vehicle starting at rest is held on the pad / rail
-        let (az0, el0) = rocket.attitude_at_time(0.0);
-        let (az0, el0) = (deg2rad(az0), deg2rad(el0));
-        let dir_ned = Vector3::new(el0.cos() * az0.cos(), el0.cos() * az0.sin(), -el0.sin());
+        // Rail along the body axis at t = 0
+        let dir_ned = rocket.attitude_dcm(0.0).0.transpose() * Vector3::x();
         let launcher = Launcher {
             active: vel_ned.magnitude() < 1.0e-9,
             lifted: false,
@@ -877,8 +876,14 @@ impl Simulator {
 
     /// Atmosphere at altitude, with the configured density variation
     fn atmosphere_at(&self, altitude: f64) -> AtmosphericConditions {
-        self.atmosphere
-            .conditions_with_variation(altitude, self.density_variation)
+        match &self.rocket.air_density_table {
+            Some(table) => self
+                .atmosphere
+                .conditions_with_percent(altitude, table.interpolate(altitude)),
+            None => self
+                .atmosphere
+                .conditions_with_variation(altitude, self.density_variation),
+        }
     }
 
     /// Time used for discrete state (stage, powered) when evaluating dynamics at `t`
@@ -1358,22 +1363,20 @@ impl Simulator {
         let q = 0.5 * atm.density * air_speed * air_speed;
 
         // Attitude: the program, or along the airflow for a free body
-        let program = self.rocket.attitude_at_time(t);
-        let attitude_deg = if flight_mode.follows_attitude_program() || air_speed < 1.0e-6 {
-            Vector3::new(program.0, program.1, 0.0)
+        let (dcm_ned_to_body, attitude_deg) = if flight_mode.follows_attitude_program()
+            || air_speed < 1.0e-6
+        {
+            self.rocket.attitude_dcm(t)
         } else {
             let horizontal = vel_air_ned.x.hypot(vel_air_ned.y);
-            Vector3::new(
+            let att = Vector3::new(
                 vel_air_ned.y.atan2(vel_air_ned.x).to_degrees(),
                 (-vel_air_ned.z).atan2(horizontal).to_degrees(),
                 0.0,
-            )
+            );
+            let dcm = CoordinateTransform::dcm_ned_to_body(deg2rad(att.x), deg2rad(att.y), None);
+            (dcm, att)
         };
-        let dcm_ned_to_body = CoordinateTransform::dcm_ned_to_body(
-            deg2rad(attitude_deg.x),
-            deg2rad(attitude_deg.y),
-            Some(deg2rad(attitude_deg.z)),
-        );
         let vel_air_body = dcm_ned_to_body * vel_air_ned;
         let aoa = CoordinateTransform::angle_of_attack(&vel_air_body);
 
@@ -1389,7 +1392,8 @@ impl Simulator {
                     * stage_cfg.thrust.throat_diameter.powi(2)
                     * 0.25
                     * stage_cfg.thrust.nozzle_expansion_ratio;
-                thrust = thrust_vac - exit_area * atm.pressure;
+                // Over-expanded at low altitude: no negative thrust
+                thrust = (thrust_vac - exit_area * atm.pressure).max(0.0);
             }
         }
         let thrust_body = Vector3::new(thrust, 0.0, 0.0);
@@ -1551,13 +1555,16 @@ impl Simulator {
     /// Aerodynamic force in the body frame from CA and CN.
     ///
     /// `vel_air_body` is the vehicle's air-relative velocity in body axes and
-    /// `q_area` is dynamic pressure × reference area. Each component opposes
-    /// the matching velocity component, with the flow angle measured from the
-    /// body axis line (0–90°). For normal flight (u > 0) this is the usual
-    /// axial drag along −X and normal force from α/β; when the flow comes
-    /// from behind (|AoA| > 90°, e.g. re-entry with a fixed commanded
-    /// attitude) the body is treated as symmetric, so the force still
-    /// opposes the air-relative velocity and never adds energy.
+    /// `q_area` is dynamic pressure × reference area. The axial force opposes
+    /// the axial flow; the normal force CN(Mach, crossflow angle) lies in the
+    /// plane of the body axis and the airflow and opposes the crossflow,
+    /// with the crossflow angle measured from the body axis line (0–90°).
+    /// For pure pitch or yaw this is the usual CN(α) / CN(β); with both, the
+    /// total angle is used once instead of adding CN(α) and CN(β), which
+    /// overstates a non-linear CN. When the flow comes from behind (e.g.
+    /// re-entry with a fixed commanded attitude) the body is treated as
+    /// symmetric, so the force still opposes the air-relative velocity and
+    /// never adds energy.
     fn aero_force_body(
         &self,
         stage_idx: usize,
@@ -1565,7 +1572,6 @@ impl Simulator {
         vel_air_body: &Vector3<f64>,
         q_area: f64,
     ) -> Vector3<f64> {
-        let sign = |x: f64| if x == 0.0 { 0.0 } else { x.signum() };
         let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
         // The axial force flips with the flow when it crosses broadside
         // (u = 0). A hard sign there makes the dynamics chatter around the
@@ -1577,21 +1583,21 @@ impl Simulator {
         let blend = 0.02 * speed;
         let axial_sign = if blend > 0.0 {
             u / u.hypot(blend) * speed.hypot(blend) / speed
+        } else if u == 0.0 {
+            0.0
         } else {
-            sign(u)
+            u.signum()
         };
-        let alpha_deg = w.abs().atan2(u.abs()).to_degrees();
-        let beta_deg = v.abs().atan2(u.abs()).to_degrees();
-
         let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
-        let cn_pitch = self.rocket.cn_at(stage_idx, mach_number, alpha_deg);
-        let cn_yaw = self.rocket.cn_at(stage_idx, mach_number, beta_deg);
+        let axial = -axial_sign * ca * q_area;
 
-        Vector3::new(
-            -axial_sign * ca * q_area,
-            -sign(v) * cn_yaw * q_area,
-            -sign(w) * cn_pitch * q_area,
-        )
+        let cross = v.hypot(w);
+        if cross == 0.0 {
+            return Vector3::new(axial, 0.0, 0.0);
+        }
+        let angle_deg = cross.atan2(u.abs()).to_degrees();
+        let normal = self.rocket.cn_at(stage_idx, mach_number, angle_deg) * q_area;
+        Vector3::new(axial, -normal * v / cross, -normal * w / cross)
     }
 }
 
@@ -1641,6 +1647,7 @@ mod tests {
                 attitude_file_name: "".to_string(),
                 const_elevation: 83.0,
                 const_azimuth: 113.0,
+                const_roll: 0.0,
                 pitch_offset: 0.0,
                 yaw_offset: 0.0,
                 roll_offset: 0.0,
@@ -1679,6 +1686,7 @@ mod tests {
                 air_density_file: "".to_string(),
                 air_density_variation: 0.0,
                 integrator: IntegratorSettings::default(),
+                atmosphere_model: Default::default(),
             },
             launch: LaunchCondition {
                 position_llh: [35.0, 139.0, 0.0],
@@ -2344,6 +2352,42 @@ mod tests {
     }
 
     #[test]
+    fn test_normal_force_uses_total_angle() {
+        // CN table that saturates: CN(deg) = min(deg, 5) * 0.1
+        let mut rocket = Rocket::new(create_test_config());
+        let angles: Vec<f64> = (0..=10).map(|d| d as f64).collect();
+        rocket.cn_surface = Some(crate::rocket::SurfaceData2D {
+            x: vec![0.0, 5.0],
+            y: angles.clone(),
+            z: vec![angles.iter().map(|a| a.min(5.0) * 0.1).collect(); 2],
+        });
+        let sim = Simulator::new(rocket).unwrap();
+        let force = |alpha: f64, beta: f64| {
+            let (a, b) = (alpha.to_radians(), beta.to_radians());
+            let v = Vector3::new(100.0, 100.0 * b.tan(), 100.0 * a.tan());
+            sim.aero_force_body(0, 1.0, &v, 1.0)
+        };
+        // Pure pitch: CN(alpha) against the flow
+        assert!((force(3.0, 0.0).z + 0.3).abs() < 1e-9);
+        assert_eq!(force(3.0, 0.0).y, 0.0);
+        // 4 deg pitch + 4 deg yaw: one CN at the total angle (5.66 deg,
+        // saturated at 0.5), split along the crossflow
+        let f = force(4.0, 4.0);
+        assert!((f.y.hypot(f.z) - 0.5).abs() < 1e-3, "{f}");
+        assert!((f.y - f.z).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_no_negative_thrust_when_overexpanded() {
+        // 3 kN vacuum thrust from a nozzle that loses 4 kN at sea level
+        let mut config = coast_config(2);
+        config.stages[0].thrust.const_thrust_vac = 3_000.0;
+        config.calculate_condition.end_time = 2.0;
+        let trajectory = run_config(config);
+        assert!(trajectory.iter().all(|s| s.thrust >= 0.0));
+    }
+
+    #[test]
     fn client_config_multi_stage_progresses() {
         use crate::rocket::*;
 
@@ -2373,6 +2417,8 @@ mod tests {
                 duration_s: 60.0,
                 output_step_s: 1.0,
                 air_density_percent: 0.0,
+                air_density_profile: Vec::new(),
+                atmosphere_model: Default::default(),
                 integrator: ClientIntegrator {
                     method: IntegratorMethod::Rk4,
                     rk4_step_s: Some(0.5),
@@ -2409,6 +2455,7 @@ mod tests {
             attitude: ClientAttitude {
                 elevation_deg: 85.0,
                 azimuth_deg: 113.0,
+                roll_deg: 0.0,
                 pitch_offset_deg: 0.0,
                 yaw_offset_deg: 0.0,
                 roll_offset_deg: 0.0,
