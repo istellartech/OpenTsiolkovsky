@@ -1,4 +1,4 @@
-time, thrust, nozzle_exhaust_pressure[Pa]
+time[s],thrust vac[N],nozzle_exhaust_pressure[Pa]
 0.0,160000, 101300
 10,100000, 101300
 30.0,50000, 101300

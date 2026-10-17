@@ -1,4 +1,4 @@
-time,azimuth,elevation
+time[s],azimuth[deg],elevation[deg]
 0,99,82.0
 31.7,99,77.0
 31.8,99,77.0
