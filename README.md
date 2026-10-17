@@ -27,11 +27,17 @@ OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core i
 - Writes `<name>_dynamics_cpp_<N>_fall.csv` / `<name>_dynamics_cpp_<N>_dump.csv` for each spent stage / dumping product and prints every impact point
 - `--monte-carlo N` runs a dispersion analysis on all CPU cores (`--dispersion FILE`, `--seed S`) and writes `<name>_montecarlo.csv` and `<name>_montecarlo_summary.json`
 
+### For AI agents ([details](docs/ai.md))
+- `run --json` / `validate --json`: one JSON document on stdout, stable error kinds and exit status (3 = invalid configuration)
+- `schema`: JSON Schema of the parameter file (units, defaults) and of the dispersion file
+- `mcp`: a Model Context Protocol server on stdio with tools to validate, fly, run Monte Carlo and create web app links — for Claude Code, Claude Desktop and other MCP clients
+- `share`: a link that opens a parameter file, with its CSV tables, in the web app
+
 ### Web app ([details](frontend/README.md))
 - **Live:** results follow every input change. The solver runs in a Web Worker, so the page stays responsive.
 - **Visual:** a 3D globe (CesiumJS, Esri basemaps), charts, an event table and telemetry, all on a shared playback timeline.
 - **Impact analysis:** fall paths and impact points of spent stages and jettisoned parts, the IIP track, the flight mode, and a Monte Carlo "Dispersion" tab that draws impact scatter and 3-sigma ellipses on the globe.
-- **Sample vehicles** built from published data: MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3, Saturn V and Ariane 5. Each comes with sources and modelling notes.
+- **Sample vehicles** built from published data: MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3, Saturn V, Ariane 5, Falcon 9, Soyuz-2.1a and Long March 3B/E. Each comes with sources and modelling notes; the picker filters them by type and country and has a search box.
 - **Files:**
   - Opens CLI `param_*.json` files together with their CSV tables; results match the CLI.
   - Exports trajectory CSV, KML for Google Earth, the settings JSON and chart PNGs.
@@ -68,6 +74,18 @@ cargo build --release
 ```
 
 More examples are in [`examples/`](examples/), e.g. `param_momo.json` and `SS-520-4/` (with CSV tables).
+
+### AI agents and scripts
+```bash
+B=./target/release/openTsiolkovsky-cli
+$B schema > param.schema.json                      # JSON Schema of param_*.json
+$B validate -c examples/param_momo.json --json     # check without flying (exit 3 if invalid)
+$B run -c examples/param_momo.json -o out/momo --json --trajectory-points 50
+$B share -c examples/SS-520-4/param_SS520-4.json   # web app link with the CSV tables embedded
+
+# MCP server for Claude Code (Claude Desktop: see docs/ai.md)
+claude mcp add opentsiolkovsky -- "$PWD/target/release/openTsiolkovsky-cli" mcp
+```
 
 ### Web app
 ```bash
@@ -107,6 +125,7 @@ OpenTsiolkovsky/
 - [Development guide](docs/development.md)
 - [Configuration file](docs/configuration.md)
 - [Output files](docs/output.md)
+- [AI agents: JSON output, MCP server, share links](docs/ai.md)
 - [Physics models and numerics](docs/physics.md)
 - [Web app](frontend/README.md)
 - [WASM build](docs/wasm.md)

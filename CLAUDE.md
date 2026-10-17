@@ -19,6 +19,7 @@ This guide helps Claude Code work effectively with the OpenTsiolkovsky project, 
   - CLI: `cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --verbose`.
   - WASM: `wasm-pack build --target web --features wasm`.
 - Frontend (Vite+ toolchain, `vp` from `frontend/node_modules/.bin`): `cd frontend && bun install && bun run dev` (build: `bun run build`; frontend only: `bunx vp build`).
+- Agent/script interface (`src/agent.rs`, `src/mcp.rs`; see `docs/ai.md`): `openTsiolkovsky-cli run --json`, `validate --json`, `schema [param|dispersion]`, `share`, `mcp` (stdio MCP server, also in `.mcp.json`). Keep the JSON keys, error kinds and exit codes (0 ok, 1 failure, 2 usage, 3 invalid config) stable; document changes in `docs/ai.md`.
 - Legacy C++ build: `cd legacy_cpp && make` (needs Boost: `brew install boost` on macOS; outputs `legacy_cpp/bin/OpenTsiolkovsky`), clean: `make clean`.
 - Rust vs C++: `cargo build --release && python3 tools/compare_cpp.py examples/param_momo.json`.
 - Legacy C++ run: `./legacy_cpp/bin/OpenTsiolkovsky examples/param_sample_01.json`.

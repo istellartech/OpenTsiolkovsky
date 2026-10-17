@@ -3,6 +3,7 @@ pub mod atmosphere {
 
     /// Which standard atmosphere `AtmosphereModel` evaluates
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+    #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
     #[serde(rename_all = "lowercase")]
     pub enum AtmosphereKind {
         /// As the C++ simulator: the 1976 layers evaluated at the geometric

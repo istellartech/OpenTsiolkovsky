@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { PRESET_OPTIONS } from '../config/presets'
 import type { ClientConfig } from '../lib/simulation'
-import { decodePayload, parseShareHash } from '../lib/share'
+import { fromLegacyParamFile } from '../lib/legacy'
+import { asLegacyBundle, decodePayload, parseShareHash } from '../lib/share'
 import { isValidClientConfig } from '../lib/validation'
 import { tr } from '../lib/i18n'
 import { useLatest } from './useLatest'
@@ -33,6 +34,33 @@ export function useOpenSharedLink(
     }
     decodePayload(target.data)
       .then((parsed) => {
+        const bundle = asLegacyBundle(parsed)
+        if (bundle) {
+          const imported = fromLegacyParamFile(bundle.param, bundle.files)
+          load(imported.config)
+          const notes = [
+            tr(
+              '共有リンクのCLI用設定を開きました。⌘Z / Ctrl+Z で元の設定に戻せます。',
+              'Opened the shared CLI configuration. Press ⌘Z / Ctrl+Z to restore your previous settings.',
+            ),
+          ]
+          if (imported.missing.length)
+            notes.push(
+              tr(
+                `リンクに含まれていないCSVは定数値を使っています（${imported.missing.join('、')}）。`,
+                `CSV files not included in the link use constant values (${imported.missing.join(', ')}).`,
+              ),
+            )
+          if (imported.unsupported.length)
+            notes.push(
+              tr(
+                `この画面では扱えない設定は無視しました：${imported.unsupported.join('、')}。`,
+                `Ignored settings not supported here: ${imported.unsupported.join(', ')}.`,
+              ),
+            )
+          notify(notes.join(' '), imported.missing.length ? 'error' : 'ok')
+          return
+        }
         if (!isValidClientConfig(parsed)) throw new Error('invalid')
         load(parsed)
         notify(

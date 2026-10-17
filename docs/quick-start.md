@@ -58,6 +58,18 @@ vehicle impact point [deg]:	28.441554	142.507390	(T+1882.8 s)
 - `<出力名>_montecarlo.csv`: 1 行 1 ケース。引いた乱数（各パラメータのずれ）、最高高度、物体ごとの落下時刻・緯度・経度
 - `<出力名>_montecarlo_summary.json`: 物体ごとの落下数、平均落下点、南北・東西の標準偏差、1σ・95 %・99 % の誤差楕円（長径・短径・長軸の方位）、平均点からの最大のずれ
 
+### AI エージェント・スクリプトから使う
+
+```bash
+./target/release/openTsiolkovsky-cli validate -c examples/param_momo.json --json   # 飛ばさずに確認
+./target/release/openTsiolkovsky-cli run -c examples/param_momo.json --json        # 結果を JSON で標準出力
+./target/release/openTsiolkovsky-cli schema                                        # 設定ファイルの JSON Schema
+./target/release/openTsiolkovsky-cli share -c examples/param_momo.json             # Web アプリで開くリンク
+./target/release/openTsiolkovsky-cli mcp                                           # MCP サーバー
+```
+
+詳しくは [AI エージェントからの利用](ai.md) を参照してください。
+
 ### Webフロントエンド
 
 ```bash
@@ -66,7 +78,7 @@ bun install
 bun run dev   # frontend/src/wasm が無ければ先に WASM をビルド
 ```
 
-ブラウザで http://localhost:5173 を開きます。ヘッダーからサンプル機体（MOMO、S-310、S-520、SS-520-5、イプシロン、H-IIA、H3、サターンV、アリアン5）を選ぶか、CLI 用の `param_*.json` を CSV と一緒にドロップして開けます。使用済みの段・投棄物の落下点や IIP は地図とイベント表に、分散解析は下のパネルの「分散解析」タブにあります。使い方の詳細は [frontend/README.md](../frontend/README.md) を参照してください。
+ブラウザで http://localhost:5173 を開きます。ヘッダーからサンプル機体（MOMO、S-310、S-520、SS-520-5、イプシロン、H-IIA、H3、サターンV、アリアン5、ファルコン9、ソユーズ2.1a、長征3B/E。種別・国での絞り込みと検索ができます）を選ぶか、CLI 用の `param_*.json` を CSV と一緒にドロップして開けます。使用済みの段・投棄物の落下点や IIP は地図とイベント表に、分散解析は下のパネルの「分散解析」タブにあります。使い方の詳細は [frontend/README.md](../frontend/README.md) を参照してください。
 
 開発用コマンド:
 
@@ -91,5 +103,6 @@ bash scripts/wasm_build.sh
 - [WASM ガイド](wasm.md) - WASMビルドの詳細
 - [設定ファイル](configuration.md) - 設定ファイルフォーマット
 - [出力ファイル](output.md) - 出力 CSV・JSON の列とキー
+- [AI エージェントからの利用](ai.md) - JSON 出力・MCP サーバー・共有リンク
 - [物理モデルと数値計算](physics.md) - 運動方程式・モデル・積分とイベント・C++版との違い
 - [Webアプリ](../frontend/README.md) - 使い方と構成

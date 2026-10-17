@@ -70,8 +70,12 @@ fn parse_csv_rows_from_str<const N: usize>(content: &str) -> Result<Vec<[f64; N]
 
 /// Load rocket configuration from JSON file
 pub fn load_config<P: AsRef<Path>>(path: P) -> Result<RocketConfig> {
-    let content = fs::read_to_string(path)?;
-    let config: RocketConfig = serde_json::from_str(&content)?;
+    parse_config_str(&fs::read_to_string(path)?)
+}
+
+/// Parse and validate a rocket configuration from JSON text
+pub fn parse_config_str(content: &str) -> Result<RocketConfig> {
+    let config: RocketConfig = serde_json::from_str(content)?;
 
     // Validate the configuration and return detailed errors if any
     if let Err(validation_errors) = validate_config(&config) {
@@ -812,6 +816,58 @@ pub fn create_rocket_from_config<P: AsRef<Path>>(config_path: P) -> Result<Rocke
     load_rocket_data(rocket, base_path)
 }
 
+/// Create rocket from configuration JSON text; relative CSV file names are
+/// resolved against `base_path` (the current directory when `None`)
+pub fn create_rocket_from_str(content: &str, base_path: Option<&Path>) -> Result<Rocket> {
+    load_rocket_data(Rocket::new(parse_config_str(content)?), base_path)
+}
+
+/// CSV file names the configuration asks `load_rocket_data` to read, in
+/// load order and without duplicates (whether or not the files exist)
+pub fn referenced_files(config: &RocketConfig) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    let mut add = |flag: bool, name: &str| {
+        let name = name.trim();
+        if flag && !name.is_empty() && !names.iter().any(|n| n == name) {
+            names.push(name.to_string());
+        }
+    };
+    for stage in &config.stages {
+        add(
+            stage.thrust.thrust_file_exists,
+            &stage.thrust.thrust_file_name,
+        );
+        add(stage.thrust.isp_file_exists, &stage.thrust.isp_file_name);
+    }
+    for stage in &config.stages {
+        let n = &stage.attitude_neutrality;
+        add(n.considering_neutrality, &n.cg_controller_position_file);
+        add(n.considering_neutrality, &n.cp_file);
+    }
+    let primary = config.primary_stage();
+    add(primary.aero.cn_file_exists, &primary.aero.cn_file_name);
+    add(primary.aero.ca_file_exists, &primary.aero.ca_file_name);
+    add(true, &primary.aero.ca_power_off_file_name);
+    add(
+        primary.attitude.attitude_file_exists,
+        &primary.attitude.attitude_file_name,
+    );
+    let calc = &config.calculate_condition;
+    add(calc.air_density_file_exists, &calc.air_density_file);
+    add(config.wind.wind_file_exists, &config.wind.wind_file_name);
+    names
+}
+
+/// Referenced CSV files that do not exist under `base_path`; the loader
+/// silently falls back to the constant values for these
+pub fn missing_files(config: &RocketConfig, base_path: Option<&Path>) -> Vec<String> {
+    let base = base_path.unwrap_or_else(|| Path::new("."));
+    referenced_files(config)
+        .into_iter()
+        .filter(|name| !base.join(name).exists())
+        .collect()
+}
+
 /// Save trajectory data to CSV file
 pub fn save_trajectory_csv<P: AsRef<Path>>(
     trajectory: &[SimulationState],
@@ -905,6 +961,19 @@ pub fn save_summary_json<P: AsRef<Path>>(
     config: &RocketConfig,
     output_path: P,
 ) -> Result<()> {
+    let summary = summary_json(trajectory, fall_bodies, events, config)?;
+    let json_string = serde_json::to_string_pretty(&summary)?;
+    std::fs::write(output_path, json_string)?;
+    Ok(())
+}
+
+/// Simulation summary, as written by `save_summary_json`
+pub fn summary_json(
+    trajectory: &[SimulationState],
+    fall_bodies: &[FallBody],
+    events: &[FlightEvent],
+    config: &RocketConfig,
+) -> Result<serde_json::Value> {
     if trajectory.is_empty() {
         return Err(IoError::FileRead(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -1004,9 +1073,140 @@ pub fn save_summary_json<P: AsRef<Path>>(
             .collect::<Vec<_>>()
     });
 
-    let json_string = serde_json::to_string_pretty(&summary)?;
-    std::fs::write(output_path, json_string)?;
+    Ok(summary)
+}
 
+/// Write C++-compatible CSV using telemetry captured by simulator
+pub fn save_cpp_telemetry_csv<P: AsRef<Path>>(
+    rows: &[crate::simulator::CsvCppRow],
+    path: P,
+) -> Result<()> {
+    let mut w = csv::Writer::from_path(path)?;
+    w.write_record([
+        "time(s)",
+        "mass(kg)",
+        "thrust(N)",
+        "lat(deg)",
+        "lon(deg)",
+        "altitude(m)",
+        "pos_ECI_X(m)",
+        "pos_ECI_Y(m)",
+        "pos_ECI_Z(m)",
+        "vel_ECI_X(m/s)",
+        "vel_ECI_Y(m/s)",
+        "vel_ECI_Z(m/s)",
+        "vel_NED_X(m/s)",
+        "vel_NED_Y(m/s)",
+        "vel_NED_Z(m/s)",
+        "acc_ECI_X(m/s2)",
+        "acc_ECI_Y(m/s2)",
+        "acc_ECI_Z(m/s2)",
+        "acc_Body_X(m/s2)",
+        "acc_Body_Y(m/s2)",
+        "acc_Body_Z(m/s2)",
+        "Isp(s)",
+        "Mach number",
+        "attitude_azimuth(deg)",
+        "attitude_elevation(deg)",
+        "attitude_roll(deg)",
+        "angle of attack alpha(deg)",
+        "angle of attack beta(deg)",
+        "all angle of attack gamma(deg)",
+        "dynamic pressure(Pa)",
+        "aeroforce_Body_X[N]",
+        "aeroforce_Body_Y[N]",
+        "aeroforce_Body_Z[N]",
+        "thrust_Body_X[N]",
+        "thrust_Body_Y[N]",
+        "thrust_Body_Z[N]",
+        "gimbal_angle_pitch(deg)",
+        "gimbal_angle_yaw(deg)",
+        "wind speed(m/s)",
+        "wind direction(deg)",
+        "downrange(m)",
+        "IIP_lat(deg)",
+        "IIP_lon(deg)",
+        "dcmBODY2ECI_11",
+        "dcmBODY2ECI_12",
+        "dcmBODY2ECI_13",
+        "dcmBODY2ECI_21",
+        "dcmBODY2ECI_22",
+        "dcmBODY2ECI_23",
+        "dcmBODY2ECI_31",
+        "dcmBODY2ECI_32",
+        "dcmBODY2ECI_33",
+        "inertial velocity(m/s)",
+        "kinematic_energy_NED(J)",
+        "loss_gravity(m/s2)",
+        "loss_aerodynamics(m/s2)",
+        "loss_thrust(m/s2)",
+        "is_powered(1=powered 0=free)",
+        "is_separated(1=already 0=still)",
+    ])?;
+    for r in rows {
+        w.write_record([
+            r.time.to_string(),
+            r.mass.to_string(),
+            r.thrust.to_string(),
+            r.lat_deg.to_string(),
+            r.lon_deg.to_string(),
+            r.alt_m.to_string(),
+            r.pos_eci.x.to_string(),
+            r.pos_eci.y.to_string(),
+            r.pos_eci.z.to_string(),
+            r.vel_eci.x.to_string(),
+            r.vel_eci.y.to_string(),
+            r.vel_eci.z.to_string(),
+            r.vel_ned.x.to_string(),
+            r.vel_ned.y.to_string(),
+            r.vel_ned.z.to_string(),
+            r.acc_eci.x.to_string(),
+            r.acc_eci.y.to_string(),
+            r.acc_eci.z.to_string(),
+            r.acc_body.x.to_string(),
+            r.acc_body.y.to_string(),
+            r.acc_body.z.to_string(),
+            r.isp_s.to_string(),
+            r.mach.to_string(),
+            r.att_az_deg.to_string(),
+            r.att_el_deg.to_string(),
+            r.att_roll_deg.to_string(),
+            r.aoa_alpha_deg.to_string(),
+            r.aoa_beta_deg.to_string(),
+            r.aoa_gamma_deg.to_string(),
+            r.q_pa.to_string(),
+            r.aero_body.x.to_string(),
+            r.aero_body.y.to_string(),
+            r.aero_body.z.to_string(),
+            r.thrust_body.x.to_string(),
+            r.thrust_body.y.to_string(),
+            r.thrust_body.z.to_string(),
+            r.gimbal_pitch_deg.to_string(),
+            r.gimbal_yaw_deg.to_string(),
+            r.wind_speed.to_string(),
+            r.wind_dir_deg.to_string(),
+            r.downrange.to_string(),
+            r.iip_lat_deg.to_string(),
+            r.iip_lon_deg.to_string(),
+            r.dcm_body_to_eci[(0, 0)].to_string(),
+            r.dcm_body_to_eci[(0, 1)].to_string(),
+            r.dcm_body_to_eci[(0, 2)].to_string(),
+            r.dcm_body_to_eci[(1, 0)].to_string(),
+            r.dcm_body_to_eci[(1, 1)].to_string(),
+            r.dcm_body_to_eci[(1, 2)].to_string(),
+            r.dcm_body_to_eci[(2, 0)].to_string(),
+            r.dcm_body_to_eci[(2, 1)].to_string(),
+            r.dcm_body_to_eci[(2, 2)].to_string(),
+            r.inertial_speed.to_string(),
+            r.kinetic_energy_ned.to_string(),
+            r.loss_gravity.to_string(),
+            r.loss_aero.to_string(),
+            r.loss_thrust.to_string(),
+            r.is_powered.to_string(),
+            r.is_separated.to_string(),
+        ])?;
+    }
+    w.flush()?;
     Ok(())
 }
 

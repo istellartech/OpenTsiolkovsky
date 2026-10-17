@@ -24,6 +24,10 @@ thiserror = "1.0"
 
 # CLI dependencies
 clap = { version = "4.4", features = ["derive"], optional = true }
+# JSON Schema of the configuration files (`schema` subcommand, MCP server)
+schemars = { version = "1.2", optional = true }
+# Raw DEFLATE for web app share links
+miniz_oxide = { version = "0.9", optional = true }
 
 # WASM dependencies
 wasm-bindgen = { version = "0.2", optional = true }
@@ -31,7 +35,8 @@ console_error_panic_hook = { version = "0.1", optional = true }
 
 [features]
 default = ["cli"]
-cli = ["clap"]
+cli = ["clap", "schema", "miniz_oxide"]
+schema = ["schemars"]
 wasm = ["wasm-bindgen", "console_error_panic_hook"]
 
 [dev-dependencies]

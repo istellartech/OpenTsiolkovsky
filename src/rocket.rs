@@ -228,7 +228,67 @@ impl<'de> Deserialize<'de> for RocketConfig {
     }
 }
 
+/// JSON Schema of the parameter file. `RocketConfig` deserializes by hand
+/// (stages from `stages`, `stage1`..`stage3` or `stage`), so its schema is
+/// derived from this mirror of the accepted keys.
+#[cfg(feature = "schema")]
+mod param_schema {
+    use super::*;
+    use schemars::{JsonSchema, Schema, SchemaGenerator};
+    use std::borrow::Cow;
+
+    /// OpenTsiolkovsky parameter file (`param_*.json`, the C++ simulator's
+    /// format). Key names include their units and are matched literally.
+    /// Relative CSV file names are resolved against the file's directory.
+    #[derive(JsonSchema)]
+    #[allow(dead_code)]
+    struct ParamFile {
+        /// Vehicle / case name
+        #[serde(rename = "name(str)")]
+        name: String,
+        #[serde(rename = "calculate condition")]
+        calculate_condition: CalculateCondition,
+        launch: LaunchCondition,
+        /// Stages in flight order (alternative to `stage1`..`stage3`)
+        #[serde(default)]
+        stages: Vec<StageConfig>,
+        /// First stage (with `stage2`, `stage3`; ignored when `stages` is given)
+        #[serde(default)]
+        stage1: Option<StageConfig>,
+        #[serde(default)]
+        stage2: Option<StageConfig>,
+        #[serde(default)]
+        stage3: Option<StageConfig>,
+        /// Single-stage vehicle (used only without `stages` and `stage1`)
+        #[serde(default)]
+        stage: Option<StageConfig>,
+        #[serde(default)]
+        wind: WindConfig,
+    }
+
+    impl JsonSchema for RocketConfig {
+        fn schema_name() -> Cow<'static, str> {
+            "RocketConfig".into()
+        }
+
+        fn json_schema(generator: &mut SchemaGenerator) -> Schema {
+            let mut schema = ParamFile::json_schema(generator);
+            schema.insert("title".into(), "OpenTsiolkovsky parameter file".into());
+            schema.insert(
+                "anyOf".into(),
+                serde_json::json!([
+                    { "required": ["stages"] },
+                    { "required": ["stage1"] },
+                    { "required": ["stage"] }
+                ]),
+            );
+            schema
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum IntegratorMethod {
     #[serde(alias = "RK4", alias = "RungeKutta4")]
@@ -239,6 +299,7 @@ pub enum IntegratorMethod {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct IntegratorSettings {
     #[serde(rename = "method(str)", default)]
     pub method: IntegratorMethod,
@@ -275,19 +336,25 @@ impl Default for IntegratorSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct CalculateCondition {
+    /// Simulation end time
     #[serde(rename = "end time[s]")]
     pub end_time: f64,
 
+    /// Output interval of the trajectory
     #[serde(rename = "time step for output[s]")]
     pub time_step: f64,
 
+    /// Use a density-variation table over altitude (overrides the variation ratio)
     #[serde(rename = "air density variation file exist?(bool)", default)]
     pub air_density_file_exists: bool,
 
+    /// CSV: altitude [m], density variation [%]
     #[serde(rename = "air density variation file name(str)", default)]
     pub air_density_file: String,
 
+    /// Seasonal density variation along the U.S. Standard Atmosphere profile [%]
     #[serde(
         rename = "variation ratio of air density[%](-100to100, default=0)",
         default
@@ -303,13 +370,17 @@ pub struct CalculateCondition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct LaunchCondition {
+    /// Launch latitude [deg], longitude [deg], WGS84 ellipsoidal height [m]
     #[serde(rename = "position LLH[deg,deg,m]")]
     pub position_llh: [f64; 3],
 
+    /// Initial Earth-relative velocity (north, east, down); zero holds the vehicle on the pad
     #[serde(rename = "velocity NED[m/s]", default)]
     pub velocity_ned: [f64; 3],
 
+    /// Launch time (UTC)
     #[serde(rename = "time(UTC)[y,m,d,h,min,sec]", default = "default_launch_time")]
     pub launch_time: [i32; 6],
 
@@ -321,13 +392,17 @@ pub struct LaunchCondition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct StageConfig {
+    /// Powered flight mode; only 0 (3DoF) is supported
     #[serde(rename = "power flight mode(int)", default)]
     pub power_flight_mode: i32,
 
+    /// After burnout: 0 aerodynamically stable (CA only), 1 3DoF with the attitude program, 2 ballistic (ballistic coefficient)
     #[serde(rename = "free flight mode(int)", default = "default_free_mode")]
     pub free_flight_mode: i32,
 
+    /// Initial mass of this stage alone, excluding upper stages (the C++ format used the stack mass)
     #[serde(rename = "mass initial[kg]")]
     pub mass_initial: f64,
 
@@ -361,38 +436,48 @@ pub struct StageConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct ThrustConfig {
+    /// Use the Isp table instead of the constant
     #[serde(rename = "Isp vac file exist?(bool)")]
     pub isp_file_exists: bool,
 
+    /// CSV: stage-relative time [s], vacuum Isp [s]
     #[serde(rename = "Isp vac file name(str)")]
     pub isp_file_name: String,
 
+    /// Scales thrust and Isp together (mass flow unchanged)
     #[serde(rename = "Isp coefficient[-]")]
     pub isp_coefficient: f64,
 
     #[serde(rename = "const Isp vac[s]")]
     pub const_isp_vac: f64,
 
+    /// Use the thrust table instead of the constant
     #[serde(rename = "thrust vac file exist?(bool)")]
     pub thrust_file_exists: bool,
 
+    /// CSV: stage-relative time [s], vacuum thrust [N]
     #[serde(rename = "thrust vac file name(str)")]
     pub thrust_file_name: String,
 
+    /// Scales thrust by k and the burn time by 1/k (same total impulse)
     #[serde(rename = "thrust coefficient[-]")]
     pub thrust_coefficient: f64,
 
     #[serde(rename = "const thrust vac[N]")]
     pub const_thrust_vac: f64,
 
+    /// Burn start, relative to the stage start
     #[serde(rename = "burn start time(time of each stage)[s]")]
     pub burn_start_time: f64,
 
+    /// Burn end, relative to the stage start
     #[serde(rename = "burn end time(time of each stage)[s]")]
     pub burn_end_time: f64,
 
+    /// Forced engine cutoff, relative to the stage start
     #[serde(rename = "forced cutoff time(time of each stage)[s]")]
     pub forced_cutoff_time: f64,
 
@@ -402,11 +487,14 @@ pub struct ThrustConfig {
     #[serde(rename = "nozzle expansion ratio[-]")]
     pub nozzle_expansion_ratio: f64,
 
+    /// Read but unused (as in the C++ simulator); the back-pressure loss uses
+    /// the exit area = pi/4 x throat diameter^2 x expansion ratio
     #[serde(rename = "nozzle exhaust pressure[Pa]")]
     pub nozzle_exhaust_pressure: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct AeroConfig {
     #[serde(rename = "body diameter[m]")]
@@ -415,18 +503,22 @@ pub struct AeroConfig {
     #[serde(rename = "normal coefficient file exist?(bool)")]
     pub cn_file_exists: bool,
 
+    /// CSV: Mach, CN-alpha [1/rad] pairs, or a 15-column CN surface over
+    /// Mach x angle of attack; vehicle-wide, read from stage 1
     #[serde(rename = "normal coefficient file name(str)")]
     pub cn_file_name: String,
 
     #[serde(rename = "normal multiplier[-]")]
     pub normal_multiplier: f64,
 
+    /// Normal-force slope CN-alpha [1/rad]
     #[serde(rename = "const normal coefficient[-]")]
     pub const_normal_coefficient: f64,
 
     #[serde(rename = "axial coefficient file exist?(bool)")]
     pub ca_file_exists: bool,
 
+    /// CSV: Mach, CA; vehicle-wide, read from stage 1
     #[serde(rename = "axial coefficient file name(str)")]
     pub ca_file_name: String,
 
@@ -453,17 +545,23 @@ pub struct AeroConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct AttitudeConfig {
+    /// Use the attitude program table instead of the constants
     #[serde(rename = "attitude file exist?(bool)")]
     pub attitude_file_exists: bool,
 
+    /// CSV: time from launch [s], azimuth [deg], elevation [deg][, roll [deg]];
+    /// vehicle-wide, read from stage 1
     #[serde(rename = "attitude file name(str)")]
     pub attitude_file_name: String,
 
+    /// Constant attitude elevation (90 = vertical)
     #[serde(rename = "const elevation[deg]")]
     pub const_elevation: f64,
 
+    /// Constant attitude azimuth (clockwise from north)
     #[serde(rename = "const azimuth[deg]")]
     pub const_azimuth: f64,
 
@@ -490,6 +588,7 @@ pub struct AttitudeConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct DumpingProductConfig {
     #[serde(rename = "dumping product exist?(bool)")]
@@ -512,6 +611,7 @@ pub struct DumpingProductConfig {
 /// "neutrality", as in the C++ simulator). Positions are STA [m] (from the
 /// nose, aft positive); the offsets move CG, CP and the thrust point.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct AttitudeNeutralityConfig {
     #[serde(rename = "considering neutrality?(bool)")]
@@ -557,6 +657,7 @@ pub struct NeutralityData {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct SixDofConfig {
     #[serde(rename = "CG,CP,Controller position file(str)")]
@@ -567,24 +668,31 @@ pub struct SixDofConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct StageTransitionConfig {
+    /// An upper stage separates from this stage
     #[serde(rename = "following stage exist?(bool)")]
     pub following_stage_exists: bool,
 
+    /// Upper-stage separation, relative to this stage start
     #[serde(rename = "separation time[s]")]
     pub separation_time: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct WindConfig {
+    /// Use the wind table instead of the constant wind
     #[serde(rename = "wind file exist?(bool)")]
     pub wind_file_exists: bool,
 
+    /// CSV: altitude [m], wind speed [m/s], direction the wind blows from [deg]
     #[serde(rename = "wind file name(str)")]
     pub wind_file_name: String,
 
+    /// Constant wind: speed [m/s], direction it blows from [deg]
     #[serde(rename = "const wind[m/s,deg]")]
     pub const_wind: [f64; 2],
 }
@@ -1151,7 +1259,14 @@ impl Default for ClientStage {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+/// An omitted block takes the same defaults as its omitted keys
+impl Default for ClientAerodynamics {
+    fn default() -> Self {
+        serde_json::from_str("{}").expect("every field has a default")
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ClientAerodynamics {
     #[serde(default = "default_body_diameter")]
     pub body_diameter_m: f64,
@@ -1176,7 +1291,14 @@ pub struct ClientAerodynamics {
     pub ballistic_coefficient: f64,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+/// An omitted block takes the same defaults as its omitted keys
+impl Default for ClientAttitude {
+    fn default() -> Self {
+        serde_json::from_str("{}").expect("every field has a default")
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ClientAttitude {
     #[serde(default = "default_attitude_elevation")]
     pub elevation_deg: f64,
@@ -1196,7 +1318,14 @@ pub struct ClientAttitude {
     pub profile: Vec<ClientAttitudeSample>,
 }
 
-#[derive(Debug, Clone, Deserialize, Default)]
+/// An omitted block takes the same defaults as its omitted keys
+impl Default for ClientWind {
+    fn default() -> Self {
+        serde_json::from_str("{}").expect("every field has a default")
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct ClientWind {
     #[serde(default)]
     pub speed_mps: f64,

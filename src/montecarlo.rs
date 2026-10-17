@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 /// 1-sigma dispersions (Gaussian, zero mean)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(default)]
 pub struct Dispersion {
     /// Thrust scale [%]
@@ -61,6 +62,7 @@ fn is_default<T: Default + PartialEq>(v: &T) -> bool {
 
 /// Probability distribution of a dispersed parameter
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "lowercase")]
 pub enum Distribution {
     /// Gaussian with the given 1-sigma

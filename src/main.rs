@@ -1,26 +1,114 @@
 #![allow(non_snake_case)]
-use clap::Parser;
+use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
 use openTsiolkovsky::{
+    agent::{self, AgentError, ConfigInput, ErrorKind, MonteCarloOptions, RunOptions},
     io::{
-        IoError, config_warnings, create_rocket_from_config, load_dispersion, rocket_warnings,
-        save_monte_carlo_csv, save_monte_carlo_summary, save_summary_json, save_trajectory_csv,
+        save_cpp_telemetry_csv, save_monte_carlo_csv, save_monte_carlo_summary, save_summary_json,
+        save_trajectory_csv,
     },
     montecarlo::{Dispersion, impact_statistics, run_cases},
-    simulator::{EventKind, FallBodyKind, SimError, Simulator, impact_point},
+    simulator::{EventKind, FallBodyKind, Simulator, impact_point},
 };
+use std::io::Read;
+use std::process::ExitCode;
+
+/// Exit status for a configuration that fails to parse or validate
+/// (clap uses 2 for usage errors; 1 is any other failure)
+const EXIT_INVALID_CONFIG: u8 = 3;
 
 #[derive(Parser)]
-#[command(name = "openTsiolkovsky")]
+#[command(name = "openTsiolkovsky", version)]
 #[command(about = "OpenTsiolkovsky Rocket Flight Simulator")]
-struct Args {
+#[command(args_conflicts_with_subcommands = true)]
+#[command(after_help = "\
+Without a subcommand, flies the vehicle (same as `run`).
+
+For AI agents and scripts:
+  run --json        one JSON document on stdout (summary, events, impact points, files)
+  validate --json   check a parameter file without flying it
+  schema            JSON Schema of the parameter file (`schema dispersion` for Monte Carlo)
+  share             link that opens the configuration in the web app
+  mcp               Model Context Protocol server on stdin/stdout
+
+`--config -` reads the configuration from stdin. Exit status: 0 success,
+1 failure, 2 invalid arguments, 3 invalid configuration. See docs/ai.md.")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Command>,
+
+    #[command(flatten)]
+    run: RunArgs,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Fly a vehicle and write the output files (the default)
+    Run(RunArgs),
+
+    /// Check a configuration without flying it
+    Validate {
+        /// Parameter file (`-`: stdin)
+        #[arg(short, long)]
+        config: String,
+
+        /// Print the result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Print the JSON Schema of a configuration file
+    Schema {
+        #[arg(value_enum, default_value_t = SchemaKind::Param)]
+        kind: SchemaKind,
+    },
+
+    /// Print a link that opens the configuration in the web app
+    Share {
+        /// Parameter file (`-`: stdin); referenced CSV tables are embedded
+        #[arg(short, long)]
+        config: String,
+
+        /// Web app URL (default: $OPENTSIOLKOVSKY_WEB_URL or the public site)
+        #[arg(long, value_name = "URL")]
+        base_url: Option<String>,
+
+        /// Print the result as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Serve the Model Context Protocol (MCP) on stdin/stdout
+    Mcp,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum SchemaKind {
+    /// CLI parameter file (param_*.json)
+    Param,
+    /// Monte Carlo dispersion file (--dispersion)
+    Dispersion,
+}
+
+#[derive(ClapArgs, Clone)]
+struct RunArgs {
+    /// Parameter file (`-`: stdin, CSV names resolved against the current directory)
     #[arg(short, long, default_value = "param_sample_01.json")]
     config: String,
 
+    /// Prefix of the output files
     #[arg(short, long)]
     output: Option<String>,
 
     #[arg(short, long)]
     verbose: bool,
+
+    /// Print one JSON document on stdout instead of text
+    #[arg(long)]
+    json: bool,
+
+    /// Include N evenly spaced trajectory samples in the --json output
+    #[arg(long, value_name = "N", default_value_t = 0, requires = "json")]
+    trajectory_points: usize,
 
     /// Also run N Monte Carlo dispersion cases
     #[arg(long, value_name = "N")]
@@ -35,34 +123,180 @@ struct Args {
     seed: u64,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CliError {
-    #[error("IO error: {0}")]
-    Io(#[from] IoError),
-
-    #[error("Simulation error: {0}")]
-    Simulation(#[from] SimError),
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let (json, outcome) = match cli.command {
+        None => (cli.run.json, run(&cli.run)),
+        Some(Command::Run(args)) => (args.json, run(&args)),
+        Some(Command::Validate { config, json }) => (json, validate(&config, json)),
+        Some(Command::Schema { kind }) => {
+            let schema = match kind {
+                SchemaKind::Param => agent::param_schema(),
+                SchemaKind::Dispersion => agent::dispersion_schema(),
+            };
+            print_json(&schema);
+            (true, Ok(ExitCode::SUCCESS))
+        }
+        Some(Command::Share {
+            config,
+            base_url,
+            json,
+        }) => (json, share(&config, base_url.as_deref(), json)),
+        Some(Command::Mcp) => (
+            false,
+            openTsiolkovsky::mcp::serve_stdio()
+                .map(|_| ExitCode::SUCCESS)
+                .map_err(|e| AgentError::new(ErrorKind::Io, e.to_string())),
+        ),
+    };
+    match outcome {
+        Ok(code) => code,
+        Err(e) => {
+            if json {
+                print_json(&e.to_json());
+            } else {
+                eprintln!("Error: {e}");
+            }
+            ExitCode::from(exit_status(&e))
+        }
+    }
 }
 
-pub type Result<T> = std::result::Result<T, CliError>;
+fn exit_status(e: &AgentError) -> u8 {
+    match e.kind {
+        ErrorKind::InvalidConfig => EXIT_INVALID_CONFIG,
+        ErrorKind::InvalidArgument => 2,
+        _ => 1,
+    }
+}
 
-fn main() -> Result<()> {
-    let args = Args::parse();
+fn print_json(value: &serde_json::Value) {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).unwrap_or_default()
+    );
+}
 
+/// The configuration file, or stdin for `-`
+fn read_input(config: &str) -> Result<ConfigInput, AgentError> {
+    if config == "-" {
+        let mut text = String::new();
+        std::io::stdin()
+            .read_to_string(&mut text)
+            .map_err(|e| AgentError::new(ErrorKind::Io, format!("stdin: {e}")))?;
+        Ok(ConfigInput::from_json(text, None))
+    } else {
+        ConfigInput::from_path(config)
+    }
+}
+
+fn load_dispersion(args: &RunArgs) -> Result<Dispersion, AgentError> {
+    match &args.dispersion {
+        Some(path) => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|e| AgentError::new(ErrorKind::Io, format!("{path}: {e}")))?;
+            agent::parse_dispersion(&text)
+        }
+        None => Ok(Dispersion::default()),
+    }
+}
+
+fn validate(config: &str, json: bool) -> Result<ExitCode, AgentError> {
+    let result = agent::validate(&read_input(config)?);
+    let valid = result["valid"] == true;
+    if json {
+        print_json(&result);
+    } else {
+        let lines = |key: &str| -> Vec<String> {
+            result[key]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        for warning in lines("warnings") {
+            eprintln!("Warning: {warning}");
+        }
+        if valid {
+            println!(
+                "{}: valid ({} stage{})",
+                result["name"].as_str().unwrap_or_default(),
+                result["stages"],
+                if result["stages"] == 1 { "" } else { "s" }
+            );
+        } else {
+            for error in lines("errors") {
+                eprintln!("Error: {error}");
+            }
+        }
+    }
+    Ok(if valid {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(EXIT_INVALID_CONFIG)
+    })
+}
+
+fn share(config: &str, base_url: Option<&str>, json: bool) -> Result<ExitCode, AgentError> {
+    let result = agent::share_link(&read_input(config)?, base_url)?;
+    if json {
+        print_json(&result);
+    } else {
+        if let Some(missing) = result["missing_files"].as_array()
+            && !missing.is_empty()
+        {
+            eprintln!("Warning: CSV files not found, not embedded: {missing:?}");
+        }
+        println!("{}", result["url"].as_str().unwrap_or_default());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn run(args: &RunArgs) -> Result<ExitCode, AgentError> {
+    let input = read_input(&args.config)?;
+    let output_base = args.output.as_deref().unwrap_or("output");
+    if args.json {
+        let mut result = agent::run(
+            &input,
+            &RunOptions {
+                output_prefix: Some(output_base.to_string()),
+                trajectory_points: args.trajectory_points,
+            },
+        )?;
+        if let Some(count) = args.monte_carlo {
+            result["monte_carlo"] = agent::monte_carlo(
+                &input,
+                &MonteCarloOptions {
+                    cases: count,
+                    seed: args.seed,
+                    dispersion: load_dispersion(args)?,
+                    output_prefix: Some(output_base.to_string()),
+                },
+            )?;
+        }
+        print_json(&result);
+        return Ok(ExitCode::SUCCESS);
+    }
+    run_text(args, &input, output_base)?;
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Human-readable run (the original CLI output)
+fn run_text(args: &RunArgs, input: &ConfigInput, output_base: &str) -> Result<(), AgentError> {
     if args.verbose {
         println!("OpenTsiolkovsky Rust Flight Simulator");
         println!("Loading configuration from: {}", args.config);
     }
 
     // Load rocket configuration and data
-    let rocket = create_rocket_from_config(&args.config)?;
-
-    for warning in config_warnings(&rocket.config)
-        .into_iter()
-        .chain(rocket_warnings(&rocket))
-    {
+    let loaded = input.load()?;
+    for warning in loaded.warnings() {
         eprintln!("Warning: {}", warning);
     }
+    let rocket = loaded.rocket;
 
     if args.verbose {
         println!("Configuration loaded: {}", rocket.config.name);
@@ -174,7 +408,7 @@ fn main() -> Result<()> {
     }
 
     // Save output files
-    let output_base = args.output.as_deref().unwrap_or("output");
+    agent::create_parent_dir(output_base)?;
     let trajectory_file = format!("{}_trajectory.csv", output_base);
     let summary_file = format!("{}_summary.json", output_base);
     let cpp_csv_file = format!("{}_dynamics_cpp.csv", output_base);
@@ -188,7 +422,7 @@ fn main() -> Result<()> {
         &summary_file,
     )?;
     // Write C++-compatible CSV
-    save_cpp_telemetry(&simulator.telemetry_cpp, &cpp_csv_file)?;
+    save_cpp_telemetry_csv(&simulator.telemetry_cpp, &cpp_csv_file)?;
     let mut fall_files = Vec::new();
     for body in &fall_bodies {
         if body.telemetry_cpp.is_empty() {
@@ -199,7 +433,7 @@ fn main() -> Result<()> {
             FallBodyKind::Dump => "dump",
         };
         let path = format!("{}_dynamics_cpp_{}_{}.csv", output_base, body.stage, suffix);
-        save_cpp_telemetry(&body.telemetry_cpp, &path)?;
+        save_cpp_telemetry_csv(&body.telemetry_cpp, &path)?;
         fall_files.push(path);
     }
 
@@ -229,10 +463,7 @@ fn main() -> Result<()> {
     }
 
     if let Some(count) = args.monte_carlo {
-        let dispersion = match &args.dispersion {
-            Some(path) => load_dispersion(path)?,
-            None => Dispersion::default(),
-        };
+        let dispersion = load_dispersion(args)?;
         println!(
             "Running {} Monte Carlo cases (seed {})...",
             count, args.seed
@@ -271,140 +502,5 @@ fn main() -> Result<()> {
         println!("Summary saved to: {}", summary_file);
     }
 
-    Ok(())
-}
-
-use csv::Writer;
-/// Write C++-compatible CSV using telemetry captured by simulator
-fn save_cpp_telemetry(
-    rows: &[openTsiolkovsky::simulator::CsvCppRow],
-    path: &str,
-) -> std::result::Result<(), IoError> {
-    let mut w = Writer::from_path(path)?;
-    w.write_record([
-        "time(s)",
-        "mass(kg)",
-        "thrust(N)",
-        "lat(deg)",
-        "lon(deg)",
-        "altitude(m)",
-        "pos_ECI_X(m)",
-        "pos_ECI_Y(m)",
-        "pos_ECI_Z(m)",
-        "vel_ECI_X(m/s)",
-        "vel_ECI_Y(m/s)",
-        "vel_ECI_Z(m/s)",
-        "vel_NED_X(m/s)",
-        "vel_NED_Y(m/s)",
-        "vel_NED_Z(m/s)",
-        "acc_ECI_X(m/s2)",
-        "acc_ECI_Y(m/s2)",
-        "acc_ECI_Z(m/s2)",
-        "acc_Body_X(m/s2)",
-        "acc_Body_Y(m/s2)",
-        "acc_Body_Z(m/s2)",
-        "Isp(s)",
-        "Mach number",
-        "attitude_azimuth(deg)",
-        "attitude_elevation(deg)",
-        "attitude_roll(deg)",
-        "angle of attack alpha(deg)",
-        "angle of attack beta(deg)",
-        "all angle of attack gamma(deg)",
-        "dynamic pressure(Pa)",
-        "aeroforce_Body_X[N]",
-        "aeroforce_Body_Y[N]",
-        "aeroforce_Body_Z[N]",
-        "thrust_Body_X[N]",
-        "thrust_Body_Y[N]",
-        "thrust_Body_Z[N]",
-        "gimbal_angle_pitch(deg)",
-        "gimbal_angle_yaw(deg)",
-        "wind speed(m/s)",
-        "wind direction(deg)",
-        "downrange(m)",
-        "IIP_lat(deg)",
-        "IIP_lon(deg)",
-        "dcmBODY2ECI_11",
-        "dcmBODY2ECI_12",
-        "dcmBODY2ECI_13",
-        "dcmBODY2ECI_21",
-        "dcmBODY2ECI_22",
-        "dcmBODY2ECI_23",
-        "dcmBODY2ECI_31",
-        "dcmBODY2ECI_32",
-        "dcmBODY2ECI_33",
-        "inertial velocity(m/s)",
-        "kinematic_energy_NED(J)",
-        "loss_gravity(m/s2)",
-        "loss_aerodynamics(m/s2)",
-        "loss_thrust(m/s2)",
-        "is_powered(1=powered 0=free)",
-        "is_separated(1=already 0=still)",
-    ])?;
-    for r in rows {
-        w.write_record([
-            r.time.to_string(),
-            r.mass.to_string(),
-            r.thrust.to_string(),
-            r.lat_deg.to_string(),
-            r.lon_deg.to_string(),
-            r.alt_m.to_string(),
-            r.pos_eci.x.to_string(),
-            r.pos_eci.y.to_string(),
-            r.pos_eci.z.to_string(),
-            r.vel_eci.x.to_string(),
-            r.vel_eci.y.to_string(),
-            r.vel_eci.z.to_string(),
-            r.vel_ned.x.to_string(),
-            r.vel_ned.y.to_string(),
-            r.vel_ned.z.to_string(),
-            r.acc_eci.x.to_string(),
-            r.acc_eci.y.to_string(),
-            r.acc_eci.z.to_string(),
-            r.acc_body.x.to_string(),
-            r.acc_body.y.to_string(),
-            r.acc_body.z.to_string(),
-            r.isp_s.to_string(),
-            r.mach.to_string(),
-            r.att_az_deg.to_string(),
-            r.att_el_deg.to_string(),
-            r.att_roll_deg.to_string(),
-            r.aoa_alpha_deg.to_string(),
-            r.aoa_beta_deg.to_string(),
-            r.aoa_gamma_deg.to_string(),
-            r.q_pa.to_string(),
-            r.aero_body.x.to_string(),
-            r.aero_body.y.to_string(),
-            r.aero_body.z.to_string(),
-            r.thrust_body.x.to_string(),
-            r.thrust_body.y.to_string(),
-            r.thrust_body.z.to_string(),
-            r.gimbal_pitch_deg.to_string(),
-            r.gimbal_yaw_deg.to_string(),
-            r.wind_speed.to_string(),
-            r.wind_dir_deg.to_string(),
-            r.downrange.to_string(),
-            r.iip_lat_deg.to_string(),
-            r.iip_lon_deg.to_string(),
-            r.dcm_body_to_eci[(0, 0)].to_string(),
-            r.dcm_body_to_eci[(0, 1)].to_string(),
-            r.dcm_body_to_eci[(0, 2)].to_string(),
-            r.dcm_body_to_eci[(1, 0)].to_string(),
-            r.dcm_body_to_eci[(1, 1)].to_string(),
-            r.dcm_body_to_eci[(1, 2)].to_string(),
-            r.dcm_body_to_eci[(2, 0)].to_string(),
-            r.dcm_body_to_eci[(2, 1)].to_string(),
-            r.dcm_body_to_eci[(2, 2)].to_string(),
-            r.inertial_speed.to_string(),
-            r.kinetic_energy_ned.to_string(),
-            r.loss_gravity.to_string(),
-            r.loss_aero.to_string(),
-            r.loss_thrust.to_string(),
-            r.is_powered.to_string(),
-            r.is_separated.to_string(),
-        ])?;
-    }
-    w.flush()?;
     Ok(())
 }
