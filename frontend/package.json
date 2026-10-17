@@ -11,6 +11,8 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5",
+    "@fontsource/ibm-plex-sans-jp": "^5",
     "cesium": "1.146.0",
     "chart.js": "^4.5.0",
     "clsx": "^2.1.1",
