@@ -129,6 +129,28 @@ fn main() -> Result<()> {
                 );
             }
         }
+        println!("\nEvents:");
+        for e in &simulator.events {
+            println!(
+                "  T+{:8.2} s  {:<10} stage {}  alt {:10.1} m  speed {:8.1} m/s  Mach {:5.2}  q {:9.1} Pa",
+                e.time_s,
+                serde_json::to_value(e.kind)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default(),
+                e.stage,
+                e.altitude_m,
+                e.speed_mps,
+                e.mach,
+                e.dynamic_pressure_pa
+            );
+        }
+        if simulator.forced_steps > 0 {
+            println!(
+                "  Warning: {} RK45 steps were accepted at the minimum step size above tolerance",
+                simulator.forced_steps
+            );
+        }
         println!();
     }
 
@@ -139,7 +161,13 @@ fn main() -> Result<()> {
     let cpp_csv_file = format!("{}_dynamics_cpp.csv", output_base);
 
     save_trajectory_csv(&trajectory, &trajectory_file)?;
-    save_summary_json(&trajectory, &fall_bodies, &rocket.config, &summary_file)?;
+    save_summary_json(
+        &trajectory,
+        &fall_bodies,
+        &simulator.events,
+        &rocket.config,
+        &summary_file,
+    )?;
     // Write C++-compatible CSV
     save_cpp_telemetry(&simulator.telemetry_cpp, &cpp_csv_file)?;
     let mut fall_files = Vec::new();

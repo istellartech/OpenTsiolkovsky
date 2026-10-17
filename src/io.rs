@@ -2,7 +2,7 @@
 ///
 /// Handles JSON configuration files and CSV data files
 use crate::rocket::{Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
-use crate::simulator::{FallBody, SimulationState, impact_point};
+use crate::simulator::{FallBody, FlightEvent, SimulationState, impact_point};
 use serde_json;
 use std::fs;
 use std::io::Read;
@@ -771,6 +771,7 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
 pub fn save_summary_json<P: AsRef<Path>>(
     trajectory: &[SimulationState],
     fall_bodies: &[FallBody],
+    events: &[FlightEvent],
     config: &RocketConfig,
     output_path: P,
 ) -> Result<()> {
@@ -832,6 +833,7 @@ pub fn save_summary_json<P: AsRef<Path>>(
         "final_mass_kg": final_state.mass,
         "simulation_points": trajectory.len(),
         "impact_point": impact_point(trajectory),
+        "events": events,
         "fall_bodies": fall_bodies
             .iter()
             .map(|b| serde_json::json!({

@@ -245,6 +245,18 @@ pub struct IntegratorSettings {
         skip_serializing_if = "Option::is_none"
     )]
     pub rk4_step: Option<f64>,
+
+    /// RK45 absolute error tolerance (all state components)
+    #[serde(rename = "rk45 absolute tolerance[-]", default = "default_rk45_tol")]
+    pub rk45_abs_tol: f64,
+
+    /// RK45 relative error tolerance
+    #[serde(rename = "rk45 relative tolerance[-]", default = "default_rk45_tol")]
+    pub rk45_rel_tol: f64,
+}
+
+fn default_rk45_tol() -> f64 {
+    1.0e-9
 }
 
 impl Default for IntegratorSettings {
@@ -252,6 +264,8 @@ impl Default for IntegratorSettings {
         Self {
             method: IntegratorMethod::Rk4,
             rk4_step: None,
+            rk45_abs_tol: default_rk45_tol(),
+            rk45_rel_tol: default_rk45_tol(),
         }
     }
 }
@@ -516,34 +530,41 @@ impl TimeSeriesData {
         ts
     }
 
-    /// Linear interpolation for given time
+    /// Linear interpolation for given time (clamped to the end values)
     pub fn interpolate(&self, t: f64) -> f64 {
-        if self.time.is_empty() {
-            return 0.0;
+        match bracket(&self.time, t) {
+            None => 0.0,
+            Some((i, a)) => match self.values.get(i + 1) {
+                Some(next) => self.values[i] + a * (next - self.values[i]),
+                None => self.values[i],
+            },
         }
-
-        // Handle boundary cases
-        if t <= self.time[0] {
-            return self.values[0];
-        }
-        if t >= self.time[self.time.len() - 1] {
-            return self.values[self.values.len() - 1];
-        }
-
-        // Find interval for interpolation
-        for i in 0..self.time.len() - 1 {
-            if t >= self.time[i] && t <= self.time[i + 1] {
-                let dt = self.time[i + 1] - self.time[i];
-                if dt.abs() < 1e-10 {
-                    return self.values[i];
-                }
-                let alpha = (t - self.time[i]) / dt;
-                return self.values[i] + alpha * (self.values[i + 1] - self.values[i]);
-            }
-        }
-
-        self.values[self.values.len() - 1]
     }
+}
+
+/// Interval of an ascending axis that contains `x`: `(i, a)` with
+/// `x ≈ axis[i] + a (axis[i+1] - axis[i])`, `a` in [0, 1]. Outside the
+/// axis the end point is returned (`a = 0`). `None` for an empty axis.
+pub(crate) fn bracket(axis: &[f64], x: f64) -> Option<(usize, f64)> {
+    let n = axis.len();
+    if n == 0 {
+        return None;
+    }
+    if n == 1 || x <= axis[0] {
+        return Some((0, 0.0));
+    }
+    if x >= axis[n - 1] {
+        return Some((n - 1, 0.0));
+    }
+    // First index with axis[i] > x, so axis[i-1] <= x < axis[i]
+    let i = axis.partition_point(|&v| v <= x) - 1;
+    let dx = axis[i + 1] - axis[i];
+    let a = if dx.abs() < 1e-10 {
+        0.0
+    } else {
+        (x - axis[i]) / dx
+    };
+    Some((i, a))
 }
 
 impl Default for TimeSeriesData {
@@ -672,43 +693,21 @@ impl Rocket {
 
     /// Get attitude angles at given time (azimuth, elevation) [deg]
     pub fn attitude_at_time(&self, time: f64) -> (f64, f64) {
-        if let Some(ref data) = self.attitude_data {
-            // Linear interpolation for attitude data
-            if data.is_empty() {
-                let default_attitude = &self.config.primary_stage().attitude;
+        let default_attitude = &self.config.primary_stage().attitude;
+        let data = match &self.attitude_data {
+            Some(data) if !data.is_empty() => data,
+            _ => {
                 return (
                     default_attitude.const_azimuth,
                     default_attitude.const_elevation,
                 );
             }
-
-            // Find appropriate interval
-            for i in 0..data.len() - 1 {
-                if time >= data[i].0 && time <= data[i + 1].0 {
-                    let dt = data[i + 1].0 - data[i].0;
-                    if dt.abs() < 1e-10 {
-                        return (data[i].1, data[i].2);
-                    }
-                    let alpha = (time - data[i].0) / dt;
-                    let azimuth = data[i].1 + alpha * (data[i + 1].1 - data[i].1);
-                    let elevation = data[i].2 + alpha * (data[i + 1].2 - data[i].2);
-                    return (azimuth, elevation);
-                }
-            }
-
-            if time <= data[0].0 {
-                (data[0].1, data[0].2)
-            } else {
-                let last = data.len() - 1;
-                (data[last].1, data[last].2)
-            }
-        } else {
-            let default_attitude = &self.config.primary_stage().attitude;
-            (
-                default_attitude.const_azimuth,
-                default_attitude.const_elevation,
-            )
-        }
+        };
+        let times: Vec<f64> = data.iter().map(|d| d.0).collect();
+        let (i, a) = bracket(&times, time).unwrap_or((0, 0.0));
+        let p0 = data[i];
+        let p1 = data.get(i + 1).copied().unwrap_or(p0);
+        (p0.1 + a * (p1.1 - p0.1), p0.2 + a * (p1.2 - p0.2))
     }
 
     /// Interpolated wind speed/direction at altitude [m]
@@ -809,6 +808,10 @@ pub struct ClientIntegrator {
     pub method: IntegratorMethod,
     #[serde(default)]
     pub rk4_step_s: Option<f64>,
+    #[serde(default = "default_rk45_tol")]
+    pub rk45_abs_tol: f64,
+    #[serde(default = "default_rk45_tol")]
+    pub rk45_rel_tol: f64,
 }
 
 impl Default for ClientIntegrator {
@@ -816,6 +819,8 @@ impl Default for ClientIntegrator {
         Self {
             method: IntegratorMethod::Rk4,
             rk4_step_s: None,
+            rk45_abs_tol: default_rk45_tol(),
+            rk45_rel_tol: default_rk45_tol(),
         }
     }
 }
@@ -1094,6 +1099,8 @@ impl ClientConfig {
         let integrator = IntegratorSettings {
             method: simulation.integrator.method,
             rk4_step: simulation.integrator.rk4_step_s,
+            rk45_abs_tol: simulation.integrator.rk45_abs_tol,
+            rk45_rel_tol: simulation.integrator.rk45_rel_tol,
         };
 
         let calc = CalculateCondition {

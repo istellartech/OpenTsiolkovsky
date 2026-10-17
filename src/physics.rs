@@ -533,24 +533,19 @@ pub mod coordinates {
             dcm_ned_to_body * (vel_ecef_ned - vel_wind_ned)
         }
 
-        /// Calculate angle of attack from air velocity in body frame
+        /// Angles of the airflow from air velocity in body frame
         ///
         /// # Returns
-        /// Vector3 [alpha, beta, gamma] in radians
-        /// - alpha: Angle of attack
-        /// - beta: Sideslip angle  
-        /// - gamma: Bank angle (always 0 for this simplified calculation)
+        /// Vector3 [alpha, beta, gamma] in radians (as in the C++ simulator)
+        /// - alpha: angle of attack in the body X-Z plane, `atan2(w, u)`
+        /// - beta: sideslip in the body X-Y plane, `atan2(v, u)`
+        /// - gamma: total angle between the body axis and the airflow
         pub fn angle_of_attack(vel_air_body: &Vector3<f64>) -> Vector3<f64> {
-            let vel_magnitude = vel_air_body.magnitude();
-
-            if vel_magnitude < 0.01 || vel_air_body.x.abs() < 0.001 {
+            let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
+            if vel_air_body.magnitude() < 0.01 || u.abs() < 0.001 {
                 return Vector3::zeros();
             }
-
-            let alpha = (vel_air_body.z / vel_air_body.x).atan(); // pitch AoA
-            let beta = (vel_air_body.y / vel_air_body.x).atan(); // yaw sideslip
-
-            Vector3::new(alpha, beta, 0.0)
+            Vector3::new(w.atan2(u), v.atan2(u), v.hypot(w).atan2(u))
         }
 
         /// Initialize ECI position from LLH at launch

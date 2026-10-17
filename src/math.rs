@@ -27,105 +27,143 @@ pub mod constants {
 }
 
 pub mod integrator {
-    /// Runge-Kutta 4th order integrator
-    ///
-    /// This is a self-contained implementation that replaces Boost ODEINT
-    /// from the original C++ implementation.
+    //! Explicit Runge-Kutta integrators on fixed-size state arrays
+    //!
+    //! Self-contained replacements for Boost ODEINT in the C++ simulator.
+    //! States are `[f64; N]` so a step never allocates.
+
+    /// Classic 4th order Runge-Kutta, fixed step
     pub struct RungeKutta4;
 
+    fn axpy<const N: usize>(y: &[f64; N], h: f64, k: &[f64; N]) -> [f64; N] {
+        std::array::from_fn(|i| y[i] + h * k[i])
+    }
+
     impl RungeKutta4 {
-        /// Integrate system of differential equations using RK4 method
-        ///
-        /// # Arguments
-        /// * `state` - Current state vector [mass, x, y, z, vx, vy, vz]
-        /// * `t` - Current time
-        /// * `dt` - Time step
-        /// * `system` - Function that computes derivatives: dy/dt = f(t, y)
-        ///
-        /// # Returns
-        /// New state vector after integration step
-        pub fn integrate<F>(&self, state: &[f64], t: f64, dt: f64, system: F) -> Vec<f64>
+        /// One step of `dt` from `(t, state)` for `dy/dt = system(t, y)`
+        pub fn integrate<const N: usize, F>(
+            &self,
+            state: &[f64; N],
+            t: f64,
+            dt: f64,
+            system: F,
+        ) -> [f64; N]
         where
-            F: Fn(f64, &[f64]) -> Vec<f64>,
+            F: Fn(f64, &[f64; N]) -> [f64; N],
         {
-            let n = state.len();
-            let mut new_state = vec![0.0; n];
-
-            // k1 = f(t, y)
             let k1 = system(t, state);
-
-            // k2 = f(t + dt/2, y + dt*k1/2)
-            let mut y1 = vec![0.0; n];
-            for i in 0..n {
-                y1[i] = state[i] + 0.5 * dt * k1[i];
-            }
-            let k2 = system(t + 0.5 * dt, &y1);
-
-            // k3 = f(t + dt/2, y + dt*k2/2)
-            let mut y2 = vec![0.0; n];
-            for i in 0..n {
-                y2[i] = state[i] + 0.5 * dt * k2[i];
-            }
-            let k3 = system(t + 0.5 * dt, &y2);
-
-            // k4 = f(t + dt, y + dt*k3)
-            let mut y3 = vec![0.0; n];
-            for i in 0..n {
-                y3[i] = state[i] + dt * k3[i];
-            }
-            let k4 = system(t + dt, &y3);
-
-            // y(t+dt) = y(t) + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
-            for i in 0..n {
-                new_state[i] = state[i] + dt * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]) / 6.0;
-            }
-
-            new_state
+            let k2 = system(t + 0.5 * dt, &axpy(state, 0.5 * dt, &k1));
+            let k3 = system(t + 0.5 * dt, &axpy(state, 0.5 * dt, &k2));
+            let k4 = system(t + dt, &axpy(state, dt, &k3));
+            std::array::from_fn(|i| {
+                state[i] + dt * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]) / 6.0
+            })
         }
 
-        /// Integrate over a time interval with multiple steps
-        ///
-        /// # Arguments
-        /// * `state` - Initial state vector
-        /// * `t_start` - Start time
-        /// * `t_end` - End time
-        /// * `dt` - Time step size
-        /// * `system` - System dynamics function
-        /// * `observer` - Function called at each step: observer(t, state)
-        pub fn integrate_const<F, O>(
+        /// Integrate from `t_start` to `t_end` with steps of `dt` (the last
+        /// one shortened), calling `observer(t, state)` after every step and
+        /// at the start
+        pub fn integrate_const<const N: usize, F, O>(
             &self,
-            mut state: Vec<f64>,
+            mut state: [f64; N],
             t_start: f64,
             t_end: f64,
             dt: f64,
             system: F,
             mut observer: O,
-        ) -> Vec<f64>
+        ) -> [f64; N]
         where
-            F: Fn(f64, &[f64]) -> Vec<f64>,
-            O: FnMut(f64, &[f64]),
+            F: Fn(f64, &[f64; N]) -> [f64; N],
+            O: FnMut(f64, &[f64; N]),
         {
             let mut t = t_start;
             observer(t, &state);
-
+            let mut k = 0u64;
             while t < t_end {
-                let step_size = if t + dt > t_end { t_end - t } else { dt };
-                state = self.integrate(&state, t, step_size, &system);
-                t += step_size;
+                // Step count based time avoids accumulating round-off
+                let t_next = (t_start + (k + 1) as f64 * dt).min(t_end);
+                state = self.integrate(&state, t, t_next - t, &system);
+                t = t_next;
+                k += 1;
                 observer(t, &state);
             }
-
             state
         }
     }
 
     /// Dormand-Prince 5(4) adaptive integrator with step control
+    ///
+    /// The error of each component is scaled by
+    /// `abs_tol + rel_tol * max(|y|, |y_new|)` and the step is accepted when
+    /// the largest scaled error is at most 1.
     #[derive(Clone, Copy, Debug)]
     pub struct DormandPrince54 {
         pub abs_tol: f64,
         pub rel_tol: f64,
         pub h_min: f64,
         pub h_max: f64,
+    }
+
+    // Butcher tableau of Dormand-Prince 5(4)
+    const C: [f64; 7] = [0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
+    const A: [[f64; 6]; 7] = [
+        [0.0; 6],
+        [1.0 / 5.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        [3.0 / 40.0, 9.0 / 40.0, 0.0, 0.0, 0.0, 0.0],
+        [44.0 / 45.0, -56.0 / 15.0, 32.0 / 9.0, 0.0, 0.0, 0.0],
+        [
+            19372.0 / 6561.0,
+            -25360.0 / 2187.0,
+            64448.0 / 6561.0,
+            -212.0 / 729.0,
+            0.0,
+            0.0,
+        ],
+        [
+            9017.0 / 3168.0,
+            -355.0 / 33.0,
+            46732.0 / 5247.0,
+            49.0 / 176.0,
+            -5103.0 / 18656.0,
+            0.0,
+        ],
+        [
+            35.0 / 384.0,
+            0.0,
+            500.0 / 1113.0,
+            125.0 / 192.0,
+            -2187.0 / 6784.0,
+            11.0 / 84.0,
+        ],
+    ];
+    /// 5th order weights (equal to the last row of `A`: FSAL)
+    const B5: [f64; 7] = [
+        35.0 / 384.0,
+        0.0,
+        500.0 / 1113.0,
+        125.0 / 192.0,
+        -2187.0 / 6784.0,
+        11.0 / 84.0,
+        0.0,
+    ];
+    /// Embedded 4th order weights
+    const B4: [f64; 7] = [
+        5179.0 / 57600.0,
+        0.0,
+        7571.0 / 16695.0,
+        393.0 / 640.0,
+        -92097.0 / 339200.0,
+        187.0 / 2100.0,
+        1.0 / 40.0,
+    ];
+
+    /// Result of one embedded step
+    struct Step<const N: usize> {
+        y: [f64; N],
+        /// Largest scaled error (accept when <= 1)
+        error: f64,
+        /// Derivative at the end of the step (first stage of the next one)
+        k_end: [f64; N],
     }
 
     impl DormandPrince54 {
@@ -138,239 +176,99 @@ pub mod integrator {
             }
         }
 
-        /// Single DP54 step with error estimate
-        fn step<F>(&self, t: f64, y: &[f64], h: f64, system: &F) -> (Vec<f64>, Vec<f64>)
-        where
-            F: Fn(f64, &[f64]) -> Vec<f64>,
-        {
-            // Coefficients for Dormand-Prince 5(4)
-            let c2 = 1.0 / 5.0;
-            let c3 = 3.0 / 10.0;
-            let c4 = 4.0 / 5.0;
-            let c5 = 8.0 / 9.0;
-            let c6 = 1.0;
-            let c7 = 1.0;
-
-            let a21 = 1.0 / 5.0;
-            let a31 = 3.0 / 40.0;
-            let a32 = 9.0 / 40.0;
-            let a41 = 44.0 / 45.0;
-            let a42 = -56.0 / 15.0;
-            let a43 = 32.0 / 9.0;
-            let a51 = 19372.0 / 6561.0;
-            let a52 = -25360.0 / 2187.0;
-            let a53 = 64448.0 / 6561.0;
-            let a54 = -212.0 / 729.0;
-            let a61 = 9017.0 / 3168.0;
-            let a62 = -355.0 / 33.0;
-            let a63 = 46732.0 / 5247.0;
-            let a64 = 49.0 / 176.0;
-            let a65 = -5103.0 / 18656.0;
-            let a71 = 35.0 / 384.0;
-            let a72 = 0.0;
-            let a73 = 500.0 / 1113.0;
-            let a74 = 125.0 / 192.0;
-            let a75 = -2187.0 / 6784.0;
-            let a76 = 11.0 / 84.0;
-
-            // b coefficients for 5th order solution (y5)
-            let b1 = 35.0 / 384.0;
-            let b2 = 0.0;
-            let b3 = 500.0 / 1113.0;
-            let b4 = 125.0 / 192.0;
-            let b5 = -2187.0 / 6784.0;
-            let b6 = 11.0 / 84.0;
-            // b* for 4th order (y4)
-            let bs1 = 5179.0 / 57600.0;
-            let bs2 = 0.0;
-            let bs3 = 7571.0 / 16695.0;
-            let bs4 = 393.0 / 640.0;
-            let bs5 = -92097.0 / 339200.0;
-            let bs6 = 187.0 / 2100.0;
-            let bs7 = 1.0 / 40.0;
-
-            let k1 = system(t, y);
-            let n = y.len();
-            let mut yt = vec![0.0; n];
-
-            for i in 0..n {
-                yt[i] = y[i] + h * a21 * k1[i];
-            }
-            let k2 = system(t + c2 * h, &yt);
-
-            for i in 0..n {
-                yt[i] = y[i] + h * (a31 * k1[i] + a32 * k2[i]);
-            }
-            let k3 = system(t + c3 * h, &yt);
-
-            for i in 0..n {
-                yt[i] = y[i] + h * (a41 * k1[i] + a42 * k2[i] + a43 * k3[i]);
-            }
-            let k4 = system(t + c4 * h, &yt);
-
-            for i in 0..n {
-                yt[i] = y[i] + h * (a51 * k1[i] + a52 * k2[i] + a53 * k3[i] + a54 * k4[i]);
-            }
-            let k5 = system(t + c5 * h, &yt);
-
-            for i in 0..n {
-                yt[i] = y[i]
-                    + h * (a61 * k1[i] + a62 * k2[i] + a63 * k3[i] + a64 * k4[i] + a65 * k5[i]);
-            }
-            let k6 = system(t + c6 * h, &yt);
-
-            // k7 for dense/embedded estimate
-            for i in 0..n {
-                yt[i] = y[i]
-                    + h * (a71 * k1[i]
-                        + a72 * k2[i]
-                        + a73 * k3[i]
-                        + a74 * k4[i]
-                        + a75 * k5[i]
-                        + a76 * k6[i]);
-            }
-            let k7 = system(t + c7 * h, &yt);
-
-            // 5th order solution y5
-            let mut y5 = vec![0.0; n];
-            for i in 0..n {
-                y5[i] = y[i]
-                    + h * (b1 * k1[i]
-                        + b2 * k2[i]
-                        + b3 * k3[i]
-                        + b4 * k4[i]
-                        + b5 * k5[i]
-                        + b6 * k6[i]);
-            }
-
-            // 4th order solution y4
-            let mut y4 = vec![0.0; n];
-            for i in 0..n {
-                y4[i] = y[i]
-                    + h * (bs1 * k1[i]
-                        + bs2 * k2[i]
-                        + bs3 * k3[i]
-                        + bs4 * k4[i]
-                        + bs5 * k5[i]
-                        + bs6 * k6[i]
-                        + bs7 * k7[i]);
-            }
-
-            // error estimate = y5 - y4
-            let err: Vec<f64> = y5.iter().zip(y4.iter()).map(|(a, b)| a - b).collect();
-            (y5, err)
-        }
-
-        /// Adaptive integration with outputs at fixed time grid.
-        /// Observer returns false to stop early.
-        pub fn integrate_with_outputs<F, O>(
+        fn step<const N: usize, F>(
             &self,
-            state0: Vec<f64>,
-            t0: f64,
-            t_end: f64,
-            dt_out: f64,
-            system: F,
-            mut observer: O,
-        ) where
-            F: Fn(f64, &[f64]) -> Vec<f64>,
-            O: FnMut(f64, &[f64]) -> bool,
+            t: f64,
+            y: &[f64; N],
+            k1: [f64; N],
+            h: f64,
+            system: &F,
+        ) -> Step<N>
+        where
+            F: Fn(f64, &[f64; N]) -> [f64; N],
         {
-            let mut t = t0;
-            let mut y = state0;
-            let mut next_out = t0;
-            let mut h = (dt_out / 10.0).max(self.h_min).min(self.h_max);
-
-            // Emit initial state
-            if !observer(t, &y) {
-                return;
+            let mut k = [[0.0; N]; 7];
+            k[0] = k1;
+            for s in 1..7 {
+                let yt: [f64; N] = std::array::from_fn(|i| {
+                    y[i] + h * (0..s).map(|j| A[s][j] * k[j][i]).sum::<f64>()
+                });
+                k[s] = system(t + C[s] * h, &yt);
             }
-
-            while t < t_end {
-                // Limit step to next output or end
-                let target = next_out + dt_out;
-                let limit = if t + h > target { target - t } else { h };
-                let limit = if t + limit > t_end { t_end - t } else { limit };
-                let (y5, err) = self.step(t, &y, limit, &system);
-
-                // Error norm
-                let mut max_err: f64 = 0.0;
-                for i in 0..y.len() {
-                    let sc = self.abs_tol + self.rel_tol * y5[i].abs().max(y[i].abs());
-                    max_err = max_err.max((err[i] / sc).abs());
-                }
-
-                if max_err <= 1.0 {
-                    // accept
-                    t += limit;
-                    y = y5;
-                    // step size update
-                    let safety = 0.9;
-                    let p = 5.0;
-                    let factor = (safety * (1.0 / max_err).powf(1.0 / (p + 1.0))).clamp(0.2, 5.0);
-                    h = (limit * factor).clamp(self.h_min, self.h_max);
-                    // Output at grid points
-                    if (t - next_out).abs() < 1e-12 || t >= next_out + dt_out - 1e-12 {
-                        next_out += dt_out;
-                        if !observer(t, &y) {
-                            break;
-                        }
-                    }
-                } else {
-                    // reject and reduce step size
-                    let safety = 0.9;
-                    let p = 5.0;
-                    let factor = (safety * (1.0 / max_err).powf(1.0 / (p + 1.0))).clamp(0.2, 0.5);
-                    h = (limit * factor).clamp(self.h_min, self.h_max);
-                    if h <= self.h_min * 1.01 {
-                        // give up and accept to avoid stall
-                        t += limit;
-                        y = y5;
-                        if !observer(t, &y) {
-                            break;
-                        }
-                    }
-                }
+            // The 7th stage is evaluated at the 5th order solution
+            let y5: [f64; N] =
+                std::array::from_fn(|i| y[i] + h * (0..7).map(|j| B5[j] * k[j][i]).sum::<f64>());
+            let mut error: f64 = 0.0;
+            for i in 0..N {
+                let e = h * (0..7).map(|j| (B5[j] - B4[j]) * k[j][i]).sum::<f64>();
+                let scale = self.abs_tol + self.rel_tol * y[i].abs().max(y5[i].abs());
+                error = error.max((e / scale).abs());
+            }
+            Step {
+                y: y5,
+                error,
+                k_end: k[6],
             }
         }
 
-        /// Advance solution from t to t_target with adaptive steps
-        pub fn advance_to<F>(&self, state: &mut Vec<f64>, t: &mut f64, t_target: f64, system: F)
+        /// Step size factor from the scaled error
+        fn factor(error: f64, max_growth: f64) -> f64 {
+            if error == 0.0 {
+                return max_growth;
+            }
+            (0.9 * error.powf(-0.2)).clamp(0.2, max_growth)
+        }
+
+        /// Advance `state` from `*t` to `t_target` with adaptive steps.
+        ///
+        /// `h_hint` carries the step size between calls (pass the same
+        /// variable each time; `None` starts from a tenth of the interval).
+        /// When the step falls to `h_min` and still fails, it is accepted
+        /// anyway so the integration cannot stall; the number of such forced
+        /// steps is returned.
+        pub fn advance_to<const N: usize, F>(
+            &self,
+            state: &mut [f64; N],
+            t: &mut f64,
+            t_target: f64,
+            h_hint: &mut Option<f64>,
+            system: F,
+        ) -> usize
         where
-            F: Fn(f64, &[f64]) -> Vec<f64>,
+            F: Fn(f64, &[f64; N]) -> [f64; N],
         {
-            let mut h = ((t_target - *t) / 10.0)
-                .abs()
-                .max(self.h_min)
-                .min(self.h_max);
-            while *t < t_target - 1e-12 {
-                if *t + h > t_target {
-                    h = t_target - *t;
-                }
-                let (y5, err) = self.step(*t, state, h, &system);
-                let mut max_err: f64 = 0.0;
-                for i in 0..state.len() {
-                    let sc = self.abs_tol + self.rel_tol * y5[i].abs().max(state[i].abs());
-                    max_err = max_err.max((err[i] / sc).abs());
-                }
-                if max_err <= 1.0 {
-                    *t += h;
-                    *state = y5;
-                    let safety = 0.9;
-                    let p = 5.0;
-                    let factor = (safety * (1.0 / max_err).powf(1.0 / (p + 1.0))).clamp(0.2, 5.0);
-                    h = (h * factor).clamp(self.h_min, self.h_max);
-                } else {
-                    let safety = 0.9;
-                    let p = 5.0;
-                    let factor = (safety * (1.0 / max_err).powf(1.0 / (p + 1.0))).clamp(0.2, 0.5);
-                    h = (h * factor).clamp(self.h_min, self.h_max);
-                    if h <= self.h_min * 1.01 {
-                        // accept to prevent stall
-                        *t += h;
-                        *state = y5;
+            let span = t_target - *t;
+            if span <= 0.0 {
+                return 0;
+            }
+            let mut h = h_hint.unwrap_or(span / 10.0).clamp(self.h_min, self.h_max);
+            let mut k1 = system(*t, state);
+            let mut forced = 0;
+            while *t < t_target {
+                let remaining = t_target - *t;
+                let last = h >= remaining;
+                let h_try = if last { remaining } else { h };
+                let step = self.step(*t, state, k1, h_try, &system);
+                if step.error <= 1.0 || h_try <= self.h_min {
+                    if step.error > 1.0 {
+                        forced += 1;
                     }
+                    *t = if last { t_target } else { *t + h_try };
+                    *state = step.y;
+                    k1 = step.k_end;
+                    // A shortened final step says nothing about the step size
+                    if !last || step.error > 0.0 {
+                        h = (h_try * Self::factor(step.error, 5.0)).clamp(self.h_min, self.h_max);
+                    }
+                    if last {
+                        break;
+                    }
+                } else {
+                    h = (h_try * Self::factor(step.error, 0.5)).clamp(self.h_min, self.h_max);
                 }
             }
+            *h_hint = Some(h);
+            forced
         }
     }
 
@@ -381,48 +279,64 @@ pub mod integrator {
 
         #[test]
         fn test_simple_exponential_decay() {
-            let integrator = RungeKutta4;
-
-            // dy/dt = -y, y(0) = 1
-            // Analytical solution: y(t) = exp(-t)
-            let system = |_t: f64, y: &[f64]| vec![-y[0]];
-
-            let initial_state = vec![1.0];
-            let dt = 0.1;
-            let t_end = 1.0;
-
-            let final_state = integrator.integrate_const(
-                initial_state,
-                0.0,
-                t_end,
-                dt,
-                system,
-                |_t, _y| {}, // no observer
-            );
-
-            let expected = (-t_end).exp(); // e^(-1) ≈ 0.36788
-            assert_relative_eq!(final_state[0], expected, epsilon = 1e-4);
+            // dy/dt = -y, y(0) = 1 -> y(t) = exp(-t)
+            let final_state =
+                RungeKutta4.integrate_const([1.0], 0.0, 1.0, 0.1, |_t, y| [-y[0]], |_t, _y| {});
+            assert_relative_eq!(final_state[0], (-1.0f64).exp(), epsilon = 1e-6);
         }
 
         #[test]
         fn test_harmonic_oscillator() {
-            let integrator = RungeKutta4;
+            // x'' = -x, x(0) = 1 -> x(pi/2) = 0, v(pi/2) = -1
+            let t_end = std::f64::consts::FRAC_PI_2;
+            let final_state = RungeKutta4.integrate_const(
+                [1.0, 0.0],
+                0.0,
+                t_end,
+                0.01,
+                |_t, s| [s[1], -s[0]],
+                |_t, _y| {},
+            );
+            assert_relative_eq!(final_state[0], 0.0, epsilon = 1e-9);
+            assert_relative_eq!(final_state[1], -1.0, epsilon = 1e-9);
+        }
 
-            // Simple harmonic oscillator: d²x/dt² = -ω²x
-            // State vector: [x, dx/dt], ω = 1
-            // dx/dt = v, dv/dt = -x
-            let system = |_t: f64, state: &[f64]| vec![state[1], -state[0]];
+        #[test]
+        fn test_rk4_is_fourth_order() {
+            let err = |dt: f64| {
+                let y =
+                    RungeKutta4.integrate_const([1.0], 0.0, 1.0, dt, |_t, y| [-y[0]], |_, _| {});
+                (y[0] - (-1.0f64).exp()).abs()
+            };
+            let ratio = err(0.1) / err(0.05);
+            assert!((ratio - 16.0).abs() < 1.0, "error ratio {ratio}");
+        }
 
-            let initial_state = vec![1.0, 0.0]; // x(0)=1, v(0)=0
-            let dt = 0.01;
-            let t_end = std::f64::consts::PI / 2.0; // quarter period
+        #[test]
+        fn test_dp54_meets_tolerance() {
+            let solver = DormandPrince54::new(1e-12, 1e-10, 1e-9, 1.0);
+            let mut y = [1.0, 0.0];
+            let mut t = 0.0;
+            let mut hint = None;
+            let forced = solver.advance_to(&mut y, &mut t, 10.0, &mut hint, |_t, s| [s[1], -s[0]]);
+            assert_eq!(forced, 0);
+            assert_eq!(t, 10.0);
+            assert_relative_eq!(y[0], 10.0f64.cos(), epsilon = 1e-8);
+            assert_relative_eq!(y[1], -10.0f64.sin(), epsilon = 1e-8);
+        }
 
-            let final_state =
-                integrator.integrate_const(initial_state, 0.0, t_end, dt, system, |_t, _y| {});
-
-            // At t = π/2, x should be ≈ 0, v should be ≈ -1
-            assert_relative_eq!(final_state[0], 0.0, epsilon = 1e-3);
-            assert_relative_eq!(final_state[1], -1.0, epsilon = 1e-3);
+        #[test]
+        fn test_dp54_forced_step_keeps_time_and_state_consistent() {
+            // A tolerance no step can meet: every step is forced at h_min,
+            // and the state must match the time it is reported at.
+            let solver = DormandPrince54::new(1e-300, 0.0, 1e-3, 1e-3);
+            let mut y = [0.0];
+            let mut t = 0.0;
+            let mut hint = None;
+            let forced = solver.advance_to(&mut y, &mut t, 0.1, &mut hint, |t, _y| [t * t]);
+            assert!(forced > 0);
+            assert_relative_eq!(t, 0.1, epsilon = 1e-12);
+            assert_relative_eq!(y[0], 0.1f64.powi(3) / 3.0, epsilon = 1e-12);
         }
     }
 }
@@ -475,7 +389,7 @@ pub mod linalg {
         Matrix3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
     }
 
-    /// Normalize angle to [-π, π) range
+    /// Normalize angle to the (-π, π] range
     pub fn normalize_angle(angle: f64) -> f64 {
         let two_pi = 2.0 * std::f64::consts::PI;
         let result = angle % two_pi;
