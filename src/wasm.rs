@@ -1,5 +1,6 @@
 use crate::{
     Simulator,
+    montecarlo::{CaseResult, Dispersion, impact_statistics, run_case},
     rocket::{ClientConfig, Rocket, RocketConfig},
 };
 use wasm_bindgen::prelude::*;
@@ -38,14 +39,7 @@ impl WasmSimulator {
             &config_json[..config_json.len().min(100)]
         );
 
-        let rocket = match serde_json::from_str::<ClientConfig>(config_json) {
-            Ok(client) => client.into_rocket(),
-            Err(_) => {
-                let legacy: RocketConfig = serde_json::from_str(config_json)
-                    .map_err(|e| JsError::new(&format!("Failed to parse config JSON: {}", e)))?;
-                Rocket::new(legacy)
-            }
-        };
+        let rocket = parse_rocket(config_json)?;
 
         let simulator = Simulator::new(rocket)
             .map_err(|e| JsError::new(&format!("Failed to create simulator: {}", e)))?;
@@ -64,6 +58,20 @@ impl WasmSimulator {
 
         serde_json::to_string(&trajectory)
             .map_err(|e| JsError::new(&format!("Failed to serialize results: {}", e)))
+    }
+
+    /// Run the simulation, then propagate the spent stages and dumping
+    /// products to the ground. Returns JSON
+    /// `{ "trajectory": SimulationState[], "fall_bodies": FallBody[] }`.
+    #[wasm_bindgen]
+    pub fn run_with_fall_bodies(&mut self) -> Result<String, JsError> {
+        let trajectory = self.inner.run();
+        let fall_bodies = self.inner.simulate_fall_bodies();
+        serde_json::to_string(&serde_json::json!({
+            "trajectory": trajectory,
+            "fall_bodies": fall_bodies,
+        }))
+        .map_err(|e| JsError::new(&format!("Failed to serialize results: {}", e)))
     }
 
     /// Execute single integration step
@@ -125,6 +133,50 @@ impl WasmSimulator {
             "Reset not yet implemented - please create a new WasmSimulator",
         ))
     }
+}
+
+/// Rocket from a client or legacy JSON configuration
+fn parse_rocket(config_json: &str) -> Result<Rocket, JsError> {
+    match serde_json::from_str::<ClientConfig>(config_json) {
+        Ok(client) => Ok(client.into_rocket()),
+        Err(_) => {
+            let legacy: RocketConfig = serde_json::from_str(config_json)
+                .map_err(|e| JsError::new(&format!("Failed to parse config JSON: {}", e)))?;
+            Ok(Rocket::new(legacy))
+        }
+    }
+}
+
+/// Default 1-sigma dispersions for Monte Carlo runs, as JSON
+#[wasm_bindgen]
+pub fn default_dispersion() -> String {
+    serde_json::to_string(&Dispersion::default()).unwrap_or_default()
+}
+
+/// Fly Monte Carlo case `index` (perturbation drawn from `seed` and
+/// `index`); returns a `CaseResult` as JSON
+#[wasm_bindgen]
+pub fn monte_carlo_case(
+    config_json: &str,
+    dispersion_json: &str,
+    seed: u32,
+    index: u32,
+) -> Result<String, JsError> {
+    let rocket = parse_rocket(config_json)?;
+    let dispersion: Dispersion = serde_json::from_str(dispersion_json)
+        .map_err(|e| JsError::new(&format!("Failed to parse dispersion JSON: {}", e)))?;
+    let case = run_case(&rocket, &dispersion, seed as u64, index);
+    serde_json::to_string(&case)
+        .map_err(|e| JsError::new(&format!("Failed to serialize case: {}", e)))
+}
+
+/// Per-body impact statistics of a JSON array of `CaseResult`
+#[wasm_bindgen]
+pub fn monte_carlo_statistics(cases_json: &str) -> Result<String, JsError> {
+    let cases: Vec<CaseResult> = serde_json::from_str(cases_json)
+        .map_err(|e| JsError::new(&format!("Failed to parse cases JSON: {}", e)))?;
+    serde_json::to_string(&impact_statistics(&cases))
+        .map_err(|e| JsError::new(&format!("Failed to serialize statistics: {}", e)))
 }
 
 /// Utility function to validate JSON configuration without creating simulator

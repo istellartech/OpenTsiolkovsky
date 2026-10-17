@@ -2,7 +2,7 @@
 ///
 /// Handles JSON configuration files and CSV data files
 use crate::rocket::{Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
-use crate::simulator::SimulationState;
+use crate::simulator::{FallBody, SimulationState, impact_point};
 use serde_json;
 use std::fs;
 use std::io::Read;
@@ -435,6 +435,34 @@ pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
         }
     }
 
+    for (i, stage) in config.stages.iter().enumerate() {
+        let dump = &stage.dumping_product;
+        if !dump.dumping_product_exists {
+            continue;
+        }
+        let t = dump.dumping_product_separation_time;
+        let stage_end = if stage.stage.following_stage_exists {
+            stage.stage.separation_time
+        } else {
+            f64::INFINITY
+        };
+        if !(t > 0.0 && t < stage_end) {
+            warnings.push(format!(
+                "ステージ{}: 投棄物の分離時刻 '{:.3}秒' がステージの飛行中(0〜分離時刻)にないため、投棄物は無視されます",
+                i + 1,
+                t
+            ));
+        }
+        if !(dump.dumping_product_mass > 0.0 && dump.dumping_product_mass < stage.mass_initial) {
+            warnings.push(format!(
+                "ステージ{}: 投棄物の質量 '{:.3}kg' がステージ質量 '{:.3}kg' に対して不正です",
+                i + 1,
+                dump.dumping_product_mass,
+                stage.mass_initial
+            ));
+        }
+    }
+
     warnings
 }
 
@@ -701,6 +729,9 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
         "acc_body_x[m/s2]",
         "acc_body_y[m/s2]",
         "acc_body_z[m/s2]",
+        "flight_mode",
+        "IIP_lat[deg]",
+        "IIP_lon[deg]",
     ])?;
 
     // Write data
@@ -726,6 +757,9 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
             state.acc_body.x.to_string(),
             state.acc_body.y.to_string(),
             state.acc_body.z.to_string(),
+            state.flight_mode.as_str().to_string(),
+            state.iip_lat_deg.map_or(String::new(), |v| v.to_string()),
+            state.iip_lon_deg.map_or(String::new(), |v| v.to_string()),
         ])?;
     }
 
@@ -736,6 +770,7 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
 /// Save simulation summary to JSON file
 pub fn save_summary_json<P: AsRef<Path>>(
     trajectory: &[SimulationState],
+    fall_bodies: &[FallBody],
     config: &RocketConfig,
     output_path: P,
 ) -> Result<()> {
@@ -795,12 +830,118 @@ pub fn save_summary_json<P: AsRef<Path>>(
             final_state.velocity.z
         ],
         "final_mass_kg": final_state.mass,
-        "simulation_points": trajectory.len()
+        "simulation_points": trajectory.len(),
+        "impact_point": impact_point(trajectory),
+        "fall_bodies": fall_bodies
+            .iter()
+            .map(|b| serde_json::json!({
+                "kind": b.kind,
+                "stage": b.stage,
+                "release_time_s": b.release_time_s,
+                "mass_kg": b.mass_kg,
+                "impact_point": b.impact,
+            }))
+            .collect::<Vec<_>>()
     });
 
     let json_string = serde_json::to_string_pretty(&summary)?;
     std::fs::write(output_path, json_string)?;
 
+    Ok(())
+}
+
+/// Load a dispersion JSON; keys left out keep their defaults
+pub fn load_dispersion<P: AsRef<Path>>(path: P) -> Result<crate::montecarlo::Dispersion> {
+    Ok(serde_json::from_str(&fs::read_to_string(path)?)?)
+}
+
+/// Save one row per Monte Carlo case: drawn perturbation, max altitude and
+/// the impact point of every body (empty when it did not hit the ground)
+pub fn save_monte_carlo_csv<P: AsRef<Path>>(
+    cases: &[crate::montecarlo::CaseResult],
+    output_path: P,
+) -> Result<()> {
+    let bodies: Vec<String> = crate::montecarlo::impact_statistics(cases)
+        .into_iter()
+        .map(|s| s.body)
+        .collect();
+    let mut wtr = csv::Writer::from_path(output_path)?;
+    let mut header: Vec<String> = [
+        "case",
+        "thrust[%]",
+        "isp[%]",
+        "mass[%]",
+        "drag[%]",
+        "elevation[deg]",
+        "azimuth[deg]",
+        "wind_speed[m/s]",
+        "wind_direction[deg]",
+        "air_density[%]",
+        "max_altitude[m]",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    for body in &bodies {
+        header.push(format!("{body}_impact_time[s]"));
+        header.push(format!("{body}_impact_lat[deg]"));
+        header.push(format!("{body}_impact_lon[deg]"));
+    }
+    wtr.write_record(&header)?;
+
+    for case in cases {
+        let p = &case.perturbation;
+        let mut row: Vec<String> = [
+            p.thrust_percent,
+            p.isp_percent,
+            p.mass_percent,
+            p.drag_percent,
+            p.elevation_deg,
+            p.azimuth_deg,
+            p.wind_speed_mps,
+            p.wind_direction_deg,
+            p.air_density_percent,
+            case.max_altitude_m,
+        ]
+        .iter()
+        .map(|v| v.to_string())
+        .collect();
+        row.insert(0, case.index.to_string());
+        for body in &bodies {
+            let impact = case
+                .impacts
+                .iter()
+                .find(|i| &i.body == body)
+                .and_then(|i| i.impact);
+            match impact {
+                Some(p) => row.extend([
+                    p.time_s.to_string(),
+                    p.latitude_deg.to_string(),
+                    p.longitude_deg.to_string(),
+                ]),
+                None => row.extend([String::new(), String::new(), String::new()]),
+            }
+        }
+        wtr.write_record(&row)?;
+    }
+    wtr.flush()?;
+    Ok(())
+}
+
+/// Save the dispersion settings and per-body impact statistics
+pub fn save_monte_carlo_summary<P: AsRef<Path>>(
+    cases: &[crate::montecarlo::CaseResult],
+    dispersion: &crate::montecarlo::Dispersion,
+    seed: u64,
+    output_path: P,
+) -> Result<()> {
+    let summary = serde_json::json!({
+        "cases": cases.len(),
+        "seed": seed,
+        "dispersion_1sigma": dispersion,
+        "impact_statistics": crate::montecarlo::impact_statistics(cases),
+    });
+    fs::write(output_path, serde_json::to_string_pretty(&summary)?)?;
     Ok(())
 }
 

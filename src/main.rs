@@ -2,9 +2,11 @@
 use clap::Parser;
 use openTsiolkovsky::{
     io::{
-        IoError, config_warnings, create_rocket_from_config, save_summary_json, save_trajectory_csv,
+        IoError, config_warnings, create_rocket_from_config, load_dispersion, save_monte_carlo_csv,
+        save_monte_carlo_summary, save_summary_json, save_trajectory_csv,
     },
-    simulator::{SimError, Simulator},
+    montecarlo::{Dispersion, impact_statistics, run_cases},
+    simulator::{FallBodyKind, SimError, Simulator, impact_point},
 };
 
 #[derive(Parser)]
@@ -19,6 +21,18 @@ struct Args {
 
     #[arg(short, long)]
     verbose: bool,
+
+    /// Also run N Monte Carlo dispersion cases
+    #[arg(long, value_name = "N")]
+    monte_carlo: Option<u32>,
+
+    /// 1-sigma dispersion JSON for --monte-carlo (missing keys use defaults)
+    #[arg(long, value_name = "FILE")]
+    dispersion: Option<String>,
+
+    /// Random seed for --monte-carlo
+    #[arg(long, default_value_t = 1)]
+    seed: u64,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -69,6 +83,8 @@ fn main() -> Result<()> {
     }
 
     let trajectory = simulator.run();
+    // Spent stages and dumping products, propagated to the ground
+    let fall_bodies = simulator.simulate_fall_bodies();
 
     if args.verbose {
         println!("Simulation completed with {} data points", trajectory.len());
@@ -123,14 +139,85 @@ fn main() -> Result<()> {
     let cpp_csv_file = format!("{}_dynamics_cpp.csv", output_base);
 
     save_trajectory_csv(&trajectory, &trajectory_file)?;
-    save_summary_json(&trajectory, &rocket.config, &summary_file)?;
+    save_summary_json(&trajectory, &fall_bodies, &rocket.config, &summary_file)?;
     // Write C++-compatible CSV
     save_cpp_telemetry(&simulator.telemetry_cpp, &cpp_csv_file)?;
+    let mut fall_files = Vec::new();
+    for body in &fall_bodies {
+        if body.telemetry_cpp.is_empty() {
+            continue;
+        }
+        let suffix = match body.kind {
+            FallBodyKind::Stage => "fall",
+            FallBodyKind::Dump => "dump",
+        };
+        let path = format!("{}_dynamics_cpp_{}_{}.csv", output_base, body.stage, suffix);
+        save_cpp_telemetry(&body.telemetry_cpp, &path)?;
+        fall_files.push(path);
+    }
+
+    // Impact points (as printed by the C++ simulator)
+    let describe = |impact: Option<openTsiolkovsky::simulator::ImpactPoint>| match impact {
+        Some(p) => format!(
+            "{:.6}\t{:.6}\t(T+{:.1} s)",
+            p.latitude_deg, p.longitude_deg, p.time_s
+        ),
+        None => "none (no ground impact)".to_string(),
+    };
+    println!(
+        "vehicle impact point [deg]:\t{}",
+        describe(impact_point(&trajectory))
+    );
+    for body in &fall_bodies {
+        let what = match body.kind {
+            FallBodyKind::Stage => "stage",
+            FallBodyKind::Dump => "stage dumping product",
+        };
+        println!(
+            "{} {} impact point [deg]:\t{}",
+            body.stage,
+            what,
+            describe(body.impact)
+        );
+    }
+
+    if let Some(count) = args.monte_carlo {
+        let dispersion = match &args.dispersion {
+            Some(path) => load_dispersion(path)?,
+            None => Dispersion::default(),
+        };
+        println!(
+            "Running {} Monte Carlo cases (seed {})...",
+            count, args.seed
+        );
+        let cases = run_cases(&rocket, &dispersion, args.seed, count);
+        let mc_csv = format!("{}_montecarlo.csv", output_base);
+        let mc_summary = format!("{}_montecarlo_summary.json", output_base);
+        save_monte_carlo_csv(&cases, &mc_csv)?;
+        save_monte_carlo_summary(&cases, &dispersion, args.seed, &mc_summary)?;
+        for s in impact_statistics(&cases) {
+            println!(
+                "{}: {}/{} impacts, mean {:.6} {:.6} [deg], 3-sigma ellipse {:.0} x {:.0} m (azimuth {:.0} deg)",
+                s.body,
+                s.impacts,
+                s.cases,
+                s.mean_latitude_deg,
+                s.mean_longitude_deg,
+                3.0 * s.ellipse_major_m,
+                3.0 * s.ellipse_minor_m,
+                s.ellipse_azimuth_deg
+            );
+        }
+        println!("Monte Carlo results saved to: {} / {}", mc_csv, mc_summary);
+    }
 
     if args.verbose {
         println!("Results saved to:");
         println!("  Trajectory: {}", trajectory_file);
         println!("  Summary: {}", summary_file);
+        for path in &fall_files {
+            println!("  Fall body: {}", path);
+        }
     } else {
         println!("Simulation completed successfully");
         println!("Trajectory saved to: {}", trajectory_file);

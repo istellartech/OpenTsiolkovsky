@@ -589,6 +589,111 @@ pub mod coordinates {
             let theta = cos_theta.acos();
             WGS84_A * theta
         }
+
+        /// Instantaneous impact point (IIP) on the WGS84 ellipsoid
+        ///
+        /// Ported from `posLLH_IIP` in the legacy C++ simulator: propagates a
+        /// Keplerian (vacuum) ellipse from the current state and iterates the
+        /// intersection with the Earth ellipsoid, accounting for Earth rotation
+        /// during the time of flight.
+        ///
+        /// # Arguments
+        /// * `pos_ecef` - Position in ECEF [m]
+        /// * `vel_ecef` - Velocity relative to the Earth, in ECEF frame [m/s]
+        ///
+        /// # Returns
+        /// `Some([lat_deg, lon_deg, 0.0])`, or `None` when no impact point exists
+        /// (below the surface, escape trajectory, perigee above the surface, or
+        /// the iteration does not converge)
+        pub fn pos_llh_iip(
+            pos_ecef: &Vector3<f64>,
+            vel_ecef: &Vector3<f64>,
+        ) -> Option<Vector3<f64>> {
+            const N_ITER: usize = 5;
+            let ra = WGS84_A;
+            let rb = ra * (1.0 - WGS84_F);
+            let e2 = WGS84_E2;
+            let mu = MU_EARTH;
+            let omega_vec = Vector3::new(0.0, 0.0, OMEGA_EARTH);
+
+            // Initial approximation of the geocentric radius at impact
+            let mut r_k1 = rb;
+
+            let r0 = pos_ecef.magnitude();
+            if r0 < r_k1 {
+                return None; // below the Earth's surface
+            }
+
+            // Inertial velocity expressed in the (instantaneous) ECEF frame
+            let vel_inertial = vel_ecef + omega_vec.cross(pos_ecef);
+            let v0 = vel_inertial.magnitude();
+
+            // Eccentricity times cosine of the eccentric anomaly at epoch
+            let eps_cos = r0 * v0 * v0 / mu - 1.0;
+            if eps_cos >= 1.0 {
+                return None; // parabolic or hyperbolic trajectory
+            }
+
+            // Semi-major axis of the trajectory ellipse
+            let a_t = r0 / (1.0 - eps_cos);
+            // Eccentricity times sine of the eccentric anomaly at epoch
+            let eps_sin = pos_ecef.dot(&vel_inertial) / (mu * a_t).sqrt();
+            let eps2 = eps_cos * eps_cos + eps_sin * eps_sin;
+            if eps2.sqrt() <= 1.0 && a_t * (1.0 - eps2.sqrt()) - ra >= 0.0 {
+                return None; // perigee above the surface
+            }
+
+            let sqrt_a3_mu = (a_t * a_t * a_t / mu).sqrt();
+            let mut eps_k_sin = 0.0;
+            let mut delta_eps_k_cos = 0.0;
+            let mut delta_eps_k_sin = 0.0;
+            let mut impact = Vector3::zeros();
+            let mut r_k2 = r_k1;
+            let mut r_k1_prev = r_k1;
+
+            for _ in 0..N_ITER {
+                // Eccentric anomaly terms at impact
+                let eps_k_cos = (a_t - r_k1) / a_t;
+                let disc = eps2 - eps_k_cos * eps_k_cos;
+                if disc < 0.0 {
+                    return None; // trajectory does not intersect the surface
+                }
+                eps_k_sin = -disc.sqrt();
+
+                // Difference between eccentric anomalies at impact and epoch
+                delta_eps_k_cos = (eps_k_cos * eps_cos + eps_k_sin * eps_sin) / eps2;
+                delta_eps_k_sin = (eps_k_sin * eps_cos - eps_k_cos * eps_sin) / eps2;
+
+                // f and g series of Kepler's equations
+                let f_series = (delta_eps_k_cos - eps_cos) / (1.0 - eps_cos);
+                let g_series = (delta_eps_k_sin + eps_sin - eps_k_sin) * sqrt_a3_mu;
+
+                impact = f_series * pos_ecef + g_series * vel_inertial;
+
+                // Geocentric radius of the ellipsoid at the impact latitude
+                let z_ratio = impact.z / r_k1;
+                r_k2 = ra / ((e2 / (1.0 - e2)) * z_ratio * z_ratio + 1.0).sqrt();
+
+                r_k1_prev = r_k1;
+                r_k1 = r_k2;
+            }
+
+            if (r_k1_prev - r_k2).abs() > 1.0 {
+                return None; // not converged
+            }
+
+            let delta_eps = delta_eps_k_sin.atan2(delta_eps_k_cos);
+            let time_of_flight = (delta_eps + eps_sin - eps_k_sin) * sqrt_a3_mu;
+
+            // Geocentric -> geodetic latitude, and Earth rotation during flight
+            let phi_geocentric = (impact.z / r_k2).clamp(-1.0, 1.0).asin();
+            let phi = phi_geocentric.tan().atan2(1.0 - e2);
+            let lambda = impact.y.atan2(impact.x) - OMEGA_EARTH * time_of_flight;
+            let lambda = (lambda + std::f64::consts::PI).rem_euclid(std::f64::consts::TAU)
+                - std::f64::consts::PI;
+
+            Some(Vector3::new(rad2deg(phi), rad2deg(lambda), 0.0))
+        }
     }
 
     #[cfg(test)]
@@ -650,6 +755,103 @@ pub mod coordinates {
             assert_relative_eq!(wind_vel.x, 0.0, epsilon = 1e-12);
             assert_relative_eq!(wind_vel.y, -5.0, epsilon = 1e-12); // Westward
             assert_relative_eq!(wind_vel.z, 0.0, epsilon = 1e-12);
+        }
+
+        /// ECEF position and Earth-relative ECEF velocity from LLH [deg, deg, m] and NED velocity
+        fn ecef_state(llh: [f64; 3], vel_ned: [f64; 3]) -> (Vector3<f64>, Vector3<f64>) {
+            let pos_llh = Vector3::new(llh[0], llh[1], llh[2]);
+            let pos_ecef = CoordinateTransform::pos_llh_to_ecef(&pos_llh);
+            let dcm_ned_to_ecef = CoordinateTransform::dcm_ecef_to_ned(&pos_llh).transpose();
+            let vel_ecef = dcm_ned_to_ecef * Vector3::new(vel_ned[0], vel_ned[1], vel_ned[2]);
+            (pos_ecef, vel_ecef)
+        }
+
+        /// Reference impact point: propagate point-mass gravity in the inertial
+        /// frame (aligned with ECEF at epoch) with RK4 until the ellipsoid is hit.
+        fn propagate_impact(pos_ecef: Vector3<f64>, vel_ecef: Vector3<f64>) -> Vector3<f64> {
+            let omega_vec = Vector3::new(0.0, 0.0, OMEGA_EARTH);
+            let accel = |r: &Vector3<f64>| -MU_EARTH * r / r.magnitude().powi(3);
+            let altitude = |r: &Vector3<f64>, t: f64| {
+                let r_ecef = CoordinateTransform::dcm_eci_to_ecef(t) * r;
+                CoordinateTransform::pos_ecef_to_llh(&r_ecef).z
+            };
+
+            let dt = 0.05;
+            let mut t = 0.0;
+            let mut r = pos_ecef;
+            let mut v = vel_ecef + omega_vec.cross(&pos_ecef);
+            let mut alt = altitude(&r, t);
+            loop {
+                let (k1r, k1v) = (v, accel(&r));
+                let (k2r, k2v) = (v + 0.5 * dt * k1v, accel(&(r + 0.5 * dt * k1r)));
+                let (k3r, k3v) = (v + 0.5 * dt * k2v, accel(&(r + 0.5 * dt * k2r)));
+                let (k4r, k4v) = (v + dt * k3v, accel(&(r + dt * k3r)));
+                let r_next = r + dt / 6.0 * (k1r + 2.0 * k2r + 2.0 * k3r + k4r);
+                let v_next = v + dt / 6.0 * (k1v + 2.0 * k2v + 2.0 * k3v + k4v);
+                let alt_next = altitude(&r_next, t + dt);
+                if alt_next <= 0.0 {
+                    // Linear interpolation of the surface crossing
+                    let s = alt / (alt - alt_next);
+                    let t_hit = t + s * dt;
+                    let r_hit = r + s * (r_next - r);
+                    let r_ecef = CoordinateTransform::dcm_eci_to_ecef(t_hit) * r_hit;
+                    return CoordinateTransform::pos_ecef_to_llh(&r_ecef);
+                }
+                r = r_next;
+                v = v_next;
+                alt = alt_next;
+                t += dt;
+                assert!(t < 20000.0, "reference propagation did not impact");
+            }
+        }
+
+        #[test]
+        fn test_iip_matches_numerical_propagation() {
+            let cases = [
+                // Sounding-rocket-like lofted trajectory (Uchinoura)
+                ([31.25, 131.08, 100_000.0], [500.0, 1500.0, -1000.0]),
+                // Steep ascent, westward
+                ([35.0, 139.0, 50_000.0], [0.0, -800.0, -2000.0]),
+                // Suborbital with long flight time, southern hemisphere near the antimeridian
+                ([-40.0, 179.0, 200_000.0], [-3000.0, 4000.0, -500.0]),
+            ];
+            for (llh, vel_ned) in cases {
+                let (pos_ecef, vel_ecef) = ecef_state(llh, vel_ned);
+                let iip = CoordinateTransform::pos_llh_iip(&pos_ecef, &vel_ecef)
+                    .expect("impact point should exist");
+                let reference = propagate_impact(pos_ecef, vel_ecef);
+                assert_relative_eq!(iip.x, reference.x, epsilon = 1e-3);
+                assert_relative_eq!(iip.y, reference.y, epsilon = 1e-3);
+                assert!((-180.0..=180.0).contains(&iip.y));
+                assert_eq!(iip.z, 0.0);
+            }
+        }
+
+        #[test]
+        fn test_iip_at_rest_is_directly_below() {
+            // Zero Earth-relative velocity: falls nearly straight down (small Coriolis drift)
+            let (pos_ecef, vel_ecef) = ecef_state([35.0, 139.0, 10_000.0], [0.0, 0.0, 0.0]);
+            let iip = CoordinateTransform::pos_llh_iip(&pos_ecef, &vel_ecef).unwrap();
+            assert_relative_eq!(iip.x, 35.0, epsilon = 1e-3);
+            assert_relative_eq!(iip.y, 139.0, epsilon = 1e-3);
+        }
+
+        #[test]
+        fn test_iip_none_when_no_impact() {
+            // Below the surface
+            let pos = Vector3::new(WGS84_A * 0.5, 0.0, 0.0);
+            assert!(CoordinateTransform::pos_llh_iip(&pos, &Vector3::zeros()).is_none());
+
+            // Circular orbit at 400 km: perigee above the surface
+            let r = WGS84_A + 400_000.0;
+            let pos = Vector3::new(r, 0.0, 0.0);
+            let v_inertial = Vector3::new(0.0, (MU_EARTH / r).sqrt(), 0.0);
+            let vel_ecef = v_inertial - Vector3::new(0.0, 0.0, OMEGA_EARTH).cross(&pos);
+            assert!(CoordinateTransform::pos_llh_iip(&pos, &vel_ecef).is_none());
+
+            // Escape velocity: hyperbolic trajectory
+            let vel_ecef = Vector3::new(0.0, (2.0 * MU_EARTH / r).sqrt() * 1.1, 0.0);
+            assert!(CoordinateTransform::pos_llh_iip(&pos, &vel_ecef).is_none());
         }
     }
 }
