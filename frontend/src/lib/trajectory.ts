@@ -74,12 +74,31 @@ export interface Track {
   summary: TrackSummary
   t0: number
   t1: number
+  /** Set when the solver output turned non-physical and was cut off here [s] */
+  truncatedAt?: number
 }
 
 const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
 
-export function buildTrack(states: SimulationState[]): Track | null {
-  if (!states || states.length < 2) return null
+/** A sample the solver could not have produced physically (diverged run). */
+function isNonPhysical(s: SimulationState): boolean {
+  const p = vec3ToObject(s.position_eci || s.position)
+  const r = Math.hypot(p.x, p.y, p.z)
+  return (
+    !Number.isFinite(r) ||
+    !Number.isFinite(s.altitude) ||
+    !Number.isFinite(s.velocity_magnitude) ||
+    s.altitude > 1e9 || // beyond ~1,000,000 km
+    s.velocity_magnitude > 5e4 // faster than any rocket here
+  )
+}
+
+export function buildTrack(input: SimulationState[]): Track | null {
+  if (!input || input.length < 2) return null
+  // Keep everything up to the first non-physical sample.
+  const cut = input.findIndex(isNonPhysical)
+  const states = cut === -1 ? input : input.slice(0, cut)
+  if (states.length < 2) return null
 
   const samples: TrackSample[] = []
   let baseLat = 0
@@ -189,6 +208,7 @@ export function buildTrack(states: SimulationState[]): Track | null {
     stages,
     t0: first.t,
     t1: last.t,
+    truncatedAt: cut === -1 ? undefined : num(input[cut].time),
     summary: {
       apogee: apogee.alt,
       apogeeTime: apogee.t,

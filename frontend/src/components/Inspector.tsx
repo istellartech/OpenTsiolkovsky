@@ -537,7 +537,7 @@ function VehicleTab({
           }
         />
         {thrustProfile.length > 0 ? (
-          <ProfileTable columns={[{ key: 'time', label: '時刻 s' }, { key: 'value', label: '推力 N' }]} rows={thrustProfile} onChange={(rows) => setStage({ thrust_profile: rows })} />
+          <ProfileTable title={`${idx + 1}段の推力テーブル`} columns={[{ key: 'time', label: '時刻 s' }, { key: 'value', label: '推力 N' }]} rows={thrustProfile} onChange={(rows) => setStage({ thrust_profile: rows })} />
         ) : (
           <NumberField label="推力（真空）" unit="N" path={p('thrust_constant')} value={stage.thrust_constant} onChange={(v) => setStage({ thrust_constant: v })} />
         )}
@@ -556,7 +556,7 @@ function VehicleTab({
           }
         />
         {ispProfile.length > 0 ? (
-          <ProfileTable columns={[{ key: 'time', label: '時刻 s' }, { key: 'value', label: 'Isp s' }]} rows={ispProfile} onChange={(rows) => setStage({ isp_profile: rows })} />
+          <ProfileTable title={`${idx + 1}段の比推力テーブル`} columns={[{ key: 'time', label: '時刻 s' }, { key: 'value', label: 'Isp s' }]} rows={ispProfile} onChange={(rows) => setStage({ isp_profile: rows })} />
         ) : (
           <NumberField label="比推力 Isp（真空）" unit="s" path={p('isp_constant')} value={stage.isp_constant} onChange={(v) => setStage({ isp_constant: v })} />
         )}
@@ -648,7 +648,7 @@ function AeroTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
       <Group title="軸力係数 CA" note="機軸方向の抵抗。マッハ数で変わる場合はテーブルで入力します。">
         <Toggle label="マッハ数テーブルで入力" checked={a.ca_profile.length > 0} onChange={(on) => set({ ca_profile: on ? [{ mach: 0, value: a.ca_constant }, { mach: 5, value: a.ca_constant }] : [] })} />
         {a.ca_profile.length > 0 ? (
-          <ProfileTable columns={[{ key: 'mach', label: 'Mach' }, { key: 'value', label: 'CA' }]} rows={a.ca_profile} onChange={(rows) => set({ ca_profile: rows })} />
+          <ProfileTable title="軸力係数 CA のマッハ数テーブル" columns={[{ key: 'mach', label: 'Mach' }, { key: 'value', label: 'CA' }]} rows={a.ca_profile} onChange={(rows) => set({ ca_profile: rows })} />
         ) : (
           <NumberField label="CA" unit="—" path="aerodynamics.ca_constant" value={a.ca_constant} onChange={(v) => set({ ca_constant: v })} />
         )}
@@ -657,7 +657,7 @@ function AeroTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
       <Group title="法線力係数 CN">
         <Toggle label="マッハ数テーブルで入力" checked={a.cn_profile.length > 0} onChange={(on) => set({ cn_profile: on ? [{ mach: 0, value: a.cn_constant }, { mach: 5, value: a.cn_constant }] : [] })} />
         {a.cn_profile.length > 0 ? (
-          <ProfileTable columns={[{ key: 'mach', label: 'Mach' }, { key: 'value', label: 'CN' }]} rows={a.cn_profile} onChange={(rows) => set({ cn_profile: rows })} />
+          <ProfileTable title="法線力係数 CN のマッハ数テーブル" columns={[{ key: 'mach', label: 'Mach' }, { key: 'value', label: 'CN' }]} rows={a.cn_profile} onChange={(rows) => set({ cn_profile: rows })} />
         ) : (
           <NumberField label="CN" unit="—" path="aerodynamics.cn_constant" value={a.cn_constant} onChange={(v) => set({ cn_constant: v })} />
         )}
@@ -697,6 +697,7 @@ function FlightTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
         {at.profile.length > 0 ? (
           <ProfileTable
             path="attitude.profile"
+            title="姿勢プログラム"
             columns={[{ key: 'time', label: '時刻 s' }, { key: 'azimuth_deg', label: '方位 °' }, { key: 'elevation_deg', label: '仰角 °' }]}
             rows={at.profile}
             onChange={(rows) => setAt({ profile: rows })}
@@ -739,6 +740,7 @@ function FlightTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
         {w.profile.length > 0 ? (
           <ProfileTable
             path="wind.profile"
+            title="高度別の風"
             columns={[{ key: 'altitude_m', label: '高度 m' }, { key: 'speed_mps', label: '風速 m/s' }, { key: 'direction_deg', label: '風向 °' }]}
             rows={w.profile}
             onChange={(rows) => setW({ profile: rows })}
