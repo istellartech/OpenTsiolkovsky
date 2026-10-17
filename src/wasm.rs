@@ -66,6 +66,20 @@ impl WasmSimulator {
             .map_err(|e| JsError::new(&format!("Failed to serialize results: {}", e)))
     }
 
+    /// Run the simulation, then propagate the spent stages and dumping
+    /// products to the ground. Returns JSON
+    /// `{ "trajectory": SimulationState[], "fall_bodies": FallBody[] }`.
+    #[wasm_bindgen]
+    pub fn run_with_fall_bodies(&mut self) -> Result<String, JsError> {
+        let trajectory = self.inner.run();
+        let fall_bodies = self.inner.simulate_fall_bodies();
+        serde_json::to_string(&serde_json::json!({
+            "trajectory": trajectory,
+            "fall_bodies": fall_bodies,
+        }))
+        .map_err(|e| JsError::new(&format!("Failed to serialize results: {}", e)))
+    }
+
     /// Execute single integration step
     #[wasm_bindgen]
     pub fn step(&mut self, dt: f64) -> Result<String, JsError> {

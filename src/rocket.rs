@@ -879,6 +879,21 @@ pub struct ClientStage {
     /// (Mach tables stay vehicle-wide, as in the CLI where they come from stage 1.)
     #[serde(default)]
     pub aero: Option<ClientStageAero>,
+    /// Product jettisoned while this stage flies (fairing, etc.)
+    #[serde(default)]
+    pub dumping_product: Option<ClientDumpingProduct>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientDumpingProduct {
+    /// Release time, relative to the stage start [s]
+    pub separation_time_s: f64,
+    pub mass_kg: f64,
+    #[serde(default = "default_ballistic_coefficient")]
+    pub ballistic_coefficient: f64,
+    /// Velocity added at release, NED [m/s]
+    #[serde(default = "default_velocity_ned")]
+    pub additional_velocity_ned_mps: [f64; 3],
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -917,6 +932,7 @@ impl Default for ClientStage {
             isp_multiplier: default_multiplier(),
             isp_profile: Vec::new(),
             aero: None,
+            dumping_product: None,
         }
     }
 }
@@ -1263,12 +1279,21 @@ fn build_stage_config(
         thrust,
         aero,
         attitude: attitude_cfg,
-        dumping_product: DumpingProductConfig {
-            dumping_product_exists: false,
-            dumping_product_separation_time: 0.0,
-            dumping_product_mass: 0.0,
-            dumping_product_ballistic_coefficient: 0.0,
-            additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
+        dumping_product: match &stage.dumping_product {
+            Some(dump) => DumpingProductConfig {
+                dumping_product_exists: true,
+                dumping_product_separation_time: dump.separation_time_s,
+                dumping_product_mass: dump.mass_kg,
+                dumping_product_ballistic_coefficient: dump.ballistic_coefficient,
+                additional_speed_at_dumping_ned: dump.additional_velocity_ned_mps,
+            },
+            None => DumpingProductConfig {
+                dumping_product_exists: false,
+                dumping_product_separation_time: 0.0,
+                dumping_product_mass: 0.0,
+                dumping_product_ballistic_coefficient: 0.0,
+                additional_speed_at_dumping_ned: [0.0, 0.0, 0.0],
+            },
         },
         attitude_neutrality: AttitudeNeutralityConfig {
             considering_neutrality: false,
@@ -1322,5 +1347,38 @@ mod client_stage_aero_tests {
         assert_eq!(s2.const_axial_coefficient, 0.3);
         // Unset fields fall back to the vehicle-wide value
         assert_eq!(s2.ballistic_coefficient, 120.0);
+    }
+
+    #[test]
+    fn dumping_product_maps_to_stage_config() {
+        let json = r#"{
+            "name": "dump",
+            "simulation": { "duration_s": 10, "output_step_s": 1 },
+            "launch": {
+                "latitude_deg": 31.25, "longitude_deg": 131.08,
+                "datetime_utc": { "year": 2020, "month": 1, "day": 1, "hour": 0, "minute": 0, "second": 0 }
+            },
+            "stages": [
+                { "mass_initial_kg": 1000,
+                  "dumping_product": { "separation_time_s": 40, "mass_kg": 15, "ballistic_coefficient": 30,
+                                       "additional_velocity_ned_mps": [0, 2, -1] } },
+                { "mass_initial_kg": 100 }
+            ]
+        }"#;
+        let rocket = serde_json::from_str::<ClientConfig>(json)
+            .unwrap()
+            .into_rocket();
+        let dump = &rocket.stage_config(0).dumping_product;
+        assert!(dump.dumping_product_exists);
+        assert_eq!(dump.dumping_product_separation_time, 40.0);
+        assert_eq!(dump.dumping_product_mass, 15.0);
+        assert_eq!(dump.dumping_product_ballistic_coefficient, 30.0);
+        assert_eq!(dump.additional_speed_at_dumping_ned, [0.0, 2.0, -1.0]);
+        assert!(
+            !rocket
+                .stage_config(1)
+                .dumping_product
+                .dumping_product_exists
+        );
     }
 }

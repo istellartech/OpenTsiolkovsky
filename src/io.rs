@@ -2,7 +2,7 @@
 ///
 /// Handles JSON configuration files and CSV data files
 use crate::rocket::{Rocket, RocketConfig, SurfaceData2D, TimeSeriesData};
-use crate::simulator::SimulationState;
+use crate::simulator::{FallBody, SimulationState, impact_point};
 use serde_json;
 use std::fs;
 use std::io::Read;
@@ -435,6 +435,34 @@ pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
         }
     }
 
+    for (i, stage) in config.stages.iter().enumerate() {
+        let dump = &stage.dumping_product;
+        if !dump.dumping_product_exists {
+            continue;
+        }
+        let t = dump.dumping_product_separation_time;
+        let stage_end = if stage.stage.following_stage_exists {
+            stage.stage.separation_time
+        } else {
+            f64::INFINITY
+        };
+        if !(t > 0.0 && t < stage_end) {
+            warnings.push(format!(
+                "ステージ{}: 投棄物の分離時刻 '{:.3}秒' がステージの飛行中(0〜分離時刻)にないため、投棄物は無視されます",
+                i + 1,
+                t
+            ));
+        }
+        if !(dump.dumping_product_mass > 0.0 && dump.dumping_product_mass < stage.mass_initial) {
+            warnings.push(format!(
+                "ステージ{}: 投棄物の質量 '{:.3}kg' がステージ質量 '{:.3}kg' に対して不正です",
+                i + 1,
+                dump.dumping_product_mass,
+                stage.mass_initial
+            ));
+        }
+    }
+
     warnings
 }
 
@@ -742,6 +770,7 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
 /// Save simulation summary to JSON file
 pub fn save_summary_json<P: AsRef<Path>>(
     trajectory: &[SimulationState],
+    fall_bodies: &[FallBody],
     config: &RocketConfig,
     output_path: P,
 ) -> Result<()> {
@@ -801,7 +830,18 @@ pub fn save_summary_json<P: AsRef<Path>>(
             final_state.velocity.z
         ],
         "final_mass_kg": final_state.mass,
-        "simulation_points": trajectory.len()
+        "simulation_points": trajectory.len(),
+        "impact_point": impact_point(trajectory),
+        "fall_bodies": fall_bodies
+            .iter()
+            .map(|b| serde_json::json!({
+                "kind": b.kind,
+                "stage": b.stage,
+                "release_time_s": b.release_time_s,
+                "mass_kg": b.mass_kg,
+                "impact_point": b.impact,
+            }))
+            .collect::<Vec<_>>()
     });
 
     let json_string = serde_json::to_string_pretty(&summary)?;

@@ -4,7 +4,7 @@ use openTsiolkovsky::{
     io::{
         IoError, config_warnings, create_rocket_from_config, save_summary_json, save_trajectory_csv,
     },
-    simulator::{SimError, Simulator},
+    simulator::{FallBodyKind, SimError, Simulator, impact_point},
 };
 
 #[derive(Parser)]
@@ -69,6 +69,8 @@ fn main() -> Result<()> {
     }
 
     let trajectory = simulator.run();
+    // Spent stages and dumping products, propagated to the ground
+    let fall_bodies = simulator.simulate_fall_bodies();
 
     if args.verbose {
         println!("Simulation completed with {} data points", trajectory.len());
@@ -123,14 +125,55 @@ fn main() -> Result<()> {
     let cpp_csv_file = format!("{}_dynamics_cpp.csv", output_base);
 
     save_trajectory_csv(&trajectory, &trajectory_file)?;
-    save_summary_json(&trajectory, &rocket.config, &summary_file)?;
+    save_summary_json(&trajectory, &fall_bodies, &rocket.config, &summary_file)?;
     // Write C++-compatible CSV
     save_cpp_telemetry(&simulator.telemetry_cpp, &cpp_csv_file)?;
+    let mut fall_files = Vec::new();
+    for body in &fall_bodies {
+        if body.telemetry_cpp.is_empty() {
+            continue;
+        }
+        let suffix = match body.kind {
+            FallBodyKind::Stage => "fall",
+            FallBodyKind::Dump => "dump",
+        };
+        let path = format!("{}_dynamics_cpp_{}_{}.csv", output_base, body.stage, suffix);
+        save_cpp_telemetry(&body.telemetry_cpp, &path)?;
+        fall_files.push(path);
+    }
+
+    // Impact points (as printed by the C++ simulator)
+    let describe = |impact: Option<openTsiolkovsky::simulator::ImpactPoint>| match impact {
+        Some(p) => format!(
+            "{:.6}\t{:.6}\t(T+{:.1} s)",
+            p.latitude_deg, p.longitude_deg, p.time_s
+        ),
+        None => "none (no ground impact)".to_string(),
+    };
+    println!(
+        "vehicle impact point [deg]:\t{}",
+        describe(impact_point(&trajectory))
+    );
+    for body in &fall_bodies {
+        let what = match body.kind {
+            FallBodyKind::Stage => "stage",
+            FallBodyKind::Dump => "stage dumping product",
+        };
+        println!(
+            "{} {} impact point [deg]:\t{}",
+            body.stage,
+            what,
+            describe(body.impact)
+        );
+    }
 
     if args.verbose {
         println!("Results saved to:");
         println!("  Trajectory: {}", trajectory_file);
         println!("  Summary: {}", summary_file);
+        for path in &fall_files {
+            println!("  Fall body: {}", path);
+        }
     } else {
         println!("Simulation completed successfully");
         println!("Trajectory saved to: {}", trajectory_file);
