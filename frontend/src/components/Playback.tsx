@@ -5,7 +5,7 @@ import { sampleAt, type Track } from '../lib/trajectory'
 import { cn } from '../lib/cn'
 import { fmt } from '../lib/format'
 import { stageColorVar } from '../lib/theme'
-import { eventLabel, eventShort } from '../lib/events'
+import { eventLabel, eventShort, flightModeLabel } from '../lib/events'
 import { tr } from '../lib/i18n'
 
 /** Event labels that would collide with the previous one are dropped. */
@@ -173,6 +173,10 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
     [tr('加速度', 'Accel.'), fmt(s.accelAxial, 1), 'G'],
     [tr('距離', 'Downrange'), fmt(s.downrange, 1), 'km'],
   ]
+  // Instantaneous impact point, while one exists
+  if (s.iipLat !== null && s.iipLon !== null) {
+    rows.push(['IIP', `${fmt(s.iipLat, 3)}, ${fmt(s.iipLon, 3)}`, '°'])
+  }
 
   return (
     <div
@@ -192,7 +196,13 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
           {tr(`${s.stage}段`, `Stage ${s.stage}`)}
         </div>
       </div>
-      {!compact && <div className="mb-1.5 h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last)}</div>}
+      {!compact && <div className="h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last)}</div>}
+      {!compact && (
+        <div className="mb-1.5 flex h-4 items-center gap-1.5 truncate text-[11px] text-ink-2">
+          <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.mode === 'power_3DoF' ? 'bg-signal' : 'bg-line-strong')} />
+          {flightModeLabel(s.mode)}
+        </div>
+      )}
       <dl className={cn('grid gap-x-3', compact ? 'mt-1 grid-cols-3 gap-y-0.5' : 'grid-cols-1 gap-y-[3px]')}>
         {(compact ? rows.slice(0, 3) : rows).map(([k, v, u]) => (
           <div key={k} className={cn('flex items-baseline', compact ? 'flex-col' : 'justify-between')}>

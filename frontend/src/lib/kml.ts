@@ -1,6 +1,6 @@
 // Google Earth export of a flight track.
 import type { Track } from './trajectory'
-import { eventLabel } from './events'
+import { eventLabel, fallBodyLabel } from './events'
 
 function escapeXML(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
@@ -27,6 +27,38 @@ export function generateKML(track: Track, vehicleName: string): string {
     })
     .join('')
 
+  // Spent stages and dumping products: fall path and impact point
+  const falls = track.fallBodies
+    .filter((b) => b.samples.length > 1)
+    .map((b) => {
+      const label = escapeXML(fallBodyLabel(b))
+      const path = b.samples.map((s) => `          ${s.lon},${s.lat},${s.alt}`).join('\n')
+      const impact = b.impact
+        ? `    <Placemark>
+      <name>${label}</name>
+      <description>${escapeXML(`T+${b.impact.t.toFixed(1)} s, ${b.impact.lat.toFixed(5)}, ${b.impact.lon.toFixed(5)}`)}</description>
+      <styleUrl>#impactPoint</styleUrl>
+      <Point>
+        <coordinates>${b.impact.lon},${b.impact.lat},0</coordinates>
+      </Point>
+    </Placemark>
+`
+        : ''
+      return `    <Placemark>
+      <name>${label}</name>
+      <styleUrl>#fallLine</styleUrl>
+      <LineString>
+        <tessellate>1</tessellate>
+        <altitudeMode>absolute</altitudeMode>
+        <coordinates>
+${path}
+        </coordinates>
+      </LineString>
+    </Placemark>
+${impact}`
+    })
+    .join('')
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
@@ -46,6 +78,22 @@ export function generateKML(track: Track, vehicleName: string): string {
         <scale>1.2</scale>
         <Icon>
           <href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href>
+        </Icon>
+      </IconStyle>
+    </Style>
+
+    <Style id="fallLine">
+      <LineStyle>
+        <color>9900a5ff</color>
+        <width>2</width>
+      </LineStyle>
+    </Style>
+
+    <Style id="impactPoint">
+      <IconStyle>
+        <color>ff00a5ff</color>
+        <Icon>
+          <href>http://maps.google.com/mapfiles/kml/shapes/cross-hairs.png</href>
         </Icon>
       </IconStyle>
     </Style>
@@ -83,6 +131,6 @@ ${coords}
       </LineString>
     </Placemark>
 
-${events}  </Document>
+${events}${falls}  </Document>
 </kml>`
 }

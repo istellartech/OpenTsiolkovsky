@@ -5,7 +5,7 @@
 // worker and starting a fresh one.
 import type { ClientConfig } from './simulation'
 import { runSimulation } from './simulation'
-import { buildTrack, type Track } from './trajectory'
+import { trackFromOutput, type Track } from './trajectory'
 
 export interface SolverRequest {
   id: number
@@ -38,7 +38,7 @@ class Solver {
 
   /** Solve `config`; a call made while another is running cancels the older one. */
   run(config: ClientConfig): Promise<Track | null> {
-    if (!this.useWorker) return runSimulation(config).then(buildTrack)
+    if (!this.useWorker) return runSimulation(config).then(trackFromOutput)
     if (this.pending) {
       this.pending.reject(new SolverCancelled())
       this.pending = null

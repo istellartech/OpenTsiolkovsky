@@ -40,6 +40,28 @@ describe('fromLegacyParamFile', () => {
     expect(all.config.stages[0].thrust_profile?.length).toBeGreaterThan(3)
     expect(validateConfig(all.config)).toEqual([])
 
+    expect(all.config.stages.every((st) => st.dumping_product === undefined)).toBe(true)
+
+    // A dumping product is carried over instead of being reported unsupported
+    const s2 = json.stage2 as Record<string, Record<string, unknown>>
+    s2['dumping product'] = {
+      ...s2['dumping product'],
+      'dumping product exist?(bool)': true,
+      'dumping product separation time[s]': 20,
+      'dumping product mass[kg]': 8,
+      'dumping product ballistic coefficient[kg/m2]': 40,
+      'additional speed at dumping NED[m/s,m/s,m/s]': [0, 1, 2],
+    }
+    const dumped = fromLegacyParamFile(json, csv)
+    expect(dumped.unsupported.join()).not.toContain('dumping')
+    expect(dumped.config.stages[1].dumping_product).toEqual({
+      separation_time_s: 20,
+      mass_kg: 8,
+      ballistic_coefficient: 40,
+      additional_velocity_ned_mps: [0, 1, 2],
+    })
+    expect(validateConfig(dumped.config)).toEqual([])
+
     const none = fromLegacyParamFile(json, new Map())
     expect(none.missing).toContain('SS520-4-1_thrust.csv')
   })

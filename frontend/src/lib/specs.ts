@@ -81,6 +81,50 @@ function ispAt(stage: ClientStageConfig, t: number): number {
   return base * stage.isp_multiplier
 }
 
+/**
+ * Burnout time (stage-relative) at which `propellant` kg has been burned,
+ * integrating thrust / (Isp g0) from ignition with the same tables the
+ * solver uses. null when the thrust table ends before that much is burned.
+ */
+export function burnEndForPropellant(stage: ClientStageConfig, propellant: number): number | null {
+  if (!(propellant > 0)) return null
+  const t0 = stage.burn_start_s
+  const table = stage.thrust_profile ?? []
+  if (table.length === 0 && (stage.isp_profile ?? []).length === 0) {
+    // Constant thrust and Isp: closed form
+    const thrust = thrustAt(stage, t0)
+    const isp = ispAt(stage, t0)
+    return thrust > 0 && isp > 0 ? t0 + (propellant * isp * G0) / thrust : null
+  }
+  // Thrust is zero past the end of its table; a constant thrust with an Isp
+  // table runs until the propellant is gone (bounded to a day).
+  const tEnd = table.length > 0 ? table[table.length - 1].time : t0 + 86400
+  const steps = 20000
+  const dt = (tEnd - t0) / steps
+  if (!(dt > 0)) return null
+  let burned = 0
+  let prev = rate(stage, t0)
+  for (let k = 1; k <= steps; k++) {
+    const t = t0 + k * dt
+    const cur = rate(stage, t)
+    const add = 0.5 * (prev + cur) * dt
+    if (burned + add >= propellant) {
+      // Linear inside the step
+      const f = add > 0 ? (propellant - burned) / add : 0
+      return t - dt + f * dt
+    }
+    burned += add
+    prev = cur
+  }
+  return null
+}
+
+/** Propellant flow rate [kg/s] at stage-relative time t (no burn window). */
+function rate(stage: ClientStageConfig, t: number): number {
+  const isp = ispAt(stage, t)
+  return isp > 0 ? thrustAt(stage, t) / (isp * G0) : 0
+}
+
 export function computeSpecs(config: ClientConfig): VehicleSpec {
   const list = config.stages
   const warnings: string[] = []

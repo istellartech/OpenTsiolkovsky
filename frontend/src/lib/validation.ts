@@ -144,12 +144,12 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
   }
 
   // First stage validation
-  validateStage(stage, push, '')
+  validateStage(stage, push, '', undefined, stageList.length > 1)
 
   // Additional stages validation
   stageList.slice(1).forEach((extraStage, idx) => {
     const stageLabel = `stage[${idx + 2}]`
-    validateStage(extraStage, push, stageLabel, idx + 2)
+    validateStage(extraStage, push, stageLabel, idx + 2, idx + 2 < stageList.length)
   })
 
   // Aerodynamics validation
@@ -164,7 +164,13 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
   return issues
 }
 
-function validateStage(stage: ClientStageConfig, push: (field: string, message: string) => void, prefix: string, stageNum?: number) {
+function validateStage(
+  stage: ClientStageConfig,
+  push: (field: string, message: string) => void,
+  prefix: string,
+  stageNum?: number,
+  hasNext = false,
+) {
   const fieldPrefix = prefix ? `${prefix}.` : 'stage.'
   // Prefix each message with the stage number for stages after the first.
   const msg = (ja: string, en: string) => (stageNum ? tr(`第${stageNum}段の${ja}`, `Stage ${stageNum}: ${en}`) : tr(ja, en))
@@ -234,6 +240,35 @@ function validateStage(stage: ClientStageConfig, push: (field: string, message: 
       `${fieldPrefix}free_mode`,
       msg('Free flight mode は 0〜2 のプリセットから選択してください。', 'Free flight mode must be one of the presets 0–2.'),
     )
+  }
+
+  // Dumping product: released while this stage flies
+  const dump = stage.dumping_product
+  if (dump) {
+    const d = `${fieldPrefix}dumping_product.`
+    const t = dump.separation_time_s
+    if (!isFiniteNumber(t) || t <= 0) {
+      push(`${d}separation_time_s`, msg('投棄物の分離時刻は0秒より後にしてください。', 'Jettison time must be after 0 s.'))
+    } else if (hasNext && isFiniteNumber(stage.separation_time_s) && t >= stage.separation_time_s) {
+      push(
+        `${d}separation_time_s`,
+        msg('投棄物の分離時刻は段の分離より前にしてください。', 'Jettison time must be before stage separation.'),
+      )
+    }
+    if (!isFiniteNumber(dump.mass_kg) || dump.mass_kg <= 0) {
+      push(`${d}mass_kg`, msg('投棄物の質量は正の値にしてください。', 'Jettisoned mass must be positive.'))
+    } else if (isFiniteNumber(stage.mass_initial_kg) && dump.mass_kg >= stage.mass_initial_kg) {
+      push(`${d}mass_kg`, msg('投棄物の質量は段の質量より小さくしてください。', 'Jettisoned mass must be less than the stage mass.'))
+    }
+    if (!isFiniteNumber(dump.ballistic_coefficient) || dump.ballistic_coefficient <= 0) {
+      push(
+        `${d}ballistic_coefficient`,
+        msg('投棄物の弾道係数は正の値にしてください。', 'Jettisoned part ballistic coefficient must be positive.'),
+      )
+    }
+    if (!dump.additional_velocity_ned_mps?.every(isFiniteNumber)) {
+      push(`${d}additional_velocity_ned_mps`, msg('投棄時の追加速度は数値にしてください。', 'Jettison velocity must be numbers.'))
+    }
   }
 
   // Profile validations

@@ -5,6 +5,7 @@ import { fmt } from '../lib/format'
 import { ErrorBoundary } from './ErrorBoundary'
 import { Telemetry } from './Playback'
 import { tr } from '../lib/i18n'
+import type { DispersionOverlay } from './Globe'
 
 const Globe = lazy(() => import('./Globe'))
 
@@ -12,12 +13,14 @@ const Globe = lazy(() => import('./Globe'))
 export function GlobeStage({
   track,
   reference,
+  dispersion,
   status,
   error,
   compactTelemetry,
 }: {
   track: Track | null
   reference: Track | null
+  dispersion: DispersionOverlay | null
   status: RunStatus
   error: string | null
   compactTelemetry: boolean
@@ -42,7 +45,7 @@ export function GlobeStage({
         )}
       >
         <Suspense fallback={<GlobeLoading />}>
-          <Globe track={track} reference={reference} />
+          <Globe track={track} reference={reference} dispersion={dispersion} />
         </Suspense>
       </ErrorBoundary>
       {track?.truncatedAt !== undefined && (

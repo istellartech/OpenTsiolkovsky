@@ -37,6 +37,16 @@ const track = await solver.run(config) // Track | null
 
 WASM側（`src/wasm.rs` の `WasmSimulator`）は、Webの設定形式と CLI 用の `param_*.json` 形式のどちらのJSONも受け付けます。
 
+| 関数 | 内容 |
+| --- | --- |
+| `WasmSimulator.run()` | 機体の時系列（`SimulationState[]`）の JSON |
+| `WasmSimulator.run_with_fall_bodies()` | `{ trajectory, fall_bodies }`。`fall_bodies` は使用済みの段・投棄物ごとの分離時刻・質量・落下点・時系列 |
+| `default_dispersion()` | 分散解析の既定の 1σ 値 |
+| `monte_carlo_case(config, dispersion, seed, index)` | 分散解析の 1 ケース（`seed` と `index` から乱数を決めるので再現可能） |
+| `monte_carlo_statistics(cases)` | ケースの配列から物体ごとの平均落下点と誤差楕円 |
+
+分散解析は `frontend/src/workers/montecarlo.worker.ts` を複数起動してケースを分担し、`frontend/src/hooks/useMonteCarlo.ts` が進み具合と集計を管理します。
+
 ## トラブルシューティング
 
 - **wasm-pack が見つからない**: インストール後、PATHを再読み込み

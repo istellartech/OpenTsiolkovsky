@@ -24,15 +24,38 @@ import {
   buildModuleUrl,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
-import { indexAt, sampleAt, type Track } from '../lib/trajectory'
+import { indexAt, sampleAt, type FallSample, type FallTrack, type Track } from '../lib/trajectory'
 import { playback } from '../lib/playback'
 import { Segmented } from './primitives'
 import { cssVar, readStageColor, useTheme, type Theme } from '../lib/theme'
 import { tr, useLang } from '../lib/i18n'
+import { fallBodyLabel, mcBodyLabel } from '../lib/events'
+import { bodyStage, ellipsePoints, type CaseResult, type ImpactStatistics } from '../lib/montecarlo'
+import { cn } from '../lib/cn'
 
 ;(window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = CESIUM_BASE_URL
 
 export type CameraMode = 'overview' | 'follow'
+
+/** Optional overlays on the globe */
+export interface Layers {
+  /** Instantaneous impact point: its ground track and the current point */
+  iip: boolean
+  /** Spent stages and dumping products */
+  falls: boolean
+  /** Monte Carlo impact scatter and 3-sigma ellipses */
+  dispersion: boolean
+}
+
+const DEFAULT_LAYERS: Layers = { iip: true, falls: true, dispersion: true }
+
+/** Monte Carlo result to draw on the globe */
+export interface DispersionOverlay {
+  cases: CaseResult[]
+  statistics: ImpactStatistics[]
+  /** Stage number of the vehicle's last stage (colours the vehicle's points) */
+  lastStage: number
+}
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services'
 const ESRI_CREDIT = 'Tiles © Esri'
@@ -125,10 +148,40 @@ interface Built {
   heading: number
 }
 
-function buildScene(viewer: Viewer, track: Track, reference: Track | null): Built {
+/** Position of a falling body at time t (linear between samples). */
+function fallAt(samples: FallSample[], t: number): FallSample | null {
+  if (samples.length === 0 || t < samples[0].t || t > samples[samples.length - 1].t) return null
+  let i = 0
+  while (i < samples.length - 2 && samples[i + 1].t < t) i++
+  const a = samples[i]
+  const b = samples[Math.min(i + 1, samples.length - 1)]
+  const f = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0
+  if (Math.abs(b.lon - a.lon) > 180) return f < 0.5 ? a : b
+  return { t, lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f, alt: a.alt + (b.alt - a.alt) * f }
+}
+
+/** Split a ground path where it crosses the antimeridian or has gaps. */
+function splitPath(points: ({ lat: number; lon: number } | null)[]): Cartesian3[][] {
+  const out: Cartesian3[][] = []
+  let cur: Cartesian3[] = []
+  let prev: { lat: number; lon: number } | null = null
+  for (const p of points) {
+    if (!p || (prev && Math.abs(p.lon - prev.lon) > 180)) {
+      if (cur.length > 1) out.push(cur)
+      cur = []
+    }
+    if (p) cur.push(Cartesian3.fromDegrees(p.lon, p.lat, 0))
+    prev = p
+  }
+  if (cur.length > 1) out.push(cur)
+  return out
+}
+
+function buildScene(viewer: Viewer, track: Track, reference: Track | null, layers: Layers, dispersion: DispersionOverlay | null): Built {
   viewer.entities.removeAll()
   const { samples } = track
   const { ink, halo } = palette()
+  const signal = Color.fromCssColorString(cssVar('--signal') || '#e2491b')
 
   // Pinned earlier result, for comparison.
   if (reference) {
@@ -248,6 +301,54 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null): Buil
   marker(first, tr('発射点', 'Launch site'))
   if (track.summary.landed) marker(last, tr('落下点', 'Impact point'))
 
+  // Instantaneous impact point: where the vehicle would land if the engine
+  // stopped now (vacuum Kepler arc), along the flight and at the playhead.
+  if (layers.iip) {
+    for (const part of splitPath(samples.map((s) => (s.iipLat === null || s.iipLon === null ? null : { lat: s.iipLat, lon: s.iipLon })))) {
+      viewer.entities.add({
+        polyline: {
+          positions: part,
+          width: 2,
+          clampToGround: true,
+          material: new PolylineDashMaterialProperty({ color: signal.withAlpha(0.7), dashLength: 8 }),
+        },
+      })
+    }
+    viewer.entities.add({
+      position: new CallbackPositionProperty(() => {
+        const s = sampleAt(track, playback.get().t)
+        return s.iipLat === null || s.iipLon === null ? undefined : Cartesian3.fromDegrees(s.iipLon, s.iipLat, 0)
+      }, false),
+      point: {
+        pixelSize: 9,
+        color: Color.TRANSPARENT,
+        outlineColor: signal,
+        outlineWidth: 2.5,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: 'IIP',
+        font: '600 11px "IBM Plex Sans JP", sans-serif',
+        fillColor: signal,
+        outlineColor: halo,
+        outlineWidth: 4,
+        style: LabelStyle.FILL_AND_OUTLINE,
+        horizontalOrigin: HorizontalOrigin.LEFT,
+        verticalOrigin: VerticalOrigin.CENTER,
+        pixelOffset: new Cartesian2(9, 0),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    })
+  }
+
+  // Spent stages and dumping products: fall path, moving point, impact point.
+  if (layers.falls) {
+    for (const body of track.fallBodies) addFallBody(viewer, body, halo, ink)
+  }
+
+  // Monte Carlo: every case's impact and each body's 3-sigma ellipse.
+  if (layers.dispersion && dispersion) addDispersion(viewer, dispersion, halo, ink)
+
   // Look at the arc side-on: heading perpendicular to the launch→end bearing.
   const from = Cartesian3.fromDegrees(first.lon, first.lat)
   const to = Cartesian3.fromDegrees(last.lon, last.lat)
@@ -255,6 +356,100 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null): Buil
   const heading = CesiumMath.toRadians(Cartesian3.distance(from, to) < 1000 ? 0 : bearing - 90)
 
   return { vehicle, sphere: BoundingSphere.fromPoints(positions), heading }
+}
+
+function addFallBody(viewer: Viewer, body: FallTrack, halo: Color, ink: Color) {
+  const color = Color.fromCssColorString(readStageColor(body.stage))
+  const label = fallBodyLabel(body)
+  if (body.samples.length > 1) {
+    viewer.entities.add({
+      polyline: {
+        positions: body.samples.map((s) => Cartesian3.fromDegrees(s.lon, s.lat, Math.max(s.alt, 0))),
+        width: 2,
+        material: new PolylineDashMaterialProperty({ color: color.withAlpha(0.75), dashLength: 12 }),
+      },
+    })
+    viewer.entities.add({
+      position: new CallbackPositionProperty(() => {
+        const s = fallAt(body.samples, playback.get().t)
+        return s ? Cartesian3.fromDegrees(s.lon, s.lat, Math.max(s.alt, 0)) : undefined
+      }, false),
+      point: {
+        pixelSize: 8,
+        color,
+        outlineColor: halo,
+        outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    })
+  }
+  if (body.impact) {
+    viewer.entities.add({
+      position: Cartesian3.fromDegrees(body.impact.lon, body.impact.lat, 0),
+      point: {
+        pixelSize: 8,
+        color,
+        outlineColor: halo,
+        outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: tr(`${label} 落下点`, `${label} impact`),
+        font: '500 11px "IBM Plex Sans JP", sans-serif',
+        fillColor: ink,
+        outlineColor: halo,
+        outlineWidth: 4,
+        style: LabelStyle.FILL_AND_OUTLINE,
+        horizontalOrigin: HorizontalOrigin.LEFT,
+        verticalOrigin: VerticalOrigin.CENTER,
+        pixelOffset: new Cartesian2(9, 0),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        translucencyByDistance: new NearFarScalar(2e6, 1, 2e7, 0),
+      },
+    })
+  }
+}
+
+function addDispersion(viewer: Viewer, mc: DispersionOverlay, halo: Color, ink: Color) {
+  const colorOf = (body: string) => Color.fromCssColorString(readStageColor(bodyStage(body) ?? mc.lastStage))
+  for (const c of mc.cases) {
+    for (const i of c.impacts) {
+      if (!i.impact) continue
+      viewer.entities.add({
+        position: Cartesian3.fromDegrees(i.impact.longitude_deg, i.impact.latitude_deg, 0),
+        point: { pixelSize: 4, color: colorOf(i.body).withAlpha(0.7), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      })
+    }
+  }
+  for (const s of mc.statistics) {
+    if (s.mean_latitude_deg === null || s.mean_longitude_deg === null || s.impacts < 2) continue
+    const color = colorOf(s.body)
+    const outline = ellipsePoints(
+      s.mean_latitude_deg,
+      s.mean_longitude_deg,
+      3 * s.ellipse_major_m,
+      3 * s.ellipse_minor_m,
+      s.ellipse_azimuth_deg,
+    )
+    for (const part of splitPath(outline)) {
+      viewer.entities.add({ polyline: { positions: part, width: 2, clampToGround: true, material: color } })
+    }
+    viewer.entities.add({
+      position: Cartesian3.fromDegrees(s.mean_longitude_deg, s.mean_latitude_deg, 0),
+      label: {
+        text: tr(`${mcBodyLabel(s.body)} 3σ`, `${mcBodyLabel(s.body)} 3σ`),
+        font: '500 11px "IBM Plex Sans JP", sans-serif',
+        fillColor: ink,
+        outlineColor: halo,
+        outlineWidth: 4,
+        style: LabelStyle.FILL_AND_OUTLINE,
+        verticalOrigin: VerticalOrigin.TOP,
+        pixelOffset: new Cartesian2(0, 8),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        translucencyByDistance: new NearFarScalar(2e6, 1, 2e7, 0),
+      },
+    })
+  }
 }
 
 function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -285,9 +480,19 @@ function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
 interface GlobeProps {
   track: Track | null
   reference?: Track | null
+  dispersion?: DispersionOverlay | null
 }
 
-export default function Globe({ track, reference = null }: GlobeProps) {
+function loadLayers(): Layers {
+  try {
+    const raw = JSON.parse(localStorage.getItem('ot.layers') ?? 'null') as Partial<Layers> | null
+    return { ...DEFAULT_LAYERS, ...raw }
+  } catch {
+    return DEFAULT_LAYERS
+  }
+}
+
+export default function Globe({ track, reference = null, dispersion = null }: GlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const builtRef = useRef<Built | null>(null)
@@ -308,6 +513,19 @@ export default function Globe({ track, reference = null }: GlobeProps) {
 
   const basemapRef = useRef(basemap)
   basemapRef.current = basemap
+
+  const [layers, setLayers] = useState<Layers>(loadLayers)
+  const toggleLayer = (key: keyof Layers) => {
+    const next = { ...layers, [key]: !layers[key] }
+    setLayers(next)
+    try {
+      localStorage.setItem('ot.layers', JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }
+  const hasFalls = !!track && track.fallBodies.length > 0
+  const hasIip = !!track && track.samples.some((s) => s.iipLat !== null)
 
   const changeBasemap = (next: Basemap) => {
     setBasemapState(next)
@@ -333,7 +551,7 @@ export default function Globe({ track, reference = null }: GlobeProps) {
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || !track) return
-    const built = buildScene(viewer, track, reference)
+    const built = buildScene(viewer, track, reference, layers, dispersion)
     builtRef.current = built
 
     // Only move the camera when the flight itself moved somewhere else;
@@ -350,7 +568,7 @@ export default function Globe({ track, reference = null }: GlobeProps) {
       viewer.trackedEntity = built.vehicle
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track, reference, theme, lang])
+  }, [track, reference, theme, lang, layers, dispersion])
 
   // Restyle the scene when the colour theme changes (track entities are rebuilt above).
   const styledTheme = useRef(theme)
@@ -422,6 +640,53 @@ export default function Globe({ track, reference = null }: GlobeProps) {
             { value: 'satellite', label: tr('衛星', 'Satellite') },
           ]}
         />
+        <div
+          role="group"
+          aria-label={tr('表示する情報', 'Overlays')}
+          className="flex gap-0.5 rounded-[8px] bg-surface/95 p-0.5 ring-1 ring-line-strong shadow-[0_1px_3px_rgba(0,0,0,0.08)]"
+        >
+          {(
+            [
+              {
+                key: 'iip',
+                label: 'IIP',
+                title: tr(
+                  '瞬間落下予測点：いまエンジンが止まったら落ちる地点（真空の楕円軌道）',
+                  'Instantaneous impact point: where the vehicle would land if thrust stopped now (vacuum orbit)',
+                ),
+                show: hasIip,
+              },
+              {
+                key: 'falls',
+                label: tr('落下物', 'Falls'),
+                title: tr('使用済みの段と投棄物の落下軌道・落下点', 'Fall paths and impact points of spent stages and jettisoned parts'),
+                show: hasFalls,
+              },
+              {
+                key: 'dispersion',
+                label: tr('分散', 'Dispersion'),
+                title: tr('分散解析の落下点と 3σ 楕円', 'Dispersion run impacts and 3-sigma ellipses'),
+                show: !!dispersion && dispersion.cases.length > 0,
+              },
+            ] as const
+          )
+            .filter((l) => l.show)
+            .map((l) => (
+              <button
+                key={l.key}
+                type="button"
+                aria-pressed={layers[l.key]}
+                title={l.title}
+                onClick={() => toggleLayer(l.key)}
+                className={cn(
+                  'h-6 rounded-[6px] px-2 text-[11px] font-medium',
+                  layers[l.key] ? 'bg-ink text-surface' : 'text-ink-3 hover:bg-surface-2 hover:text-ink',
+                )}
+              >
+                {l.label}
+              </button>
+            ))}
+        </div>
       </div>
     </div>
   )
