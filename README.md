@@ -10,7 +10,7 @@ OpenTsiolkovsky is a modern rocket flight simulator with command-line and web in
 * **Multi-Platform**:
   - **Rust implementation**: Main simulation engine with CLI and WASM support
   - **Command-line interface (CLI)**: Fast native execution
-  - **Modern React/TypeScript web frontend**: Results update live as parameters change; animated 3D globe (CesiumJS, Esri basemaps) with a shared timeline that drives the charts and telemetry; sample vehicles built from published data (MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3); opens CLI `param_*.json` files together with their CSV tables (results match the CLI); CSV/KML/JSON export. The web config's `stages[].aero` optionally overrides diameter and coefficients per stage, as the CLI does
+  - **Modern React/TypeScript web frontend**: Results update live as parameters change; animated 3D globe (CesiumJS, Esri basemaps) with a shared timeline that drives the charts and telemetry; sample vehicles built from published data (MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3); opens CLI `param_*.json` files together with their CSV tables (results match the CLI); CSV/KML/JSON export; undo/redo, shareable links and pinned-result comparison; Japanese/English UI and dark mode. The solver runs in a Web Worker. The web config's `stages[].aero` optionally overrides diameter and coefficients per stage, as the CLI does
   - **WASM support**: Browser-based simulation
   - **Legacy C++ implementation**: Reference implementation in `legacy_cpp/`
 * **Multi-Stage Support**: Supports up to three rocket stages
@@ -69,6 +69,7 @@ OpenTsiolkovsky/
 - [Quick Start](docs/quick-start.md)
 - [Development guide](docs/development.md)
 - [WASM build](docs/wasm.md)
+- [Web frontend](frontend/README.md)
 - [Configuration file](docs/configuration.md)
 - [Legacy C++ Implementation](legacy_cpp/)
 

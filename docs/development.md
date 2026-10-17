@@ -52,7 +52,10 @@ bunx tsc --noEmit
 
 ### フロントエンド
 - **Core**: React 18 + TypeScript + Vite
-- **スタイリング**: Tailwind CSS v4
-- **UI コンポーネント**: Radix UI
+- **スタイリング**: Tailwind CSS v4（色は `src/index.css` の CSS 変数、ライト/ダーク対応）
+- **3D 地図**: CesiumJS（Esri タイル）
 - **チャート**: Chart.js
 - **アイコン**: Lucide React
+- **計算**: Rust ソルバーの WASM を Web Worker で実行
+
+構成と実装上の約束ごと（文言の多言語化、色、Worker で動くモジュール）は [frontend/README.md](../frontend/README.md) を参照してください。
