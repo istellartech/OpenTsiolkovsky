@@ -3,6 +3,7 @@
 import type { FallBodyJson, FlightModeName, ImpactPointJson, SimulationOutput, SimulationState } from './simulation'
 import { vec3ToObject } from './simulation'
 import { G0, haversineDistanceKm, posEciToLlh } from './geo'
+import type { IllPoint, IllViolation } from './ill'
 
 export interface TrackSample {
   t: number
@@ -40,7 +41,8 @@ export interface TrackSample {
   iipLon: number | null
 }
 
-export type FlightEventKind = 'liftoff' | 'maxq' | 'burnout' | 'separation' | 'jettison' | 'apogee' | 'end'
+/** 'ill': the IIP first crossed the impact limit line (see lib/ill) */
+export type FlightEventKind = 'liftoff' | 'maxq' | 'burnout' | 'separation' | 'jettison' | 'apogee' | 'ill' | 'end'
 
 export interface FlightEvent {
   kind: FlightEventKind
@@ -115,6 +117,8 @@ export interface Track {
   /** Where the vehicle itself came down (null if it did not) */
   impact: ImpactPoint | null
   fallBodies: FallTrack[]
+  /** IIP limit line and its check, when one is set (added by `withIll`) */
+  ill?: { points: IllPoint[]; violation: IllViolation | null }
 }
 
 const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)

@@ -18,6 +18,8 @@ export function eventLabel(e: FlightEvent): string {
       return tr(`${e.stage}段 投棄物分離`, `Stage ${e.stage} jettison`)
     case 'apogee':
       return tr('最高到達点', 'Apogee')
+    case 'ill':
+      return tr('IIPがILLを越境', 'IIP crosses ILL')
     case 'end':
       return e.landed ? tr('着地', 'Impact') : tr('計算終了', 'End of run')
   }
@@ -38,6 +40,8 @@ export function eventShort(e: FlightEvent): string {
       return `JET${e.stage}`
     case 'apogee':
       return 'APO'
+    case 'ill':
+      return 'ILL'
     case 'end':
       return e.landed ? 'IMP' : 'END'
   }
