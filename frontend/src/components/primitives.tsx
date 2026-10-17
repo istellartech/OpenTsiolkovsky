@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { TableSummary } from './TableEditor'
 import { cn } from '../lib/cn'
+import { fmtInput, unitHint } from '../lib/format'
 
 /* ------------------------------------------------------------------ Buttons */
 
@@ -127,7 +128,10 @@ function FieldRow({
 const inputBase =
   'h-8 w-full rounded-[6px] border border-line bg-surface-2 text-ink outline-none transition-colors hover:border-line-strong focus:border-signal focus:bg-surface'
 
-/** Numeric input that keeps the raw text while typing ("-", "1.", "") and commits valid numbers. */
+/**
+ * Numeric input that keeps the raw text while typing ("-", "1.", "") and commits valid numbers.
+ * Shown rounded with digit grouping until focused; focusing reveals the full stored value.
+ */
 export function NumberInput({
   value,
   onChange,
@@ -146,22 +150,30 @@ export function NumberInput({
   ariaLabel?: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
-  const shown = draft ?? (Number.isFinite(value) ? String(value) : '')
+  const full = Number.isFinite(value) ? String(value) : ''
+  const shown = draft ?? fmtInput(value)
   return (
     <div className={cn('relative', className)}>
       <input
         ref={inputRef}
-        type="number"
+        type="text"
         inputMode="decimal"
-        step="any"
+        autoComplete="off"
+        spellCheck={false}
         aria-label={ariaLabel}
         aria-invalid={error || undefined}
+        title={draft === null && shown !== full ? full : undefined}
         value={shown}
-        onFocus={() => setDraft(shown)}
+        onFocus={(e) => {
+          setDraft(full)
+          const el = e.currentTarget
+          requestAnimationFrame(() => el.select())
+        }}
         onBlur={() => setDraft(null)}
         onChange={(e) => {
           setDraft(e.target.value)
-          const n = e.target.value.trim() === '' ? NaN : Number(e.target.value)
+          const text = e.target.value.replace(/,/g, '').trim()
+          const n = text === '' ? NaN : Number(text)
           if (Number.isFinite(n)) onChange(n)
         }}
         className={cn(inputBase, 'num pl-2 text-right text-[13px]', unit ? 'pr-10' : 'pr-2', error && 'border-danger')}
@@ -193,17 +205,21 @@ export function NumberField({
   note?: ReactNode
 }) {
   const { error, ref } = useFieldState(path)
+  const scaled = unitHint(value, unit)
   return (
     <FieldRow label={label} hint={hint} note={note} error={error}>
-      <NumberInput
-        ariaLabel={typeof label === 'string' ? label : undefined}
-        value={value}
-        onChange={onChange}
-        unit={unit}
-        error={!!error}
-        inputRef={ref}
-        className="w-[9.5rem] shrink-0"
-      />
+      <span className="flex w-[9.5rem] shrink-0 flex-col items-end">
+        <NumberInput
+          ariaLabel={typeof label === 'string' ? label : undefined}
+          value={value}
+          onChange={onChange}
+          unit={unit}
+          error={!!error}
+          inputRef={ref}
+          className="w-full"
+        />
+        {scaled && <span className="num mt-0.5 pr-10 text-[10px] leading-none text-ink-3">{scaled}</span>}
+      </span>
     </FieldRow>
   )
 }

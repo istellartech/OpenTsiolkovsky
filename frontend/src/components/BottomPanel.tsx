@@ -2,7 +2,6 @@ import { Suspense, lazy, type ReactNode } from 'react'
 import { Pin, X } from 'lucide-react'
 import type { Track } from '../lib/trajectory'
 import { fmt } from '../lib/format'
-import { cn } from '../lib/cn'
 import { Segmented } from './primitives'
 import { tr } from '../lib/i18n'
 import type { MonteCarloState } from '../hooks/useMonteCarlo'
@@ -51,43 +50,72 @@ export function BottomPanel({
   return (
     <div className="flex h-full flex-col bg-bg">
       <div className="flex shrink-0 items-center gap-3 border-b border-line bg-surface px-3 py-1.5">
-        <Segmented
-          size="sm"
-          value={tab}
-          onChange={onTab}
-          options={[
-            { value: 'charts', label: tr('グラフ', 'Charts') },
-            { value: 'events', label: tr('イベント', 'Events') },
-            {
-              value: 'montecarlo',
-              label: tr('分散解析', 'Dispersion'),
-              title: tr('モンテカルロ法で落下点のばらつきを調べる', 'Monte Carlo spread of impact points'),
-            },
-          ]}
-        />
-        <div className="min-w-0 flex-1 overflow-x-auto">
-          <Summary track={track} reference={compare.reference?.track} inline />
-        </div>
-        <CompareControl {...compare} />
+        <PanelTabs tab={tab} onTab={onTab} />
+        <span className="flex-1" />
         <div className="shrink-0">{layoutSwitch}</div>
       </div>
       <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto p-2">
-        <Suspense fallback={null}>
-          {tab === 'charts' ? (
-            <ChartGrid track={track} reference={compare.reference?.track} />
-          ) : tab === 'events' ? (
-            <>
-              <div className="rounded-[8px] border border-line bg-surface px-3 py-1">
-                <EventList track={track} />
-              </div>
-              <FallSection track={track} />
-            </>
-          ) : (
-            <MonteCarloPanel mc={montecarlo.mc} lastStage={lastStage} fileBase={montecarlo.fileBase} />
-          )}
-        </Suspense>
+        <PanelBody tab={tab} track={track} compare={compare} montecarlo={montecarlo} lastStage={lastStage} />
       </div>
     </div>
+  )
+}
+
+function PanelTabs({ tab, onTab }: { tab: PanelTab; onTab: (t: PanelTab) => void }) {
+  return (
+    <Segmented
+      size="sm"
+      value={tab}
+      onChange={onTab}
+      options={[
+        { value: 'charts', label: tr('グラフ', 'Charts') },
+        { value: 'events', label: tr('イベント', 'Events') },
+        {
+          value: 'montecarlo',
+          label: tr('分散解析', 'Dispersion'),
+          title: tr('モンテカルロ法で落下点のばらつきを調べる', 'Monte Carlo spread of impact points'),
+        },
+      ]}
+    />
+  )
+}
+
+/** Contents of one results tab; shared by the desktop panel and the phone view. */
+function PanelBody({
+  tab,
+  track,
+  compare,
+  montecarlo,
+  lastStage,
+}: {
+  tab: PanelTab
+  track: Track
+  compare: CompareProps
+  montecarlo: McProps
+  lastStage: number
+}) {
+  return (
+    <Suspense fallback={null}>
+      {tab === 'charts' ? (
+        <>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h2 className="text-[12px] font-semibold text-ink-2">{tr('飛行結果', 'Flight results')}</h2>
+            <CompareControl {...compare} />
+          </div>
+          <Summary track={track} reference={compare.reference?.track} />
+          <ChartGrid track={track} reference={compare.reference?.track} />
+        </>
+      ) : tab === 'events' ? (
+        <div className="grid items-start gap-2 2xl:grid-cols-2">
+          <div className="min-w-0 rounded-[8px] border border-line bg-surface px-3 py-1">
+            <EventList track={track} />
+          </div>
+          <FallSection track={track} />
+        </div>
+      ) : (
+        <MonteCarloPanel mc={montecarlo.mc} lastStage={lastStage} fileBase={montecarlo.fileBase} />
+      )}
+    </Suspense>
   )
 }
 
@@ -95,7 +123,7 @@ export function BottomPanel({
 function FallSection({ track }: { track: Track }) {
   if (!track.impact && track.fallBodies.length === 0) return null
   return (
-    <div className="mt-2 rounded-[8px] border border-line bg-surface px-3 py-1">
+    <div className="min-w-0 rounded-[8px] border border-line bg-surface px-3 py-1">
       <FallList track={track} />
     </div>
   )
@@ -115,7 +143,7 @@ export function CompareControl({ reference, onPin, onUnpin }: CompareProps) {
         className="flex h-7 shrink-0 items-center gap-1 rounded-[6px] px-2 text-[12px] text-ink-2 hover:bg-surface-2 hover:text-ink"
       >
         <Pin className="h-3.5 w-3.5" />
-        <span className="hidden xl:inline">{tr('比較用に固定', 'Pin to compare')}</span>
+        <span>{tr('比較用に固定', 'Pin to compare')}</span>
       </button>
     )
   }
@@ -140,7 +168,7 @@ export function CompareControl({ reference, onPin, onUnpin }: CompareProps) {
 
 const signed = (v: number, d: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${fmt(Math.abs(v), d)}`
 
-export function Summary({ track, reference, inline = false }: { track: Track; reference?: Track | null; inline?: boolean }) {
+export function Summary({ track, reference }: { track: Track; reference?: Track | null }) {
   const s = track.summary
   const r = reference?.summary
   // [label, value, unit, sub, delta vs reference]
@@ -159,25 +187,19 @@ export function Summary({ track, reference, inline = false }: { track: Track; re
     [tr('飛行時間', 'Flight time'), fmt(s.duration, 0), 's', undefined, r && signed(s.duration - r.duration, 0)],
   ]
   return (
-    <dl
-      className={cn(
-        inline
-          ? 'flex items-baseline gap-5 whitespace-nowrap'
-          : 'mb-2 grid grid-cols-2 gap-px overflow-hidden rounded-[8px] border border-line bg-line sm:grid-cols-3',
-      )}
-    >
+    <dl className="mb-2 grid grid-cols-2 gap-px overflow-hidden rounded-[8px] border border-line bg-line sm:grid-cols-3 xl:grid-cols-6">
       {items.map(([k, v, u, sub, delta]) => (
-        <div key={k} className={cn(inline ? 'flex items-baseline gap-1.5' : 'bg-surface px-3 py-2')}>
+        <div key={k} className="bg-surface px-3 py-2">
           <dt className="text-[11px] text-ink-3">{k}</dt>
-          <dd className={cn('num', inline ? 'text-[12px]' : 'text-[15px]')}>
+          <dd className="num text-[15px]">
             {v}
             <span className="text-[11px] text-ink-3"> {u}</span>
-            {sub && !inline && <span className="ml-1.5 text-[11px] text-ink-3">{sub}</span>}
             {delta && (
               <span className="ml-1.5 text-[11px] text-ink-3" title={tr('比較用に固定した結果との差', 'Difference from the pinned result')}>
                 {delta}
               </span>
             )}
+            {sub && <span className="block text-[11px] leading-tight text-ink-3">{sub}</span>}
           </dd>
         </div>
       ))}
@@ -185,24 +207,34 @@ export function Summary({ track, reference, inline = false }: { track: Track; re
   )
 }
 
-/** Phone layout: summary, charts and events stacked in one scrolling column. */
-export function MobileResults({ track, compare, montecarlo }: { track: Track; compare: CompareProps; montecarlo: McProps }) {
+/** Phone layout: the same three tabs as the desktop panel, in one scrolling column. */
+export function MobileResults({
+  tab,
+  onTab,
+  track,
+  compare,
+  montecarlo,
+}: {
+  tab: PanelTab
+  onTab: (t: PanelTab) => void
+  track: Track
+  compare: CompareProps
+  montecarlo: McProps
+}) {
   return (
-    <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto p-2">
-      <div className="mb-2 flex justify-end">
-        <CompareControl {...compare} />
+    <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto">
+      <div className="sticky top-0 z-10 flex justify-center border-b border-line bg-surface px-2 py-1.5">
+        <PanelTabs tab={tab} onTab={onTab} />
       </div>
-      <Summary track={track} reference={compare.reference?.track} />
-      <Suspense fallback={null}>
-        <ChartGrid track={track} reference={compare.reference?.track} />
-        <div className="mt-3 rounded-[8px] border border-line bg-surface px-3 py-1">
-          <EventList track={track} />
-        </div>
-        <FallSection track={track} />
-        <div className="mt-3">
-          <MonteCarloPanel mc={montecarlo.mc} lastStage={track.samples[track.samples.length - 1].stage} fileBase={montecarlo.fileBase} />
-        </div>
-      </Suspense>
+      <div className="p-2">
+        <PanelBody
+          tab={tab}
+          track={track}
+          compare={compare}
+          montecarlo={montecarlo}
+          lastStage={track.samples[track.samples.length - 1].stage}
+        />
+      </div>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Download, Play, RotateCcw, Square, X } from 'lucide-react'
 import type { MonteCarloState } from '../hooks/useMonteCarlo'
 import { MAX_CASES } from '../hooks/useMonteCarlo'
@@ -8,6 +9,7 @@ import { saveFile } from '../lib/download'
 import { bodyStage } from '../lib/montecarlo'
 import { stageColorVar } from '../lib/theme'
 import { tr } from '../lib/i18n'
+import { cn } from '../lib/cn'
 import { NumberField } from './primitives'
 import { Group } from './inspector/shared'
 
@@ -34,6 +36,8 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
   const running = status === 'running'
   const done = result?.cases.length ?? 0
   const total = result?.total ?? settings.count
+  // Settings fold away once there are results, giving the table the full width.
+  const [settingsOpen, setSettingsOpen] = useState(!result)
   const setDispersion = (k: keyof Dispersion, v: number) =>
     setSettings({ ...settings, dispersion: { ...settings.dispersion, [k]: Math.max(v, 0) } })
 
@@ -44,9 +48,13 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
   }
 
   return (
-    <div className="grid gap-2 lg:grid-cols-[minmax(17rem,21rem)_1fr]">
+    <div className={cn('grid items-start gap-2', settingsOpen && 'lg:grid-cols-[minmax(17rem,21rem)_1fr]')}>
       <section className="rounded-[8px] border border-line bg-surface px-3 py-2.5 text-[13px]">
         <Group
+          collapsible
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          badge={tr(`${settings.count}ケース · シード ${settings.seed}`, `${settings.count} cases · seed ${settings.seed}`)}
           title={tr('分散解析の条件', 'Dispersion settings')}
           note={tr(
             '推力や風などを正規分布でばらつかせて何度も飛ばし、機体・使用済みの段・投棄物の落下点のばらつきを調べます。値は 1σ（標準偏差）です。',

@@ -5,7 +5,7 @@ import { FREE_MODE_OPTIONS, MAX_STAGE_COUNT, POWER_MODE_OPTIONS, createDefaultSt
 import { NumberField, ProfileTable, SelectField, Toggle, VectorField } from '../primitives'
 
 import { burnEndForPropellant, type VehicleSpec } from '../../lib/specs'
-import { fmt, fmtMass } from '../../lib/format'
+import { fmt, fmtMass, fmtMax } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { stagePath, Readout, Group, type Patch } from './shared'
 import { stageColorVar } from '../../lib/theme'
@@ -95,6 +95,12 @@ export function VehicleTab({
   const dump = stage.dumping_product
   const setDump = (d: Partial<ClientDumpingProduct>) => dump && setStage({ dumping_product: { ...dump, ...d } })
   const dumpPath = (k: keyof ClientDumpingProduct) => `${p('dumping_product')}.${k}`
+  const modeLabel = (opts: { value: number; label: string }[], v: number) =>
+    opts.find((o) => o.value === v)?.label.replace(/^\d+:\s*/, '') ?? String(v)
+  const multipliers = stage.thrust_multiplier !== 1 || stage.isp_multiplier !== 1
+  const modeBadge = `${modeLabel(POWER_MODE_OPTIONS, stage.power_mode)} / ${modeLabel(FREE_MODE_OPTIONS, stage.free_mode)}${
+    multipliers ? tr(' · 倍率あり', ' · scaled') : ''
+  }`
   const thrustProfile = stage.thrust_profile ?? []
   const ispProfile = stage.isp_profile ?? []
 
@@ -312,6 +318,10 @@ export function VehicleTab({
       </Group>
 
       <Group
+        key={`dump-${idx}`}
+        collapsible
+        defaultOpen={!!dump}
+        badge={dump ? tr('あり', 'On') : tr('なし', 'None')}
         title={tr('投棄物', 'Jettisoned part')}
         note={tr(
           'フェアリングなど、この段の飛行中に切り離す物体です。切り離した質量は機体から減り、物体は弾道係数で落下点まで計算します。',
@@ -374,6 +384,10 @@ export function VehicleTab({
       </Group>
 
       <Group
+        key={`modes-${idx}`}
+        collapsible
+        defaultOpen={false}
+        badge={modeBadge}
         title={tr('飛行モード・補正', 'Flight modes & corrections')}
         note={tr(
           '慣性飛行のモードは、燃焼後のこの段（上段が載っている間）の飛び方です。分離後に落ちていく使用済みの段は姿勢制御がないため、「指定姿勢」は「空力安定」として計算します。',
@@ -411,6 +425,10 @@ export function VehicleTab({
       </Group>
 
       <Group
+        key={`aero-${idx}`}
+        collapsible
+        defaultOpen={!!stage.aero}
+        badge={stage.aero ? tr('この段で変更', 'Overridden') : tr('全段共通', 'Shared')}
         title={tr('この段の空力', 'Stage aerodynamics')}
         note={tr(
           '上段で機体が細くなる場合などに使います。マッハ数テーブルは空力タブの設定を全段で共通に使います。',
@@ -463,7 +481,13 @@ export function VehicleTab({
         )}
       </Group>
 
-      <Group title={tr('ノズル', 'Nozzle')}>
+      <Group
+        key={`nozzle-${idx}`}
+        collapsible
+        defaultOpen={false}
+        badge={`ε ${fmtMax(stage.nozzle_expansion_ratio, 1)}`}
+        title={tr('ノズル', 'Nozzle')}
+      >
         <NumberField
           label={tr('スロート径', 'Throat diameter')}
           unit="m"

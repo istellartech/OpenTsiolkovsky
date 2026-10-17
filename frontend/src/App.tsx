@@ -85,6 +85,9 @@ export default function App() {
     revealParams()
     requestAnimationFrame(() => {
       const el = fieldRefs.current.get(issue.field)
+      // A folded group hides its fields; open it first.
+      const fold = el?.closest('details')
+      if (fold && !fold.open) fold.open = true
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       el?.focus?.()
     })
@@ -220,7 +223,9 @@ export default function App() {
           {isMobile ? (
             <>
               <div className={cn('min-h-0 flex-1', mobileView !== 'globe' && 'hidden')}>{globe}</div>
-              {mobileView === 'charts' && track && <MobileResults track={track} compare={compare} montecarlo={montecarlo} />}
+              {mobileView === 'charts' && track && (
+                <MobileResults tab={panelTab} onTab={setPanelTab} track={track} compare={compare} montecarlo={montecarlo} />
+              )}
               {track && mobileView !== 'params' && <PlaybackBar track={track} />}
             </>
           ) : (
