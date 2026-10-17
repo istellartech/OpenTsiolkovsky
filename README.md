@@ -11,17 +11,24 @@ OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core i
 - Multi-stage vehicles with burn, forced cutoff, separation and coast times per stage
 - Thrust and Isp as constants or time tables, with nozzle exit-pressure losses
 - Aerodynamics from constant or Mach-dependent CA/CN tables, with optional per-stage diameter and coefficients; ballistic-coefficient descent
-- Standard atmosphere, constant or altitude-dependent wind, Earth rotation, WGS84 geodesy
+- Standard atmosphere (with optional density variation), constant or altitude-dependent wind, Earth rotation, WGS84 geodesy
+- Free-flight modes as in the C++ version: aerodynamically stable, commanded attitude or ballistic; the flight mode is reported with every sample
+- Instantaneous impact point (IIP) on the WGS84 ellipsoid at every sample
+- Spent stages and dumping products (fairings, etc.) are flown to the ground after release, giving their impact points
+- Monte Carlo dispersion analysis of impact points (thrust, Isp, mass, drag, attitude, wind, air density), with mean points and error ellipses per body
 - RK4 or adaptive RK45 integration
 - Covers sounding-rocket and low-Earth-orbit trajectories
 
 ### Command-line interface
 - Reads the classic `param_*.json` files together with the CSV tables they reference (thrust, Isp, CN/CA, attitude, wind)
 - Writes `<name>_trajectory.csv`, a `<name>_summary.json` and `<name>_dynamics_cpp.csv` (column-compatible with the legacy C++ output)
+- Writes `<name>_dynamics_cpp_<N>_fall.csv` / `<name>_dynamics_cpp_<N>_dump.csv` for each spent stage / dumping product and prints every impact point
+- `--monte-carlo N` runs a dispersion analysis on all CPU cores (`--dispersion FILE`, `--seed S`) and writes `<name>_montecarlo.csv` and `<name>_montecarlo_summary.json`
 
 ### Web app ([details](frontend/README.md))
 - **Live:** results follow every input change. The solver runs in a Web Worker, so the page stays responsive.
 - **Visual:** a 3D globe (CesiumJS, Esri basemaps), charts, an event table and telemetry, all on a shared playback timeline.
+- **Impact analysis:** fall paths and impact points of spent stages and jettisoned parts, the IIP track, the flight mode, and a Monte Carlo "Dispersion" tab that draws impact scatter and 3-sigma ellipses on the globe.
 - **Sample vehicles** built from published data: MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3, Saturn V and Ariane 5. Each comes with sources and modelling notes.
 - **Files:**
   - Opens CLI `param_*.json` files together with their CSV tables; results match the CLI.
@@ -50,6 +57,12 @@ cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --
 cargo build --release
 ./target/release/openTsiolkovsky-cli --config examples/param_sample_01.json --output my_result
 # -> my_result_trajectory.csv, my_result_summary.json, my_result_dynamics_cpp.csv
+#    (+ my_result_dynamics_cpp_<N>_fall.csv / _<N>_dump.csv for spent stages / dumping products)
+
+# Monte Carlo dispersion of impact points (1-sigma values in examples/dispersion_sample.json)
+./target/release/openTsiolkovsky-cli --config examples/SS-520-4/param_SS520-4.json \
+  --output ss520 --monte-carlo 500 --dispersion examples/dispersion_sample.json --seed 1
+# -> ss520_montecarlo.csv (one row per case), ss520_montecarlo_summary.json (mean point and error ellipse per body)
 ```
 
 More examples are in [`examples/`](examples/), e.g. `param_momo.json` and `SS-520-4/` (with CSV tables).

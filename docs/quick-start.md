@@ -25,6 +25,38 @@ cargo build --release
 
 `result_trajectory.csv`（時系列）、`result_summary.json`（概要）、`result_dynamics_cpp.csv`（旧C++版と同じ列構成）が出力されます。`examples/` には `param_momo.json` や、CSVテーブル付きの `SS-520-4/` もあります。
 
+#### 出力ファイル
+
+| ファイル | 内容 |
+| --- | --- |
+| `<出力名>_trajectory.csv` | 機体の時系列。末尾に `flight_mode`（`power_3DoF` / `free_aero_stable` / `free_3dof` / `free_ballistic`）、`IIP_lat[deg]`、`IIP_lon[deg]`（瞬間落下予測点。無いときは空欄）の列があります |
+| `<出力名>_dynamics_cpp.csv` | 旧C++版と同じ列構成の時系列。`IIP_lat(deg)` / `IIP_lon(deg)` は落下予測点が無いとき 0 |
+| `<出力名>_dynamics_cpp_<N>_fall.csv` | 分離後の N 段（使用済み）が落ちていく時系列（列は上と同じ） |
+| `<出力名>_dynamics_cpp_<N>_dump.csv` | N 段の投棄物（フェアリングなど）の時系列 |
+| `<出力名>_summary.json` | 最高高度などの概要。`impact_point`（機体の落下点）と `fall_bodies`（使用済みの段・投棄物ごとの分離時刻・質量・落下点）を含みます |
+
+実行時には各物体の落下点も表示されます（旧C++版と同じ形式）。
+
+```
+vehicle impact point [deg]:	28.441554	142.507390	(T+1882.8 s)
+1 stage impact point [deg]:	31.245380	131.125613	(T+330.8 s)
+2 stage impact point [deg]:	31.220407	131.303028	(T+620.4 s)
+```
+
+使用済みの段は姿勢制御がないため、慣性飛行モードが「1: 指定姿勢」の段も、分離後は「0: 空力安定」として落下を計算します。周回軌道に入るなど地表に落ちない物体は計算しません。
+
+#### 分散解析（モンテカルロ）
+
+```bash
+./target/release/openTsiolkovsky-cli --config examples/SS-520-4/param_SS520-4.json \
+  --output ss520 --monte-carlo 500 --dispersion examples/dispersion_sample.json --seed 1
+```
+
+推力・比推力・各段の質量・抗力・姿勢（上下角・方位角）・風速・風向・大気密度を正規分布でばらつかせて N 回飛ばし、機体と使用済みの段・投棄物の落下点を集計します。`--dispersion` の JSON には 1σ の値を書きます（省略したキーは `examples/dispersion_sample.json` と同じ既定値）。全 CPU コアで並列に計算し、同じ `--seed` なら同じ結果になります。
+
+- `<出力名>_montecarlo.csv`: 1 行 1 ケース。引いた乱数（各パラメータのずれ）、最高高度、物体ごとの落下時刻・緯度・経度
+- `<出力名>_montecarlo_summary.json`: 物体ごとの落下数、平均落下点、南北・東西の標準偏差、1σ 誤差楕円（長径・短径・長軸の方位）、平均点からの最大のずれ
+
 ### Webフロントエンド
 
 ```bash
@@ -33,7 +65,7 @@ bun install
 bun run dev   # frontend/src/wasm が無ければ先に WASM をビルド
 ```
 
-ブラウザで http://localhost:5173 を開きます。ヘッダーからサンプル機体（MOMO、S-310、S-520、SS-520-5、イプシロン、H-IIA、H3、サターンV、アリアン5）を選ぶか、CLI 用の `param_*.json` を CSV と一緒にドロップして開けます。使い方の詳細は [frontend/README.md](../frontend/README.md) を参照してください。
+ブラウザで http://localhost:5173 を開きます。ヘッダーからサンプル機体（MOMO、S-310、S-520、SS-520-5、イプシロン、H-IIA、H3、サターンV、アリアン5）を選ぶか、CLI 用の `param_*.json` を CSV と一緒にドロップして開けます。使用済みの段・投棄物の落下点や IIP は地図とイベント表に、分散解析は下のパネルの「分散解析」タブにあります。使い方の詳細は [frontend/README.md](../frontend/README.md) を参照してください。
 
 開発用コマンド:
 
