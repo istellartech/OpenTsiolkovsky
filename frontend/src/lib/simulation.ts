@@ -3,6 +3,9 @@ import type { Vec3 } from './geo'
 
 export type Vec3Json = { x: number; y: number; z: number } | [number, number, number]
 
+/** Flight mode of a body, named as in the C++ simulator */
+export type FlightModeName = 'power_3DoF' | 'free_aero_stable' | 'free_3dof' | 'free_ballistic'
+
 export type SimulationState = {
   time: number
   position: Vec3Json
@@ -29,6 +32,32 @@ export type SimulationState = {
   sideslip_angle?: number // Sideslip angle [deg]
   attitude_azimuth?: number // Attitude azimuth [deg]
   attitude_elevation?: number // Attitude elevation [deg]
+  flight_mode?: FlightModeName
+  /** Instantaneous impact point [deg]; null when none exists (orbit, escape) */
+  iip_lat_deg?: number | null
+  iip_lon_deg?: number | null
+}
+
+export type ImpactPointJson = {
+  time_s: number
+  latitude_deg: number
+  longitude_deg: number
+  speed_mps: number
+}
+
+/** A spent stage or dumping product propagated to the ground */
+export type FallBodyJson = {
+  kind: 'stage' | 'dump'
+  stage: number
+  release_time_s: number
+  mass_kg: number
+  impact: ImpactPointJson | null
+  trajectory: SimulationState[]
+}
+
+export type SimulationOutput = {
+  trajectory: SimulationState[]
+  fall_bodies: FallBodyJson[]
 }
 
 export function vec3ToObject(vec: Vec3Json | undefined): Vec3 {
@@ -81,6 +110,17 @@ export type ClientStageConfig = {
   rotational_inertia_kgm2: [number, number, number]
   /** Values for this stage only; unset fields use `aerodynamics` (Mach tables are always vehicle-wide) */
   aero?: ClientStageAero
+  /** Product jettisoned while this stage flies (fairing, etc.) */
+  dumping_product?: ClientDumpingProduct
+}
+
+export type ClientDumpingProduct = {
+  /** Release time from the stage start [s] */
+  separation_time_s: number
+  mass_kg: number
+  ballistic_coefficient: number
+  /** Velocity added at release, NED [m/s] */
+  additional_velocity_ned_mps: [number, number, number]
 }
 
 export type ClientStageAero = {
@@ -160,14 +200,17 @@ export function initWasm(): Promise<WasmModule> {
   return modPromise
 }
 
-/** Run the solver to completion. The WASM side accepts this config as JSON. */
-export async function runSimulation(config: ClientConfig): Promise<SimulationState[]> {
+/**
+ * Run the solver to completion, then fly the spent stages and dumping
+ * products to the ground. The WASM side accepts this config as JSON.
+ */
+export async function runSimulation(config: ClientConfig): Promise<SimulationOutput> {
   const mod = await initWasm()
   // Each WasmSimulator owns WASM heap memory that JS garbage collection does
   // not reclaim; free it explicitly or repeated runs exhaust the heap.
   const sim = new mod.WasmSimulator(JSON.stringify(config))
   try {
-    return JSON.parse(sim.run()) as SimulationState[]
+    return JSON.parse(sim.run_with_fall_bodies()) as SimulationOutput
   } finally {
     sim.free()
   }

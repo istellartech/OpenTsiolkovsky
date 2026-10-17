@@ -5,6 +5,9 @@ import { fmt } from '../lib/format'
 import { cn } from '../lib/cn'
 import { Segmented } from './primitives'
 import { tr } from '../lib/i18n'
+import type { MonteCarloState } from '../hooks/useMonteCarlo'
+import { FallList } from './FallList'
+import { MonteCarloPanel } from './MonteCarloPanel'
 
 const ChartGrid = lazy(() => import('./Charts').then((m) => ({ default: m.ChartGrid })))
 const EventList = lazy(() => import('./Charts').then((m) => ({ default: m.EventList })))
@@ -21,7 +24,13 @@ export interface CompareProps {
   onUnpin: () => void
 }
 
-export type PanelTab = 'charts' | 'events'
+export type PanelTab = 'charts' | 'events' | 'montecarlo'
+
+/** Monte Carlo state plus what the panel needs to label and save results */
+export interface McProps {
+  mc: MonteCarloState
+  fileBase: string
+}
 
 export function BottomPanel({
   tab,
@@ -29,13 +38,16 @@ export function BottomPanel({
   track,
   layoutSwitch,
   compare,
+  montecarlo,
 }: {
   tab: PanelTab
   onTab: (t: PanelTab) => void
   track: Track
   layoutSwitch: ReactNode
   compare: CompareProps
+  montecarlo: McProps
 }) {
+  const lastStage = track.samples[track.samples.length - 1].stage
   return (
     <div className="flex h-full flex-col bg-bg">
       <div className="flex shrink-0 items-center gap-3 border-b border-line bg-surface px-3 py-1.5">
@@ -46,6 +58,11 @@ export function BottomPanel({
           options={[
             { value: 'charts', label: tr('グラフ', 'Charts') },
             { value: 'events', label: tr('イベント', 'Events') },
+            {
+              value: 'montecarlo',
+              label: tr('分散解析', 'Dispersion'),
+              title: tr('モンテカルロ法で落下点のばらつきを調べる', 'Monte Carlo spread of impact points'),
+            },
           ]}
         />
         <div className="min-w-0 flex-1 overflow-x-auto">
@@ -58,13 +75,28 @@ export function BottomPanel({
         <Suspense fallback={null}>
           {tab === 'charts' ? (
             <ChartGrid track={track} reference={compare.reference?.track} />
+          ) : tab === 'events' ? (
+            <>
+              <div className="rounded-[8px] border border-line bg-surface px-3 py-1">
+                <EventList track={track} />
+              </div>
+              <FallSection track={track} />
+            </>
           ) : (
-            <div className="rounded-[8px] border border-line bg-surface px-3 py-1">
-              <EventList track={track} />
-            </div>
+            <MonteCarloPanel mc={montecarlo.mc} lastStage={lastStage} fileBase={montecarlo.fileBase} />
           )}
         </Suspense>
       </div>
+    </div>
+  )
+}
+
+/** Impact points of the vehicle, spent stages and jettisoned parts. */
+function FallSection({ track }: { track: Track }) {
+  if (!track.impact && track.fallBodies.length === 0) return null
+  return (
+    <div className="mt-2 rounded-[8px] border border-line bg-surface px-3 py-1">
+      <FallList track={track} />
     </div>
   )
 }
@@ -154,7 +186,7 @@ export function Summary({ track, reference, inline = false }: { track: Track; re
 }
 
 /** Phone layout: summary, charts and events stacked in one scrolling column. */
-export function MobileResults({ track, compare }: { track: Track; compare: CompareProps }) {
+export function MobileResults({ track, compare, montecarlo }: { track: Track; compare: CompareProps; montecarlo: McProps }) {
   return (
     <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto p-2">
       <div className="mb-2 flex justify-end">
@@ -165,6 +197,10 @@ export function MobileResults({ track, compare }: { track: Track; compare: Compa
         <ChartGrid track={track} reference={compare.reference?.track} />
         <div className="mt-3 rounded-[8px] border border-line bg-surface px-3 py-1">
           <EventList track={track} />
+        </div>
+        <FallSection track={track} />
+        <div className="mt-3">
+          <MonteCarloPanel mc={montecarlo.mc} lastStage={track.samples[track.samples.length - 1].stage} fileBase={montecarlo.fileBase} />
         </div>
       </Suspense>
     </div>

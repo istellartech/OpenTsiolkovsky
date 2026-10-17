@@ -1,6 +1,6 @@
 // Turns raw simulator output into a flight "track": geodetic positions,
 // derived quantities, flight events and an interpolator for playback.
-import type { SimulationState } from './simulation'
+import type { FallBodyJson, FlightModeName, ImpactPointJson, SimulationOutput, SimulationState } from './simulation'
 import { vec3ToObject } from './simulation'
 import { G0, haversineDistanceKm, posEciToLlh } from './geo'
 
@@ -34,19 +34,53 @@ export interface TrackSample {
   sideslip: number
   azimuth: number
   elevation: number
+  mode: FlightModeName
+  /** Instantaneous impact point [deg]; null when there is none (orbit, escape) */
+  iipLat: number | null
+  iipLon: number | null
 }
 
-export type FlightEventKind = 'liftoff' | 'maxq' | 'burnout' | 'separation' | 'apogee' | 'end'
+export type FlightEventKind = 'liftoff' | 'maxq' | 'burnout' | 'separation' | 'jettison' | 'apogee' | 'end'
 
 export interface FlightEvent {
   kind: FlightEventKind
   t: number
-  /** Stage the event belongs to (burnout), or the stage being dropped (separation) */
+  /** Stage the event belongs to (burnout, jettison), or the stage being dropped (separation) */
   stage?: number
   /** Stage that continues after a separation */
   nextStage?: number
   /** For 'end': the vehicle reached the ground */
   landed?: boolean
+}
+
+export interface ImpactPoint {
+  t: number
+  lat: number
+  lon: number
+  /** Earth-relative speed at impact [m/s] */
+  speed: number
+  /** Great-circle distance from the launch point [km] */
+  downrange: number
+}
+
+/** Where a body comes down, as a point on the ground */
+export interface FallSample {
+  t: number
+  lat: number
+  lon: number
+  alt: number
+}
+
+/** A spent stage or dumping product, from its release to the ground */
+export interface FallTrack {
+  kind: 'stage' | 'dump'
+  stage: number
+  releaseTime: number
+  /** [kg] */
+  mass: number
+  /** null when it does not come down (orbit, escape) */
+  impact: ImpactPoint | null
+  samples: FallSample[]
 }
 
 export interface StageSpan {
@@ -78,6 +112,9 @@ export interface Track {
   t1: number
   /** Set when the solver output turned non-physical and was cut off here [s] */
   truncatedAt?: number
+  /** Where the vehicle itself came down (null if it did not) */
+  impact: ImpactPoint | null
+  fallBodies: FallTrack[]
 }
 
 const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
@@ -95,7 +132,44 @@ function isNonPhysical(s: SimulationState): boolean {
   )
 }
 
-export function buildTrack(input: SimulationState[]): Track | null {
+const MODES: FlightModeName[] = ['power_3DoF', 'free_aero_stable', 'free_3dof', 'free_ballistic']
+const modeOf = (s: SimulationState): FlightModeName =>
+  s.flight_mode && MODES.includes(s.flight_mode) ? s.flight_mode : s.thrust > 0 ? 'power_3DoF' : 'free_3dof'
+const nullableNum = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+
+function toImpact(p: ImpactPointJson | null | undefined, baseLat: number, baseLon: number): ImpactPoint | null {
+  if (!p) return null
+  return {
+    t: p.time_s,
+    lat: p.latitude_deg,
+    lon: p.longitude_deg,
+    speed: p.speed_mps,
+    downrange: haversineDistanceKm(baseLat, baseLon, p.latitude_deg, p.longitude_deg),
+  }
+}
+
+function buildFallTrack(body: FallBodyJson, baseLat: number, baseLon: number): FallTrack {
+  const states = (body.trajectory ?? []).filter((s) => !isNonPhysical(s))
+  return {
+    kind: body.kind,
+    stage: body.stage,
+    releaseTime: body.release_time_s,
+    mass: body.mass_kg,
+    impact: toImpact(body.impact, baseLat, baseLon),
+    samples: states.map((s) => {
+      const t = num(s.time)
+      const llh = posEciToLlh(vec3ToObject(s.position_eci || s.position), t)
+      return { t, lat: llh.lat, lon: llh.lon, alt: num(s.altitude, llh.alt * 1000) }
+    }),
+  }
+}
+
+/** Track from the solver's full output (vehicle plus falling bodies). */
+export function trackFromOutput(output: SimulationOutput): Track | null {
+  return buildTrack(output.trajectory, output.fall_bodies)
+}
+
+export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] = []): Track | null {
   if (!input || input.length < 2) return null
   // Keep everything up to the first non-physical sample.
   const cut = input.findIndex(isNonPhysical)
@@ -135,6 +209,9 @@ export function buildTrack(input: SimulationState[]): Track | null {
       sideslip: num(s.sideslip_angle),
       azimuth: num(s.attitude_azimuth),
       elevation: num(s.attitude_elevation),
+      mode: modeOf(s),
+      iipLat: nullableNum(s.iip_lat_deg),
+      iipLon: nullableNum(s.iip_lon_deg),
     })
   })
 
@@ -189,6 +266,11 @@ export function buildTrack(input: SimulationState[]): Track | null {
     }
   }
 
+  const falls = fallBodies.map((b) => buildFallTrack(b, baseLat, baseLon))
+  for (const f of falls) {
+    if (f.kind === 'dump' && f.releaseTime <= last.t) events.push({ kind: 'jettison', t: f.releaseTime, stage: f.stage })
+  }
+
   const apogee = samples[apogeeIdx]
   const descends = apogeeIdx < samples.length - 1 && last.alt < apogee.alt - 1
   if (descends) {
@@ -206,6 +288,8 @@ export function buildTrack(input: SimulationState[]): Track | null {
     t0: first.t,
     t1: last.t,
     truncatedAt: cut === -1 ? undefined : num(input[cut].time),
+    impact: landed ? { t: last.t, lat: last.lat, lon: last.lon, speed: last.groundSpeed, downrange: last.downrange } : null,
+    fallBodies: falls,
     summary: {
       apogee: apogee.alt,
       apogeeTime: apogee.t,
@@ -269,6 +353,11 @@ export function sampleAt(track: Track, t: number): TrackSample {
   }
   // Longitude wrap-around
   if (Math.abs(b.lon - a.lon) > 180) out.lon = f < 0.5 ? a.lon : b.lon
+  // Discrete or wrapping values: take the nearer sample
+  const near = f < 0.5 ? a : b
+  out.mode = near.mode
+  out.iipLat = near.iipLat
+  out.iipLon = near.iipLon
   return out
 }
 
@@ -293,6 +382,9 @@ export function trackToCsv(track: Track): string {
     'sideslip_deg',
     'attitude_azimuth_deg',
     'attitude_elevation_deg',
+    'flight_mode',
+    'iip_latitude_deg',
+    'iip_longitude_deg',
   ]
   const rows = track.samples.map((s) =>
     [
@@ -315,6 +407,9 @@ export function trackToCsv(track: Track): string {
       s.sideslip,
       s.azimuth,
       s.elevation,
+      s.mode,
+      s.iipLat ?? '',
+      s.iipLon ?? '',
     ].join(','),
   )
   return [header.join(','), ...rows].join('\n')

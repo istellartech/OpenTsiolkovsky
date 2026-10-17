@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { FolderOpen, Globe as GlobeIcon, Keyboard, LineChart, SlidersHorizontal, X } from 'lucide-react'
 import { useSimulation } from './hooks/useSimulation'
+import { useMonteCarlo } from './hooks/useMonteCarlo'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useFileDrop } from './hooks/useFileDrop'
 import { usePlayerKeys, usePlayerTrack } from './hooks/usePlayer'
@@ -12,7 +13,8 @@ import { PlaybackBar } from './components/Playback'
 import { Header } from './components/Header'
 import type { FileActions } from './components/FileMenu'
 import { LayoutSwitch, SplitView, useSplitRatio } from './components/SplitView'
-import { BottomPanel, MobileResults, type CompareProps, type PanelTab, type Reference } from './components/BottomPanel'
+import { BottomPanel, MobileResults, type CompareProps, type McProps, type PanelTab, type Reference } from './components/BottomPanel'
+import type { DispersionOverlay } from './components/Globe'
 import { GlobeStage } from './components/GlobeStage'
 import { Toast, useToast } from './components/Toast'
 import { ThemeToggle } from './components/ThemeToggle'
@@ -89,6 +91,18 @@ export default function App() {
   }
 
   const base = fileBase(config.name)
+
+  // Monte Carlo dispersion runs; drawn on the globe while they match the inputs.
+  const mc = useMonteCarlo(config)
+  const montecarlo: McProps = { mc, fileBase: base }
+  const mcResult = mc.result
+  const dispersion = useMemo<DispersionOverlay | null>(
+    () =>
+      mcResult && !mc.stale && mcResult.cases.length > 0
+        ? { cases: mcResult.cases, statistics: mcResult.statistics, lastStage: config.stages.length }
+        : null,
+    [mcResult, mc.stale, config.stages.length],
+  )
   const openFiles = (fs: File[]) => sim.importFiles(fs).then((r) => showToast(r.message, r.ok ? 'ok' : 'error'))
   const files: FileActions = {
     base,
@@ -134,6 +148,7 @@ export default function App() {
     <GlobeStage
       track={track}
       reference={reference?.track ?? null}
+      dispersion={dispersion}
       status={sim.status}
       error={sim.error}
       compactTelemetry={isMobile || split.ratio < 0.35}
@@ -205,7 +220,7 @@ export default function App() {
           {isMobile ? (
             <>
               <div className={cn('min-h-0 flex-1', mobileView !== 'globe' && 'hidden')}>{globe}</div>
-              {mobileView === 'charts' && track && <MobileResults track={track} compare={compare} />}
+              {mobileView === 'charts' && track && <MobileResults track={track} compare={compare} montecarlo={montecarlo} />}
               {track && mobileView !== 'params' && <PlaybackBar track={track} />}
             </>
           ) : (
@@ -222,6 +237,7 @@ export default function App() {
                     track={track}
                     layoutSwitch={<LayoutSwitch layout={split.layout} onRatio={split.setRatio} />}
                     compare={compare}
+                    montecarlo={montecarlo}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-ink-3">
