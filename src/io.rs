@@ -466,6 +466,35 @@ pub fn config_warnings(config: &RocketConfig) -> Vec<String> {
     warnings
 }
 
+/// Warnings that need the loaded data tables (thrust and Isp profiles)
+pub fn rocket_warnings(rocket: &Rocket) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for i in 0..rocket.stage_count() {
+        let demand = rocket.propellant_demand(i);
+        let usable = rocket.usable_propellant(i);
+        if demand > usable * (1.0 + 1e-6) {
+            warnings.push(format!(
+                "ステージ{}: 燃焼に必要な推進剤 '{:.1}kg' が搭載量 '{:.1}kg' を超えるため、推進剤が尽きた時点で燃焼を終えます",
+                i + 1,
+                demand,
+                usable
+            ));
+        }
+        let stage = rocket.stage_config(i);
+        if let Some(dry) = stage.mass_dry
+            && !(0.0..=stage.mass_initial).contains(&dry)
+        {
+            warnings.push(format!(
+                "ステージ{}: 乾燥質量 '{:.1}kg' が初期質量 '{:.1}kg' の範囲外です",
+                i + 1,
+                dry,
+                stage.mass_initial
+            ));
+        }
+    }
+    warnings
+}
+
 #[allow(clippy::ptr_arg)]
 fn validate_wind_config(_wind: &crate::rocket::WindConfig, _errors: &mut Vec<String>) {
     // Wind configuration validation can be added here if needed

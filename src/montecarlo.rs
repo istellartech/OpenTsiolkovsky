@@ -125,12 +125,13 @@ impl Perturbation {
         let elevation = |el: f64| (el + self.elevation_deg).clamp(-90.0, 90.0);
 
         let perturb_stage = |stage: &mut StageConfig| {
-            // Constant and tabulated values: each path uses one of the pair
-            stage.thrust.const_thrust_vac *= thrust;
+            // The coefficients act on constant and tabulated values alike:
+            // thrust scales the burn rate (same impulse, shorter burn), Isp
+            // the impulse (same mass flow)
             stage.thrust.thrust_coefficient *= thrust;
-            stage.thrust.const_isp_vac *= isp;
             stage.thrust.isp_coefficient *= isp;
             stage.mass_initial *= mass;
+            stage.mass_dry = stage.mass_dry.map(|m| m * mass);
             stage.aero.const_axial_coefficient *= drag;
             stage.aero.axial_multiplier *= drag;
             stage.aero.ballistic_coefficient /= drag;
@@ -435,7 +436,10 @@ mod tests {
         };
         let out = p.apply(&rocket);
         let s = out.stage_config(0);
-        assert_relative_eq!(s.thrust.const_thrust_vac, 22000.0, epsilon = 1e-9);
+        assert_relative_eq!(s.thrust.thrust_coefficient, 1.1, epsilon = 1e-12);
+        assert_relative_eq!(out.thrust_at(0, 0.0), 22000.0, epsilon = 1e-9);
+        // Same impulse: the burn is 1/1.1 as long
+        assert_relative_eq!(out.burn_end_time(0), 10.0 / 1.1, epsilon = 1e-9);
         assert_relative_eq!(s.mass_initial, 475.0, epsilon = 1e-9);
         assert_relative_eq!(s.aero.const_axial_coefficient, 0.5, epsilon = 1e-12);
         assert_relative_eq!(s.aero.ballistic_coefficient, 240.0, epsilon = 1e-9);

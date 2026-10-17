@@ -2,8 +2,8 @@
 use clap::Parser;
 use openTsiolkovsky::{
     io::{
-        IoError, config_warnings, create_rocket_from_config, load_dispersion, save_monte_carlo_csv,
-        save_monte_carlo_summary, save_summary_json, save_trajectory_csv,
+        IoError, config_warnings, create_rocket_from_config, load_dispersion, rocket_warnings,
+        save_monte_carlo_csv, save_monte_carlo_summary, save_summary_json, save_trajectory_csv,
     },
     montecarlo::{Dispersion, impact_statistics, run_cases},
     simulator::{FallBodyKind, SimError, Simulator, impact_point},
@@ -57,7 +57,10 @@ fn main() -> Result<()> {
     // Load rocket configuration and data
     let rocket = create_rocket_from_config(&args.config)?;
 
-    for warning in config_warnings(&rocket.config) {
+    for warning in config_warnings(&rocket.config)
+        .into_iter()
+        .chain(rocket_warnings(&rocket))
+    {
         eprintln!("Warning: {}", warning);
     }
 

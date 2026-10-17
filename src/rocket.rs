@@ -314,6 +314,15 @@ pub struct StageConfig {
     #[serde(rename = "mass initial[kg]")]
     pub mass_initial: f64,
 
+    /// Mass of the stage without propellant [kg]; the burn ends when the
+    /// propellant runs out. Unset: the whole stage mass may be burned.
+    #[serde(
+        rename = "mass dry[kg]",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub mass_dry: Option<f64>,
+
     pub thrust: ThrustConfig,
     pub aero: AeroConfig,
     pub attitude: AttitudeConfig,
@@ -629,14 +638,21 @@ impl Rocket {
         &self.stage_configs[index]
     }
 
-    /// Get thrust for a specific stage at stage-relative time [N]
+    /// Vacuum thrust of a stage at stage-relative time [N]
+    ///
+    /// As in the C++ simulator, the thrust coefficient `k_T` scales the
+    /// thrust and compresses the profile in time (the burn lasts `1/k_T` as
+    /// long, so the total impulse is unchanged), and the Isp coefficient
+    /// `k_I` scales thrust and Isp together (same mass flow, `k_I` times
+    /// the impulse).
     pub fn thrust_at(&self, stage_index: usize, time: f64) -> f64 {
-        let stage = &self.stage_configs[stage_index];
-        if let Some(Some(data)) = self.thrust_tables.get(stage_index) {
-            data.interpolate(time) * stage.thrust.thrust_coefficient
-        } else {
-            stage.thrust.const_thrust_vac
-        }
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let scale = thrust.thrust_coefficient * thrust.isp_coefficient;
+        let base = match self.thrust_tables.get(stage_index) {
+            Some(Some(data)) => data.interpolate(time * thrust.thrust_coefficient),
+            _ => thrust.const_thrust_vac,
+        };
+        base * scale
     }
 
     /// Legacy helper (stage 0)
@@ -644,18 +660,67 @@ impl Rocket {
         self.thrust_at(0, time)
     }
 
-    /// Get specific impulse for a stage at stage-relative time [s]
+    /// Vacuum specific impulse of a stage at stage-relative time [s]
+    /// (see `thrust_at` for the coefficients)
     pub fn isp_at(&self, stage_index: usize, time: f64) -> f64 {
-        let stage = &self.stage_configs[stage_index];
-        if let Some(Some(data)) = self.isp_tables.get(stage_index) {
-            data.interpolate(time) * stage.thrust.isp_coefficient
-        } else {
-            stage.thrust.const_isp_vac
-        }
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let base = match self.isp_tables.get(stage_index) {
+            Some(Some(data)) => data.interpolate(time * thrust.thrust_coefficient),
+            _ => thrust.const_isp_vac,
+        };
+        base * thrust.isp_coefficient
     }
 
     pub fn isp_at_time(&self, time: f64) -> f64 {
         self.isp_at(0, time)
+    }
+
+    /// Stage-relative end of the burn [s]: the burn start plus the burn
+    /// duration divided by the thrust coefficient (as in C++)
+    pub fn burn_end_time(&self, stage_index: usize) -> f64 {
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let k = thrust.thrust_coefficient;
+        let duration = thrust.burn_end_time - thrust.burn_start_time;
+        if k > 0.0 {
+            thrust.burn_start_time + duration / k
+        } else {
+            thrust.burn_start_time
+        }
+    }
+
+    /// Propellant the stage may burn [kg]: initial minus dry mass
+    /// (the whole stage mass when no dry mass is given)
+    pub fn usable_propellant(&self, stage_index: usize) -> f64 {
+        let stage = &self.stage_configs[stage_index];
+        let dry = stage.mass_dry.unwrap_or(0.0).clamp(0.0, stage.mass_initial);
+        stage.mass_initial - dry
+    }
+
+    /// Propellant the programmed burn would use [kg] (mass flow integrated
+    /// over the burn window, ignoring depletion)
+    pub fn propellant_demand(&self, stage_index: usize) -> f64 {
+        let thrust = &self.stage_configs[stage_index].thrust;
+        let start = thrust.burn_start_time;
+        let end = self
+            .burn_end_time(stage_index)
+            .min(thrust.forced_cutoff_time);
+        if end <= start {
+            return 0.0;
+        }
+        let n = 2000;
+        let h = (end - start) / n as f64;
+        let flow = |t: f64| {
+            let isp = self.isp_at(stage_index, t);
+            if isp > 0.0 {
+                self.thrust_at(stage_index, t).max(0.0) / (isp * crate::math::constants::G0)
+            } else {
+                0.0
+            }
+        };
+        // Trapezoidal rule
+        (0..n)
+            .map(|i| 0.5 * h * (flow(start + i as f64 * h) + flow(start + (i + 1) as f64 * h)))
+            .sum()
     }
 
     /// Get normal force coefficient at given Mach number for a stage
@@ -744,29 +809,6 @@ impl Rocket {
         let last = data.last().unwrap();
         (last.1, last.2)
     }
-
-    /// Get current stage mass [kg]
-    pub fn mass_at_time(&self, stage_index: usize, time: f64) -> f64 {
-        let stage_cfg = &self.stage_configs[stage_index];
-        let burn_start = stage_cfg.thrust.burn_start_time;
-        let burn_end = stage_cfg.thrust.burn_end_time;
-
-        if time < burn_start || time > burn_end {
-            return stage_cfg.mass_initial;
-        }
-
-        let thrust = self.thrust_at(stage_index, time);
-        let isp = self.isp_at(stage_index, time);
-        let g0 = 9.80665; // Standard gravity
-
-        if isp > 0.0 {
-            let mass_flow_rate = thrust / (isp * g0);
-            let burn_time = time - burn_start;
-            stage_cfg.mass_initial - mass_flow_rate * burn_time
-        } else {
-            stage_cfg.mass_initial
-        }
-    }
 }
 
 /// -------------------------------------------------------------------------------------------------
@@ -854,6 +896,9 @@ pub struct ClientStage {
     pub free_mode: i32,
     #[serde(default = "default_stage_mass")]
     pub mass_initial_kg: f64,
+    /// Mass without propellant [kg]; unset: the whole stage may be burned
+    #[serde(default)]
+    pub mass_dry_kg: Option<f64>,
     #[serde(default = "default_burn_start")]
     pub burn_start_s: f64,
     #[serde(default = "default_burn_end")]
@@ -923,6 +968,7 @@ impl Default for ClientStage {
             power_mode: default_power_mode(),
             free_mode: default_free_mode(),
             mass_initial_kg: default_stage_mass(),
+            mass_dry_kg: None,
             burn_start_s: default_burn_start(),
             burn_end_s: default_burn_end(),
             forced_cutoff_s: default_forced_cutoff(),
@@ -1283,6 +1329,7 @@ fn build_stage_config(
         power_flight_mode: stage.power_mode,
         free_flight_mode: stage.free_mode,
         mass_initial: stage.mass_initial_kg,
+        mass_dry: stage.mass_dry_kg,
         thrust,
         aero,
         attitude: attitude_cfg,

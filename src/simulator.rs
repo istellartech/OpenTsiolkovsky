@@ -155,6 +155,9 @@ struct StageRuntime {
     power_end: f64,
     separation_time: f64,
     stack_mass: f64,
+    /// Vehicle mass at which this stage's propellant is used up [kg];
+    /// lowered when a dumping product leaves
+    mass_floor: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -178,7 +181,7 @@ fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRunti
     for (idx, &mass) in stack_mass.iter().enumerate().take(rocket.stage_count()) {
         let stage_cfg = rocket.stage_config(idx);
         let burn_start = start_time + stage_cfg.thrust.burn_start_time;
-        let burn_end = start_time + stage_cfg.thrust.burn_end_time;
+        let burn_end = start_time + rocket.burn_end_time(idx);
         let forced_cutoff = start_time + stage_cfg.thrust.forced_cutoff_time;
 
         let mut separation_time = if stage_cfg.stage.following_stage_exists {
@@ -202,6 +205,7 @@ fn build_stage_runtime(config: &RocketConfig, rocket: &Rocket) -> Vec<StageRunti
             power_end: burn_end.min(forced_cutoff),
             separation_time,
             stack_mass: mass,
+            mass_floor: mass - rocket.usable_propellant(idx),
         });
 
         start_time = separation_time;
@@ -907,6 +911,8 @@ impl Simulator {
                 mass,
             });
             self.state.mass -= mass;
+            // The product was part of the stage's dry mass
+            self.stage_runtime[stage_idx].mass_floor -= mass;
         }
     }
 
@@ -943,20 +949,82 @@ impl Simulator {
         self.apply_due_dumps();
     }
 
-    /// Integrate to `target`; no event may lie strictly inside the interval
+    /// Integrate to `target`; no event may lie strictly inside the interval.
+    /// A burn that runs out of propellant on the way is cut off at the
+    /// moment of depletion (located by root finding).
     fn integrate_to(&mut self, target: f64) {
         let t0 = self.state.time;
         if target <= t0 {
             return;
         }
-        self.phase_time = Some(0.5 * (t0 + target));
-        let mut y = self.state_vector();
+        let y0 = self.state_vector();
+        let hint0 = self.h_hint;
+        let y = self.integrate_raw(&y0, t0, target);
+
+        let stage_idx = self.stage_index_for_time(0.5 * (t0 + target));
+        let floor = self.stage_runtime[stage_idx].mass_floor;
+        let powered = self.is_powered_at(stage_idx, 0.5 * (t0 + target));
+        if powered && y[0] < floor && y0[0] > floor {
+            // Mass decreases monotonically while burning: Illinois on m - floor
+            let (mut ta, mut fa) = (t0, y0[0] - floor);
+            let (mut tb, mut fb) = (target, y[0] - floor);
+            let mut side = 0;
+            for _ in 0..100 {
+                if tb - ta < 1.0e-9 {
+                    break;
+                }
+                let mut tc = (ta * fb - tb * fa) / (fb - fa);
+                if !(tc > ta && tc < tb) {
+                    tc = 0.5 * (ta + tb);
+                }
+                self.h_hint = hint0;
+                let fc = self.integrate_raw(&y0, t0, tc)[0] - floor;
+                if fc.abs() < 1.0e-9 * floor.abs().max(1.0) {
+                    ta = tc;
+                    tb = tc;
+                    break;
+                }
+                if fc < 0.0 {
+                    tb = tc;
+                    fb = fc;
+                    if side == -1 {
+                        fa *= 0.5;
+                    }
+                    side = -1;
+                } else {
+                    ta = tc;
+                    fa = fc;
+                    if side == 1 {
+                        fb *= 0.5;
+                    }
+                    side = 1;
+                }
+            }
+            let t_out = 0.5 * (ta + tb);
+            self.h_hint = hint0;
+            let mut y_out = self.integrate_raw(&y0, t0, t_out);
+            y_out[0] = y_out[0].max(floor);
+            self.stage_runtime[stage_idx].power_end = t_out;
+            self.apply_state_vector(t_out, &y_out);
+            self.refresh();
+            self.record_event(EventKind::Burnout);
+            self.integrate_to(target);
+            return;
+        }
+        self.apply_state_vector(target, &y);
+    }
+
+    /// Integrate the equations of motion from `(t0, y0)` to `t1` without
+    /// touching the simulator state (except the adaptive step hint)
+    fn integrate_raw(&mut self, y0: &StateVector, t0: f64, t1: f64) -> StateVector {
+        self.phase_time = Some(0.5 * (t0 + t1));
+        let mut y = *y0;
         let system = |t: f64, s: &StateVector| self.dynamics(t, s);
         match self.integration {
             IntegrationMode::Rk4 { step } => {
-                // Equal steps no longer than `step`, ending exactly on target
-                let n = ((target - t0) / step - 1.0e-9).ceil().max(1.0) as u64;
-                let h = (target - t0) / n as f64;
+                // Equal steps no longer than `step`, ending exactly on t1
+                let n = ((t1 - t0) / step - 1.0e-9).ceil().max(1.0) as u64;
+                let h = (t1 - t0) / n as f64;
                 for i in 0..n {
                     y = RungeKutta4.integrate(&y, t0 + i as f64 * h, h, system);
                 }
@@ -964,13 +1032,13 @@ impl Simulator {
             IntegrationMode::Rk45 { solver } => {
                 let mut t = t0;
                 let mut hint = self.h_hint;
-                let forced = solver.advance_to(&mut y, &mut t, target, &mut hint, system);
+                let forced = solver.advance_to(&mut y, &mut t, t1, &mut hint, system);
                 self.h_hint = hint;
                 self.forced_steps += forced;
             }
         }
         self.phase_time = None;
-        self.apply_state_vector(target, &y);
+        y
     }
 
     /// Propagate every spent stage and dumping product released during
@@ -1386,6 +1454,7 @@ mod tests {
             power_flight_mode: 0,
             free_flight_mode: 2,
             mass_initial: 1000.0,
+            mass_dry: None,
             thrust: ThrustConfig {
                 isp_file_exists: false,
                 isp_file_name: "".to_string(),
@@ -1965,6 +2034,67 @@ mod tests {
                 assert_eq!(row.aero_body.z, 0.0);
             }
         }
+    }
+
+    #[test]
+    fn test_burn_ends_when_propellant_runs_out() {
+        // 50 kN at Isp 200 s burns 25.5 kg/s; 60 kg of propellant lasts 2.35 s
+        let mut config = coast_config(2);
+        config.stages[0].mass_dry = Some(940.0);
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        let flow = 50_000.0 / (200.0 * G0);
+        let t_out = 60.0 / flow;
+        let burnout = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Burnout)
+            .unwrap();
+        assert!(
+            (burnout.time_s - t_out).abs() < 1e-6,
+            "burnout {}",
+            burnout.time_s
+        );
+        assert!((burnout.mass_kg - 940.0).abs() < 1e-6);
+        for s in trajectory.iter().filter(|s| s.time > t_out) {
+            assert_eq!(s.thrust, 0.0);
+            assert!((s.mass - 940.0).abs() < 1e-6, "mass {}", s.mass);
+        }
+    }
+
+    #[test]
+    fn test_mass_never_negative_without_dry_mass() {
+        // A two-stage burn far longer than the first stage's mass: the
+        // first stage cannot eat into the upper stage
+        let mut config = two_stage_config();
+        config.stages[0].thrust.burn_end_time = 100.0;
+        config.stages[0].thrust.forced_cutoff_time = 100.0;
+        let trajectory = run_config(config);
+        let first_stage: Vec<_> = trajectory.iter().filter(|s| s.stage == 1).collect();
+        assert!(first_stage.iter().all(|s| s.mass >= 300.0 - 1e-6));
+        assert!(trajectory.iter().all(|s| s.altitude.is_finite()));
+    }
+
+    #[test]
+    fn test_thrust_coefficient_keeps_total_impulse() {
+        // Thrust x2 burns the same propellant in half the time
+        let burned = |k: f64| {
+            let mut config = coast_config(2);
+            config.stages[0].thrust.thrust_coefficient = k;
+            let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+            sim.run();
+            let b = sim
+                .events
+                .iter()
+                .find(|e| e.kind == EventKind::Burnout)
+                .unwrap()
+                .clone();
+            (b.time_s, 1000.0 - b.mass_kg)
+        };
+        let (t1, m1) = burned(1.0);
+        let (t2, m2) = burned(2.0);
+        assert!((t1 - 5.0).abs() < 1e-9 && (t2 - 2.5).abs() < 1e-9);
+        assert!((m1 - m2).abs() < 1e-6, "{m1} vs {m2}");
     }
 
     #[test]
