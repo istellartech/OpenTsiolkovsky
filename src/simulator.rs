@@ -256,6 +256,10 @@ pub fn impact_point(trajectory: &[SimulationState]) -> Option<ImpactPoint> {
 pub enum EventKind {
     /// Engine ignition of a stage
     Ignition,
+    /// The vehicle starts to move off the pad / along the rail
+    Liftoff,
+    /// The vehicle leaves the end of the launcher rail
+    RailExit,
     /// End of powered flight (burn end or forced cutoff)
     Burnout,
     /// Stage separation (the event belongs to the stage that separates)
@@ -362,12 +366,29 @@ struct Forces {
     aero_body: Vector3<f64>,
     gravity_eci: Vector3<f64>,
     acc_eci: Vector3<f64>,
+    /// On the launcher: acceleration along the rail without the
+    /// constraint (Earth-fixed frame) [m/s²]; 0 off the launcher
+    launcher_along: f64,
 }
 
 impl Forces {
     fn dcm_body_to_eci(&self) -> Matrix3<f64> {
         (self.dcm_ned_to_body * self.dcm_eci_to_ned).transpose()
     }
+}
+
+/// Launch pad / rail constraint
+#[derive(Debug, Clone)]
+struct Launcher {
+    /// Constraint in force (until rail exit, or liftoff without a rail)
+    active: bool,
+    /// The vehicle has started to move
+    lifted: bool,
+    /// Rail length [m]
+    length: f64,
+    /// Rail direction (unit) and foot, ECEF
+    dir_ecef: Vector3<f64>,
+    origin_ecef: Vector3<f64>,
 }
 
 /// Simulator state that integration and event handling change; saved
@@ -381,6 +402,7 @@ struct Snapshot {
     events: Vec<FlightEvent>,
     stage_runtime: Vec<StageRuntime>,
     h_hint: Option<f64>,
+    launcher: Launcher,
 }
 
 /// Main simulator struct
@@ -408,6 +430,7 @@ pub struct Simulator {
     event_times: Vec<f64>,
     dump_events: Vec<DumpEvent>,
     releases: Vec<Release>,
+    launcher: Launcher,
     /// While integrating between two events: a time inside that interval,
     /// used for discrete state (stage, powered) so RK stages evaluated on an
     /// interval boundary do not see the next phase
@@ -463,6 +486,18 @@ impl Simulator {
 
         let position = CoordinateTransform::pos_eci_init(&pos_llh);
         let velocity = CoordinateTransform::vel_eci_init(&vel_ned, &pos_llh);
+
+        // Launcher: a vehicle starting at rest is held on the pad / rail
+        let (az0, el0) = rocket.attitude_at_time(0.0);
+        let (az0, el0) = (deg2rad(az0), deg2rad(el0));
+        let dir_ned = Vector3::new(el0.cos() * az0.cos(), el0.cos() * az0.sin(), -el0.sin());
+        let launcher = Launcher {
+            active: vel_ned.magnitude() < 1.0e-9,
+            lifted: false,
+            length: config.launch.rail_length.max(0.0),
+            dir_ecef: CoordinateTransform::dcm_ecef_to_ned(&pos_llh).transpose() * dir_ned,
+            origin_ecef: position,
+        };
 
         let stage_runtime = build_stage_runtime(&config, &rocket);
         let mass = stage_runtime
@@ -546,6 +581,7 @@ impl Simulator {
             event_times,
             dump_events,
             releases: Vec::new(),
+            launcher,
             phase_time: None,
         };
         sim.refresh();
@@ -568,6 +604,9 @@ impl Simulator {
         self.record_output();
         let t0 = self.state.time;
         self.record_scheduled_events(t0, true);
+        if self.launcher.active && self.current_forces().launcher_along > 0.0 {
+            self.lift_off();
+        }
         let end_time = self.config.calculate_condition.end_time;
         let dt_out = self.config.calculate_condition.time_step;
         if !(dt_out.is_finite() && dt_out > 0.0) {
@@ -585,7 +624,7 @@ impl Simulator {
             self.advance_to_time(t_next);
             self.refresh();
 
-            if self.state.altitude <= 0.0 && prev.altitude > 0.0 {
+            if self.state.altitude <= 0.0 && prev.altitude > 0.0 && !self.launcher.active {
                 self.locate(&before, prev.time, t_next, |sim| sim.state.altitude);
                 if max_q
                     .as_ref()
@@ -597,7 +636,7 @@ impl Simulator {
                 self.record_event(EventKind::Impact);
                 break;
             }
-            if self.state.altitude < 0.0 {
+            if self.state.altitude < 0.0 && !self.launcher.active {
                 // Started on (or below) the ground and sank
                 self.record_output();
                 self.record_event(EventKind::Impact);
@@ -670,6 +709,7 @@ impl Simulator {
             events: self.events.clone(),
             stage_runtime: self.stage_runtime.clone(),
             h_hint: self.h_hint,
+            launcher: self.launcher.clone(),
         }
     }
 
@@ -683,6 +723,7 @@ impl Simulator {
         self.events = snap.events.clone();
         self.stage_runtime = snap.stage_runtime.clone();
         self.h_hint = snap.h_hint;
+        self.launcher = snap.launcher.clone();
     }
 
     /// Re-integrate from `from` to time `t` and refresh the derived state
@@ -961,6 +1002,77 @@ impl Simulator {
         let hint0 = self.h_hint;
         let y = self.integrate_raw(&y0, t0, target);
 
+        if self.launcher.active {
+            const MOVED_M: f64 = 1.0e-6;
+            if !self.launcher.lifted && self.rail_distance(&y, target) > MOVED_M {
+                // First time the vehicle is pushed off: bisection
+                let (mut ta, mut tb) = (t0, target);
+                while tb - ta > 1.0e-9 {
+                    let tc = 0.5 * (ta + tb);
+                    self.h_hint = hint0;
+                    let yc = self.integrate_raw(&y0, t0, tc);
+                    self.apply_state_vector(tc, &yc);
+                    let pushed = self.current_forces().launcher_along > 0.0
+                        || self.rail_distance(&yc, tc) > MOVED_M;
+                    self.apply_state_vector(t0, &y0);
+                    if pushed {
+                        tb = tc;
+                    } else {
+                        ta = tc;
+                    }
+                }
+                self.h_hint = hint0;
+                let y_lift = self.integrate_raw(&y0, t0, ta);
+                self.apply_state_vector(ta, &y_lift);
+                self.lift_off();
+                self.integrate_to(target);
+                return;
+            }
+            let length = self.launcher.length;
+            if self.launcher.lifted && length > 0.0 && self.rail_distance(&y, target) >= length {
+                // Rail exit: Illinois on distance - length
+                let (mut ta, mut fa) = (t0, self.rail_distance(&y0, t0) - length);
+                let (mut tb, mut fb) = (target, self.rail_distance(&y, target) - length);
+                let mut side = 0;
+                let mut y_exit = y;
+                for _ in 0..100 {
+                    if tb - ta < 1.0e-9 {
+                        break;
+                    }
+                    let mut tc = (ta * fb - tb * fa) / (fb - fa);
+                    if !(tc > ta && tc < tb) {
+                        tc = 0.5 * (ta + tb);
+                    }
+                    self.h_hint = hint0;
+                    let yc = self.integrate_raw(&y0, t0, tc);
+                    let fc = self.rail_distance(&yc, tc) - length;
+                    if fc.abs() < 1.0e-6 {
+                        (tb, y_exit) = (tc, yc);
+                        break;
+                    }
+                    if fc > 0.0 {
+                        (tb, fb, y_exit) = (tc, fc, yc);
+                        if side == -1 {
+                            fa *= 0.5;
+                        }
+                        side = -1;
+                    } else {
+                        (ta, fa) = (tc, fc);
+                        if side == 1 {
+                            fb *= 0.5;
+                        }
+                        side = 1;
+                    }
+                }
+                self.apply_state_vector(tb, &y_exit);
+                self.launcher.active = false;
+                self.refresh();
+                self.record_event(EventKind::RailExit);
+                self.integrate_to(target);
+                return;
+            }
+        }
+
         let stage_idx = self.stage_index_for_time(0.5 * (t0 + target));
         let floor = self.stage_runtime[stage_idx].mass_floor;
         let powered = self.is_powered_at(stage_idx, 0.5 * (t0 + target));
@@ -1012,6 +1124,25 @@ impl Simulator {
             return;
         }
         self.apply_state_vector(target, &y);
+    }
+
+    /// The vehicle starts to move: record liftoff; without a rail the
+    /// constraint ends here
+    fn lift_off(&mut self) {
+        self.launcher.lifted = true;
+        if self.launcher.length <= 0.0 {
+            self.launcher.active = false;
+        }
+        self.refresh();
+        self.record_event(EventKind::Liftoff);
+    }
+
+    /// Distance travelled along the launcher rail [m]
+    fn rail_distance(&self, y: &StateVector, t: f64) -> f64 {
+        let pos_ecef = CoordinateTransform::dcm_eci_to_ecef(t) * Vector3::new(y[1], y[2], y[3]);
+        self.launcher
+            .dir_ecef
+            .dot(&(pos_ecef - self.launcher.origin_ecef))
     }
 
     /// Integrate the equations of motion from `(t0, y0)` to `t1` without
@@ -1101,6 +1232,7 @@ impl Simulator {
         let Ok(mut sim) = Simulator::new(rocket) else {
             return body;
         };
+        sim.launcher.active = false;
         sim.state.time = release.time;
         sim.state.position = release.position;
         sim.state.velocity = release.velocity;
@@ -1287,11 +1419,30 @@ impl Simulator {
 
         let gravity_eci = self.gravity.gravity_eci(&position);
         let dcm_body_to_eci = (dcm_ned_to_body * dcm_eci_to_ned).transpose();
-        let acc_eci = if mass > 0.0 {
+        let mut acc_eci = if mass > 0.0 {
             dcm_body_to_eci * (thrust_body + aero_body) / mass + gravity_eci
         } else {
             gravity_eci
         };
+
+        // On the launcher only the motion along the Earth-fixed rail is free.
+        // In the rotating frame: a_rel = a - w x (w x r) - 2 w x v_rel, of
+        // which the rail keeps the component along it.
+        let mut launcher_along = 0.0;
+        if self.launcher.active {
+            let omega = Vector3::new(0.0, 0.0, OMEGA_EARTH);
+            let u = CoordinateTransform::dcm_eci_to_ecef(t).transpose() * self.launcher.dir_ecef;
+            let v_rel = velocity - omega.cross(&position);
+            let frame = omega.cross(&omega.cross(&position)) + 2.0 * omega.cross(&v_rel);
+            launcher_along = u.dot(&(acc_eci - frame));
+            let along = if self.launcher.lifted {
+                launcher_along
+            } else {
+                // Held until the thrust overcomes the weight
+                launcher_along.max(0.0)
+            };
+            acc_eci = frame + along * u;
+        }
 
         Forces {
             stage_idx,
@@ -1314,6 +1465,7 @@ impl Simulator {
             aero_body,
             gravity_eci,
             acc_eci,
+            launcher_along,
         }
     }
 
@@ -1446,6 +1598,7 @@ impl Simulator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rocket::TimeSeriesData;
 
     fn create_test_config() -> RocketConfig {
         use crate::rocket::*;
@@ -1531,6 +1684,7 @@ mod tests {
                 position_llh: [35.0, 139.0, 0.0],
                 velocity_ned: [0.0, 0.0, 0.0],
                 launch_time: [2023, 1, 1, 12, 0, 0],
+                rail_length: 0.0,
             },
             stages: vec![stage],
             wind: WindConfig {
@@ -1961,6 +2115,7 @@ mod tests {
             without_max_q,
             [
                 EventKind::Ignition,
+                EventKind::Liftoff,
                 EventKind::Burnout,
                 EventKind::Apogee,
                 EventKind::Impact
@@ -2098,6 +2253,97 @@ mod tests {
     }
 
     #[test]
+    fn test_held_on_pad_until_thrust_exceeds_weight() {
+        // Thrust 5 kN for a 1000 kg vehicle: never lifts off
+        let mut config = coast_config(2);
+        config.stages[0].thrust.const_thrust_vac = 5_000.0;
+        config.calculate_condition.end_time = 10.0;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        assert_eq!(trajectory.last().unwrap().time, 10.0);
+        for s in &trajectory {
+            assert!(
+                s.altitude.abs() < 1e-6,
+                "altitude {} at {}",
+                s.altitude,
+                s.time
+            );
+            assert!(s.velocity_ecef_ned.magnitude() < 1e-6);
+        }
+        // Propellant still burns on the pad
+        assert!(trajectory.last().unwrap().mass < 1000.0);
+        assert!(sim.events.iter().all(|e| e.kind != EventKind::Liftoff));
+    }
+
+    #[test]
+    fn test_liftoff_when_thrust_ramps_up() {
+        // Thrust rises linearly from 0 to 20 kN over 2 s: lifts off when
+        // the thrust (less the exit pressure loss) exceeds the weight
+        let mut config = coast_config(2);
+        config.calculate_condition.end_time = 10.0;
+        let mut rocket = Rocket::new(config);
+        rocket.thrust_tables[0] = Some(TimeSeriesData::from_pairs([(0.0, 0.0), (2.0, 20_000.0)]));
+        let mut sim = Simulator::new(rocket).unwrap();
+        sim.run();
+        let liftoff = sim
+            .events
+            .iter()
+            .find(|e| e.kind == EventKind::Liftoff)
+            .expect("liftoff");
+        let exit_area = std::f64::consts::PI * 0.1f64.powi(2) / 4.0 * 5.0;
+        let thrust = |t: f64| 10_000.0 * t - exit_area * 101_325.0;
+        let weight = liftoff.mass_kg * 9.80;
+        // Along a rail at 83 deg elevation the weight component is W sin(83)
+        let needed = weight * 83f64.to_radians().sin();
+        assert!(
+            (thrust(liftoff.time_s) - needed).abs() < 0.01 * needed,
+            "liftoff at {} s: thrust {} vs {}",
+            liftoff.time_s,
+            thrust(liftoff.time_s),
+            needed
+        );
+    }
+
+    #[test]
+    fn test_rail_guides_the_vehicle() {
+        let mut config = coast_config(2);
+        config.launch.rail_length = 10.0;
+        config.launch.position_llh[2] = 0.0;
+        // Crosswind: off the rail the vehicle would drift sideways
+        config.wind.const_wind = [10.0, 23.0];
+        config.calculate_condition.time_step = 0.05;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        let trajectory = sim.run();
+        let kinds: Vec<EventKind> = sim.events.iter().map(|e| e.kind).collect();
+        assert_eq!(
+            &kinds[..3],
+            [EventKind::Ignition, EventKind::Liftoff, EventKind::RailExit]
+        );
+        let exit = &sim.events[2];
+        // On the rail the vehicle climbs at the rail elevation (83 deg)
+        assert!((exit.altitude_m - 10.0 * 83f64.to_radians().sin()).abs() < 1e-3);
+        for s in trajectory
+            .iter()
+            .filter(|s| s.time < exit.time_s && s.time > 0.0)
+        {
+            let v = s.velocity_ecef_ned;
+            let elevation = (-v.z).atan2(v.x.hypot(v.y)).to_degrees();
+            let azimuth = v.y.atan2(v.x).to_degrees();
+            assert!((elevation - 83.0).abs() < 1e-3, "elevation {elevation}");
+            assert!((azimuth - 113.0).abs() < 1e-3, "azimuth {azimuth}");
+        }
+        // Exit speed from the along-rail acceleration
+        let exit_area = std::f64::consts::PI * 0.1f64.powi(2) / 4.0 * 5.0;
+        let accel = (50_000.0 - exit_area * 101_325.0) / 1000.0 - 9.80 * 83f64.to_radians().sin();
+        let expected = (2.0 * accel * 10.0).sqrt();
+        assert!(
+            (exit.speed_mps / expected - 1.0).abs() < 0.02,
+            "{} vs {expected}",
+            exit.speed_mps
+        );
+    }
+
+    #[test]
     fn client_config_multi_stage_progresses() {
         use crate::rocket::*;
 
@@ -2146,6 +2392,7 @@ mod tests {
                     minute: 0,
                     second: 0,
                 },
+                rail_length_m: 0.0,
             },
             stages: vec![stage1, stage2],
             stage: None,

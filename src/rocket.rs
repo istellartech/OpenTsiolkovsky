@@ -301,6 +301,12 @@ pub struct LaunchCondition {
 
     #[serde(rename = "time(UTC)[y,m,d,h,min,sec]")]
     pub launch_time: [i32; 6],
+
+    /// Launcher rail length [m], along the attitude at t = 0. Starting at
+    /// rest, the vehicle is held until the thrust lifts it and then slides
+    /// along the rail; 0 means a pad without rail.
+    #[serde(rename = "launcher rail length[m]", default)]
+    pub rail_length: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -876,6 +882,9 @@ pub struct ClientLaunch {
     #[serde(default = "default_velocity_ned")]
     pub velocity_ned_mps: [f64; 3],
     pub datetime_utc: ClientDateTime,
+    /// Launcher rail length [m] (0: pad without rail)
+    #[serde(default)]
+    pub rail_length_m: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1169,6 +1178,7 @@ impl ClientConfig {
                 launch.datetime_utc.minute as i32,
                 launch.datetime_utc.second as i32,
             ],
+            rail_length: launch.rail_length_m,
         };
 
         let mut stage_sources = if !stages.is_empty() {
