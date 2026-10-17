@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { ClientConfig, ClientStageConfig } from '../lib/simulation'
 import { FREE_MODE_OPTIONS, MAX_STAGE_COUNT, POWER_MODE_OPTIONS, createDefaultStage } from '../config/defaults'
 import { PRESET_OPTIONS } from '../config/presets'
+import { LAUNCH_SITES, findSite } from '../config/sites'
 import { NumberField, ProfileTable, SelectField, TextInputField, Toggle, VectorField } from './primitives'
 import { stageColorVar } from '../lib/trajectory'
 import { fmtForce, fmtMass, type VehicleSpec } from '../lib/specs'
@@ -86,6 +87,15 @@ export function Inspector({ config, patch, presetId, specs, nav, onNav, issueFie
         {nav.tab === 'flight' && <FlightTab config={config} patch={patch} />}
         {nav.tab === 'solver' && <SolverTab config={config} patch={patch} />}
       </div>
+    </div>
+  )
+}
+
+function Readout({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-ink-3">{k}</dt>
+      <dd className={cn('num', warn ? 'text-danger' : 'text-ink')}>{v}</dd>
     </div>
   )
 }
@@ -315,6 +325,7 @@ function niceTicks(max: number): number[] {
 function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
   const { launch } = config
   const dt = launch.datetime_utc
+  const site = findSite(launch.latitude_deg, launch.longitude_deg)
   const setLaunch = (l: Partial<ClientConfig['launch']>) => patch((c) => ({ ...c, launch: { ...c.launch, ...l } }))
   const setDate = (v: string) => {
     const [y, m, d] = v.split('-').map(Number)
@@ -326,7 +337,30 @@ function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
   }
   return (
     <>
-      <Group title="発射地点">
+      <Group title="発射地点" note="射場を選ぶと座標が入ります（座標は概略値）。">
+        <label className="flex min-h-8 items-center gap-3 py-[3px]">
+          <span className="min-w-0 flex-1 text-ink-2">射場</span>
+          <select
+            aria-label="射場"
+            value={site?.id ?? ''}
+            onChange={(e) => {
+              const s = LAUNCH_SITES.find((x) => x.id === e.target.value)
+              if (s) setLaunch({ latitude_deg: s.lat, longitude_deg: s.lon, altitude_m: s.alt })
+            }}
+            className="h-8 w-[13rem] shrink-0 cursor-pointer rounded-[6px] border border-line bg-surface-2 px-2 text-[12px] text-ink outline-none hover:border-line-strong focus:border-signal"
+          >
+            <option value="">座標を直接入力</option>
+            {[...new Set(LAUNCH_SITES.map((x) => x.region))].map((region) => (
+              <optgroup key={region} label={region}>
+                {LAUNCH_SITES.filter((x) => x.region === region).map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
         <NumberField label="緯度" unit="°" path="launch.latitude_deg" value={launch.latitude_deg} onChange={(v) => setLaunch({ latitude_deg: v })} />
         <NumberField label="経度" unit="°" path="launch.longitude_deg" value={launch.longitude_deg} onChange={(v) => setLaunch({ longitude_deg: v })} />
         <NumberField label="標高" unit="m" path="launch.altitude_m" value={launch.altitude_m} onChange={(v) => setLaunch({ altitude_m: v })} />
@@ -404,6 +438,23 @@ function VehicleTab({
 
   const p = (k: keyof ClientStageConfig) => stagePath(idx, k)
   const abs = (t: number) => `T+${fmt(spec.start + t)} s`
+
+  // Propellant ⇄ burn time (constant thrust and Isp only).
+  const canEditPropellant = (stage.thrust_profile ?? []).length === 0 && (stage.isp_profile ?? []).length === 0
+  const setBurnEnd = (end: number, s: ClientStageConfig = stage): Partial<ClientStageConfig> => {
+    const out: Partial<ClientStageConfig> = { burn_end_s: end }
+    // Keep a forced cutoff that sat at the burn end (the usual case) moving with it.
+    if (Math.abs(s.forced_cutoff_s - s.burn_end_s) < 1e-6 || s.forced_cutoff_s > end) out.forced_cutoff_s = end
+    if (!isLast && s.separation_time_s < end) out.separation_time_s = Math.round((end + 2) * 10) / 10
+    return out
+  }
+  const setPropellant = (kg: number) => {
+    const thrust = stage.thrust_constant * stage.thrust_multiplier
+    const isp = stage.isp_constant * stage.isp_multiplier
+    if (thrust <= 0 || isp <= 0 || kg <= 0) return
+    const burn = (kg * isp * 9.80665) / thrust
+    setStage(setBurnEnd(Math.round((stage.burn_start_s + burn) * 100) / 100))
+  }
   const thrustProfile = stage.thrust_profile ?? []
   const ispProfile = stage.isp_profile ?? []
 
@@ -431,7 +482,7 @@ function VehicleTab({
         )}
       </div>
 
-      <Group title="質量">
+      <Group title="質量と推進剤" note="推進剤の量を入れると、推力と比推力から燃焼時間（燃焼終了時刻）が決まります。">
         <NumberField
           label="段の質量"
           hint="この段単体の質量（推進剤込み）。上の段は含めません。"
@@ -440,9 +491,34 @@ function VehicleTab({
           value={stage.mass_initial_kg}
           onChange={(v) => setStage({ mass_initial_kg: v })}
         />
-        <p className="text-right text-[11px] text-ink-3">
-          推進剤 {fmtMass(spec.propellant)} を消費 · 点火時の総質量 {fmtMass(spec.stackMass)}
-        </p>
+        {canEditPropellant ? (
+          <NumberField
+            label="推進剤"
+            hint="燃焼で消費する量"
+            unit="kg"
+            value={Math.round(spec.propellant * 10) / 10}
+            onChange={setPropellant}
+          />
+        ) : (
+          <div className="flex min-h-8 items-center justify-between py-[3px] text-ink-2">
+            <span>
+              推進剤
+              <span className="block text-[10px] leading-snug text-ink-3">推力・Ispのテーブルから計算</span>
+            </span>
+            <span className="num w-[9.5rem] pr-2 text-right text-[13px] text-ink">{fmtMass(spec.propellant)}</span>
+          </div>
+        )}
+        <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 rounded-[6px] bg-surface-2 px-2.5 py-2 text-[11px]">
+          <Readout k="燃焼時間" v={`${fmt(spec.burnTime)} s`} />
+          <Readout k="燃焼後" v={fmtMass(Math.max(stage.mass_initial_kg - spec.propellant, 0))} warn={spec.propellant >= stage.mass_initial_kg} />
+          <Readout k="推進剤比" v={`${fmt((spec.propellant / Math.max(stage.mass_initial_kg, 1e-9)) * 100, 0)} %`} />
+          <Readout k="推力重量比" v={fmt(spec.thrustIgnition / Math.max(spec.stackMass * 9.80665, 1e-9), 2)} warn={idx === 0 && spec.thrustIgnition < spec.stackMass * 9.80665} />
+          <Readout k="Δv（理想）" v={`${fmt(spec.dv / 1000, 2)} km/s`} />
+          <Readout k="点火時総質量" v={fmtMass(spec.stackMass)} />
+        </dl>
+        {idx === 0 && spec.thrustIgnition < spec.stackMass * 9.80665 && (
+          <p className="mt-1 text-[11px] text-danger">推力が重量より小さく、離昇できません。</p>
+        )}
       </Group>
 
       <Group title="推力・比推力">
@@ -495,8 +571,16 @@ function VehicleTab({
         }
       >
         <NumberField label="点火" note={abs(stage.burn_start_s)} unit="s" path={p('burn_start_s')} value={stage.burn_start_s} onChange={(v) => setStage({ burn_start_s: v })} />
-        <NumberField label="燃焼終了" note={abs(stage.burn_end_s)} unit="s" path={p('burn_end_s')} value={stage.burn_end_s} onChange={(v) => setStage({ burn_end_s: v })} />
-        <NumberField label="強制停止" note={abs(stage.forced_cutoff_s)} unit="s" path={p('forced_cutoff_s')} value={stage.forced_cutoff_s} onChange={(v) => setStage({ forced_cutoff_s: v })} />
+        <NumberField label="燃焼終了" note={abs(stage.burn_end_s)} unit="s" path={p('burn_end_s')} value={stage.burn_end_s} onChange={(v) => setStage(setBurnEnd(v))} />
+        <NumberField
+          label="強制停止"
+          note={Math.abs(stage.forced_cutoff_s - stage.burn_end_s) < 1e-6 ? '燃焼終了と同じ（変更不要）' : abs(stage.forced_cutoff_s)}
+          hint={Math.abs(stage.forced_cutoff_s - stage.burn_end_s) < 1e-6 ? undefined : '燃焼終了より前なら、その時刻で燃焼を打ち切ります'}
+          unit="s"
+          path={p('forced_cutoff_s')}
+          value={stage.forced_cutoff_s}
+          onChange={(v) => setStage({ forced_cutoff_s: v })}
+        />
         {!isLast && (
           <NumberField label="分離" note={abs(stage.separation_time_s)} unit="s" path={p('separation_time_s')} value={stage.separation_time_s} onChange={(v) => setStage({ separation_time_s: v })} />
         )}
@@ -624,6 +708,13 @@ function FlightTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
           </>
         )}
       </Group>
+      <Group title="姿勢プログラムをかんたん作成" note="垂直に上昇してから徐々に傾ける、典型的な形のテーブルを作ります。作成後は上の表で細かく調整できます。">
+        <PitchProgramBuilder
+          latitude={config.launch.latitude_deg}
+          azimuth={at.profile[0]?.azimuth_deg ?? at.azimuth_deg}
+          onApply={(profile) => setAt({ profile, azimuth_deg: profile[0].azimuth_deg })}
+        />
+      </Group>
       <Group title="姿勢の誤差">
         <NumberField label="ピッチ" unit="°" path="attitude.pitch_offset_deg" value={at.pitch_offset_deg} onChange={(v) => setAt({ pitch_offset_deg: v })} />
         <NumberField label="ヨー" unit="°" path="attitude.yaw_offset_deg" value={at.yaw_offset_deg} onChange={(v) => setAt({ yaw_offset_deg: v })} />
@@ -707,5 +798,72 @@ function SolverTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
         <NumberField label="密度の変動" unit="%" path="simulation.air_density_percent" value={s.air_density_percent} onChange={(v) => set({ air_density_percent: v })} />
       </Group>
     </>
+  )
+}
+
+/* --------------------------------------------------- Pitch program helper */
+
+function PitchProgramBuilder({
+  latitude,
+  azimuth,
+  onApply,
+}: {
+  latitude: number
+  azimuth: number
+  onApply: (profile: ClientConfig['attitude']['profile']) => void
+}) {
+  const [v, setV] = useState({ azimuth, vertical: 10, pitchTime: 60, pitchEl: 65, finalTime: 300, finalEl: 0, inclination: NaN })
+  const set = (patch: Partial<typeof v>) => setV((old) => ({ ...old, ...patch }))
+
+  // Launch azimuth for a target inclination: sin(Az) = cos(i) / cos(φ)
+  const ratio = Math.cos((v.inclination * Math.PI) / 180) / Math.cos((latitude * Math.PI) / 180)
+  const azNorth = Number.isFinite(ratio) && Math.abs(ratio) <= 1 ? (Math.asin(ratio) * 180) / Math.PI : NaN
+  const azChoices = Number.isFinite(azNorth) ? [((azNorth % 360) + 360) % 360, 180 - azNorth] : []
+
+  const valid = v.vertical >= 0 && v.pitchTime > v.vertical && v.finalTime > v.pitchTime
+  return (
+    <div>
+      <NumberField label="打上げ方位角" unit="°" value={v.azimuth} onChange={(azimuth) => set({ azimuth })} />
+      <NumberField label="（目標の軌道傾斜角）" hint="入れると方位角の候補を出します" unit="°" value={v.inclination} onChange={(inclination) => set({ inclination })} />
+      {Number.isFinite(v.inclination) && (
+        <p className="mb-1 text-right text-[11px] text-ink-3">
+          {azChoices.length ? (
+            <>
+              候補：
+              {azChoices.map((az) => (
+                <button key={az} type="button" onClick={() => set({ azimuth: Math.round(az * 10) / 10 })} className="num ml-1.5 rounded border border-line px-1.5 text-ink-2 hover:border-ink hover:text-ink">
+                  {fmt(az, 1)}°
+                </button>
+              ))}
+            </>
+          ) : (
+            <span className="text-danger">この緯度からは直接投入できない傾斜角です（緯度 {fmt(Math.abs(latitude), 1)}° 以上が必要）</span>
+          )}
+        </p>
+      )}
+      <NumberField label="垂直上昇" unit="s" value={v.vertical} onChange={(vertical) => set({ vertical })} />
+      <NumberField label="傾け終わる時刻" unit="s" value={v.pitchTime} onChange={(pitchTime) => set({ pitchTime })} />
+      <NumberField label="そのときの仰角" unit="°" value={v.pitchEl} onChange={(pitchEl) => set({ pitchEl })} />
+      <NumberField label="最終の時刻" unit="s" value={v.finalTime} onChange={(finalTime) => set({ finalTime })} />
+      <NumberField label="最終の仰角" unit="°" value={v.finalEl} onChange={(finalEl) => set({ finalEl })} />
+      <div className="mt-1 flex items-center justify-end gap-2">
+        {!valid && <span className="text-[11px] text-danger">時刻は 垂直上昇 ＜ 傾け終わり ＜ 最終 の順にしてください</span>}
+        <button
+          type="button"
+          disabled={!valid}
+          onClick={() =>
+            onApply([
+              { time: 0, azimuth_deg: v.azimuth, elevation_deg: 90 },
+              { time: v.vertical, azimuth_deg: v.azimuth, elevation_deg: 90 },
+              { time: v.pitchTime, azimuth_deg: v.azimuth, elevation_deg: v.pitchEl },
+              { time: v.finalTime, azimuth_deg: v.azimuth, elevation_deg: v.finalEl },
+            ])
+          }
+          className="h-8 rounded-[6px] bg-ink px-3 text-[12px] font-medium text-surface hover:opacity-90 disabled:opacity-40"
+        >
+          姿勢テーブルに反映
+        </button>
+      </div>
+    </div>
   )
 }

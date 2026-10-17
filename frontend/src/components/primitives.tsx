@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import { Plus, X } from 'lucide-react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Copy, FileUp, Plus, X } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 /* ------------------------------------------------------------------ Buttons */
@@ -380,6 +380,23 @@ export interface ProfileColumn<T> {
   label: string
 }
 
+/**
+ * Rows of `n` numbers from pasted spreadsheet text or a CSV file. Accepts tab,
+ * comma or semicolon separated values; lines without `n` numbers (headers,
+ * blanks) are skipped. Thousands separators inside tab-separated cells
+ * ("160,000") are tolerated.
+ */
+export function parseTableText(text: string, n: number): number[][] {
+  const out: number[][] = []
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue
+    const cells = line.includes('\t') ? line.split('\t').map((c) => c.replace(/,/g, '')) : line.split(/[,;]/)
+    const nums = cells.map((c) => c.trim()).filter((c) => c !== '').map(Number)
+    if (nums.length >= n && nums.slice(0, n).every(Number.isFinite)) out.push(nums.slice(0, n))
+  }
+  return out
+}
+
 export function ProfileTable<T extends Record<string, number>>({
   columns,
   rows,
@@ -392,6 +409,8 @@ export function ProfileTable<T extends Record<string, number>>({
   path?: string
 }) {
   const { error, ref } = useFieldState(path)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const update = (i: number, key: keyof T, v: number) =>
     onChange(rows.map((r, j) => (j === i ? { ...r, [key]: v } : r)))
   const add = () => {
@@ -399,8 +418,42 @@ export function ProfileTable<T extends Record<string, number>>({
     const blank = Object.fromEntries(columns.map((c) => [c.key, prev ? prev[c.key] : 0])) as T
     onChange([...rows, blank])
   }
+  const replaceFrom = (text: string, source: string) => {
+    const parsed = parseTableText(text, columns.length)
+    if (parsed.length === 0) {
+      setNotice(`${source}から数値の行が見つかりませんでした（${columns.length}列の数値が必要です）。`)
+      return false
+    }
+    onChange(parsed.map((vals) => Object.fromEntries(columns.map((c, i) => [c.key, vals[i]])) as T))
+    setNotice(`${source}から ${parsed.length} 行を読み込みました。`)
+    return true
+  }
+  const copy = () => {
+    const tsv = [columns.map((c) => c.label).join('\t'), ...rows.map((r) => columns.map((c) => r[c.key]).join('\t'))].join('\n')
+    navigator.clipboard?.writeText(tsv).then(
+      () => setNotice('表をコピーしました（表計算ソフトに貼り付けられます）。'),
+      () => setNotice('コピーできませんでした。'),
+    )
+  }
+  useEffect(() => {
+    if (!notice) return
+    const t = window.setTimeout(() => setNotice(null), 4000)
+    return () => window.clearTimeout(t)
+  }, [notice])
+
+  const toolBtn = 'flex h-7 items-center gap-1 rounded-[5px] px-1.5 text-[12px] text-ink-2 hover:bg-surface-2 hover:text-ink'
   return (
-    <div ref={ref as (el: HTMLDivElement | null) => void} className="mt-1 mb-2">
+    <div
+      ref={ref as (el: HTMLDivElement | null) => void}
+      className="mt-1 mb-2"
+      onPaste={(e) => {
+        const text = e.clipboardData.getData('text')
+        // A single number goes into the focused cell as usual; a block replaces the table.
+        if (!/[\n\t]/.test(text.trim())) return
+        e.preventDefault()
+        replaceFrom(text, '貼り付けた表')
+      }}
+    >
       <div
         className="grid gap-1.5 pb-1 text-[11px] text-ink-3"
         style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr)) 24px` }}
@@ -433,9 +486,31 @@ export function ProfileTable<T extends Record<string, number>>({
           </div>
         ))}
       </div>
-      <button type="button" onClick={add} className="mt-1.5 flex h-7 items-center gap-1 text-[12px] text-ink-2 hover:text-ink">
-        <Plus className="h-3.5 w-3.5" /> 行を追加
-      </button>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-1">
+        <button type="button" onClick={add} className={toolBtn}>
+          <Plus className="h-3.5 w-3.5" /> 行を追加
+        </button>
+        <button type="button" onClick={() => fileRef.current?.click()} className={toolBtn}>
+          <FileUp className="h-3.5 w-3.5" /> CSVを読み込む
+        </button>
+        <button type="button" onClick={copy} className={toolBtn}>
+          <Copy className="h-3.5 w-3.5" /> 表をコピー
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,.tsv,.txt,text/csv"
+          className="hidden"
+          onChange={async (e) => {
+            const f = e.target.files?.[0]
+            e.target.value = ''
+            if (f) replaceFrom(await f.text(), `「${f.name}」`)
+          }}
+        />
+      </div>
+      <p className="text-[10px] leading-snug text-ink-3">
+        {notice ?? 'Excel などでコピーした表を、どれかのセルに貼り付けると表全体を置き換えます。'}
+      </p>
       {error && <p className="text-[11px] text-danger">{error}</p>}
     </div>
   )

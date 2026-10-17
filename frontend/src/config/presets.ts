@@ -1,7 +1,8 @@
 // Sample vehicles built from published figures. Each preset lists its
 // sources and the simplifications made, which the overview tab shows.
 import type { ClientConfig } from '../lib/simulation'
-import { CA_SLENDER, exitAreaFromDiameter, parallelPhase, pitchProgram, stage, vehicle } from './build'
+import { siteById } from './sites'
+import { CA_SLENDER, exitAreaFromDiameter, exitAreaFromThrust, parallelPhase, pitchProgram, stage, vehicle } from './build'
 
 export interface PresetSource {
   label: string
@@ -32,14 +33,12 @@ export const PRESET_CATEGORIES: { id: PresetCategory; label: string }[] = [
 /* ------------------------------------------------------------ Launch sites */
 
 const SITES = {
-  // Uchinoura Space Center, KS launcher (sounding rockets)
-  uchinouraKS: { lat: 31.2518, lon: 131.079, alt: 276 },
-  // Interstellar Technologies launch site, Taiki, Hokkaido (approximate)
-  taiki: { lat: 42.5, lon: 143.44, alt: 15 },
-  // Uchinoura Space Center, M-V / Epsilon launcher
-  uchinouraMV: { lat: 31.251, lon: 131.082, alt: 270 },
-  // Tanegashima Space Center, Yoshinobu launch complex
-  yoshinobu: { lat: 30.4022, lon: 130.975, alt: 20 },
+  ksc39a: siteById('ksc-39a'),
+  ela3: siteById('csg-ela3'),
+  uchinouraKS: siteById('uchinoura-ks'),
+  taiki: siteById('taiki'),
+  uchinouraMV: siteById('uchinoura-m'),
+  yoshinobu: siteById('tanegashima'),
 }
 
 
@@ -47,12 +46,18 @@ const SITES = {
 
 // Calibrated total-impulse factors: thrust is scaled so that the simulated
 // apogee matches the published flight record (see the notes on each preset).
-const CAL = {
+export const CAL = {
   s310: 1.2213, // apogee 180 km
   s520: 0.9116, // apogee 304 km
   momoIsp: 206.72, // apogee 113.4 km
   momoElevation: 86.71, // splashdown 37 km
   ss520Stage1: 1.3752, // 2.0 km/s at 26 km at stage-1 burnout
+  saturnIsp1: 315.96, // S-IC vacuum Isp; tuned to the S-IC cutoff / S-II cutoff / parking orbit
+  saturnPitch: [[30, 82.08], [70, 60.42], [120, 31.62], [161, 29.04], [300, 18.86], [450, 15.48], [550, 13.19], [700, 1.07]] as [number, number][],
+  saturnAzimuth: 74.85, // published flight azimuth 72.058°; adjusted to the 32.52° inclination
+  ariane5Pitch: [[20, 82.85], [60, 63.19], [137, 41.03], [300, 10.54], [520, 6.2], [1000, 1.24], [1500, -1.32]] as [number, number][], // GTO 250 × 35,786 km
+  ariane5Azimuth: 90,
+  ariane5Cutoff: 978, // full ESC-A burn
 }
 
 function s310(): ClientConfig {
@@ -210,6 +215,134 @@ function momo(): ClientConfig {
     attitude: { azimuth: 112.5, elevation: CAL.momoElevation },
     duration: 700,
     step: 0.5,
+  })
+}
+
+
+/* ---------------------------------------------------------------- Saturn V */
+
+function saturnV(): ClientConfig {
+  // Apollo 11 (AS-506), 1969-07-16, from the Saturn V flight evaluation report
+  // (MPR-SAT-FE-69-9). Times are from liftoff (holddown release, range 0.3 s).
+  const t0 = 0.3
+  const liftoff = 2899008 // vehicle at holddown release
+  const atSII = 479706 + 174365 // S-II at ignition + everything above it
+  const atSIVB = 166571 // vehicle at S-IVB ignition
+
+  // S-IC: centre engine cutoff 135.20, outboard cutoff 161.63, separation 162.3
+  const sicBurn = 161.63 - t0
+  const ceco = (135.2 - t0) / sicBurn
+  const sicShape: [number, number][] = [[0, 1], [ceco, 1], [ceco + 0.0005, 0.8], [1, 0.8]]
+  const sicProp = 2278688 - 39307 - 168015 // ignition→OECO minus hold-down burn
+  // Exit area from the published sea-level thrust (sum of five F-1, 33,596 kN)
+  const shapeArea = ceco + (1 - ceco) * 0.8
+  const fVac0 = (sicProp * CAL.saturnIsp1 * 9.80665) / sicBurn / shapeArea
+  const sicExit = Math.max(fVac0 - 33596e3, 0) / 101325
+
+  // S-II: start 163.0, OECO 548.22 (385.2 s), CECO 460.6, separation 549.0
+  const sep1 = 162.3 - t0
+  const siiBurn = 548.22 - 163.0
+  const siiCeco = (460.6 - 163.0) / siiBurn
+  const sep2 = 549.0 - t0 - sep1
+
+  return vehicle({
+    name: 'サターンV（アポロ11号）',
+    site: SITES.ksc39a,
+    date: [1969, 7, 16, 13, 32, 0],
+    stages: [
+      stage({
+        mass: liftoff - atSII,
+        propellant: sicProp,
+        isp: CAL.saturnIsp1,
+        burn: sicBurn,
+        separation: sep1,
+        exitArea: sicExit,
+        shape: sicShape,
+        freeMode: 1,
+      }),
+      stage({
+        mass: atSII - atSIVB,
+        propellant: 479706 - 43564,
+        isp: 423.2,
+        ignition: 163.0 - t0 - sep1,
+        burn: siiBurn,
+        separation: sep2,
+        exitArea: 5 * exitAreaFromDiameter(1.96),
+        // 5,141.5 kN, then 4,093.1 kN after centre engine cutoff (report §6.3)
+        shape: [[0, 5141.5], [siiCeco, 5141.5], [siiCeco + 0.0005, 4093.1], [1, 4093.1]],
+        freeMode: 1,
+      }),
+      stage({
+        mass: atSIVB,
+        propellant: 118939 - 87550,
+        isp: 428.7,
+        ignition: 552.2 - t0 - sep1 - sep2,
+        burn: 699.34 - 552.2,
+        exitArea: exitAreaFromDiameter(1.96),
+        freeMode: 1,
+      }),
+    ],
+    diameter: 10.06,
+    ca: CA_SLENDER,
+    // Rolled to a 72.058° flight azimuth; pitch program tuned to the report
+    attitude: pitchProgram(CAL.saturnAzimuth, CAL.saturnPitch),
+    duration: 1500,
+    step: 1,
+  })
+}
+
+
+/* ------------------------------------------------------------------ Kourou */
+
+function ariane5(): ClientConfig {
+  // VA247 (HS-4/SGS-1 + GSAT-31), 2019-02-05. Times after liftoff (H0+7.3 s):
+  // EAP separation 136.7, EPC end of thrust 513.7, separation 519.7,
+  // ESC-A ignition 523.7, extinction 1501.7.
+  const jettison = 136.7
+  const eapBurn = 130
+  // EPC: 174 t (kit) burned from H0+1 to H0+521; 6.3 s of it before liftoff
+  const epcFlow = 174000 / 520
+  const epcAtLiftoff = 174000 - epcFlow * 6.3
+  const { phase, coreUsed } = parallelPhase({
+    booster: { mass: 2 * 277000, propellant: 2 * 240000, isp: 274.5, burn: eapBurn, exitArea: 2 * exitAreaFromDiameter(3.0) },
+    // Exit area from Vulcain 2's published vacuum / sea-level thrust (1390 / 960 kN)
+    core: { propellant: epcAtLiftoff, isp: 432, burn: 513.7, exitArea: exitAreaFromThrust(1390e3, 960e3) },
+    jettison,
+  })
+  const payload = 10052 // both satellites with carrying structures (kit)
+  return vehicle({
+    name: 'アリアン5 ECA（VA247）',
+    site: SITES.ela3,
+    date: [2019, 2, 5, 21, 1, 0],
+    stages: [
+      stage({ ...phase, freeMode: 1 }),
+      stage({
+        // EPC 188 t (kit) less what burned before EAP separation, + fairing 2.4 t
+        mass: 188000 - (174000 - epcAtLiftoff) - coreUsed + 2400,
+        propellant: epcAtLiftoff - coreUsed,
+        isp: 432,
+        burn: 513.7 - jettison,
+        separation: 519.7 - jettison,
+        exitArea: exitAreaFromThrust(1390e3, 960e3),
+        freeMode: 1,
+      }),
+      stage({
+        // ESC-A 19 t + vehicle equipment bay 0.97 t + payload
+        mass: 19000 + 970 + payload,
+        propellant: 14900,
+        isp: 446,
+        ignition: 523.7 - 519.7,
+        burn: 1501.7 - 523.7,
+        cutoff: CAL.ariane5Cutoff,
+        exitArea: exitAreaFromDiameter(1.0),
+        freeMode: 1,
+      }),
+    ],
+    diameter: 5.4,
+    ca: CA_SLENDER,
+    attitude: pitchProgram(CAL.ariane5Azimuth, CAL.ariane5Pitch),
+    duration: 2400,
+    step: 2,
   })
 }
 
@@ -394,6 +527,9 @@ const SOUNDING_NOTES = [
   '打上げ方位角は公開値が見当たらないため仮定値です。',
 ]
 
+const NASA_AS506 = { label: 'NASA MSFC Saturn V Launch Vehicle Flight Evaluation Report AS-506 Apollo 11 Mission（MPR-SAT-FE-69-9）', url: 'https://ibiblio.org/apollo/Documents/lvfea-AS506-Apollo11.pdf' }
+const A5_UM = { label: "Arianespace Ariane 5 User's Manual Issue 5 Rev 2（Fig. 1-7 主要諸元）", url: 'https://courses.edx.org/asset-v1:DelftX%2BAEASM1x%2B1T2022%2Btype%40asset%2Bblock/Ariane5_Users-Manual_October2016_Red.pdf' }
+const A5_VA247 = { label: 'Arianespace VA247 Launch Kit（機体構成・飛行シーケンス・目標軌道）', url: 'https://www.arianespace.com/wp-content/uploads/2019/01/VA247-launchkit-EN.pdf' }
 const JAXA_EPSILON_PRESSKIT = { label: 'JAXA イプシロンロケット試験機 プレスキット（主要諸元）', url: 'https://fanfun.jaxa.jp/countdown/epsilon/files/presskit_epsilon_j.pdf' }
 const JAXA_EPSILON_RESULT = { label: 'JAXA イプシロンロケット試験機の打上げ結果（飛行シーケンス・軌道）', url: 'https://www.jaxa.jp/press/2013/12/20131224_epsilon_j.pdf' }
 const JAXA_HISAKI = { label: 'JAXA 惑星分光観測衛星「ひさき」パンフレット（衛星質量）', url: 'https://www.jaxa.jp/projects/pr/brochure/pdf/04/sat35.pdf' }
@@ -524,4 +660,61 @@ export const PRESET_OPTIONS: PresetOption[] = [
     sources: [MEXT_H3_TF1, JAXA_H3_LEAFLET],
     create: h3_22s,
   },
+  {
+    id: 'saturn-v',
+    label: 'サターンV',
+    kind: '3段式 液体ロケット（アポロ11号）',
+    category: 'orbital',
+    site: '米国 ケネディ宇宙センター',
+    description: '1969年に人類初の月着陸へ向かったアポロ11号の打上げ。NASA の飛行評価報告書の実測値（各段の質量・推力・比推力・燃焼時刻）で構成し、第3段の1回目の燃焼で高度約185 kmの待機軌道に入るまで。',
+    modelNotes: [
+      '質量はすべて報告書の実測値です（離昇時 2,899 t、S-II 点火時 654 t、S-IVB 点火時 167 t）。',
+      'S-IC は中央エンジン停止（T+134.9 s）で推力が 4/5 になる形、S-II は中央エンジン停止前後の推力（5,142 kN → 4,093 kN）を使っています。',
+      'S-IC の真空比推力は報告書にないため、S-IC 燃焼終了時（高度 66.1 km、速度 2,764 m/s）に合うよう調整し、ノズル出口面積は公表の海面推力（33,596 kN）から逆算しています。',
+      '姿勢は簡易ピッチプログラムで、報告書の待機軌道（183.2 × 186.0 km、傾斜角 32.52°）と S-II 燃焼終了高度（187.3 km）に合うよう調整しています。方位角は報告書の飛行方位角 72.058° ではなく、傾斜角が合うよう 74.85° としています（3自由度の簡易モデルのため）。',
+      '計算上の S-IC 燃焼終了時の速度は 2,857 m/s（報告書 2,764 m/s）、高度は 66.3 km（同 66.1 km）です。',
+      '脱出塔（約4 t）と段間部の投棄は分離時刻までまとめて扱っています。機体直径 10.06 m は一般的な公称値です。',
+    ],
+    sources: [NASA_AS506],
+    create: saturnV,
+  },
+  {
+    id: 'ariane5',
+    label: 'アリアン5 ECA',
+    kind: '2段式 液体ロケット + 固体ブースタ2本',
+    category: 'orbital',
+    site: '仏領ギアナ ギアナ宇宙センター',
+    description: '欧州の大型ロケット。VA247（2019年、静止衛星2機・計約10 t）の打上げキットの機体構成と飛行シーケンスで構成し、静止トランスファ軌道（近地点 250 km × 遠地点 35,786 km）へ。',
+    modelNotes: [
+      '固体ブースタ EAP（各 277 t・推進薬 240 t・比推力 274.5 s・燃焼 130 s）と主段 EPC の同時燃焼は「EAP 分離（離昇後 136.7 s）までの段」として近似しています。',
+      '主段 EPC は打上げキットの推進薬 174 t を H0+1 s〜H0+521 s で燃やす扱いで、離昇前（6.3 s）の消費分を差し引いています。ノズル出口面積はマニュアルの真空／海面推力（1,390 / 960 kN）から求めています。',
+      '上段 ESC-A（19 t・推進薬 14.9 t・比推力 446 s）は打上げキットの点火〜停止（離昇後 523.7〜1,501.7 s）をそのまま使い、搭載物 約10 t と機器搭載部 0.97 t を加えています。',
+      'EAP のノズル出口径は公開値がないため推定（各 3.0 m）です。フェアリング 2.4 t は投棄時刻ではなく主段分離まで機体に含めています。',
+      '姿勢プログラムは目標軌道に合うよう調整したもので、計算上の軌道は 250 × 35,786 km です。軌道傾斜角は計算で 4.4°（目標 3°）で、射場の緯度（5.2°）より小さくする実機のヨー方向の誘導は再現していません。',
+      '離昇時の総質量は計算で 772 t（打上げキット 780 t）です。',
+    ],
+    sources: [A5_UM, A5_VA247],
+    create: ariane5,
+  },
 ]
+
+/**
+ * A minimal single-stage rocket to start from scratch, at the given launch
+ * point (or Taiki): 1 t, 70 % propellant, 20 kN, Isp 250 s.
+ */
+export function createBlankConfig(launch?: ClientConfig['launch']): ClientConfig {
+  const c = vehicle({
+    name: '新しいロケット',
+    site: launch ? { lat: launch.latitude_deg, lon: launch.longitude_deg, alt: launch.altitude_m } : SITES.taiki,
+    date: launch
+      ? [launch.datetime_utc.year, launch.datetime_utc.month, launch.datetime_utc.day, launch.datetime_utc.hour, launch.datetime_utc.minute, launch.datetime_utc.second]
+      : [2025, 1, 1, 0, 0, 0],
+    stages: [stage({ mass: 1000, propellant: 700, isp: 250, burn: (700 * 250 * 9.80665) / 20000, exitArea: exitAreaFromDiameter(0.25) })],
+    diameter: 0.5,
+    ca: 0.4,
+    attitude: { azimuth: 90, elevation: 85 },
+    duration: 600,
+    step: 0.5,
+  })
+  return c
+}

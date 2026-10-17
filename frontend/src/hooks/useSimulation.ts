@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ClientConfig, SimulationState } from '../lib/simulation'
 import { runSimulation } from '../lib/simulation'
-import { PRESET_OPTIONS } from '../config/presets'
+import { PRESET_OPTIONS, createBlankConfig } from '../config/presets'
 import { isValidClientConfig, validateConfig } from '../utils/validation'
 import { buildTrack, type Track } from '../lib/trajectory'
 import { baseName, fromLegacyParamFile, isLegacyParamFile } from '../lib/legacy'
@@ -95,6 +95,11 @@ export function useSimulation() {
     return () => window.clearTimeout(timer)
   }, [config, issues.length, presetId])
 
+  const startBlank = useCallback(() => {
+    setConfigState((c) => createBlankConfig(c.launch))
+    setPresetId('custom')
+  }, [])
+
   const applyPreset = useCallback((id: string) => {
     const preset = PRESET_OPTIONS.find((p) => p.id === id)
     if (!preset) return
@@ -151,5 +156,5 @@ export function useSimulation() {
     return { ok: true, message: `「${file.name}」を読み込みました。` }
   }, [])
 
-  return { config, patch, presetId, applyPreset, importFiles, status, error, result, issues, issueMap }
+  return { config, patch, presetId, applyPreset, startBlank, importFiles, status, error, result, issues, issueMap }
 }

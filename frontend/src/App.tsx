@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, FileText, FolderOpen, Globe as GlobeIcon, LineChart, Map as MapIcon, Save, SlidersHorizontal, Table2, X } from 'lucide-react'
+import { Check, ChevronDown, Plus, FileText, FolderOpen, Globe as GlobeIcon, LineChart, Map as MapIcon, Save, SlidersHorizontal, Table2, X } from 'lucide-react'
 import { useSimulation, type RunStatus } from './hooks/useSimulation'
 import { PRESET_CATEGORIES, PRESET_OPTIONS } from './config/presets'
 import { Inspector, navForField, type InspectorNav } from './components/Inspector'
@@ -217,6 +217,12 @@ export default function App() {
           sim.applyPreset(id)
           setNav({ tab: 'overview', stage: 0 })
         }}
+        onBlank={() => {
+          sim.startBlank()
+          setNav({ tab: 'vehicle', stage: 0 })
+          if (isMobile) setMobileView('params')
+          else if (!isDesktop) setDrawerOpen(true)
+        }}
         files={files}
         hasResult={!!track}
         status={sim.status}
@@ -352,6 +358,7 @@ function Header(props: {
   name: string
   presetId: string
   onPreset: (id: string) => void
+  onBlank: () => void
   files: FileActions
   hasResult: boolean
   status: RunStatus
@@ -373,7 +380,7 @@ function Header(props: {
         <span className="text-[14px] font-semibold tracking-tight">OpenTsiolkovsky</span>
       </div>
       <div className="mx-1 hidden h-5 w-px shrink-0 bg-line sm:block" />
-      <VehiclePicker name={props.name} presetId={props.presetId} onPreset={props.onPreset} />
+      <VehiclePicker name={props.name} presetId={props.presetId} onPreset={props.onPreset} onBlank={props.onBlank} />
 
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <StatusIndicator {...props} />
@@ -708,7 +715,7 @@ function Summary({ track, inline = false }: { track: Track; inline?: boolean }) 
 
 const PRESET_SPECS = PRESET_OPTIONS.map((p) => ({ preset: p, specs: computeSpecs(p.create()) }))
 
-function VehiclePicker({ name, presetId, onPreset }: { name: string; presetId: string; onPreset: (id: string) => void }) {
+function VehiclePicker({ name, presetId, onPreset, onBlank }: { name: string; presetId: string; onPreset: (id: string) => void; onBlank: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const current = PRESET_OPTIONS.find((p) => p.id === presetId)
@@ -782,6 +789,24 @@ function VehiclePicker({ name, presetId, onPreset }: { name: string; presetId: s
               })}
               </div>
             ))}
+            <div className="mt-1 border-t border-line pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false)
+                  onBlank()
+                }}
+                className="flex w-full items-start gap-2.5 rounded-[7px] px-2.5 py-2 text-left hover:bg-surface-2"
+              >
+                <Plus className="mt-0.5 h-4 w-4 shrink-0 text-ink-2" />
+                <span>
+                  <span className="block text-[13px] font-semibold">白紙から作る</span>
+                  <span className="block text-[11px] leading-relaxed text-ink-3">
+                    1段・1 t・推力 20 kN の最小構成から始めます。発射地点と日時はいまの設定を引き継ぎます。
+                  </span>
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}
