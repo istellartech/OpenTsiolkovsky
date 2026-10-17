@@ -24,9 +24,11 @@ import {
   buildModuleUrl,
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
-import { indexAt, readStageColor, sampleAt, type Track } from '../lib/trajectory'
+import { indexAt, sampleAt, type Track } from '../lib/trajectory'
 import { playback } from '../lib/playback'
 import { Segmented } from './primitives'
+import { cssVar, readStageColor, useTheme, type Theme } from '../lib/theme'
+import { tr, useLang } from '../lib/i18n'
 
 ;(window as unknown as { CESIUM_BASE_URL: string }).CESIUM_BASE_URL = CESIUM_BASE_URL
 
@@ -55,17 +57,25 @@ const BASEMAPS: Record<Basemap, { layers: { path: string; max: number }[]; credi
   },
 }
 
-const PAPER = '#f2f1ed'
-const INK = '#1d1c1a'
+/** Scene colours from the current theme's CSS tokens. */
+function palette() {
+  return {
+    paper: Color.fromCssColorString(cssVar('--bg') || '#f2f1ed'),
+    ink: Color.fromCssColorString(cssVar('--ink') || '#1d1c1a'),
+    halo: Color.fromCssColorString(cssVar('--surface') || '#ffffff'),
+  }
+}
 
-function setBasemap(viewer: Viewer, basemap: Basemap) {
+function setBasemap(viewer: Viewer, basemap: Basemap, theme: Theme) {
   // Keep layer 0 (offline Natural Earth fallback), replace the rest.
   while (viewer.imageryLayers.length > 1) viewer.imageryLayers.remove(viewer.imageryLayers.get(1), true)
   const spec = BASEMAPS[basemap]
   for (const l of spec.layers) {
+    // The plain map has a matching dark canvas.
+    const path = theme === 'dark' ? l.path.replace('Light_Gray', 'Dark_Gray') : l.path
     viewer.imageryLayers.addImageryProvider(
       new UrlTemplateImageryProvider({
-        url: `${ESRI}/${l.path}/MapServer/tile/{z}/{y}/{x}`,
+        url: `${ESRI}/${path}/MapServer/tile/{z}/{y}/{x}`,
         maximumLevel: l.max,
         credit: spec.credit,
       }),
@@ -73,7 +83,14 @@ function setBasemap(viewer: Viewer, basemap: Basemap) {
   }
 }
 
-function createViewer(container: HTMLElement, basemap: Basemap): Viewer {
+function applySceneTheme(viewer: Viewer, theme: Theme) {
+  const { scene } = viewer
+  // A flat, map-like globe on paper rather than a planet in space.
+  scene.backgroundColor = palette().paper
+  scene.globe.baseColor = Color.fromCssColorString(theme === 'dark' ? '#2b2c2a' : '#e6e8e4')
+}
+
+function createViewer(container: HTMLElement, basemap: Basemap, theme: Theme): Viewer {
   const viewer = new Viewer(container, {
     animation: false,
     timeline: false,
@@ -88,16 +105,11 @@ function createViewer(container: HTMLElement, basemap: Basemap): Viewer {
     skyBox: false,
     skyAtmosphere: false,
     // Offline fallback that ships with Cesium; online tiles are layered on top.
-    baseLayer: ImageryLayer.fromProviderAsync(
-      TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')),
-      {},
-    ),
+    baseLayer: ImageryLayer.fromProviderAsync(TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')), {}),
   })
-  setBasemap(viewer, basemap)
+  setBasemap(viewer, basemap, theme)
+  applySceneTheme(viewer, theme)
   const { scene } = viewer
-  // A flat, map-like globe on paper rather than a planet in space.
-  scene.backgroundColor = Color.fromCssColorString(PAPER)
-  scene.globe.baseColor = Color.fromCssColorString('#e6e8e4')
   scene.globe.enableLighting = false
   scene.globe.showGroundAtmosphere = false
   scene.fog.enabled = false
@@ -113,9 +125,21 @@ interface Built {
   heading: number
 }
 
-function buildScene(viewer: Viewer, track: Track): Built {
+function buildScene(viewer: Viewer, track: Track, reference: Track | null): Built {
   viewer.entities.removeAll()
   const { samples } = track
+  const { ink, halo } = palette()
+
+  // Pinned earlier result, for comparison.
+  if (reference) {
+    viewer.entities.add({
+      polyline: {
+        positions: reference.samples.map((s) => Cartesian3.fromDegrees(s.lon, s.lat, Math.max(s.alt, 0))),
+        width: 2,
+        material: new PolylineDashMaterialProperty({ color: ink.withAlpha(0.35), dashLength: 6 }),
+      },
+    })
+  }
 
   const positions = samples.map((s) => Cartesian3.fromDegrees(s.lon, s.lat, Math.max(s.alt, 0)))
   const ground = samples.map((s) => Cartesian3.fromDegrees(s.lon, s.lat, 0))
@@ -126,7 +150,7 @@ function buildScene(viewer: Viewer, track: Track): Built {
       positions,
       width: 1.5,
       material: new PolylineDashMaterialProperty({
-        color: Color.fromCssColorString(INK).withAlpha(0.45),
+        color: ink.withAlpha(0.45),
         dashLength: 10,
       }),
     },
@@ -138,7 +162,7 @@ function buildScene(viewer: Viewer, track: Track): Built {
       positions: ground,
       width: 1.5,
       clampToGround: true,
-      material: Color.fromCssColorString(INK).withAlpha(0.3),
+      material: ink.withAlpha(0.3),
     },
   })
 
@@ -178,7 +202,7 @@ function buildScene(viewer: Viewer, track: Track): Built {
         return [pos, Cartesian3.fromDegrees(s.lon, s.lat, 0)]
       }, false),
       width: 1,
-      material: new PolylineDashMaterialProperty({ color: Color.fromCssColorString(INK).withAlpha(0.55), dashLength: 6 }),
+      material: new PolylineDashMaterialProperty({ color: ink.withAlpha(0.55), dashLength: 6 }),
     },
   })
 
@@ -187,7 +211,7 @@ function buildScene(viewer: Viewer, track: Track): Built {
     point: {
       pixelSize: 11,
       color: Color.fromCssColorString(readStageColor(1)),
-      outlineColor: Color.WHITE,
+      outlineColor: halo,
       outlineWidth: 2,
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
@@ -199,16 +223,16 @@ function buildScene(viewer: Viewer, track: Track): Built {
       position: Cartesian3.fromDegrees(s.lon, s.lat, 0),
       point: {
         pixelSize: 7,
-        color: Color.fromCssColorString(INK),
-        outlineColor: Color.WHITE,
+        color: ink,
+        outlineColor: halo,
         outlineWidth: 2,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
         text,
         font: '500 12px "IBM Plex Sans JP", sans-serif',
-        fillColor: Color.fromCssColorString(INK),
-        outlineColor: Color.WHITE,
+        fillColor: ink,
+        outlineColor: halo,
         outlineWidth: 4,
         style: LabelStyle.FILL_AND_OUTLINE,
         horizontalOrigin: HorizontalOrigin.LEFT,
@@ -221,8 +245,8 @@ function buildScene(viewer: Viewer, track: Track): Built {
 
   const first = samples[0]
   const last = samples[samples.length - 1]
-  marker(first, '発射点')
-  if (track.summary.landed) marker(last, '落下点')
+  marker(first, tr('発射点', 'Launch site'))
+  if (track.summary.landed) marker(last, tr('落下点', 'Impact point'))
 
   // Look at the arc side-on: heading perpendicular to the launch→end bearing.
   const from = Cartesian3.fromDegrees(first.lon, first.lat)
@@ -260,14 +284,19 @@ function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
 
 interface GlobeProps {
   track: Track | null
+  reference?: Track | null
 }
 
-export default function Globe({ track }: GlobeProps) {
+export default function Globe({ track, reference = null }: GlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const builtRef = useRef<Built | null>(null)
   const launchKeyRef = useRef<string>('')
   const [mode, setMode] = useState<CameraMode>('overview')
+  const theme = useTheme()
+  const lang = useLang()
+  const themeRef = useRef(theme)
+  themeRef.current = theme
   const [basemap, setBasemapState] = useState<Basemap>(() => {
     try {
       const v = localStorage.getItem('ot.basemap')
@@ -277,9 +306,12 @@ export default function Globe({ track }: GlobeProps) {
     }
   })
 
+  const basemapRef = useRef(basemap)
+  basemapRef.current = basemap
+
   const changeBasemap = (next: Basemap) => {
     setBasemapState(next)
-    if (viewerRef.current) setBasemap(viewerRef.current, next)
+    if (viewerRef.current) setBasemap(viewerRef.current, next, themeRef.current)
     try {
       localStorage.setItem('ot.basemap', next)
     } catch {
@@ -289,7 +321,7 @@ export default function Globe({ track }: GlobeProps) {
 
   useEffect(() => {
     if (!containerRef.current) return
-    const viewer = createViewer(containerRef.current, basemap)
+    const viewer = createViewer(containerRef.current, basemapRef.current, themeRef.current)
     viewerRef.current = viewer
     if (import.meta.env.DEV) (window as unknown as { __viewer: Viewer }).__viewer = viewer
     return () => {
@@ -301,7 +333,7 @@ export default function Globe({ track }: GlobeProps) {
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || !track) return
-    const built = buildScene(viewer, track)
+    const built = buildScene(viewer, track, reference)
     builtRef.current = built
 
     // Only move the camera when the flight itself moved somewhere else;
@@ -318,8 +350,17 @@ export default function Globe({ track }: GlobeProps) {
       viewer.trackedEntity = built.vehicle
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track])
+  }, [track, reference, theme, lang])
 
+  // Restyle the scene when the colour theme changes (track entities are rebuilt above).
+  const styledTheme = useRef(theme)
+  useEffect(() => {
+    const viewer = viewerRef.current
+    if (!viewer || styledTheme.current === theme) return
+    styledTheme.current = theme
+    applySceneTheme(viewer, theme)
+    setBasemap(viewer, basemapRef.current, theme)
+  }, [theme])
 
   // Re-fit the overview when the map area is resized (layout switch, divider drag).
   const modeRef = useRef(mode)
@@ -366,8 +407,8 @@ export default function Globe({ track }: GlobeProps) {
           value={mode}
           onChange={changeMode}
           options={[
-            { value: 'overview', label: '全体', title: '軌道全体が見える視点' },
-            { value: 'follow', label: '追従', title: '機体を追いかける視点' },
+            { value: 'overview', label: tr('全体', 'Overview'), title: tr('軌道全体が見える視点', 'Show the whole trajectory') },
+            { value: 'follow', label: tr('追従', 'Follow'), title: tr('機体を追いかける視点', 'Follow the vehicle') },
           ]}
         />
         <Segmented
@@ -376,9 +417,9 @@ export default function Globe({ track }: GlobeProps) {
           value={basemap}
           onChange={changeBasemap}
           options={[
-            { value: 'map', label: '地図' },
-            { value: 'terrain', label: '地形' },
-            { value: 'satellite', label: '衛星' },
+            { value: 'map', label: tr('地図', 'Map') },
+            { value: 'terrain', label: tr('地形', 'Terrain') },
+            { value: 'satellite', label: tr('衛星', 'Satellite') },
           ]}
         />
       </div>

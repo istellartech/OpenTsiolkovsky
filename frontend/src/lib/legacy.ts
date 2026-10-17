@@ -6,6 +6,7 @@
 //  - stages after one whose "following stage exist?" is false never run;
 //  - with no integrator block the CLI uses RK4 at half the output step.
 import type { ClientConfig, ClientStageConfig, ClientMachSample, ClientTimeSample } from './simulation'
+import { tr } from './i18n'
 
 type Json = Record<string, unknown>
 
@@ -21,6 +22,7 @@ export const isLegacyParamFile = (v: unknown): v is Json => !!v && typeof v === 
 
 const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
 const obj = (v: unknown): Json => (v && typeof v === 'object' ? (v as Json) : {})
+const str = (v: unknown, fallback = '') => (typeof v === 'string' ? v : fallback)
 const bool = (v: unknown) => v === true
 
 /** Rows of the first `n` numeric columns; header and non-numeric rows are skipped. */
@@ -71,13 +73,15 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
     if (!bool(obj(obj(st).stage)['following stage exist?(bool)'])) break
   }
   if (rawStages.length === 0 && json.stage) rawStages.push(obj(json.stage))
-  if (rawStages.length === 0) throw new Error('段（stage1）の設定が見つかりません。')
+  if (rawStages.length === 0) throw new Error(tr('段（stage1）の設定が見つかりません。', 'No stage settings (stage1) found.'))
 
   const stages: ClientStageConfig[] = rawStages.map((st, i) => {
     const t = obj(st.thrust)
     const hasNext = i < rawStages.length - 1
-    if (bool(obj(st['dumping product'])['dumping product exist?(bool)'])) unsupported.push(`${i + 1}段の投棄物（dumping product）`)
-    if (bool(obj(st['attitude neutrality(3DoF)'])['considering neutrality?(bool)'])) unsupported.push(`${i + 1}段の姿勢中立性（3DoF）`)
+    if (bool(obj(st['dumping product'])['dumping product exist?(bool)']))
+      unsupported.push(tr(`${i + 1}段の投棄物（dumping product）`, `stage ${i + 1} dumping product`))
+    if (bool(obj(st['attitude neutrality(3DoF)'])['considering neutrality?(bool)']))
+      unsupported.push(tr(`${i + 1}段の姿勢中立性（3DoF）`, `stage ${i + 1} attitude neutrality (3DoF)`))
     return {
       power_mode: num(st['power flight mode(int)']),
       free_mode: num(st['free flight mode(int)']),
@@ -129,18 +133,19 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
 
   let cnProfile: ClientMachSample[] = []
   if (bool(aero['normal coefficient file exist?(bool)'])) {
-    const name = baseName(String(aero['normal coefficient file name(str)'] ?? ''))
+    const name = baseName(str(aero['normal coefficient file name(str)']))
     const text = csvByName.get(name)
     if (text === undefined) missing.push(name)
-    else if (isSurface(text)) unsupported.push(`CN の2次元テーブル（${name}）— 定数 CN を使います`)
+    else if (isSurface(text))
+      unsupported.push(tr(`CN の2次元テーブル（${name}）— 定数 CN を使います`, `2-D CN table (${name}) — constant CN is used instead`))
     else cnProfile = machSeries(parseCsvRows(text, 2))
   }
 
   const calc = obj(json['calculate condition'])
   const outputStep = num(calc['time step for output[s]'], 1)
   const integ = obj(calc.integrator)
-  const method = String(integ['method(str)'] ?? 'rk4').toLowerCase() === 'rk45' ? 'rk45' : 'rk4'
-  if (bool(calc['air density variation file exist?(bool)'])) unsupported.push('大気密度変動ファイル')
+  const method = str(integ['method(str)'], 'rk4').toLowerCase() === 'rk45' ? 'rk45' : 'rk4'
+  if (bool(calc['air density variation file exist?(bool)'])) unsupported.push(tr('大気密度変動ファイル', 'air density variation file'))
 
   const launch = obj(json.launch)
   const llh = (launch['position LLH[deg,deg,m]'] as number[]) ?? [0, 0, 0]
@@ -153,7 +158,7 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
   const attRows = table(att['attitude file exist?(bool)'], att['attitude file name(str)'], 3)
 
   const config: ClientConfig = {
-    name: String(json['name(str)'] ?? 'imported'),
+    name: str(json['name(str)'], 'imported'),
     simulation: {
       duration_s: num(calc['end time[s]'], 100),
       output_step_s: outputStep,
@@ -168,7 +173,14 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
       longitude_deg: num(llh[1]),
       altitude_m: num(llh[2]),
       velocity_ned_mps: [num(ned[0]), num(ned[1]), num(ned[2])],
-      datetime_utc: { year: num(ts[0]), month: num(ts[1], 1), day: num(ts[2], 1), hour: num(ts[3]), minute: num(ts[4]), second: num(ts[5]) },
+      datetime_utc: {
+        year: num(ts[0]),
+        month: num(ts[1], 1),
+        day: num(ts[2], 1),
+        hour: num(ts[3]),
+        minute: num(ts[4]),
+        second: num(ts[5]),
+      },
     },
     stages,
     aerodynamics: {

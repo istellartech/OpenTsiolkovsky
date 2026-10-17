@@ -6,7 +6,7 @@
   "installCommand": "cd frontend && bun install",
   "devCommand": "cd frontend && bun run dev",
   "env": {
-    "NODE_VERSION": "18"
+    "NODE_VERSION": "24"
   },
   "build": {
     "env": {

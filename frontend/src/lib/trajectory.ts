@@ -2,9 +2,7 @@
 // derived quantities, flight events and an interpolator for playback.
 import type { SimulationState } from './simulation'
 import { vec3ToObject } from './simulation'
-import { haversineDistanceKm, posEciToLlh } from './utils'
-
-const G0 = 9.80665
+import { G0, haversineDistanceKm, posEciToLlh } from './geo'
 
 export interface TrackSample {
   t: number
@@ -43,8 +41,12 @@ export type FlightEventKind = 'liftoff' | 'maxq' | 'burnout' | 'separation' | 'a
 export interface FlightEvent {
   kind: FlightEventKind
   t: number
-  label: string
-  short: string
+  /** Stage the event belongs to (burnout), or the stage being dropped (separation) */
+  stage?: number
+  /** Stage that continues after a separation */
+  nextStage?: number
+  /** For 'end': the vehicle reached the ground */
+  landed?: boolean
 }
 
 export interface StageSpan {
@@ -169,37 +171,32 @@ export function buildTrack(input: SimulationState[]): Track | null {
   }
 
   // Events
-  const events: FlightEvent[] = [{ kind: 'liftoff', t: first.t, label: 'リフトオフ', short: 'LO' }]
+  const events: FlightEvent[] = [{ kind: 'liftoff', t: first.t }]
 
   // Max-Q only means something inside the atmosphere during powered ascent.
   const maxQSample = samples[maxQIdx]
   if (maxQSample.q > 0 && maxQIdx > 0) {
-    events.push({ kind: 'maxq', t: maxQSample.t, label: '最大動圧', short: 'Max-Q' })
+    events.push({ kind: 'maxq', t: maxQSample.t })
   }
 
   for (let i = 1; i < samples.length; i++) {
     const prev = samples[i - 1]
     const cur = samples[i]
     if (cur.stage !== prev.stage) {
-      events.push({
-        kind: 'separation',
-        t: cur.t,
-        label: `${prev.stage}/${cur.stage}段 分離`,
-        short: `SEP${prev.stage}`,
-      })
+      events.push({ kind: 'separation', t: cur.t, stage: prev.stage, nextStage: cur.stage })
     } else if (prev.thrust > 0 && cur.thrust <= 0) {
-      events.push({ kind: 'burnout', t: cur.t, label: `${cur.stage}段 燃焼終了`, short: `BO${cur.stage}` })
+      events.push({ kind: 'burnout', t: cur.t, stage: cur.stage })
     }
   }
 
   const apogee = samples[apogeeIdx]
   const descends = apogeeIdx < samples.length - 1 && last.alt < apogee.alt - 1
   if (descends) {
-    events.push({ kind: 'apogee', t: apogee.t, label: '最高到達点', short: 'APO' })
+    events.push({ kind: 'apogee', t: apogee.t })
   }
 
   const landed = last.alt <= 1
-  events.push({ kind: 'end', t: last.t, label: landed ? '着地' : '計算終了', short: landed ? 'IMP' : 'END' })
+  events.push({ kind: 'end', t: last.t, landed })
   events.sort((a, b) => a.t - b.t)
 
   return {
@@ -239,8 +236,23 @@ export function indexAt(samples: TrackSample[], t: number): number {
 }
 
 const NUMERIC_KEYS = [
-  'lat', 'lon', 'alt', 'downrange', 'speed', 'groundSpeed', 'mach', 'q', 'thrust', 'drag',
-  'mass', 'accel', 'accelAxial', 'aoa', 'sideslip', 'azimuth', 'elevation',
+  'lat',
+  'lon',
+  'alt',
+  'downrange',
+  'speed',
+  'groundSpeed',
+  'mach',
+  'q',
+  'thrust',
+  'drag',
+  'mass',
+  'accel',
+  'accelAxial',
+  'aoa',
+  'sideslip',
+  'azimuth',
+  'elevation',
 ] as const
 
 /** Linearly interpolated state at time t. */
@@ -260,28 +272,49 @@ export function sampleAt(track: Track, t: number): TrackSample {
   return out
 }
 
-export function stageColorVar(stage: number): string {
-  return `var(--stage-${((Math.max(stage, 1) - 1) % 5) + 1})`
-}
-
-export function readStageColor(stage: number): string {
-  const v = getComputedStyle(document.documentElement)
-    .getPropertyValue(`--stage-${((Math.max(stage, 1) - 1) % 5) + 1}`)
-    .trim()
-  return v || '#ff4f00'
-}
-
 export function trackToCsv(track: Track): string {
   const header = [
-    'time_s', 'stage', 'latitude_deg', 'longitude_deg', 'altitude_m', 'downrange_km',
-    'speed_inertial_mps', 'speed_ground_mps', 'mach', 'dynamic_pressure_pa', 'thrust_n',
-    'drag_n', 'mass_kg', 'accel_g', 'accel_axial_g', 'aoa_deg', 'sideslip_deg',
-    'attitude_azimuth_deg', 'attitude_elevation_deg',
+    'time_s',
+    'stage',
+    'latitude_deg',
+    'longitude_deg',
+    'altitude_m',
+    'downrange_km',
+    'speed_inertial_mps',
+    'speed_ground_mps',
+    'mach',
+    'dynamic_pressure_pa',
+    'thrust_n',
+    'drag_n',
+    'mass_kg',
+    'accel_g',
+    'accel_axial_g',
+    'aoa_deg',
+    'sideslip_deg',
+    'attitude_azimuth_deg',
+    'attitude_elevation_deg',
   ]
   const rows = track.samples.map((s) =>
     [
-      s.t, s.stage, s.lat, s.lon, s.alt, s.downrange, s.speed, s.groundSpeed, s.mach, s.q,
-      s.thrust, s.drag, s.mass, s.accel, s.accelAxial, s.aoa, s.sideslip, s.azimuth, s.elevation,
+      s.t,
+      s.stage,
+      s.lat,
+      s.lon,
+      s.alt,
+      s.downrange,
+      s.speed,
+      s.groundSpeed,
+      s.mach,
+      s.q,
+      s.thrust,
+      s.drag,
+      s.mass,
+      s.accel,
+      s.accelAxial,
+      s.aoa,
+      s.sideslip,
+      s.azimuth,
+      s.elevation,
     ].join(','),
   )
   return [header.join(','), ...rows].join('\n')

@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chart, type ChartConfiguration, type Plugin } from 'chart.js/auto'
 import { Download, Maximize2, RotateCcw, X } from 'lucide-react'
-import { readStageColor, sampleAt, type Track, type TrackSample } from '../lib/trajectory'
+import { sampleAt, type Track, type TrackSample } from '../lib/trajectory'
 import { playback } from '../lib/playback'
+import { fmt } from '../lib/format'
+import { cssVar, readStageColor, useTheme } from '../lib/theme'
+import { eventLabel } from '../lib/events'
+import { tr, useLang } from '../lib/i18n'
 
 interface Series {
   label: string
@@ -20,56 +24,209 @@ export interface ChartSpec {
 }
 
 export const CHARTS: ChartSpec[] = [
-  { id: 'altitude', title: '高度', unit: 'km', x: 'time', digits: 1, series: [{ label: '高度', get: (s) => s.alt / 1000 }] },
   {
-    id: 'velocity', title: '速度', unit: 'm/s', x: 'time', digits: 0,
+    id: 'altitude',
+    get title() {
+      return tr('高度', 'Altitude')
+    },
+    unit: 'km',
+    x: 'time',
+    digits: 1,
     series: [
-      { label: '慣性', get: (s) => s.speed },
-      { label: '対地', get: (s) => s.groundSpeed, secondary: true },
-    ],
-  },
-  { id: 'mach', title: 'マッハ数', unit: '', x: 'time', digits: 2, series: [{ label: 'Mach', get: (s) => s.mach }] },
-  { id: 'q', title: '動圧', unit: 'kPa', x: 'time', digits: 1, series: [{ label: '動圧', get: (s) => s.q / 1000 }] },
-  {
-    id: 'force', title: '推力・抗力', unit: 'kN', x: 'time', digits: 1,
-    series: [
-      { label: '推力', get: (s) => s.thrust / 1000 },
-      { label: '抗力', get: (s) => s.drag / 1000, secondary: true },
-    ],
-  },
-  {
-    id: 'accel', title: '加速度', unit: 'G', x: 'time', digits: 2,
-    series: [
-      { label: '機軸 (センサ)', get: (s) => s.accelAxial },
-      { label: '慣性 |a|', get: (s) => s.accel, secondary: true },
-    ],
-  },
-  { id: 'mass', title: '質量', unit: 'kg', x: 'time', digits: 0, series: [{ label: '質量', get: (s) => s.mass }] },
-  {
-    id: 'attitude', title: '姿勢', unit: '°', x: 'time', digits: 1,
-    series: [
-      { label: '仰角', get: (s) => s.elevation },
-      { label: '方位角', get: (s) => s.azimuth, secondary: true },
+      {
+        get label() {
+          return tr('高度', 'Altitude')
+        },
+        get: (s) => s.alt / 1000,
+      },
     ],
   },
   {
-    id: 'aoa', title: '迎角・横滑り角', unit: '°', x: 'time', digits: 2,
+    id: 'velocity',
+    get title() {
+      return tr('速度', 'Velocity')
+    },
+    unit: 'm/s',
+    x: 'time',
+    digits: 0,
     series: [
-      { label: '迎角', get: (s) => s.aoa },
-      { label: '横滑り角', get: (s) => s.sideslip, secondary: true },
+      {
+        get label() {
+          return tr('慣性', 'Inertial')
+        },
+        get: (s) => s.speed,
+      },
+      {
+        get label() {
+          return tr('対地', 'Ground-relative')
+        },
+        get: (s) => s.groundSpeed,
+        secondary: true,
+      },
     ],
   },
-  { id: 'profile', title: '高度 × ダウンレンジ', unit: 'km', x: 'downrange', digits: 1, series: [{ label: '高度', get: (s) => s.alt / 1000 }] },
+  {
+    id: 'mach',
+    get title() {
+      return tr('マッハ数', 'Mach number')
+    },
+    unit: '',
+    x: 'time',
+    digits: 2,
+    series: [{ label: 'Mach', get: (s) => s.mach }],
+  },
+  {
+    id: 'q',
+    get title() {
+      return tr('動圧', 'Dynamic pressure')
+    },
+    unit: 'kPa',
+    x: 'time',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('動圧', 'Dynamic pressure')
+        },
+        get: (s) => s.q / 1000,
+      },
+    ],
+  },
+  {
+    id: 'force',
+    get title() {
+      return tr('推力・抗力', 'Thrust and drag')
+    },
+    unit: 'kN',
+    x: 'time',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('推力', 'Thrust')
+        },
+        get: (s) => s.thrust / 1000,
+      },
+      {
+        get label() {
+          return tr('抗力', 'Drag')
+        },
+        get: (s) => s.drag / 1000,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'accel',
+    get title() {
+      return tr('加速度', 'Acceleration')
+    },
+    unit: 'G',
+    x: 'time',
+    digits: 2,
+    series: [
+      {
+        get label() {
+          return tr('機軸 (センサ)', 'Axial (sensed)')
+        },
+        get: (s) => s.accelAxial,
+      },
+      {
+        get label() {
+          return tr('慣性 |a|', 'Inertial |a|')
+        },
+        get: (s) => s.accel,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'mass',
+    get title() {
+      return tr('質量', 'Mass')
+    },
+    unit: 'kg',
+    x: 'time',
+    digits: 0,
+    series: [
+      {
+        get label() {
+          return tr('質量', 'Mass')
+        },
+        get: (s) => s.mass,
+      },
+    ],
+  },
+  {
+    id: 'attitude',
+    get title() {
+      return tr('姿勢', 'Attitude')
+    },
+    unit: '°',
+    x: 'time',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('仰角', 'Elevation')
+        },
+        get: (s) => s.elevation,
+      },
+      {
+        get label() {
+          return tr('方位角', 'Azimuth')
+        },
+        get: (s) => s.azimuth,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'aoa',
+    get title() {
+      return tr('迎角・横滑り角', 'Angle of attack and sideslip')
+    },
+    unit: '°',
+    x: 'time',
+    digits: 2,
+    series: [
+      {
+        get label() {
+          return tr('迎角', 'Angle of attack')
+        },
+        get: (s) => s.aoa,
+      },
+      {
+        get label() {
+          return tr('横滑り角', 'Sideslip')
+        },
+        get: (s) => s.sideslip,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'profile',
+    get title() {
+      return tr('高度 × ダウンレンジ', 'Altitude vs downrange')
+    },
+    unit: 'km',
+    x: 'downrange',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('高度', 'Altitude')
+        },
+        get: (s) => s.alt / 1000,
+      },
+    ],
+  },
 ]
 
 function themeColors() {
-  const css = getComputedStyle(document.documentElement)
-  const v = (name: string) => css.getPropertyValue(name).trim()
-  return { ink: v('--ink'), ink2: v('--ink-2'), ink3: v('--ink-3'), line: v('--line'), surface: v('--surface') }
+  return { ink: cssVar('--ink'), ink2: cssVar('--ink-2'), ink3: cssVar('--ink-3'), line: cssVar('--line'), surface: cssVar('--surface') }
 }
-
-const fmt = (v: number, digits = 1) =>
-  Number.isFinite(v) ? v.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '—'
 
 /** Hairlines at stage separations and burnouts. */
 const eventLines = (track: Track, color: string): Plugin<'line'> => ({
@@ -96,21 +253,25 @@ const eventLines = (track: Track, color: string): Plugin<'line'> => ({
 interface ChartViewProps {
   spec: ChartSpec
   track: Track
+  /** Pinned earlier result, drawn underneath for comparison */
+  reference?: Track | null
   large?: boolean
   onExpand?: () => void
 }
 
 /** Visible y range for samples inside [x0, x1], padded. */
-function yRangeFor(spec: ChartSpec, track: Track, x0: number, x1: number) {
+function yRangeFor(spec: ChartSpec, tracks: Track[], x0: number, x1: number) {
   let lo = Infinity
   let hi = -Infinity
-  for (const s of track.samples) {
-    const x = spec.x === 'time' ? s.t : s.downrange
-    if (x < x0 || x > x1) continue
-    for (const ser of spec.series) {
-      const v = ser.get(s)
-      if (v < lo) lo = v
-      if (v > hi) hi = v
+  for (const track of tracks) {
+    for (const s of track.samples) {
+      const x = spec.x === 'time' ? s.t : s.downrange
+      if (x < x0 || x > x1) continue
+      for (const ser of spec.series) {
+        const v = ser.get(s)
+        if (v < lo) lo = v
+        if (v > hi) hi = v
+      }
     }
   }
   if (!Number.isFinite(lo)) return null
@@ -118,7 +279,7 @@ function yRangeFor(spec: ChartSpec, track: Track, x0: number, x1: number) {
   return { min: lo - pad, max: hi + pad }
 }
 
-function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
+function ChartView({ spec, track, reference = null, large = false, onExpand }: ChartViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chartRef = useRef<Chart<'line'> | null>(null)
   const lineRef = useRef<HTMLDivElement>(null)
@@ -129,6 +290,9 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
   const dragRef = useRef<{ x0: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
   const [zoomed, setZoomed] = useState(false)
+  // Colours are read from CSS when the chart is built, so rebuild on theme change.
+  const theme = useTheme()
+  const lang = useLang()
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -146,13 +310,28 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
       segment: ser.secondary
         ? undefined
         : {
-            borderColor: (ctx: { p0DataIndex: number }) =>
-              stageColors.get(track.samples[ctx.p0DataIndex]?.stage ?? 0) ?? c.ink,
+            borderColor: (ctx: { p0DataIndex: number }) => stageColors.get(track.samples[ctx.p0DataIndex]?.stage ?? 0) ?? c.ink,
           },
       pointRadius: 0,
       pointHoverRadius: 0,
       tension: 0,
     }))
+    if (reference) {
+      const ref = spec.series[0]
+      datasets.push({
+        label: tr(`比較: ${ref.label}`, `Pinned: ${ref.label}`),
+        data: reference.samples.map((s) => ({ x: xOf(s), y: ref.get(s), stage: s.stage })),
+        borderWidth: large ? 1.75 : 1.5,
+        borderColor: c.ink3,
+        borderDash: [6, 4],
+        segment: undefined,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        tension: 0,
+      })
+    }
+    const t0 = reference ? Math.min(track.t0, reference.t0) : track.t0
+    const t1 = reference ? Math.max(track.t1, reference.t1) : track.t1
 
     const config: ChartConfiguration<'line'> = {
       type: 'line',
@@ -178,8 +357,7 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
             cornerRadius: 4,
             displayColors: false,
             callbacks: {
-              title: (items) =>
-                spec.x === 'time' ? `T+ ${fmt(items[0].parsed.x ?? 0, 1)} s` : `${fmt(items[0].parsed.x ?? 0, 1)} km`,
+              title: (items) => (spec.x === 'time' ? `T+ ${fmt(items[0].parsed.x ?? 0, 1)} s` : `${fmt(items[0].parsed.x ?? 0, 1)} km`),
               label: (item) => `${item.dataset.label}  ${fmt(item.parsed.y ?? 0, spec.digits)} ${spec.unit}`,
             },
           },
@@ -187,20 +365,38 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
         scales: {
           x: {
             type: 'linear',
-            min: spec.x === 'time' ? track.t0 : undefined,
-            max: spec.x === 'time' ? track.t1 : undefined,
+            min: spec.x === 'time' ? t0 : undefined,
+            max: spec.x === 'time' ? t1 : undefined,
             border: { color: c.line },
             grid: { color: c.line, drawTicks: false },
-            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 12 : 6, padding: 4, includeBounds: false },
+            ticks: {
+              color: c.ink3,
+              font: { family: 'IBM Plex Mono', size: tick },
+              maxTicksLimit: large ? 12 : 6,
+              padding: 4,
+              includeBounds: false,
+            },
             title: large
-              ? { display: true, text: spec.x === 'time' ? '打上げからの時間 [s]' : 'ダウンレンジ [km]', color: c.ink3, font: { size: 11 } }
+              ? {
+                  display: true,
+                  text: spec.x === 'time' ? tr('打上げからの時間 [s]', 'Time since launch [s]') : tr('ダウンレンジ [km]', 'Downrange [km]'),
+                  color: c.ink3,
+                  font: { size: 11 },
+                }
               : undefined,
           },
           y: {
             border: { display: false },
             grid: { color: c.line, drawTicks: false },
-            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 9 : 5, padding: 6, includeBounds: false },
-            title: large && spec.unit ? { display: true, text: `${spec.title} [${spec.unit}]`, color: c.ink3, font: { size: 11 } } : undefined,
+            ticks: {
+              color: c.ink3,
+              font: { family: 'IBM Plex Mono', size: tick },
+              maxTicksLimit: large ? 9 : 5,
+              padding: 6,
+              includeBounds: false,
+            },
+            title:
+              large && spec.unit ? { display: true, text: `${spec.title} [${spec.unit}]`, color: c.ink3, font: { size: 11 } } : undefined,
           },
         },
         onClick: (_e, _els, chart) => {
@@ -269,7 +465,7 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
       chart.destroy()
       chartRef.current = null
     }
-  }, [spec, track, large])
+  }, [spec, track, reference, large, theme, lang])
 
   const setRange = (x0?: number, x1?: number) => {
     const chart = chartRef.current
@@ -277,15 +473,15 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
     const xs = chart.options.scales!.x!
     const ys = chart.options.scales!.y!
     if (x0 === undefined || x1 === undefined) {
-      xs.min = spec.x === 'time' ? track.t0 : undefined
-      xs.max = spec.x === 'time' ? track.t1 : undefined
+      xs.min = spec.x === 'time' ? Math.min(track.t0, reference?.t0 ?? Infinity) : undefined
+      xs.max = spec.x === 'time' ? Math.max(track.t1, reference?.t1 ?? -Infinity) : undefined
       ys.min = undefined
       ys.max = undefined
       setZoomed(false)
     } else {
       xs.min = x0
       xs.max = x1
-      const yr = yRangeFor(spec, track, x0, x1)
+      const yr = yRangeFor(spec, reference ? [track, reference] : [track], x0, x1)
       ys.min = yr?.min
       ys.max = yr?.max
       setZoomed(true)
@@ -360,21 +556,31 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
         )}
         <span ref={valueRef} className={`num ml-auto whitespace-nowrap text-ink ${large ? 'text-[14px]' : 'text-[12px]'}`} />
         {large && zoomed && (
-          <button type="button" onClick={() => setRange()} className="flex h-7 items-center gap-1 rounded-[6px] border border-line px-2 text-[12px] text-ink-2 hover:bg-surface-2">
-            <RotateCcw className="h-3 w-3" /> 全体を表示
+          <button
+            type="button"
+            onClick={() => setRange()}
+            className="flex h-7 items-center gap-1 rounded-[6px] border border-line px-2 text-[12px] text-ink-2 hover:bg-surface-2"
+          >
+            <RotateCcw className="h-3 w-3" /> {tr('全体を表示', 'Show all')}
           </button>
         )}
         <button
           type="button"
           onClick={download}
-          aria-label={`${spec.title}をPNGで保存`}
-          title="PNGで保存"
+          aria-label={tr(`${spec.title}をPNGで保存`, `Save ${spec.title} as PNG`)}
+          title={tr('PNGで保存', 'Save as PNG')}
           className={`${iconBtn} ${large ? '' : `-mr-1 ${revealOnHover}`}`}
         >
           <Download className="h-3.5 w-3.5" />
         </button>
         {!large && onExpand && (
-          <button type="button" onClick={onExpand} aria-label={`${spec.title}を拡大`} title="拡大（ダブルクリックでも開きます）" className={`${iconBtn} -mr-1 ${revealOnHover}`}>
+          <button
+            type="button"
+            onClick={onExpand}
+            aria-label={tr(`${spec.title}を拡大`, `Enlarge ${spec.title}`)}
+            title={tr('拡大（ダブルクリックでも開きます）', 'Enlarge (or double-click)')}
+            className={`${iconBtn} -mr-1 ${revealOnHover}`}
+          >
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
         )}
@@ -393,14 +599,29 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
       </div>
       {large && (
         <p className="pt-1 text-[11px] text-ink-3">
-          横にドラッグで範囲を拡大 · ダブルクリックで全体に戻す · クリックでその時刻へ移動
+          {tr(
+            '横にドラッグで範囲を拡大 · ダブルクリックで全体に戻す · クリックでその時刻へ移動',
+            'Drag across to zoom · double-click to reset · click to jump to that time',
+          )}
         </p>
       )}
     </figure>
   )
 }
 
-function ChartDialog({ index, track, onIndex, onClose }: { index: number; track: Track; onIndex: (i: number) => void; onClose: () => void }) {
+function ChartDialog({
+  index,
+  track,
+  reference,
+  onIndex,
+  onClose,
+}: {
+  index: number
+  track: Track
+  reference: Track | null
+  onIndex: (i: number) => void
+  onClose: () => void
+}) {
   const spec = CHARTS[index]
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -417,7 +638,7 @@ function ChartDialog({ index, track, onIndex, onClose }: { index: number; track:
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={`${spec.title}（拡大表示）`}
+        aria-label={tr(`${spec.title}（拡大表示）`, `${spec.title} (enlarged)`)}
         onClick={(e) => e.stopPropagation()}
         className="flex h-[min(760px,92vh)] w-[min(1200px,100%)] flex-col rounded-[10px] border border-line bg-surface p-3 shadow-[0_20px_50px_-20px_rgba(0,0,0,0.4)] sm:p-4"
       >
@@ -434,28 +655,34 @@ function ChartDialog({ index, track, onIndex, onClose }: { index: number; track:
               </button>
             ))}
           </div>
-          <button type="button" onClick={onClose} aria-label="閉じる (Esc)" title="閉じる (Esc)" className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={tr('閉じる (Esc)', 'Close (Esc)')}
+            title={tr('閉じる (Esc)', 'Close (Esc)')}
+            className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
         <div className="min-h-0 flex-1">
-          <ChartView key={spec.id} spec={spec} track={track} large />
+          <ChartView key={spec.id} spec={spec} track={track} reference={reference} large />
         </div>
       </div>
     </div>
   )
 }
 
-export function ChartGrid({ track }: { track: Track }) {
+export function ChartGrid({ track, reference = null }: { track: Track; reference?: Track | null }) {
   const [open, setOpen] = useState<number | null>(null)
   return (
     <>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2">
         {CHARTS.map((spec, i) => (
-          <ChartView key={spec.id} spec={spec} track={track} onExpand={() => setOpen(i)} />
+          <ChartView key={spec.id} spec={spec} track={track} reference={reference} onExpand={() => setOpen(i)} />
         ))}
       </div>
-      {open !== null && <ChartDialog index={open} track={track} onIndex={setOpen} onClose={() => setOpen(null)} />}
+      {open !== null && <ChartDialog index={open} track={track} reference={reference} onIndex={setOpen} onClose={() => setOpen(null)} />}
     </>
   )
 }
@@ -482,12 +709,12 @@ export function EventList({ track }: { track: Track }) {
     <table className="w-full border-collapse text-left text-[12px]">
       <thead>
         <tr className="text-[11px] text-ink-3">
-          <th className="py-1.5 pr-3 font-normal">時刻</th>
-          <th className="py-1.5 pr-3 font-normal">イベント</th>
-          <th className="py-1.5 pr-3 text-right font-normal">高度</th>
-          <th className="py-1.5 pr-3 text-right font-normal">速度</th>
-          <th className="hidden py-1.5 pr-3 text-right font-normal sm:table-cell">マッハ</th>
-          <th className="hidden py-1.5 text-right font-normal sm:table-cell">ダウンレンジ</th>
+          <th className="py-1.5 pr-3 font-normal">{tr('時刻', 'Time')}</th>
+          <th className="py-1.5 pr-3 font-normal">{tr('イベント', 'Event')}</th>
+          <th className="py-1.5 pr-3 text-right font-normal">{tr('高度', 'Altitude')}</th>
+          <th className="py-1.5 pr-3 text-right font-normal">{tr('速度', 'Velocity')}</th>
+          <th className="hidden py-1.5 pr-3 text-right font-normal sm:table-cell">{tr('マッハ', 'Mach')}</th>
+          <th className="hidden py-1.5 text-right font-normal sm:table-cell">{tr('ダウンレンジ', 'Downrange')}</th>
         </tr>
       </thead>
       <tbody>
@@ -501,7 +728,7 @@ export function EventList({ track }: { track: Track }) {
               <span className={`mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle ${i <= active ? 'bg-signal' : 'bg-line-strong'}`} />
               T+{fmt(e.t, 1)}
             </td>
-            <td className="py-1.5 pr-3">{e.label}</td>
+            <td className="py-1.5 pr-3">{eventLabel(e)}</td>
             <td className="num py-1.5 pr-3 text-right">{fmt(s.alt / 1000, 1)} km</td>
             <td className="num py-1.5 pr-3 text-right">{fmt(s.speed, 0)} m/s</td>
             <td className="num hidden py-1.5 pr-3 text-right sm:table-cell">{fmt(s.mach, 2)}</td>

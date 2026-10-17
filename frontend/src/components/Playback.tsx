@@ -1,11 +1,12 @@
 import { useRef } from 'react'
 import { Pause, Play, RotateCcw } from 'lucide-react'
 import { SPEEDS, playback, usePlayback } from '../lib/playback'
-import { sampleAt, stageColorVar, type Track } from '../lib/trajectory'
-import { cn } from '../lib/utils'
-
-const fmt = (v: number, d = 1) =>
-  Number.isFinite(v) ? v.toLocaleString('ja-JP', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—'
+import { sampleAt, type Track } from '../lib/trajectory'
+import { cn } from '../lib/cn'
+import { fmt } from '../lib/format'
+import { stageColorVar } from '../lib/theme'
+import { eventLabel, eventShort } from '../lib/events'
+import { tr } from '../lib/i18n'
 
 /** Event labels that would collide with the previous one are dropped. */
 function spacedLabels(track: Track, pct: (t: number) => number, minGap = 4.5) {
@@ -39,11 +40,11 @@ function Scrubber({ track }: { track: Track }) {
       ref={ref}
       role="slider"
       tabIndex={0}
-      aria-label="再生位置"
+      aria-label={tr('再生位置', 'Playback position')}
       aria-valuemin={track.t0}
       aria-valuemax={track.t1}
       aria-valuenow={Math.round(t * 10) / 10}
-      aria-valuetext={`T+${fmt(t)}秒`}
+      aria-valuetext={tr(`T+${fmt(t)}秒`, `T+${fmt(t)} s`)}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId)
         seekFromEvent(e.clientX)
@@ -67,7 +68,7 @@ function Scrubber({ track }: { track: Track }) {
       {track.events.map((e) => (
         <div
           key={`${e.kind}-${e.t}`}
-          title={`${e.label}  T+${fmt(e.t)} s`}
+          title={`${eventLabel(e)}  T+${fmt(e.t)} s`}
           className="absolute top-0 h-2 w-px bg-ink-3"
           style={{ left: `${pct(e.t)}%` }}
         />
@@ -100,14 +101,14 @@ function Scrubber({ track }: { track: Track }) {
       {/* Event short labels under the track on wide screens */}
       <div className="pointer-events-none absolute inset-x-0 top-[22px] hidden h-3 md:block">
         {spacedLabels(track, pct).map((e) => (
-            <span
-              key={`l-${e.kind}-${e.t}`}
-              className="num absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none text-ink-3"
-              style={{ left: `${pct(e.t)}%` }}
-            >
-              {e.short}
-            </span>
-          ))}
+          <span
+            key={`l-${e.kind}-${e.t}`}
+            className="num absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none text-ink-3"
+            style={{ left: `${pct(e.t)}%` }}
+          >
+            {eventShort(e)}
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -121,8 +122,8 @@ export function PlaybackBar({ track }: { track: Track }) {
       <button
         type="button"
         onClick={() => playback.toggle()}
-        aria-label={playing ? '一時停止' : '再生'}
-        title={playing ? '一時停止 (Space)' : '再生 (Space)'}
+        aria-label={playing ? tr('一時停止', 'Pause') : tr('再生', 'Play')}
+        title={playing ? tr('一時停止 (Space)', 'Pause (Space)') : tr('再生 (Space)', 'Play (Space)')}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-surface hover:opacity-90"
       >
         {playing ? (
@@ -141,12 +142,12 @@ export function PlaybackBar({ track }: { track: Track }) {
       <Scrubber track={track} />
       <div className="num hidden shrink-0 text-[12px] text-ink-3 sm:block">{fmt(track.t1)} s</div>
       <label className="relative shrink-0">
-        <span className="sr-only">再生速度</span>
+        <span className="sr-only">{tr('再生速度', 'Playback speed')}</span>
         <select
           value={speed}
           onChange={(e) => playback.setSpeed(Number(e.target.value))}
           className="num h-7 cursor-pointer appearance-none rounded-[6px] border border-line bg-surface-2 pl-2 pr-2 text-[12px] text-ink-2 hover:border-line-strong"
-          title="再生速度"
+          title={tr('再生速度', 'Playback speed')}
         >
           {SPEEDS.map((s) => (
             <option key={s} value={s}>
@@ -165,12 +166,12 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
   const last = [...track.events].reverse().find((e) => e.t <= t + 1e-6)
 
   const rows: [string, string, string][] = [
-    ['高度', fmt(s.alt / 1000, 1), 'km'],
-    ['速度', fmt(s.speed, 0), 'm/s'],
-    ['マッハ', fmt(s.mach, 2), ''],
-    ['動圧', fmt(s.q / 1000, 1), 'kPa'],
-    ['加速度', fmt(s.accelAxial, 1), 'G'],
-    ['距離', fmt(s.downrange, 1), 'km'],
+    [tr('高度', 'Altitude'), fmt(s.alt / 1000, 1), 'km'],
+    [tr('速度', 'Velocity'), fmt(s.speed, 0), 'm/s'],
+    [tr('マッハ', 'Mach'), fmt(s.mach, 2), ''],
+    [tr('動圧', 'Dyn. pressure'), fmt(s.q / 1000, 1), 'kPa'],
+    [tr('加速度', 'Accel.'), fmt(s.accelAxial, 1), 'G'],
+    [tr('距離', 'Downrange'), fmt(s.downrange, 1), 'km'],
   ]
 
   return (
@@ -188,10 +189,10 @@ export function Telemetry({ track, compact = false }: { track: Track; compact?: 
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-ink-2">
           <span className="h-2 w-2 rounded-full" style={{ background: stageColorVar(s.stage) }} />
-          {s.stage}段
+          {tr(`${s.stage}段`, `Stage ${s.stage}`)}
         </div>
       </div>
-      {!compact && <div className="mb-1.5 h-4 truncate text-[11px] text-ink-3">{last?.label}</div>}
+      {!compact && <div className="mb-1.5 h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last)}</div>}
       <dl className={cn('grid gap-x-3', compact ? 'mt-1 grid-cols-3 gap-y-0.5' : 'grid-cols-1 gap-y-[3px]')}>
         {(compact ? rows.slice(0, 3) : rows).map(([k, v, u]) => (
           <div key={k} className={cn('flex items-baseline', compact ? 'flex-col' : 'justify-between')}>

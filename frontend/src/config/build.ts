@@ -6,9 +6,9 @@
 //  - stage times are measured from that stage's start (previous separation);
 //  - thrust = F_vac − A_exit · p_ambient, mass flow = F_vac / (Isp_vac · g0).
 import type { ClientConfig, ClientStageConfig } from '../lib/simulation'
+import { G0 } from '../lib/geo'
 import { createDefaultStage } from './defaults'
 
-const G0 = 9.80665
 const P0 = 101325
 
 export interface StageInput {
@@ -187,7 +187,12 @@ export function vehicle(v: VehicleInput): ClientConfig {
  */
 export function pitchProgram(azimuth: number, knots: [number, number][]): [number, number, number][] {
   const last = knots[knots.length - 1]
-  return [[0, azimuth, 90], [8, azimuth, 90], ...knots.map(([t, e]) => [t, azimuth, e] as [number, number, number]), [last[0] + 5000, azimuth, last[1]]]
+  return [
+    [0, azimuth, 90],
+    [8, azimuth, 90],
+    ...knots.map(([t, e]) => [t, azimuth, e] as [number, number, number]),
+    [last[0] + 5000, azimuth, last[1]],
+  ]
 }
 
 function round(v: number, d: number) {

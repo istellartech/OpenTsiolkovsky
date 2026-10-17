@@ -16,6 +16,14 @@ else
   echo "[VERCEL BUILD] Rust already installed"
 fi
 
+# The build image can ship rustup without a default toolchain, in which case
+# every rustc/cargo call fails ("no default is configured").
+if ! rustup show active-toolchain >/dev/null 2>&1; then
+  echo "[VERCEL BUILD] No default Rust toolchain; installing stable..."
+  rustup toolchain install stable --profile minimal
+  rustup default stable
+fi
+
 # Add wasm32 target
 echo "[VERCEL BUILD] Adding wasm32-unknown-unknown target..."
 rustup target add wasm32-unknown-unknown
@@ -41,13 +49,12 @@ cd frontend
 echo "[VERCEL BUILD] Installing frontend dependencies..."
 bun install
 
-# Type check
-echo "[VERCEL BUILD] Running TypeScript type check..."
-bunx tsc --noEmit
+# Format, lint and type check, then build with Vite+ (vp from node_modules)
+echo "[VERCEL BUILD] Running vp check..."
+bunx vp check
 
-# Build frontend with Vite
-echo "[VERCEL BUILD] Building frontend with Vite..."
-bun run build
+echo "[VERCEL BUILD] Building frontend with Vite+..."
+bunx vp build
 
 echo "[VERCEL BUILD] Build completed successfully!"
 echo "[VERCEL BUILD] Frontend output available in frontend/dist/"

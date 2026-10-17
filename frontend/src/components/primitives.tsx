@@ -1,36 +1,10 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { TableSummary } from './TableEditor'
-import { cn } from '../lib/utils'
+import { cn } from '../lib/cn'
 
 /* ------------------------------------------------------------------ Buttons */
 
-type ButtonVariant = 'primary' | 'plain' | 'quiet'
-
-export function Button({
-  variant = 'plain',
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        'inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] px-3 text-[13px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40',
-        variant === 'primary' && 'bg-signal text-signal-ink hover:brightness-95',
-        variant === 'plain' && 'border border-line-strong bg-surface text-ink hover:bg-surface-2',
-        variant === 'quiet' && 'text-ink-2 hover:bg-surface-2 hover:text-ink',
-        className,
-      )}
-      {...props}
-    />
-  )
-}
-
-export function IconButton({
-  label,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+export function IconButton({ label, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
     <button
       type="button"
@@ -38,7 +12,7 @@ export function IconButton({
       title={label}
       className={cn(
         'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] transition-colors',
-        'text-ink-2 hover:bg-surface-2 hover:text-ink',
+        'text-ink-2 hover:bg-surface-2 hover:text-ink disabled:pointer-events-none disabled:opacity-35',
         className,
       )}
       {...props}
@@ -262,7 +236,7 @@ export function VectorField({
           <div key={axis} className="relative">
             <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-[11px] text-ink-3">{axis}</span>
             <NumberInput
-              ariaLabel={`${label} ${axis}`}
+              ariaLabel={typeof label === 'string' ? `${label} ${axis}` : axis}
               value={value[i]}
               error={!!error}
               inputRef={i === 0 ? ref : undefined}
@@ -357,10 +331,7 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
         aria-checked={checked}
         aria-label={typeof label === 'string' ? label : undefined}
         onClick={() => onChange(!checked)}
-        className={cn(
-          'relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors',
-          checked ? 'bg-signal' : 'bg-line-strong',
-        )}
+        className={cn('relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors', checked ? 'bg-signal' : 'bg-line-strong')}
       >
         <span
           className={cn(

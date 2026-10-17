@@ -14,23 +14,28 @@
 bash scripts/wasm_build.sh
 ```
 
-`frontend/src/wasm/` に以下が生成されます：
-- `openTsiolkovsky_cli.js`
-- `openTsiolkovsky_cli_bg.wasm`
-- `openTsiolkovsky_cli.d.ts`
+`frontend/src/wasm/` に以下が生成されます（Git 管理外）：
+- `openTsiolkovsky.js`
+- `openTsiolkovsky_bg.wasm`
+- `openTsiolkovsky.d.ts` / `openTsiolkovsky_bg.wasm.d.ts`
+
+フロントエンドの `bun run dev` は、このフォルダが無いときに自動でビルドします。
 
 ## フロントエンドでの使用
 
-シミュレーション設定パネルで「Execution mode」を `Browser (WASM)` に設定することで、ブラウザ上でシミュレーションが実行されます。
+Webフロントエンドは常にWASMでシミュレーションします。計算は画面を止めないよう Web Worker で実行されます。
 
-内部的には `frontend/src/lib/wasm.ts` がWASMモジュールを動的にロードし、JSON形式でデータをやりとりします。
+- `frontend/src/lib/simulation.ts` — WASMモジュールを読み込み、設定（`ClientConfig`）をJSONで渡して結果を受け取ります
+- `frontend/src/workers/solver.worker.ts` — 上記を別スレッドで実行し、結果を軌道データ（Track）に変換します
+- `frontend/src/lib/solver.ts` — 画面側からWorkerを呼び出します。新しい入力が来たら古い計算は打ち切ります
 
 ```typescript
-// 使用例
-import { runSimulationWasm } from '../lib/wasm'
+import { solver } from './lib/solver'
 
-const result = await runSimulationWasm(configObject)
+const track = await solver.run(config) // Track | null
 ```
+
+WASM側（`src/wasm.rs` の `WasmSimulator`）は、Webの設定形式と CLI 用の `param_*.json` 形式のどちらのJSONも受け付けます。
 
 ## トラブルシューティング
 

@@ -2,79 +2,99 @@
 
 ![OpenTsiolkovsky](docs/OpenTsiolkovsky_Logo_small.png)
 
-OpenTsiolkovsky is a modern rocket flight simulator with command-line and web interfaces, implemented primarily in Rust with a legacy C++ reference implementation.
+OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core is written in Rust and runs both as a command-line tool and, compiled to WebAssembly, in a web app that needs no server. A legacy C++ implementation is kept for reference.
 
-## Key Features
+## Features
 
-* **Rocket Simulation**: Three-degree-of-freedom and six-degree-of-freedom flight simulation with attitude control (TVC)
-* **Multi-Platform**:
-  - **Rust implementation**: Main simulation engine with CLI and WASM support
-  - **Command-line interface (CLI)**: Fast native execution
-  - **Modern React/TypeScript web frontend**: Results update live as parameters change; animated 3D globe (CesiumJS, Esri basemaps) with a shared timeline that drives the charts and telemetry; sample vehicles built from published data (MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3); opens CLI `param_*.json` files together with their CSV tables (results match the CLI); CSV/KML/JSON export. The web config's `stages[].aero` optionally overrides diameter and coefficients per stage, as the CLI does
-  - **WASM support**: Browser-based simulation
-  - **Legacy C++ implementation**: Reference implementation in `legacy_cpp/`
-* **Multi-Stage Support**: Supports up to three rocket stages
-* **Trajectory Analysis**: Sub-orbital and low Earth orbit trajectories
-* **Data Export**: CSV and JSON output formats
-* **Real-time Visualization**: Interactive 3D trajectory viewer and performance graphs
+### Simulation core (Rust)
+- Three-degree-of-freedom (point-mass) flight with a commanded attitude: constant elevation/azimuth or a time-based attitude (pitch) program, with pitch/yaw/roll offsets
+- Multi-stage vehicles with burn, forced cutoff, separation and coast times per stage
+- Thrust and Isp as constants or time tables, with nozzle exit-pressure losses
+- Aerodynamics from constant or Mach-dependent CA/CN tables, with optional per-stage diameter and coefficients; ballistic-coefficient descent
+- Standard atmosphere, constant or altitude-dependent wind, Earth rotation, WGS84 geodesy
+- RK4 or adaptive RK45 integration
+- Covers sounding-rocket and low-Earth-orbit trajectories
+
+### Command-line interface
+- Reads the classic `param_*.json` files together with the CSV tables they reference (thrust, Isp, CN/CA, attitude, wind)
+- Writes `<name>_trajectory.csv`, a `<name>_summary.json` and `<name>_dynamics_cpp.csv` (column-compatible with the legacy C++ output)
+
+### Web app ([details](frontend/README.md))
+- **Live:** results follow every input change. The solver runs in a Web Worker, so the page stays responsive.
+- **Visual:** a 3D globe (CesiumJS, Esri basemaps), charts, an event table and telemetry, all on a shared playback timeline.
+- **Sample vehicles** built from published data: MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3, Saturn V and Ariane 5. Each comes with sources and modelling notes.
+- **Files:**
+  - Opens CLI `param_*.json` files together with their CSV tables; results match the CLI.
+  - Exports trajectory CSV, KML for Google Earth, the settings JSON and chart PNGs.
+- **Editing:**
+  - Undo/redo.
+  - Shareable links: the settings travel in the URL fragment and are never sent to a server.
+  - "Pin to compare" overlays an earlier result and shows the differences.
+- **Interface:** Japanese/English, light/dark theme, keyboard shortcuts (`?`).
 
 ## Quick Start
 
 ### Prerequisites
 - Rust (stable) + Cargo
-- Bun v1+ (https://bun.sh/)
-- Optional: wasm-pack for WASM builds
+- For the web app:
+  - [Bun](https://bun.sh/) v1+
+  - Node.js 22.18+ (the [Vite+](https://viteplus.dev/) toolchain runs on it)
+  - [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
 
-### Command Line Usage
+### Command line
 ```bash
 # Build and run the Rust CLI
 cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --verbose
 
-# Or build release version
+# Or build a release binary
 cargo build --release
 ./target/release/openTsiolkovsky-cli --config examples/param_sample_01.json --output my_result
+# -> my_result_trajectory.csv, my_result_summary.json, my_result_dynamics_cpp.csv
 ```
 
-### Frontend Development
+More examples are in [`examples/`](examples/), e.g. `param_momo.json` and `SS-520-4/` (with CSV tables).
+
+### Web app
 ```bash
 cd frontend
 bun install
-bun run dev
-# Builds the WASM bundle first if frontend/src/wasm is missing (needs wasm-pack)
-# Open http://localhost:5173 in your browser
+bun run dev          # builds the WASM bundle first if frontend/src/wasm is missing
+# open http://localhost:5173
 ```
 
-### WASM Build
+Development commands (Vite+ — `vp` is installed in `frontend/node_modules`):
 ```bash
-# Install wasm-pack if not already installed
-# cargo install wasm-pack
+bunx vp check        # format check (Oxfmt), lint (Oxlint) and type check
+bunx vp test run     # unit tests + every sample vehicle through the WASM solver
+bun run build        # WASM build -> vp check -> production build in frontend/dist
+```
 
-# Build WASM package for frontend
-./scripts/wasm_build.sh
+### WASM only
+```bash
+bash scripts/wasm_build.sh   # outputs to frontend/src/wasm
 ```
 
 ## Project Structure
 ```
 OpenTsiolkovsky/
-├── src/              # Main Rust implementation
+├── src/              # Rust simulation core, CLI (main.rs) and WASM bindings (wasm.rs)
 ├── tests/            # Rust integration tests
-├── examples/         # Configuration files and sample data
-├── frontend/         # React/TypeScript web interface
+├── examples/         # CLI parameter files and CSV tables
+├── frontend/         # Web app (React + TypeScript, Vite+, CesiumJS, Chart.js)
 ├── legacy_cpp/       # Legacy C++ implementation (reference)
-├── scripts/          # Build scripts (WASM, etc.)
+├── scripts/          # Build scripts (WASM, Vercel)
 └── docs/             # Documentation
 ```
 
 ## Documentation
 - [Quick Start](docs/quick-start.md)
 - [Development guide](docs/development.md)
-- [WASM build](docs/wasm.md)
 - [Configuration file](docs/configuration.md)
-- [Legacy C++ Implementation](legacy_cpp/)
+- [Web app](frontend/README.md)
+- [WASM build](docs/wasm.md)
+- [Legacy C++ implementation](legacy_cpp/)
 
-Read more about it on the [Wiki](https://github.com/istellartech/OpenTsiolkovsky/wiki)
-
-Input file format is following [input file format](https://github.com/istellartech/OpenTsiolkovsky/wiki/input_file)
+Read more on the [Wiki](https://github.com/istellartech/OpenTsiolkovsky/wiki). The input file format is described in [input file format](https://github.com/istellartech/OpenTsiolkovsky/wiki/input_file).
 
 ## License
-OpenTsiolkovsky is an Open Source project licensed under the MIT License
+OpenTsiolkovsky is an open-source project licensed under the MIT License.

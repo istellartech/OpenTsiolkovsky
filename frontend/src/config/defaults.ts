@@ -1,16 +1,47 @@
 import type { ClientStageConfig } from '../lib/simulation'
+import { tr } from '../lib/i18n'
 
 export const POWER_MODE_OPTIONS = [
-  { value: 0, label: '0: 3DoF（標準）' },
-  { value: 1, label: '1: 3DoF（遅れ付き）' },
+  {
+    value: 0,
+    get label() {
+      return tr('0: 3DoF（標準）', '0: 3DoF (standard)')
+    },
+  },
+  {
+    value: 1,
+    get label() {
+      return tr('1: 3DoF（遅れ付き）', '1: 3DoF (with lag)')
+    },
+  },
   { value: 2, label: '2: 6DoF' },
-  { value: 3, label: '3: 6DoF（空力安定）' },
+  {
+    value: 3,
+    get label() {
+      return tr('3: 6DoF（空力安定）', '3: 6DoF (aerodynamically stable)')
+    },
+  },
 ]
 
 export const FREE_MODE_OPTIONS = [
-  { value: 0, label: '0: 空力安定' },
-  { value: 1, label: '1: 3DoF 指定姿勢' },
-  { value: 2, label: '2: 弾道飛行' },
+  {
+    value: 0,
+    get label() {
+      return tr('0: 空力安定', '0: Aerodynamically stable')
+    },
+  },
+  {
+    value: 1,
+    get label() {
+      return tr('1: 3DoF 指定姿勢', '1: 3DoF, commanded attitude')
+    },
+  },
+  {
+    value: 2,
+    get label() {
+      return tr('2: 弾道飛行', '2: Ballistic')
+    },
+  },
 ]
 
 export const MAX_STAGE_COUNT = 5
@@ -38,15 +69,5 @@ export function createDefaultStage(): ClientStageConfig {
     rotational_inertia_kgm2: [900, 900, 120],
     thrust_profile: [],
     isp_profile: [],
-  }
-}
-
-export function cloneStage(stage: ClientStageConfig): ClientStageConfig {
-  return {
-    ...stage,
-    cg_position_m: [...stage.cg_position_m],
-    rotational_inertia_kgm2: [...stage.rotational_inertia_kgm2],
-    thrust_profile: stage.thrust_profile ? stage.thrust_profile.map(sample => ({ ...sample })) : [],
-    isp_profile: stage.isp_profile ? stage.isp_profile.map(sample => ({ ...sample })) : [],
   }
 }
