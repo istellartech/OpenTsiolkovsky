@@ -14,14 +14,21 @@
       "RUSTUP_HOME": "/vercel/.rustup"
     }
   },
-  "routes": [
+  "headers": [
     {
-      "src": "/assets/(.*)",
-      "headers": { "cache-control": "max-age=31536000" }
-    },
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "cache-control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
