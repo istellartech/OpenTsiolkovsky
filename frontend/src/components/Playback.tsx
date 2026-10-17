@@ -18,7 +18,7 @@ const eventColor = (e: FlightEvent) =>
 function spacedLabels(track: Track, pct: (t: number) => number, minGap = 4.5) {
   let last = -Infinity
   return track.events
-    .filter((e) => e.kind !== 'liftoff' && e.kind !== 'end')
+    .filter((e) => e.kind !== 'liftoff' && e.kind !== 'end' && e.t > track.t0)
     .filter((e) => {
       const p = pct(e.t)
       if (p - last < minGap) return false

@@ -55,9 +55,44 @@ export type FallBodyJson = {
   trajectory: SimulationState[]
 }
 
+/** What happened at a solver event (`EventKind` in src/simulator.rs) */
+export type EventKindJson =
+  | 'ignition'
+  | 'liftoff'
+  | 'rail_exit'
+  | 'burnout'
+  | 'separation'
+  | 'dump'
+  | 'mach1'
+  | 'max_q'
+  | 'apogee'
+  | 'impact'
+
+/** A flight event located by the solver, with the vehicle state at that moment */
+export type FlightEventJson = {
+  kind: EventKindJson
+  /** Stage the event belongs to (1-based) */
+  stage: number
+  time_s: number
+  altitude_m: number
+  latitude_deg: number
+  longitude_deg: number
+  /** Surface distance from the launch point [m] */
+  downrange_m: number
+  /** Earth-relative speed [m/s] */
+  speed_mps: number
+  /** Inertial speed [m/s] */
+  inertial_speed_mps: number
+  mach: number
+  dynamic_pressure_pa: number
+  mass_kg: number
+}
+
 export type SimulationOutput = {
   trajectory: SimulationState[]
   fall_bodies: FallBodyJson[]
+  /** Missing from outputs of older solver builds */
+  events?: FlightEventJson[]
 }
 
 export function vec3ToObject(vec: Vec3Json | undefined): Vec3 {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test'
-import type { FallBodyJson, SimulationState } from './simulation'
+import type { FallBodyJson, FlightEventJson, SimulationState } from './simulation'
 import { buildTrack, indexAt, sampleAt, trackToCsv } from './trajectory'
 import { generateKML } from './kml'
 
@@ -85,6 +85,57 @@ describe('buildTrack', () => {
       ['burnout', 1],
       ['separation', 1],
     ])
+  })
+
+  it('takes the events located by the solver when there are any', () => {
+    const ev = (kind: FlightEventJson['kind'], time_s: number, stage = 1): FlightEventJson => ({
+      kind,
+      stage,
+      time_s,
+      altitude_m: 1000 * time_s,
+      latitude_deg: 0,
+      longitude_deg: 0,
+      downrange_m: 500,
+      speed_mps: 300,
+      inertial_speed_mps: 700,
+      mach: 0.9,
+      dynamic_pressure_pa: 0,
+      mass_kg: 50,
+    })
+    const solver = [
+      ev('ignition', 0),
+      ev('liftoff', 0.2),
+      ev('rail_exit', 0.8),
+      ev('burnout', 4.6),
+      ev('mach1', 6.1),
+      ev('max_q', 7.3),
+      ev('separation', 9.5),
+      ev('ignition', 9.5, 2),
+      ev('dump', 12, 2),
+      ev('apogee', 20.04, 2),
+      ev('impact', 40, 2),
+      ev('burnout', 41, 2),
+    ]
+    const t = buildTrack(hop(), falls(), solver)!
+    expect(t.events.map((e) => [e.kind, e.t, e.stage])).toEqual([
+      ['ignition', 0, 1],
+      ['liftoff', 0.2, undefined],
+      ['railexit', 0.8, undefined],
+      ['burnout', 4.6, 1],
+      ['mach1', 6.1, undefined],
+      ['maxq', 7.3, undefined],
+      ['separation', 9.5, 1],
+      ['ignition', 9.5, 2],
+      ['jettison', 12, 2],
+      ['apogee', 20.04, undefined],
+      ['end', 40, undefined],
+    ])
+    const sep = t.events.find((e) => e.kind === 'separation')!
+    expect(sep.nextStage).toBe(2)
+    expect(sep.at).toEqual({ alt: 9500, groundSpeed: 300, mach: 0.9, downrange: 0.5 })
+    expect(t.events[t.events.length - 1].landed).toBe(true)
+    // Without an impact the run just ends
+    expect(buildTrack(hop(), [], solver.slice(0, 3))!.events.slice(-1)[0]).toEqual({ kind: 'end', t: 40, landed: true })
   })
 
   it('keeps flight mode, IIP and falling bodies', () => {

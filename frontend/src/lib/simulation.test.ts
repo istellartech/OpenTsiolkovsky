@@ -45,6 +45,11 @@ describe.skipIf(!existsSync(wasmPath))('WASM solver', () => {
     // Every spent stage is propagated from its separation
     expect(track.fallBodies.filter((b) => b.kind === 'stage')).toHaveLength(config.stages.length - 1)
     for (const body of track.fallBodies) expect(body.samples[0]?.t ?? body.releaseTime).toBeCloseTo(body.releaseTime, 6)
+    // Events come from the solver: separations at the exact release times, not on output samples
+    const seps = track.events.filter((e) => e.kind === 'separation')
+    const releases = track.fallBodies.filter((b) => b.kind === 'stage').map((b) => b.releaseTime)
+    expect(seps.map((e) => e.t)).toEqual(releases)
+    expect(seps.every((e) => e.at)).toBe(true)
     // Powered at liftoff, with an impact point under the vehicle
     expect(track.samples[1].mode).toBe('power_3DoF')
     expect(track.samples[1].iipLat).not.toBeNull()

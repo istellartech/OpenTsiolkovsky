@@ -6,8 +6,14 @@ import type { FallTrack, FlightEvent } from './trajectory'
 
 export function eventLabel(e: FlightEvent): string {
   switch (e.kind) {
+    case 'ignition':
+      return tr(`${e.stage}段 点火`, `Stage ${e.stage} ignition`)
     case 'liftoff':
       return tr('リフトオフ', 'Liftoff')
+    case 'railexit':
+      return tr('ランチャー離脱', 'Rail exit')
+    case 'mach1':
+      return tr('音速突破', 'Mach 1')
     case 'maxq':
       return tr('最大動圧', 'Max-Q')
     case 'separation':
@@ -26,8 +32,14 @@ export function eventLabel(e: FlightEvent): string {
 /** Short tag for the timeline. */
 export function eventShort(e: FlightEvent): string {
   switch (e.kind) {
+    case 'ignition':
+      return `IGN${e.stage}`
     case 'liftoff':
       return 'LO'
+    case 'railexit':
+      return 'RAIL'
+    case 'mach1':
+      return 'M1'
     case 'maxq':
       return 'Max-Q'
     case 'separation':

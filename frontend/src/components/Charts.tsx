@@ -688,7 +688,7 @@ export function ChartGrid({ track, reference = null }: { track: Track; reference
 }
 
 export function EventList({ track }: { track: Track }) {
-  const rows = useMemo(() => track.events.map((e) => ({ e, s: sampleAt(track, e.t) })), [track])
+  const rows = useMemo(() => track.events.map((e) => ({ e, s: e.at ?? sampleAt(track, e.t) })), [track])
   const [active, setActive] = useState(-1)
   useEffect(() => {
     const update = () => {
