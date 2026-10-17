@@ -1586,6 +1586,19 @@ impl Simulator {
     ) -> Vector3<f64> {
         let sign = |x: f64| if x == 0.0 { 0.0 } else { x.signum() };
         let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
+        // The axial force flips with the flow when it crosses broadside
+        // (u = 0). A hard sign there makes the dynamics chatter around the
+        // crossing (a commanded attitude held through re-entry) and stalls the
+        // adaptive integrator, so blend it over about +-1 deg of flow angle.
+        // Normalised to exactly 1 for flow along the axis; below 80 deg angle
+        // of attack the axial force changes by < 0.7 %.
+        let speed = vel_air_body.magnitude();
+        let blend = 0.02 * speed;
+        let axial_sign = if blend > 0.0 {
+            u / u.hypot(blend) * speed.hypot(blend) / speed
+        } else {
+            sign(u)
+        };
         let alpha_deg = w.abs().atan2(u.abs()).to_degrees();
         let beta_deg = v.abs().atan2(u.abs()).to_degrees();
 
@@ -1594,7 +1607,7 @@ impl Simulator {
         let cn_yaw = self.rocket.cn_at(stage_idx, mach_number, beta_deg);
 
         Vector3::new(
-            -sign(u) * ca * q_area,
+            -axial_sign * ca * q_area,
             -sign(v) * cn_yaw * q_area,
             -sign(w) * cn_pitch * q_area,
         )
@@ -1843,6 +1856,22 @@ mod tests {
 
     fn run_config(config: RocketConfig) -> Vec<SimulationState> {
         Simulator::new(Rocket::new(config)).unwrap().run()
+    }
+
+    #[test]
+    fn test_axial_force_continuous_through_broadside_flow() {
+        let sim = Simulator::new(Rocket::new(create_test_config())).unwrap();
+        let ca = sim.rocket.ca_at_mach(0, 1.0);
+        let axial = |u: f64, w: f64| sim.aero_force_body(0, 1.0, &Vector3::new(u, 0.0, w), 1.0).x;
+        // Flow along the axis: exactly CA * q * S
+        assert_eq!(axial(100.0, 0.0), -ca);
+        assert_eq!(axial(-100.0, 0.0), ca);
+        // Crossing broadside (u: +0.01 -> -0.01 m/s) no longer jumps by 2 CA
+        let jump = (axial(0.01, 100.0) - axial(-0.01, 100.0)).abs();
+        assert!(jump < 0.02 * ca, "jump {jump}");
+        // 60 deg angle of attack: within 0.1 %
+        let f = axial(50.0, 50.0 * 3f64.sqrt());
+        assert!((f + ca).abs() < 1e-3 * ca, "{f}");
     }
 
     #[test]
