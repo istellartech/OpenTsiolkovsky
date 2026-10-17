@@ -1,7 +1,9 @@
 #![allow(non_snake_case)]
 use clap::Parser;
 use openTsiolkovsky::{
-    io::{IoError, create_rocket_from_config, save_summary_json, save_trajectory_csv},
+    io::{
+        IoError, config_warnings, create_rocket_from_config, save_summary_json, save_trajectory_csv,
+    },
     simulator::{SimError, Simulator},
 };
 
@@ -40,6 +42,10 @@ fn main() -> Result<()> {
 
     // Load rocket configuration and data
     let rocket = create_rocket_from_config(&args.config)?;
+
+    for warning in config_warnings(&rocket.config) {
+        eprintln!("Warning: {}", warning);
+    }
 
     if args.verbose {
         println!("Configuration loaded: {}", rocket.config.name);
