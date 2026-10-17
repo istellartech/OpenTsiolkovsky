@@ -106,6 +106,8 @@ CLI が読む `param_*.json`（旧C++版と同じ形式）の項目と、そこ�
 | `const axial coefficient[-]` | 0 | 軸力係数 CA |
 | `axial coefficient file exist?(bool)` / `axial coefficient file name(str)` | false / "" | CA テーブル（Mach, CA） |
 | `axial multiplier[-]` | 1 | CA テーブルの倍率 |
+| `const axial coefficient power off[-]` | なし | 燃焼していないときの CA（ベース抗力の違い）。省略時は燃焼中と同じ CA |
+| `axial coefficient power off file name(str)` | "" | 燃焼していないときの CA テーブル（Mach, CA。倍率が掛かります） |
 | `const normal coefficient[-]` | 0 | 法線力係数の傾き CNα [1/rad]。法線力 = CNα × 迎角 [rad] × 動圧 × 基準面積 |
 | `normal coefficient file exist?(bool)` / `normal coefficient file name(str)` | false / "" | CN テーブル。Mach × 迎角の 2 次元表（下記）か、1 次元の CNα(Mach) [1/rad] |
 | `normal multiplier[-]` | 1 | CN テーブルの倍率 |
@@ -201,6 +203,6 @@ Webアプリと WASM は、より簡潔な JSON（`ClientConfig`）も受け付�
 - `simulation`: `duration_s`, `output_step_s`, `air_density_percent`, `air_density_profile`（`[{ altitude_m, percent }]`）, `atmosphere_model`（`"legacy"` / `"ussa1976"`）, `integrator`（`method`, `rk4_step_s`, `rk45_abs_tol`, `rk45_rel_tol`）
 - `launch`: `latitude_deg`, `longitude_deg`, `altitude_m`, `velocity_ned_mps`, `datetime_utc`, `rail_length_m`
 - `stages[]`: `mass_initial_kg`, `mass_dry_kg`, `burn_start_s`, `burn_end_s`, `forced_cutoff_s`, `separation_time_s`, `thrust_constant`, `thrust_multiplier`, `thrust_profile`, `isp_constant`, `isp_multiplier`, `isp_profile`, `throat_diameter_m`, `nozzle_expansion_ratio`, `power_mode`, `free_mode`, `aero`（段ごとの直径・係数）, `dumping_product`（`separation_time_s`, `mass_kg`, `ballistic_coefficient`, `additional_velocity_ned_mps`）
-- `aerodynamics`: `body_diameter_m`, `cn_constant`, `cn_multiplier`, `cn_profile`, `ca_constant`, `ca_multiplier`, `ca_profile`, `ballistic_coefficient`
+- `aerodynamics`: `body_diameter_m`, `cn_constant`, `cn_multiplier`, `cn_profile`, `ca_constant`, `ca_multiplier`, `ca_profile`, `ca_power_off_constant`, `ca_power_off_profile`, `ballistic_coefficient`（段ごとの `aero` でも `ca_power_off_constant` を指定可）
 - `attitude`: `elevation_deg`, `azimuth_deg`, `roll_deg`, `pitch_offset_deg`, `yaw_offset_deg`, `roll_offset_deg`, `gyro_bias_deg_h`, `profile`（`[{ time, azimuth_deg, elevation_deg, roll_deg? }]`）
 - `wind`: `speed_mps`, `direction_deg`, `profile`（`[{ altitude_m, speed_mps, direction_deg }]`）

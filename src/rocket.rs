@@ -436,6 +436,18 @@ pub struct AeroConfig {
     #[serde(rename = "const axial coefficient[-]")]
     pub const_axial_coefficient: f64,
 
+    /// CA while the engine is off (base drag); unset: the powered CA
+    #[serde(
+        rename = "const axial coefficient power off[-]",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub const_axial_coefficient_power_off: Option<f64>,
+
+    /// CA(Mach) table while the engine is off (vehicle-wide, read from
+    /// stage 1; scaled by the axial multiplier)
+    #[serde(rename = "axial coefficient power off file name(str)")]
+    pub ca_power_off_file_name: String,
+
     #[serde(rename = "ballistic coefficient(ballistic flight mode)[kg/m2]")]
     pub ballistic_coefficient: f64,
 }
@@ -675,6 +687,8 @@ pub struct Rocket {
     pub cn_data: Option<TimeSeriesData>,
     pub cn_surface: Option<SurfaceData2D>,
     pub ca_data: Option<TimeSeriesData>,
+    /// CA(Mach) while the engine is off
+    pub ca_power_off_data: Option<TimeSeriesData>,
     pub attitude_data: Option<Vec<(f64, f64, f64)>>, // (time, azimuth, elevation)
     /// Roll program [deg] over time (4th column of the attitude file)
     pub attitude_roll: Option<TimeSeriesData>,
@@ -699,6 +713,7 @@ impl Rocket {
             cn_data: None,
             cn_surface: None,
             ca_data: None,
+            ca_power_off_data: None,
             attitude_data: None,
             attitude_roll: None,
             air_density_table: None,
@@ -821,6 +836,21 @@ impl Rocket {
             let base = self.cn_at_mach(stage_index, mach);
             base * (angle_deg_abs.to_radians())
         }
+    }
+
+    /// Axial force coefficient with the engine on or off: the power-off
+    /// table or constant when given, otherwise the powered CA
+    pub fn ca_at(&self, stage_index: usize, mach: f64, powered: bool) -> f64 {
+        if !powered {
+            let aero = &self.stage_configs[stage_index].aero;
+            if let Some(data) = &self.ca_power_off_data {
+                return data.interpolate(mach) * aero.axial_multiplier;
+            }
+            if let Some(ca) = aero.const_axial_coefficient_power_off {
+                return ca;
+            }
+        }
+        self.ca_at_mach(stage_index, mach)
     }
 
     /// Get axial force coefficient at given Mach number for a stage
@@ -1090,6 +1120,8 @@ pub struct ClientStageAero {
     #[serde(default)]
     pub ca_multiplier: Option<f64>,
     #[serde(default)]
+    pub ca_power_off_constant: Option<f64>,
+    #[serde(default)]
     pub ballistic_coefficient: Option<f64>,
 }
 
@@ -1135,6 +1167,11 @@ pub struct ClientAerodynamics {
     pub ca_multiplier: f64,
     #[serde(default)]
     pub ca_profile: Vec<ClientMachSample>,
+    /// CA with the engine off (unset: the powered CA)
+    #[serde(default)]
+    pub ca_power_off_constant: Option<f64>,
+    #[serde(default)]
+    pub ca_power_off_profile: Vec<ClientMachSample>,
     #[serde(default = "default_ballistic_coefficient")]
     pub ballistic_coefficient: f64,
 }
@@ -1237,6 +1274,8 @@ impl Default for AeroConfig {
             ca_file_name: String::new(),
             axial_multiplier: 1.0,
             const_axial_coefficient: 0.0,
+            const_axial_coefficient_power_off: None,
+            ca_power_off_file_name: String::new(),
             ballistic_coefficient: default_ballistic_coefficient(),
         }
     }
@@ -1480,6 +1519,14 @@ impl ClientConfig {
             ));
         }
 
+        if !aerodynamics.ca_power_off_profile.is_empty() {
+            rocket.ca_power_off_data = Some(TimeSeriesData::from_pairs(
+                aerodynamics
+                    .ca_power_off_profile
+                    .iter()
+                    .map(|p| (p.mach, p.value)),
+            ));
+        }
         if !aerodynamics.ca_profile.is_empty() {
             rocket.ca_data = Some(TimeSeriesData::from_pairs(
                 aerodynamics
@@ -1554,6 +1601,10 @@ fn build_stage_config(
         ca_file_name: String::new(),
         axial_multiplier: own.ca_multiplier.unwrap_or(aerodynamics.ca_multiplier),
         const_axial_coefficient: own.ca_constant.unwrap_or(aerodynamics.ca_constant),
+        const_axial_coefficient_power_off: own
+            .ca_power_off_constant
+            .or(aerodynamics.ca_power_off_constant),
+        ca_power_off_file_name: String::new(),
         ballistic_coefficient: own
             .ballistic_coefficient
             .unwrap_or(aerodynamics.ballistic_coefficient),

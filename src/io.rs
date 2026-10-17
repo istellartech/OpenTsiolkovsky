@@ -766,6 +766,9 @@ pub fn load_rocket_data(mut rocket: Rocket, base_path: Option<&Path>) -> Result<
     rocket.ca_data = maybe_load(base, aero.ca_file_exists, &aero.ca_file_name, |p| {
         load_time_series(p)
     })?;
+    rocket.ca_power_off_data = maybe_load(base, true, &aero.ca_power_off_file_name, |p| {
+        load_time_series(p)
+    })?;
 
     let attitude = &primary_stage.attitude;
     rocket.attitude_data = maybe_load(

@@ -1430,12 +1430,18 @@ impl Simulator {
                 ),
                 // Body aligned with the airflow (zero angle of attack)
                 FlightMode::FreeAeroStable => Vector3::new(
-                    -self.rocket.ca_at_mach(stage_idx, mach) * q * reference_area,
+                    -self.rocket.ca_at(stage_idx, mach, false) * q * reference_area,
                     0.0,
                     0.0,
                 ),
                 // Aerodynamic coefficients (CA, CN from Mach x |angle| table)
-                _ => self.aero_force_body(stage_idx, mach, &vel_air_body, q * reference_area),
+                _ => self.aero_force_body(
+                    stage_idx,
+                    mach,
+                    is_powered,
+                    &vel_air_body,
+                    q * reference_area,
+                ),
             }
         };
 
@@ -1657,6 +1663,7 @@ impl Simulator {
         &self,
         stage_idx: usize,
         mach_number: f64,
+        powered: bool,
         vel_air_body: &Vector3<f64>,
         q_area: f64,
     ) -> Vector3<f64> {
@@ -1676,7 +1683,7 @@ impl Simulator {
         } else {
             u.signum()
         };
-        let ca = self.rocket.ca_at_mach(stage_idx, mach_number);
+        let ca = self.rocket.ca_at(stage_idx, mach_number, powered);
         let axial = -axial_sign * ca * q_area;
 
         let cross = v.hypot(w);
@@ -1728,6 +1735,8 @@ mod tests {
                 ca_file_name: "".to_string(),
                 axial_multiplier: 1.0,
                 const_axial_coefficient: 0.2,
+                const_axial_coefficient_power_off: None,
+                ca_power_off_file_name: "".to_string(),
                 ballistic_coefficient: 100.0,
             },
             attitude: AttitudeConfig {
@@ -1938,7 +1947,10 @@ mod tests {
     fn test_axial_force_continuous_through_broadside_flow() {
         let sim = Simulator::new(Rocket::new(create_test_config())).unwrap();
         let ca = sim.rocket.ca_at_mach(0, 1.0);
-        let axial = |u: f64, w: f64| sim.aero_force_body(0, 1.0, &Vector3::new(u, 0.0, w), 1.0).x;
+        let axial = |u: f64, w: f64| {
+            sim.aero_force_body(0, 1.0, true, &Vector3::new(u, 0.0, w), 1.0)
+                .x
+        };
         // Flow along the axis: exactly CA * q * S
         assert_eq!(axial(100.0, 0.0), -ca);
         assert_eq!(axial(-100.0, 0.0), ca);
@@ -2449,7 +2461,7 @@ mod tests {
         let force = |alpha: f64, beta: f64| {
             let (a, b) = (alpha.to_radians(), beta.to_radians());
             let v = Vector3::new(100.0, 100.0 * b.tan(), 100.0 * a.tan());
-            sim.aero_force_body(0, 1.0, &v, 1.0)
+            sim.aero_force_body(0, 1.0, true, &v, 1.0)
         };
         // Pure pitch: CN(alpha) against the flow
         assert!((force(3.0, 0.0).z + 0.3).abs() < 1e-9);
@@ -2497,6 +2509,28 @@ mod tests {
         // Pitch moment about the CG: thrust 4 m aft, normal force 1 m aft
         let moment = thrust.z * (9.0 - 5.0) + aero.z * (6.0 - 5.0);
         assert!(moment.abs() < 1e-6, "moment {moment}, pitch {pitch}");
+    }
+
+    #[test]
+    fn test_power_off_axial_coefficient_after_burnout() {
+        // Aerodynamically stable coast: the power-off CA applies after burnout
+        let flight = |power_off: Option<f64>| {
+            let mut config = coast_config(0);
+            config.stages[0].aero.const_axial_coefficient_power_off = power_off;
+            let trajectory = run_config(config);
+            let during = trajectory
+                .iter()
+                .find(|s| s.time == 3.0)
+                .unwrap()
+                .drag_force;
+            let after = trajectory.iter().find(|s| s.time == 20.0).unwrap();
+            (during, after.drag_force / after.dynamic_pressure)
+        };
+        let (during_same, after_same) = flight(None);
+        let (during_off, after_off) = flight(Some(1.0));
+        assert_eq!(during_same, during_off, "powered CA unchanged");
+        // drag / q = CA * S: doubles from 0.5 to 1.0
+        assert!((after_off / after_same - 2.0).abs() < 1e-9);
     }
 
     #[test]
@@ -2562,6 +2596,8 @@ mod tests {
                 ca_constant: 0.2,
                 ca_multiplier: 1.0,
                 ca_profile: Vec::new(),
+                ca_power_off_constant: None,
+                ca_power_off_profile: Vec::new(),
                 ballistic_coefficient: 120.0,
             },
             attitude: ClientAttitude {
