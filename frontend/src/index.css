@@ -26,6 +26,52 @@
   --stage-5: #b7791f;
 }
 
+/* Dark: follows the OS unless the user forced light; or forced dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #161614;
+    --surface: #1f1e1c;
+    --surface-2: #2a2926;
+    --line: #34322e;
+    --line-strong: #4a4741;
+    --ink: #ecebe7;
+    --ink-2: #b9b5ac;
+    --ink-3: #8a867e;
+    --signal: #ff6a3d;
+    --signal-ink: #ffffff;
+    --danger: #ff6b66;
+    --ok: #4cc38a;
+    --map: #222321;
+    --stage-1: #ff6a3d;
+    --stage-2: #7096ff;
+    --stage-3: #3cc49e;
+    --stage-4: #b48cf0;
+    --stage-5: #e0a64a;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #161614;
+  --surface: #1f1e1c;
+  --surface-2: #2a2926;
+  --line: #34322e;
+  --line-strong: #4a4741;
+  --ink: #ecebe7;
+  --ink-2: #b9b5ac;
+  --ink-3: #8a867e;
+  --signal: #ff6a3d;
+  --signal-ink: #ffffff;
+  --danger: #ff6b66;
+  --ok: #4cc38a;
+  --map: #222321;
+  --stage-1: #ff6a3d;
+  --stage-2: #7096ff;
+  --stage-3: #3cc49e;
+  --stage-4: #b48cf0;
+  --stage-5: #e0a64a;
+}
+
 @theme {
   --color-bg: var(--bg);
   --color-surface: var(--surface);

@@ -258,17 +258,6 @@ export function sampleAt(track: Track, t: number): TrackSample {
   return out
 }
 
-export function stageColorVar(stage: number): string {
-  return `var(--stage-${((Math.max(stage, 1) - 1) % 5) + 1})`
-}
-
-export function readStageColor(stage: number): string {
-  const v = getComputedStyle(document.documentElement)
-    .getPropertyValue(`--stage-${((Math.max(stage, 1) - 1) % 5) + 1}`)
-    .trim()
-  return v || '#ff4f00'
-}
-
 export function trackToCsv(track: Track): string {
   const header = [
     'time_s', 'stage', 'latitude_deg', 'longitude_deg', 'altitude_m', 'downrange_km',

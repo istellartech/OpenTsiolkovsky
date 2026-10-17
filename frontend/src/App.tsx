@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { FolderOpen, Globe as GlobeIcon, LineChart, SlidersHorizontal, X } from 'lucide-react'
+import { FolderOpen, Globe as GlobeIcon, Keyboard, LineChart, SlidersHorizontal, X } from 'lucide-react'
 import { useSimulation } from './hooks/useSimulation'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useFileDrop } from './hooks/useFileDrop'
@@ -15,6 +15,8 @@ import { LayoutSwitch, SplitView, useSplitRatio } from './components/SplitView'
 import { BottomPanel, MobileResults, type CompareProps, type PanelTab, type Reference } from './components/BottomPanel'
 import { GlobeStage } from './components/GlobeStage'
 import { Toast, useToast } from './components/Toast'
+import { ThemeToggle } from './components/ThemeToggle'
+import { ShortcutsDialog } from './components/ShortcutsDialog'
 import { trackToCsv } from './lib/trajectory'
 import { computeSpecs } from './lib/specs'
 import { generateKML } from './lib/kml'
@@ -39,7 +41,8 @@ export default function App() {
   const { toast, show: showToast, dismiss: dismissToast } = useToast()
 
   usePlayerTrack(track)
-  usePlayerKeys()
+  const [helpOpen, setHelpOpen] = useState(false)
+  usePlayerKeys(() => setHelpOpen((v) => !v))
   useUndoKeys(sim.undo, sim.redo)
   useOpenSharedLink(sim.load, showToast)
 
@@ -140,6 +143,16 @@ export default function App() {
         onToggleDrawer={() => setDrawerOpen((v) => !v)}
         compact={isMobile}
         history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
+        actions={
+          <>
+            {!isMobile && (
+              <IconButton label="キーボードショートカット (?)" onClick={() => setHelpOpen(true)}>
+                <Keyboard className="h-4 w-4" />
+              </IconButton>
+            )}
+            <ThemeToggle />
+          </>
+        }
       />
 
       <div className="relative flex min-h-0 flex-1">
@@ -198,6 +211,7 @@ export default function App() {
       </div>
 
       <Toast toast={toast} onDismiss={dismissToast} />
+      {helpOpen && <ShortcutsDialog onClose={() => setHelpOpen(false)} />}
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-6">
           <div className="rounded-[12px] border-2 border-dashed border-ink-3 bg-surface px-8 py-6 text-center">

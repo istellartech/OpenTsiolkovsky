@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chart, type ChartConfiguration, type Plugin } from 'chart.js/auto'
 import { Download, Maximize2, RotateCcw, X } from 'lucide-react'
-import { readStageColor, sampleAt, type Track, type TrackSample } from '../lib/trajectory'
+import { sampleAt, type Track, type TrackSample } from '../lib/trajectory'
 import { playback } from '../lib/playback'
 import { fmt } from '../lib/format'
+import { cssVar, readStageColor, useTheme } from '../lib/theme'
 
 interface Series {
   label: string
@@ -64,9 +65,7 @@ export const CHARTS: ChartSpec[] = [
 ]
 
 function themeColors() {
-  const css = getComputedStyle(document.documentElement)
-  const v = (name: string) => css.getPropertyValue(name).trim()
-  return { ink: v('--ink'), ink2: v('--ink-2'), ink3: v('--ink-3'), line: v('--line'), surface: v('--surface') }
+  return { ink: cssVar('--ink'), ink2: cssVar('--ink-2'), ink3: cssVar('--ink-3'), line: cssVar('--line'), surface: cssVar('--surface') }
 }
 
 /** Hairlines at stage separations and burnouts. */
@@ -131,6 +130,8 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
   const dragRef = useRef<{ x0: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
   const [zoomed, setZoomed] = useState(false)
+  // Colours are read from CSS when the chart is built, so rebuild on theme change.
+  const theme = useTheme()
 
   useEffect(() => {
     if (!canvasRef.current) return
@@ -287,7 +288,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
       chart.destroy()
       chartRef.current = null
     }
-  }, [spec, track, reference, large])
+  }, [spec, track, reference, large, theme])
 
   const setRange = (x0?: number, x1?: number) => {
     const chart = chartRef.current

@@ -2,10 +2,11 @@ import type { InspectorNav } from '../Inspector'
 import { AlertTriangle } from 'lucide-react'
 import type { ClientConfig } from '../../lib/simulation'
 import { PRESET_OPTIONS } from '../../config/presets'
-import { stageColorVar } from '../../lib/trajectory'
+
 import type { VehicleSpec } from '../../lib/specs'
 import { fmt, fmtForce, fmtMass } from '../../lib/format'
 import { pad2, type Patch } from './shared'
+import { stageColorVar } from '../../lib/theme'
 
 export function Overview({
   config,

@@ -2,11 +2,12 @@ import { Plus, Trash2 } from 'lucide-react'
 import type { ClientConfig, ClientStageConfig } from '../../lib/simulation'
 import { FREE_MODE_OPTIONS, MAX_STAGE_COUNT, POWER_MODE_OPTIONS, createDefaultStage } from '../../config/defaults'
 import { NumberField, ProfileTable, SelectField, Toggle } from '../primitives'
-import { stageColorVar } from '../../lib/trajectory'
+
 import type { VehicleSpec } from '../../lib/specs'
 import { fmt, fmtMass } from '../../lib/format'
 import { cn } from '../../lib/cn'
 import { stagePath, Readout, Group, type Patch } from './shared'
+import { stageColorVar } from '../../lib/theme'
 
 export function VehicleTab({
   config,

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { playback, suggestedSpeed } from '../lib/playback'
+import { useLatest } from './useLatest'
 import type { Track } from '../lib/trajectory'
 
 /**
@@ -29,13 +30,15 @@ export function usePlayerTrack(track: Track | null) {
 export const isTypingTarget = (el: EventTarget | null) =>
   el instanceof HTMLElement && !!el.closest('input, select, textarea, [contenteditable="true"], [role="slider"]')
 
-/** Space = play/pause, ←/→ = ±1 s (Shift: ±10 s). */
-export function usePlayerKeys() {
+/** Space = play/pause, ←/→ = ±1 s (Shift: ±10 s), ? = `onHelp`. */
+export function usePlayerKeys(onHelp?: () => void) {
+  const help = useLatest(onHelp)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
       const el = e.target as HTMLElement
-      if (e.key === ' ' && !el.closest('button')) {
+      if (e.key === '?') help.current?.()
+      else if (e.key === ' ' && !el.closest('button')) {
         e.preventDefault()
         playback.toggle()
       } else if (e.key === 'ArrowRight') playback.step(e.shiftKey ? 10 : 1)
@@ -43,5 +46,5 @@ export function usePlayerKeys() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [help])
 }

@@ -34,7 +34,7 @@ export function GlobeStage({
           </div>
         )}
       >
-        <Suspense fallback={<div className="h-full w-full bg-bg" />}>
+        <Suspense fallback={<GlobeLoading />}>
           <Globe track={track} reference={reference} />
         </Suspense>
       </ErrorBoundary>
@@ -57,11 +57,38 @@ export function GlobeStage({
           </p>
         </div>
       )}
+      {!track && status === 'running' && (
+        <div className="pointer-events-none absolute inset-x-0 top-3 flex justify-center">
+          <p className="flex items-center gap-2 rounded-full bg-surface px-3 py-1 text-[12px] text-ink-2 ring-1 ring-line-strong">
+            <Spinner /> 計算中…
+          </p>
+        </div>
+      )}
       {!track && status !== 'running' && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-[13px] text-ink-2">
           {status === 'invalid' ? '入力値を確認してください' : error}
         </div>
       )}
+    </div>
+  )
+}
+
+function Spinner() {
+  return <span aria-hidden className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-line-strong border-t-ink-2" />
+}
+
+/** Shown while the 3D engine (a few MB) downloads on first visit. */
+function GlobeLoading() {
+  return (
+    <div className="flex h-full w-full items-center justify-center bg-bg">
+      <div className="flex flex-col items-center gap-3 text-[12px] text-ink-3">
+        <div className="relative h-24 w-24 rounded-full bg-map ring-1 ring-line">
+          <div className="absolute inset-0 animate-pulse rounded-full bg-surface-2/60" />
+        </div>
+        <span className="flex items-center gap-2">
+          <Spinner /> 3D 地図を読み込み中…
+        </span>
+      </div>
     </div>
   )
 }

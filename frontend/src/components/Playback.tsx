@@ -1,9 +1,10 @@
 import { useRef } from 'react'
 import { Pause, Play, RotateCcw } from 'lucide-react'
 import { SPEEDS, playback, usePlayback } from '../lib/playback'
-import { sampleAt, stageColorVar, type Track } from '../lib/trajectory'
+import { sampleAt, type Track } from '../lib/trajectory'
 import { cn } from '../lib/cn'
 import { fmt } from '../lib/format'
+import { stageColorVar } from '../lib/theme'
 
 /** Event labels that would collide with the previous one are dropped. */
 function spacedLabels(track: Track, pct: (t: number) => number, minGap = 4.5) {
