@@ -2,7 +2,19 @@ import { useState } from 'react'
 import { Download, Play, RotateCcw, Square, X } from 'lucide-react'
 import type { MonteCarloState } from '../hooks/useMonteCarlo'
 import { MAX_CASES } from '../hooks/useMonteCarlo'
-import { DEFAULT_DISPERSION, casesToCsv, type Dispersion } from '../lib/montecarlo'
+import {
+  DEFAULT_DISPERSION,
+  DEFAULT_ELLIPSE,
+  ELLIPSE_LEVELS,
+  casesToCsv,
+  ellipseAxes,
+  ellipseLabel,
+  tidyDispersion,
+  type Dispersion,
+  type EllipseLevel,
+  type ImpactStatistics,
+  type NumericDispersionKey,
+} from '../lib/montecarlo'
 import { mcBodyLabel } from '../lib/events'
 import { fmt } from '../lib/format'
 import { saveFile } from '../lib/download'
@@ -10,11 +22,11 @@ import { bodyStage } from '../lib/montecarlo'
 import { stageColorVar } from '../lib/theme'
 import { tr } from '../lib/i18n'
 import { cn } from '../lib/cn'
-import { NumberField } from './primitives'
+import { NumberField, Segmented, SelectField, Toggle } from './primitives'
 import { Group } from './inspector/shared'
 
 /** Dispersion inputs: [key, label, unit] (all 1-sigma) */
-function dispersionFields(): [keyof Dispersion, string, string][] {
+function dispersionFields(): [NumericDispersionKey, string, string][] {
   return [
     ['thrust_percent', tr('推力', 'Thrust'), '%'],
     ['isp_percent', tr('比推力', 'Isp'), '%'],
@@ -25,10 +37,19 @@ function dispersionFields(): [keyof Dispersion, string, string][] {
     ['wind_speed_mps', tr('風速', 'Wind speed'), 'm/s'],
     ['wind_direction_deg', tr('風向', 'Wind direction'), '°'],
     ['air_density_percent', tr('大気密度', 'Air density'), '%'],
+    ['normal_percent', tr('法線力（CN）', 'Normal force (CN)'), '%'],
+    ['separation_time_s', tr('分離時刻', 'Separation time'), 's'],
+    ['wind_speed_percent', tr('風速の倍率', 'Wind speed scale'), '%'],
   ]
 }
 
 const km = (m: number) => fmt(m / 1000, m < 10_000 ? 2 : 1)
+
+/** Semi-axes of the chosen ellipse */
+function ellipseText(s: ImpactStatistics, level: EllipseLevel) {
+  const { major, minor } = ellipseAxes(s, level)
+  return `${km(major)} × ${km(minor)} km`
+}
 
 /** Monte Carlo dispersion analysis: settings, progress and impact statistics. */
 export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloState; lastStage: number; fileBase: string }) {
@@ -38,8 +59,9 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
   const total = result?.total ?? settings.count
   // Settings fold away once there are results, giving the table the full width.
   const [settingsOpen, setSettingsOpen] = useState(!result)
-  const setDispersion = (k: keyof Dispersion, v: number) =>
-    setSettings({ ...settings, dispersion: { ...settings.dispersion, [k]: Math.max(v, 0) } })
+  const setDispersion = (d: Partial<Dispersion>) =>
+    setSettings({ ...settings, dispersion: tidyDispersion({ ...settings.dispersion, ...d }) })
+  const level = settings.ellipse ?? DEFAULT_ELLIPSE
 
   const saveCsv = () => {
     if (!result) return
@@ -57,8 +79,8 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
           badge={tr(`${settings.count}ケース · シード ${settings.seed}`, `${settings.count} cases · seed ${settings.seed}`)}
           title={tr('分散解析の条件', 'Dispersion settings')}
           note={tr(
-            '推力や風などを正規分布でばらつかせて何度も飛ばし、機体・使用済みの段・投棄物の落下点のばらつきを調べます。値は 1σ（標準偏差）です。',
-            'Flies the vehicle many times with thrust, wind and the rest drawn from normal distributions, and shows how the impact points of the vehicle, spent stages and jettisoned parts spread. Values are 1-sigma.',
+            '推力や風などをばらつかせて何度も飛ばし、機体・使用済みの段・投棄物の落下点のばらつきを調べます。値は 1σ（標準偏差）です。',
+            'Flies the vehicle many times with thrust, wind and the rest drawn at random, and shows how the impact points of the vehicle, spent stages and jettisoned parts spread. Values are 1-sigma (standard deviation).',
           )}
         >
           <NumberField
@@ -73,8 +95,34 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
             onChange={(v) => setSettings({ ...settings, seed: Math.min(Math.max(Math.round(v), 0), 2 ** 32 - 1) })}
           />
           {dispersionFields().map(([k, label, unit]) => (
-            <NumberField key={k} label={label} unit={unit} value={settings.dispersion[k]} onChange={(v) => setDispersion(k, v)} />
+            <NumberField
+              key={k}
+              label={label}
+              unit={unit}
+              value={settings.dispersion[k] ?? 0}
+              onChange={(v) => setDispersion({ [k]: Math.max(v, 0) })}
+            />
           ))}
+          <SelectField
+            label={tr('分布', 'Distribution')}
+            value={settings.dispersion.distribution ?? 'normal'}
+            options={[
+              { value: 'normal', label: tr('正規分布', 'Normal') },
+              { value: 'uniform', label: tr('一様分布（±√3σ）', 'Uniform (±√3σ)') },
+            ]}
+            onChange={(distribution) => setDispersion({ distribution })}
+          />
+          <Toggle
+            label={tr('段ごとに独立に引く', 'Draw each stage independently')}
+            checked={!!settings.dispersion.independent_stages}
+            onChange={(independent_stages) => setDispersion({ independent_stages })}
+          />
+          <p className="mb-1 text-[11px] leading-relaxed text-ink-3">
+            {tr(
+              'オンにすると推力・比推力・質量・抗力・CN・分離時刻を段ごとに別の値で引きます。オフでは同じ値を全段に使います。',
+              'When on, thrust, Isp, mass, drag, CN and separation time get a separate draw for each stage; when off, one draw applies to every stage.',
+            )}
+          </p>
           <button
             type="button"
             onClick={() => setSettings({ ...settings, dispersion: DEFAULT_DISPERSION })}
@@ -120,6 +168,16 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
         <div className="mb-1 flex items-center gap-2">
           <h3 className="text-[12px] font-semibold">{tr('落下点のばらつき', 'Impact dispersion')}</h3>
           <span className="flex-1" />
+          <Segmented
+            size="sm"
+            value={level}
+            options={ELLIPSE_LEVELS.map((l) => ({
+              value: l,
+              label: ellipseLabel(l),
+              title: tr(`${ellipseLabel(l)} 誤差楕円を表示`, `Show the ${ellipseLabel(l)} error ellipse`),
+            }))}
+            onChange={(ellipse) => setSettings({ ...settings, ellipse })}
+          />
           {result && result.cases.length > 0 && !running && (
             <>
               <button
@@ -154,8 +212,8 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
             {running
               ? tr('計算中…', 'Computing…')
               : tr(
-                  '条件を決めて「計算」を押すと、落下点の分布と 3σ 楕円が地図とこの表に出ます。',
-                  'Press Run to see the impact scatter and 3-sigma ellipses on the map and in this table.',
+                  '条件を決めて「計算」を押すと、落下点の分布と誤差楕円が地図とこの表に出ます。',
+                  'Press Run to see the impact scatter and error ellipses on the map and in this table.',
                 )}
           </p>
         ) : (
@@ -166,7 +224,9 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
                   <th className="py-1.5 pr-3 font-normal">{tr('落下物', 'Body')}</th>
                   <th className="py-1.5 pr-3 text-right font-normal">{tr('落下', 'Impacts')}</th>
                   <th className="py-1.5 pr-3 text-right font-normal">{tr('平均落下点', 'Mean impact')}</th>
-                  <th className="py-1.5 pr-3 text-right font-normal">{tr('3σ 楕円（長径×短径）', '3σ ellipse (major × minor)')}</th>
+                  <th className="py-1.5 pr-3 text-right font-normal">
+                    {tr(`${ellipseLabel(level)} 楕円（長半径×短半径）`, `${ellipseLabel(level)} ellipse (semi-major × minor)`)}
+                  </th>
                   <th className="hidden py-1.5 pr-3 text-right font-normal sm:table-cell">{tr('長軸の方位', 'Major axis')}</th>
                   <th className="hidden py-1.5 text-right font-normal sm:table-cell">{tr('最大のずれ', 'Max offset')}</th>
                 </tr>
@@ -189,9 +249,7 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
                         ? '—'
                         : `${fmt(s.mean_latitude_deg, 4)}, ${fmt(s.mean_longitude_deg, 4)}`}
                     </td>
-                    <td className="num py-1.5 pr-3 text-right">
-                      {s.impacts < 2 ? '—' : `${km(3 * s.ellipse_major_m)} × ${km(3 * s.ellipse_minor_m)} km`}
-                    </td>
+                    <td className="num py-1.5 pr-3 text-right">{s.impacts < 2 ? '—' : ellipseText(s, level)}</td>
                     <td className="num hidden py-1.5 pr-3 text-right sm:table-cell">
                       {s.impacts < 2 ? '—' : `${fmt(s.ellipse_azimuth_deg, 0)}°`}
                     </td>
@@ -202,8 +260,8 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
             </table>
             <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
               {tr(
-                '3σ 楕円は落下点の共分散から求めた範囲で、正規分布ならおよそ 99% の落下点が入ります。長軸の方位は北から時計回りです。',
-                'The 3-sigma ellipse comes from the impact covariance; for a normal distribution about 99% of impacts fall inside. The major-axis bearing is clockwise from north.',
+                '誤差楕円は落下点の共分散から求めた範囲です。95%・99% の楕円には、落下点が 2 次元正規分布に従うときにその割合が入ります（1σ 楕円は約 39%）。長軸の方位は北から時計回りです。',
+                'Error ellipses come from the impact covariance; for a 2-D normal distribution the 95% and 99% ellipses hold that share of impacts (the 1-sigma ellipse about 39%). The major-axis bearing is clockwise from north.',
               )}
             </p>
           </div>

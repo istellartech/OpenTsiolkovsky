@@ -465,6 +465,33 @@ export function VehicleTab({
               value={stage.aero.ca_constant ?? config.aerodynamics.ca_constant}
               onChange={(v) => setStage({ aero: { ...stage.aero, ca_constant: v } })}
             />
+            <Toggle
+              label={tr('燃焼していないときの CA を別に指定', 'Separate engine-off CA')}
+              checked={stage.aero.ca_power_off_constant !== undefined}
+              onChange={(on) =>
+                setStage({
+                  aero: {
+                    ...stage.aero,
+                    ca_power_off_constant: on
+                      ? (config.aerodynamics.ca_power_off_constant ?? stage.aero?.ca_constant ?? config.aerodynamics.ca_constant)
+                      : undefined,
+                  },
+                })
+              }
+            />
+            {stage.aero.ca_power_off_constant !== undefined && (
+              <NumberField
+                label={tr('燃焼していないときの CA', 'Engine-off CA')}
+                unit="—"
+                note={
+                  (config.aerodynamics.ca_power_off_profile?.length ?? 0) > 0
+                    ? tr('空力タブのマッハ数テーブルが優先されます', 'The Mach table on the Aero tab takes precedence')
+                    : undefined
+                }
+                value={stage.aero.ca_power_off_constant}
+                onChange={(v) => setStage({ aero: { ...stage.aero, ca_power_off_constant: v } })}
+              />
+            )}
             <NumberField
               label={tr('法線力係数 CN', 'Normal force coefficient CN')}
               unit="—"

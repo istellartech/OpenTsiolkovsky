@@ -25,6 +25,7 @@ import { computeSpecs } from './lib/specs'
 import { generateKML } from './lib/kml'
 import { fileBase, saveFile } from './lib/download'
 import { buildShareUrl } from './lib/share'
+import { DEFAULT_ELLIPSE } from './lib/montecarlo'
 import { cn } from './lib/cn'
 import type { ValidationIssue } from './lib/validation'
 import { tr, useLang } from './lib/i18n'
@@ -102,9 +103,14 @@ export default function App() {
   const dispersion = useMemo<DispersionOverlay | null>(
     () =>
       mcResult && !mc.stale && mcResult.cases.length > 0
-        ? { cases: mcResult.cases, statistics: mcResult.statistics, lastStage: config.stages.length }
+        ? {
+            cases: mcResult.cases,
+            statistics: mcResult.statistics,
+            lastStage: config.stages.length,
+            ellipse: mc.settings.ellipse ?? DEFAULT_ELLIPSE,
+          }
         : null,
-    [mcResult, mc.stale, config.stages.length],
+    [mcResult, mc.stale, config.stages.length, mc.settings.ellipse],
   )
   const openFiles = (fs: File[]) => sim.importFiles(fs).then((r) => showToast(r.message, r.ok ? 'ok' : 'error'))
   const files: FileActions = {

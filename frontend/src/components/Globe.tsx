@@ -30,7 +30,15 @@ import { Segmented } from './primitives'
 import { cssVar, readStageColor, useTheme, type Theme } from '../lib/theme'
 import { tr, useLang } from '../lib/i18n'
 import { fallBodyLabel, mcBodyLabel } from '../lib/events'
-import { bodyStage, ellipsePoints, type CaseResult, type ImpactStatistics } from '../lib/montecarlo'
+import {
+  bodyStage,
+  ellipseAxes,
+  ellipseLabel,
+  ellipsePoints,
+  type CaseResult,
+  type EllipseLevel,
+  type ImpactStatistics,
+} from '../lib/montecarlo'
 import { cn } from '../lib/cn'
 import { useDismiss } from '../hooks/useDismiss'
 import { Layers as LayersIcon } from 'lucide-react'
@@ -45,7 +53,7 @@ export interface Layers {
   iip: boolean
   /** Spent stages and dumping products */
   falls: boolean
-  /** Monte Carlo impact scatter and 3-sigma ellipses */
+  /** Monte Carlo impact scatter and error ellipses */
   dispersion: boolean
 }
 
@@ -57,6 +65,8 @@ export interface DispersionOverlay {
   statistics: ImpactStatistics[]
   /** Stage number of the vehicle's last stage (colours the vehicle's points) */
   lastStage: number
+  /** Error ellipse to draw */
+  ellipse: EllipseLevel
 }
 
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services'
@@ -348,7 +358,7 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null, layer
     for (const body of track.fallBodies) addFallBody(viewer, body, halo, ink)
   }
 
-  // Monte Carlo: every case's impact and each body's 3-sigma ellipse.
+  // Monte Carlo: every case's impact and each body's error ellipse.
   if (layers.dispersion && dispersion) addDispersion(viewer, dispersion, halo, ink)
 
   // Look at the arc side-on: heading perpendicular to the launch→end bearing.
@@ -426,20 +436,15 @@ function addDispersion(viewer: Viewer, mc: DispersionOverlay, halo: Color, ink: 
   for (const s of mc.statistics) {
     if (s.mean_latitude_deg === null || s.mean_longitude_deg === null || s.impacts < 2) continue
     const color = colorOf(s.body)
-    const outline = ellipsePoints(
-      s.mean_latitude_deg,
-      s.mean_longitude_deg,
-      3 * s.ellipse_major_m,
-      3 * s.ellipse_minor_m,
-      s.ellipse_azimuth_deg,
-    )
+    const { major, minor } = ellipseAxes(s, mc.ellipse)
+    const outline = ellipsePoints(s.mean_latitude_deg, s.mean_longitude_deg, major, minor, s.ellipse_azimuth_deg)
     for (const part of splitPath(outline)) {
       viewer.entities.add({ polyline: { positions: part, width: 2, clampToGround: true, material: color } })
     }
     viewer.entities.add({
       position: Cartesian3.fromDegrees(s.mean_longitude_deg, s.mean_latitude_deg, 0),
       label: {
-        text: tr(`${mcBodyLabel(s.body)} 3σ`, `${mcBodyLabel(s.body)} 3σ`),
+        text: `${mcBodyLabel(s.body)} ${ellipseLabel(mc.ellipse)}`,
         font: '500 11px "IBM Plex Sans JP", sans-serif',
         fillColor: ink,
         outlineColor: halo,
@@ -636,7 +641,7 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
       {
         key: 'dispersion',
         label: tr('分散解析', 'Dispersion'),
-        title: tr('分散解析の落下点と 3σ 楕円', 'Dispersion run impacts and 3-sigma ellipses'),
+        title: tr('分散解析の落下点と誤差楕円', 'Dispersion run impacts and error ellipses'),
         show: !!dispersion && dispersion.cases.length > 0,
       },
     ] as const

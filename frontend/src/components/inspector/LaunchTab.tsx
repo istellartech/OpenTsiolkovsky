@@ -68,6 +68,21 @@ export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patc
           onChange={(v) => setLaunch({ altitude_m: v })}
         />
       </Group>
+      <Group
+        title={tr('ランチャ', 'Launcher')}
+        note={tr(
+          '推力が重力を上回るまで発射台で保持し、レール長の分だけ打ち上げ時の機軸の向きに沿って拘束します。0 なら保持のみ。初期速度が 0 でないときは使いません。',
+          'The vehicle is held on the pad until thrust exceeds gravity, then constrained along the liftoff body axis for the rail length. 0 means hold only. Not used when the initial velocity is non-zero.',
+        )}
+      >
+        <NumberField
+          label={tr('レール長', 'Rail length')}
+          unit="m"
+          path="launch.rail_length_m"
+          value={launch.rail_length_m ?? 0}
+          onChange={(v) => setLaunch({ rail_length_m: v })}
+        />
+      </Group>
       <Group title={tr('日時', 'Date & time')}>
         <TextInputField
           label={tr('日付 (UTC)', 'Date (UTC)')}

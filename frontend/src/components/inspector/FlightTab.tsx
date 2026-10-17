@@ -7,6 +7,8 @@ import { tr } from '../../lib/i18n'
 export function FlightTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
   const at = config.attitude
   const w = config.wind
+  // The solver uses the table's roll only when every row has one.
+  const rollTable = at.profile.length > 0 && at.profile.every((p) => p.roll_deg !== undefined)
   const setAt = (v: Partial<ClientConfig['attitude']>) => patch((c) => ({ ...c, attitude: { ...c.attitude, ...v } }))
   const setW = (v: Partial<ClientConfig['wind']>) => patch((c) => ({ ...c, wind: { ...c.wind, ...v } }))
   return (
@@ -33,17 +35,29 @@ export function FlightTab({ config, patch }: { config: ClientConfig; patch: Patc
           }
         />
         {at.profile.length > 0 ? (
-          <ProfileTable
-            path="attitude.profile"
-            title={tr('姿勢プログラム', 'Attitude program')}
-            columns={[
-              { key: 'time', label: tr('時刻 s', 'Time s') },
-              { key: 'azimuth_deg', label: tr('方位 °', 'Azimuth °') },
-              { key: 'elevation_deg', label: tr('仰角 °', 'Elevation °') },
-            ]}
-            rows={at.profile}
-            onChange={(rows) => setAt({ profile: rows })}
-          />
+          <>
+            <ProfileTable
+              path="attitude.profile"
+              title={tr('姿勢プログラム', 'Attitude program')}
+              columns={[
+                { key: 'time', label: tr('時刻 s', 'Time s') },
+                { key: 'azimuth_deg', label: tr('方位 °', 'Azimuth °') },
+                { key: 'elevation_deg', label: tr('仰角 °', 'Elevation °') },
+                ...(rollTable ? [{ key: 'roll_deg' as const, label: tr('ロール °', 'Roll °') }] : []),
+              ]}
+              rows={at.profile.map((p) => ({ ...p, roll_deg: p.roll_deg ?? at.roll_deg ?? 0 }))}
+              onChange={(rows) => setAt({ profile: rows })}
+            />
+            <Toggle
+              label={tr('ロール角も表で指定', 'Roll angle in the table')}
+              checked={rollTable}
+              onChange={(on) =>
+                setAt({
+                  profile: at.profile.map(({ roll_deg, ...p }) => (on ? { ...p, roll_deg: roll_deg ?? at.roll_deg ?? 0 } : p)),
+                })
+              }
+            />
+          </>
         ) : (
           <>
             <NumberField
@@ -61,6 +75,15 @@ export function FlightTab({ config, patch }: { config: ClientConfig; patch: Patc
               onChange={(v) => setAt({ elevation_deg: v })}
             />
           </>
+        )}
+        {!rollTable && (
+          <NumberField
+            label={tr('ロール角', 'Roll angle')}
+            unit="°"
+            path="attitude.roll_deg"
+            value={at.roll_deg ?? 0}
+            onChange={(v) => setAt({ roll_deg: v })}
+          />
         )}
       </Group>
       <Group

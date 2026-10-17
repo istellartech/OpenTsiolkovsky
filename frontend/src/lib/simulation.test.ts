@@ -34,6 +34,8 @@ describe.skipIf(!existsSync(wasmPath))('WASM solver', () => {
     expect(stats.map((s) => s.body)).toEqual(['vehicle', 'stage1', 'stage2'])
     expect(stats[1].impacts).toBe(3)
     expect(stats[1].ellipse_major_m).toBeGreaterThan(0)
+    expect(stats[1].ellipse_95_major_m! / stats[1].ellipse_major_m).toBeCloseTo(2.4477, 3)
+    expect(stats[1].ellipse_99_minor_m! / stats[1].ellipse_minor_m).toBeCloseTo(3.0349, 3)
   })
 
   it.each(PRESET_OPTIONS.map((p) => [p.id, p] as const))('flies %s', async (id, preset) => {

@@ -99,6 +99,36 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
       )
     }
   }
+  if (integrator.method === 'rk45') {
+    for (const key of ['rk45_abs_tol', 'rk45_rel_tol'] as const) {
+      const tol = integrator[key]
+      if (tol !== undefined && (!isFiniteNumber(tol) || tol <= 0)) {
+        push(`simulation.integrator.${key}`, tr('RK45の許容誤差は正の値にしてください。', 'RK45 tolerances must be positive.'))
+      }
+    }
+  }
+  if (simulation.atmosphere_model !== undefined && simulation.atmosphere_model !== 'legacy' && simulation.atmosphere_model !== 'ussa1976') {
+    push(
+      'simulation.atmosphere_model',
+      tr('大気モデルは legacy か ussa1976 を選択してください。', 'Atmosphere model must be legacy or ussa1976.'),
+    )
+  }
+  if (simulation.air_density_profile?.length) {
+    let prev = -Infinity
+    for (const p of simulation.air_density_profile) {
+      if (!isFiniteNumber(p.altitude_m) || !isFiniteNumber(p.percent) || p.altitude_m <= prev || p.percent <= -100) {
+        push(
+          'simulation.air_density_profile',
+          tr(
+            '密度変動テーブルは高度の昇順に、変動率は -100% より大きい数値で入力してください。',
+            'The density table needs ascending altitudes and variations above -100%.',
+          ),
+        )
+        break
+      }
+      prev = p.altitude_m
+    }
+  }
 
   // Launch validation
   if (!isFiniteNumber(launch.latitude_deg) || launch.latitude_deg < -90 || launch.latitude_deg > 90) {
@@ -114,6 +144,10 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
       'launch.altitude_m',
       tr('発射高度は-500〜100000 mの範囲で指定してください。', 'Launch altitude must be between -500 and 100,000 m.'),
     )
+  }
+
+  if (launch.rail_length_m !== undefined && (!isFiniteNumber(launch.rail_length_m) || launch.rail_length_m < 0)) {
+    push('launch.rail_length_m', tr('レール長は0以上で指定してください。', 'Rail length must be 0 or greater.'))
   }
 
   const velocityMag = Math.hypot(...launch.velocity_ned_mps)
@@ -321,6 +355,17 @@ function validateAerodynamics(aerodynamics: ClientConfig['aerodynamics'], push: 
 
   if (aerodynamics.ca_profile?.length > 0) {
     validateMachProfile(aerodynamics.ca_profile, push, 'aerodynamics.ca_profile', 'CA', { valueMin: 0 })
+  }
+
+  const caOff = aerodynamics.ca_power_off_constant
+  if (caOff !== undefined && (!isFiniteNumber(caOff) || caOff < 0)) {
+    push('aerodynamics.ca_power_off_constant', tr('燃焼後のCAは0以上で指定してください。', 'Engine-off CA must be 0 or greater.'))
+  }
+
+  if (aerodynamics.ca_power_off_profile?.length) {
+    validateMachProfile(aerodynamics.ca_power_off_profile, push, 'aerodynamics.ca_power_off_profile', tr('燃焼後のCA', 'Engine-off CA'), {
+      valueMin: 0,
+    })
   }
 }
 

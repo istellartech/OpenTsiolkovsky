@@ -5,6 +5,8 @@ import { tr } from '../../lib/i18n'
 
 export function AeroTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
   const a = config.aerodynamics
+  const offTable = (a.ca_power_off_profile?.length ?? 0) > 0
+  const powerOff = offTable || a.ca_power_off_constant !== undefined
   const set = (v: Partial<ClientConfig['aerodynamics']>) => patch((c) => ({ ...c, aerodynamics: { ...c.aerodynamics, ...v } }))
   return (
     <>
@@ -64,6 +66,71 @@ export function AeroTab({ config, patch }: { config: ClientConfig; patch: Patch 
           value={a.ca_multiplier}
           onChange={(v) => set({ ca_multiplier: v })}
         />
+      </Group>
+      <Group
+        collapsible
+        defaultOpen={powerOff}
+        badge={powerOff ? tr('別の値', 'Separate') : tr('燃焼中と同じ', 'Same as powered')}
+        title={tr('燃焼していないときの CA', 'Engine-off CA')}
+        note={tr(
+          '燃焼前・燃焼後はベース抗力が増えるので、別の CA を使えます。指定しなければ燃焼中と同じ CA です。テーブルにも CA 倍率が掛かります。',
+          'Base drag rises when the engine is not firing, so a separate CA can be used before ignition and after burnout. Unset, the powered CA applies. The CA multiplier also scales this table.',
+        )}
+      >
+        <Toggle
+          label={tr('燃焼中と別の CA を使う', 'Use a separate CA')}
+          checked={powerOff}
+          onChange={(on) =>
+            set(
+              !on
+                ? { ca_power_off_constant: undefined, ca_power_off_profile: undefined }
+                : // Start from the powered CA, table or constant
+                  a.ca_profile.length > 0
+                  ? { ca_power_off_profile: a.ca_profile.map((p) => ({ ...p })) }
+                  : { ca_power_off_constant: a.ca_constant },
+            )
+          }
+        />
+        {powerOff && (
+          <>
+            <Toggle
+              label={tr('マッハ数テーブルで入力', 'Enter as Mach table')}
+              checked={offTable}
+              onChange={(on) => {
+                const ca = a.ca_power_off_constant ?? a.ca_constant
+                set({
+                  ca_power_off_constant: on ? undefined : ca,
+                  ca_power_off_profile: on
+                    ? [
+                        { mach: 0, value: ca },
+                        { mach: 5, value: ca },
+                      ]
+                    : undefined,
+                })
+              }}
+            />
+            {offTable ? (
+              <ProfileTable
+                path="aerodynamics.ca_power_off_profile"
+                title={tr('燃焼していないときの CA のマッハ数テーブル', 'Engine-off CA vs. Mach')}
+                columns={[
+                  { key: 'mach', label: 'Mach' },
+                  { key: 'value', label: 'CA' },
+                ]}
+                rows={a.ca_power_off_profile ?? []}
+                onChange={(rows) => set({ ca_power_off_profile: rows })}
+              />
+            ) : (
+              <NumberField
+                label="CA"
+                unit="—"
+                path="aerodynamics.ca_power_off_constant"
+                value={a.ca_power_off_constant ?? a.ca_constant}
+                onChange={(v) => set({ ca_power_off_constant: v })}
+              />
+            )}
+          </>
+        )}
       </Group>
       <Group title={tr('法線力係数 CN', 'Normal force coefficient CN')}>
         <Toggle
