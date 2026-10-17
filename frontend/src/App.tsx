@@ -4,19 +4,22 @@ import { useSimulation } from './hooks/useSimulation'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useFileDrop } from './hooks/useFileDrop'
 import { usePlayerKeys, usePlayerTrack } from './hooks/usePlayer'
+import { useUndoKeys } from './hooks/useUndoKeys'
+import { useOpenSharedLink } from './hooks/useShareLink'
 import { Inspector, navForField, type InspectorNav } from './components/Inspector'
 import { FieldContext, IconButton } from './components/primitives'
 import { PlaybackBar } from './components/Playback'
 import { Header } from './components/Header'
 import type { FileActions } from './components/FileMenu'
 import { LayoutSwitch, SplitView, useSplitRatio } from './components/SplitView'
-import { BottomPanel, MobileResults, type PanelTab } from './components/BottomPanel'
+import { BottomPanel, MobileResults, type CompareProps, type PanelTab, type Reference } from './components/BottomPanel'
 import { GlobeStage } from './components/GlobeStage'
 import { Toast, useToast } from './components/Toast'
 import { trackToCsv } from './lib/trajectory'
 import { computeSpecs } from './lib/specs'
 import { generateKML } from './lib/kml'
 import { fileBase, saveFile } from './lib/download'
+import { buildShareUrl } from './lib/share'
 import { cn } from './lib/cn'
 import type { ValidationIssue } from './lib/validation'
 
@@ -37,6 +40,15 @@ export default function App() {
 
   usePlayerTrack(track)
   usePlayerKeys()
+  useUndoKeys(sim.undo, sim.redo)
+  useOpenSharedLink(sim.load, showToast)
+
+  const [reference, setReference] = useState<Reference | null>(null)
+  const compare: CompareProps = {
+    reference,
+    onPin: () => track && setReference({ track, label: config.name || 'カスタム' }),
+    onUnpin: () => setReference(null),
+  }
 
   // Field refs for "jump to issue".
   const fieldRefs = useRef(new Map<string, HTMLElement>())
@@ -74,6 +86,15 @@ export default function App() {
     base,
     open: openFiles,
     saveJson: () => saveFile(`${base}.json`, JSON.stringify(config, null, 2), 'application/json'),
+    copyLink: async () => {
+      try {
+        const url = await buildShareUrl(window.location.href, config, sim.presetId)
+        await navigator.clipboard.writeText(url)
+        showToast(url.length > 8000 ? '共有リンクをコピーしました（長いため、使う場所によっては途中で切れることがあります）。' : '共有リンクをコピーしました。', 'ok')
+      } catch {
+        showToast('共有リンクをコピーできませんでした。', 'error')
+      }
+    },
     saveCsv: () => track && saveFile(`${base}_trajectory.csv`, trackToCsv(track), 'text/csv'),
     saveKml: () => track && saveFile(`${base}_trajectory.kml`, generateKML(track, config.name), 'application/vnd.google-earth.kml+xml'),
   }
@@ -93,7 +114,7 @@ export default function App() {
     </FieldContext.Provider>
   )
 
-  const globe = <GlobeStage track={track} status={sim.status} error={sim.error} compactTelemetry={isMobile || split.ratio < 0.35} />
+  const globe = <GlobeStage track={track} reference={reference?.track ?? null} status={sim.status} error={sim.error} compactTelemetry={isMobile || split.ratio < 0.35} />
 
   return (
     <div className="flex h-full flex-col">
@@ -118,6 +139,7 @@ export default function App() {
         showDrawerToggle={!isDesktop && !isMobile}
         onToggleDrawer={() => setDrawerOpen((v) => !v)}
         compact={isMobile}
+        history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
       />
 
       <div className="relative flex min-h-0 flex-1">
@@ -148,7 +170,7 @@ export default function App() {
           {isMobile ? (
             <>
               <div className={cn('min-h-0 flex-1', mobileView !== 'globe' && 'hidden')}>{globe}</div>
-              {mobileView === 'charts' && track && <MobileResults track={track} />}
+              {mobileView === 'charts' && track && <MobileResults track={track} compare={compare} />}
               {track && mobileView !== 'params' && <PlaybackBar track={track} />}
             </>
           ) : (
@@ -164,6 +186,7 @@ export default function App() {
                     onTab={setPanelTab}
                     track={track}
                     layoutSwitch={<LayoutSwitch layout={split.layout} onRatio={split.setRatio} />}
+                    compare={compare}
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-ink-3">{sim.status === 'running' ? '計算中…' : ''}</div>

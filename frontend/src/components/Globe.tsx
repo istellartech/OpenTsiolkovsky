@@ -113,9 +113,20 @@ interface Built {
   heading: number
 }
 
-function buildScene(viewer: Viewer, track: Track): Built {
+function buildScene(viewer: Viewer, track: Track, reference: Track | null): Built {
   viewer.entities.removeAll()
   const { samples } = track
+
+  // Pinned earlier result, for comparison.
+  if (reference) {
+    viewer.entities.add({
+      polyline: {
+        positions: reference.samples.map((s) => Cartesian3.fromDegrees(s.lon, s.lat, Math.max(s.alt, 0))),
+        width: 2,
+        material: new PolylineDashMaterialProperty({ color: Color.fromCssColorString(INK).withAlpha(0.35), dashLength: 6 }),
+      },
+    })
+  }
 
   const positions = samples.map((s) => Cartesian3.fromDegrees(s.lon, s.lat, Math.max(s.alt, 0)))
   const ground = samples.map((s) => Cartesian3.fromDegrees(s.lon, s.lat, 0))
@@ -260,9 +271,10 @@ function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
 
 interface GlobeProps {
   track: Track | null
+  reference?: Track | null
 }
 
-export default function Globe({ track }: GlobeProps) {
+export default function Globe({ track, reference = null }: GlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const builtRef = useRef<Built | null>(null)
@@ -301,7 +313,7 @@ export default function Globe({ track }: GlobeProps) {
   useEffect(() => {
     const viewer = viewerRef.current
     if (!viewer || !track) return
-    const built = buildScene(viewer, track)
+    const built = buildScene(viewer, track, reference)
     builtRef.current = built
 
     // Only move the camera when the flight itself moved somewhere else;
@@ -318,7 +330,7 @@ export default function Globe({ track }: GlobeProps) {
       viewer.trackedEntity = built.vehicle
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track])
+  }, [track, reference])
 
 
   // Re-fit the overview when the map area is resized (layout switch, divider drag).

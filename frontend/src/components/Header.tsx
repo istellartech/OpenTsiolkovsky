@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useRef, useState } from 'react'
-import { SlidersHorizontal } from 'lucide-react'
+import { Redo2, SlidersHorizontal, Undo2 } from 'lucide-react'
 import type { RunStatus } from '../hooks/useSimulation'
 import { useDismiss } from '../hooks/useDismiss'
 import type { ValidationIssue } from '../lib/validation'
@@ -23,7 +23,11 @@ export function Header(props: {
   showDrawerToggle: boolean
   onToggleDrawer: () => void
   compact: boolean
+  history: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void }
+  /** Extra buttons placed before the file menu */
+  actions?: ReactNode
 }) {
+  const mod = navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl+'
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-2 sm:px-3">
       {props.showDrawerToggle && (
@@ -36,9 +40,18 @@ export function Header(props: {
       </div>
       <div className="mx-1 hidden h-5 w-px shrink-0 bg-line sm:block" />
       <VehiclePicker name={props.name} presetId={props.presetId} onPreset={props.onPreset} onBlank={props.onBlank} />
+      <div className="hidden shrink-0 items-center sm:flex">
+        <IconButton label={`元に戻す (${mod}Z)`} onClick={props.history.undo} disabled={!props.history.canUndo}>
+          <Undo2 className="h-4 w-4" />
+        </IconButton>
+        <IconButton label={`やり直す (${mod}⇧Z)`} onClick={props.history.redo} disabled={!props.history.canRedo}>
+          <Redo2 className="h-4 w-4" />
+        </IconButton>
+      </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-1">
         <StatusIndicator {...props} />
+        {props.actions}
         <FileMenu files={props.files} hasResult={props.hasResult} />
       </div>
     </header>

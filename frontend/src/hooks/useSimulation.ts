@@ -5,12 +5,19 @@ import { PRESET_OPTIONS, createBlankConfig } from '../config/presets'
 import { isValidClientConfig, validateConfig } from '../lib/validation'
 import type { Track } from '../lib/trajectory'
 import { baseName, fromLegacyParamFile, isLegacyParamFile } from '../lib/legacy'
+import { commit, initHistory, redo as redoHistory, undo as undoHistory, type History } from '../lib/history'
 
 const LOCALSTORAGE_KEY = 'openTsiolkovsky_config'
 const LOCALSTORAGE_PRESET_KEY = 'openTsiolkovsky_preset'
 const RUN_DEBOUNCE_MS = 250
 
-function loadStored(): { config: ClientConfig; presetId: string } | null {
+interface Entry {
+  config: ClientConfig
+  /** Preset the config came from unchanged, or 'custom' */
+  presetId: string
+}
+
+function loadStored(): Entry | null {
   try {
     const stored = localStorage.getItem(LOCALSTORAGE_KEY)
     if (!stored) return null
@@ -49,9 +56,10 @@ export interface SimulationResult {
 }
 
 export function useSimulation() {
-  const initial = useMemo(() => loadStored() ?? { config: PRESET_OPTIONS[0].create(), presetId: PRESET_OPTIONS[0].id }, [])
-  const [config, setConfigState] = useState<ClientConfig>(initial.config)
-  const [presetId, setPresetId] = useState(initial.presetId)
+  const [history, setHistory] = useState<History<Entry>>(() =>
+    initHistory(loadStored() ?? { config: PRESET_OPTIONS[0].create(), presetId: PRESET_OPTIONS[0].id }),
+  )
+  const { config, presetId } = history.present
   const [status, setStatus] = useState<RunStatus>('running')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SimulationResult | null>(null)
@@ -60,10 +68,21 @@ export function useSimulation() {
   const issues = useMemo(() => validateConfig(config), [config])
   const issueMap = useMemo(() => new Map(issues.map((i) => [i.field, i.message])), [issues])
 
+  /** Edit the config. Rapid successive edits become a single undo step. */
   const patch = useCallback((fn: (c: ClientConfig) => ClientConfig) => {
-    setConfigState((c) => fn(c))
-    setPresetId('custom')
+    setHistory((h) => {
+      const next = fn(h.present.config)
+      return next === h.present.config ? h : commit(h, { config: next, presetId: 'custom' }, { key: 'edit' })
+    })
   }, [])
+
+  /** Replace the whole config (preset, file, shared link) as one undo step. */
+  const load = useCallback((config: ClientConfig, presetId = 'custom') => {
+    setHistory((h) => commit(h, { config, presetId }))
+  }, [])
+
+  const undo = useCallback(() => setHistory(undoHistory), [])
+  const redo = useCallback(() => setHistory(redoHistory), [])
 
   // Persist and re-run on every change (debounced). The solver is fast enough
   // that results follow the inputs without an explicit "run" step.
@@ -94,16 +113,16 @@ export function useSimulation() {
   }, [config, issues.length, presetId])
 
   const startBlank = useCallback(() => {
-    setConfigState((c) => createBlankConfig(c.launch))
-    setPresetId('custom')
+    setHistory((h) => commit(h, { config: createBlankConfig(h.present.config.launch), presetId: 'custom' }))
   }, [])
 
-  const applyPreset = useCallback((id: string) => {
-    const preset = PRESET_OPTIONS.find((p) => p.id === id)
-    if (!preset) return
-    setConfigState(preset.create())
-    setPresetId(id)
-  }, [])
+  const applyPreset = useCallback(
+    (id: string) => {
+      const preset = PRESET_OPTIONS.find((p) => p.id === id)
+      if (preset) load(preset.create(), id)
+    },
+    [load],
+  )
 
   /**
    * Open a settings file: either one saved from this app, or a CLI parameter
@@ -135,8 +154,7 @@ export function useSimulation() {
       } catch (err) {
         return { ok: false, message: `「${file.name}」を変換できませんでした：${err instanceof Error ? err.message : String(err)}` }
       }
-      setConfigState(imported.config)
-      setPresetId('custom')
+      load(imported.config)
       const notes: string[] = []
       if (imported.missing.length) {
         notes.push(`参照しているCSVが見つからないため定数値を使っています（${imported.missing.join('、')}）。JSONと一緒に選ぶかドロップしてください。`)
@@ -149,10 +167,26 @@ export function useSimulation() {
     if (!isValidClientConfig(parsed)) {
       return { ok: false, message: `「${file.name}」は設定ファイルとして読めませんでした（このアプリで保存した設定か、CLI用の param_*.json を選んでください）。` }
     }
-    setConfigState(parsed)
-    setPresetId('custom')
+    load(parsed)
     return { ok: true, message: `「${file.name}」を読み込みました。` }
-  }, [])
+  }, [load])
 
-  return { config, patch, presetId, applyPreset, startBlank, importFiles, status, error, result, issues, issueMap }
+  return {
+    config,
+    patch,
+    load,
+    undo,
+    redo,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
+    presetId,
+    applyPreset,
+    startBlank,
+    importFiles,
+    status,
+    error,
+    result,
+    issues,
+    issueMap,
+  }
 }

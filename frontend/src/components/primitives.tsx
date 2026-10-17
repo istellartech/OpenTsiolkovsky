@@ -16,7 +16,7 @@ export function IconButton({
       title={label}
       className={cn(
         'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] transition-colors',
-        'text-ink-2 hover:bg-surface-2 hover:text-ink',
+        'text-ink-2 hover:bg-surface-2 hover:text-ink disabled:pointer-events-none disabled:opacity-35',
         className,
       )}
       {...props}

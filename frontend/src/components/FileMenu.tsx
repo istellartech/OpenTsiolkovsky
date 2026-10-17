@@ -1,11 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
-import { ChevronDown, FileText, FolderOpen, Map as MapIcon, Save, Table2 } from 'lucide-react'
+import { ChevronDown, FileText, FolderOpen, Link2, Map as MapIcon, Save, Table2 } from 'lucide-react'
 import { useDismiss } from '../hooks/useDismiss'
 
 export interface FileActions {
   base: string
   open: (files: File[]) => void
   saveJson: () => void
+  copyLink: () => void
   saveCsv: () => void
   saveKml: () => void
 }
@@ -86,6 +87,13 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
             onSelect={() => input.current?.click()}
           />
           <MenuItem onClose={close} icon={Save} title="設定を保存" detail={`いまの入力を ${files.base}.json として保存します。`} onSelect={files.saveJson} />
+          <MenuItem
+            onClose={close}
+            icon={Link2}
+            title="共有リンクをコピー"
+            detail="いまの設定を URL に埋め込みます。開くと同じ機体・条件で計算されます。"
+            onSelect={files.copyLink}
+          />
           <div className="my-1 h-px bg-line" />
           <p className="px-2.5 pb-0.5 pt-1 text-[11px] font-semibold text-ink-2">計算結果を書き出す</p>
           <MenuItem

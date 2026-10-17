@@ -10,11 +10,13 @@ const Globe = lazy(() => import('./Globe'))
 /** The 3D view with its overlays: telemetry, stale-result and divergence notices. */
 export function GlobeStage({
   track,
+  reference,
   status,
   error,
   compactTelemetry,
 }: {
   track: Track | null
+  reference: Track | null
   status: RunStatus
   error: string | null
   compactTelemetry: boolean
@@ -33,7 +35,7 @@ export function GlobeStage({
         )}
       >
         <Suspense fallback={<div className="h-full w-full bg-bg" />}>
-          <Globe track={track} />
+          <Globe track={track} reference={reference} />
         </Suspense>
       </ErrorBoundary>
       {track?.truncatedAt !== undefined && (

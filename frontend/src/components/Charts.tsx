@@ -94,21 +94,25 @@ const eventLines = (track: Track, color: string): Plugin<'line'> => ({
 interface ChartViewProps {
   spec: ChartSpec
   track: Track
+  /** Pinned earlier result, drawn underneath for comparison */
+  reference?: Track | null
   large?: boolean
   onExpand?: () => void
 }
 
 /** Visible y range for samples inside [x0, x1], padded. */
-function yRangeFor(spec: ChartSpec, track: Track, x0: number, x1: number) {
+function yRangeFor(spec: ChartSpec, tracks: Track[], x0: number, x1: number) {
   let lo = Infinity
   let hi = -Infinity
-  for (const s of track.samples) {
-    const x = spec.x === 'time' ? s.t : s.downrange
-    if (x < x0 || x > x1) continue
-    for (const ser of spec.series) {
-      const v = ser.get(s)
-      if (v < lo) lo = v
-      if (v > hi) hi = v
+  for (const track of tracks) {
+    for (const s of track.samples) {
+      const x = spec.x === 'time' ? s.t : s.downrange
+      if (x < x0 || x > x1) continue
+      for (const ser of spec.series) {
+        const v = ser.get(s)
+        if (v < lo) lo = v
+        if (v > hi) hi = v
+      }
     }
   }
   if (!Number.isFinite(lo)) return null
@@ -116,7 +120,7 @@ function yRangeFor(spec: ChartSpec, track: Track, x0: number, x1: number) {
   return { min: lo - pad, max: hi + pad }
 }
 
-function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
+function ChartView({ spec, track, reference = null, large = false, onExpand }: ChartViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const chartRef = useRef<Chart<'line'> | null>(null)
   const lineRef = useRef<HTMLDivElement>(null)
@@ -151,6 +155,22 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
       pointHoverRadius: 0,
       tension: 0,
     }))
+    if (reference) {
+      const ref = spec.series[0]
+      datasets.push({
+        label: `比較: ${ref.label}`,
+        data: reference.samples.map((s) => ({ x: xOf(s), y: ref.get(s), stage: s.stage })),
+        borderWidth: large ? 1.75 : 1.5,
+        borderColor: c.ink3,
+        borderDash: [6, 4],
+        segment: undefined,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        tension: 0,
+      })
+    }
+    const t0 = reference ? Math.min(track.t0, reference.t0) : track.t0
+    const t1 = reference ? Math.max(track.t1, reference.t1) : track.t1
 
     const config: ChartConfiguration<'line'> = {
       type: 'line',
@@ -185,8 +205,8 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
         scales: {
           x: {
             type: 'linear',
-            min: spec.x === 'time' ? track.t0 : undefined,
-            max: spec.x === 'time' ? track.t1 : undefined,
+            min: spec.x === 'time' ? t0 : undefined,
+            max: spec.x === 'time' ? t1 : undefined,
             border: { color: c.line },
             grid: { color: c.line, drawTicks: false },
             ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 12 : 6, padding: 4, includeBounds: false },
@@ -267,7 +287,7 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
       chart.destroy()
       chartRef.current = null
     }
-  }, [spec, track, large])
+  }, [spec, track, reference, large])
 
   const setRange = (x0?: number, x1?: number) => {
     const chart = chartRef.current
@@ -275,15 +295,15 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
     const xs = chart.options.scales!.x!
     const ys = chart.options.scales!.y!
     if (x0 === undefined || x1 === undefined) {
-      xs.min = spec.x === 'time' ? track.t0 : undefined
-      xs.max = spec.x === 'time' ? track.t1 : undefined
+      xs.min = spec.x === 'time' ? Math.min(track.t0, reference?.t0 ?? Infinity) : undefined
+      xs.max = spec.x === 'time' ? Math.max(track.t1, reference?.t1 ?? -Infinity) : undefined
       ys.min = undefined
       ys.max = undefined
       setZoomed(false)
     } else {
       xs.min = x0
       xs.max = x1
-      const yr = yRangeFor(spec, track, x0, x1)
+      const yr = yRangeFor(spec, reference ? [track, reference] : [track], x0, x1)
       ys.min = yr?.min
       ys.max = yr?.max
       setZoomed(true)
@@ -398,7 +418,19 @@ function ChartView({ spec, track, large = false, onExpand }: ChartViewProps) {
   )
 }
 
-function ChartDialog({ index, track, onIndex, onClose }: { index: number; track: Track; onIndex: (i: number) => void; onClose: () => void }) {
+function ChartDialog({
+  index,
+  track,
+  reference,
+  onIndex,
+  onClose,
+}: {
+  index: number
+  track: Track
+  reference: Track | null
+  onIndex: (i: number) => void
+  onClose: () => void
+}) {
   const spec = CHARTS[index]
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -437,23 +469,23 @@ function ChartDialog({ index, track, onIndex, onClose }: { index: number; track:
           </button>
         </div>
         <div className="min-h-0 flex-1">
-          <ChartView key={spec.id} spec={spec} track={track} large />
+          <ChartView key={spec.id} spec={spec} track={track} reference={reference} large />
         </div>
       </div>
     </div>
   )
 }
 
-export function ChartGrid({ track }: { track: Track }) {
+export function ChartGrid({ track, reference = null }: { track: Track; reference?: Track | null }) {
   const [open, setOpen] = useState<number | null>(null)
   return (
     <>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2">
         {CHARTS.map((spec, i) => (
-          <ChartView key={spec.id} spec={spec} track={track} onExpand={() => setOpen(i)} />
+          <ChartView key={spec.id} spec={spec} track={track} reference={reference} onExpand={() => setOpen(i)} />
         ))}
       </div>
-      {open !== null && <ChartDialog index={open} track={track} onIndex={setOpen} onClose={() => setOpen(null)} />}
+      {open !== null && <ChartDialog index={open} track={track} reference={reference} onIndex={setOpen} onClose={() => setOpen(null)} />}
     </>
   )
 }
