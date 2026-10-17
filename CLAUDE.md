@@ -1,9 +1,12 @@
 # Claude Code Guidelines
 
+> To *use* the simulator (fly vehicles, validate configs, run Monte Carlo, make web links) rather than develop it, read `docs/ai.md`: `openTsiolkovsky-cli run --json`, `validate --json`, `schema`, `share`, and the MCP server (`.mcp.json`). Claude Code also has the `rocket-sim` skill.
+
 This guide helps Claude Code work effectively with the OpenTsiolkovsky project, now with Rust as the primary implementation.
 
 ## Project Structure & Module Organization
 - `src/` Main Rust simulator with CLI binary and WASM library for physics simulation.
+  - `src/agent.rs` / `src/mcp.rs`: machine-readable interface for AI agents (`--json`, `schema`, `share`, MCP server); spec and current status in `docs/ai.md`.
 - `tests/` Rust integration tests (`cpp_reference.rs` compares against stored legacy C++ output; `conservation.rs` checks energy/angular momentum).
 - `tools/compare_cpp.py` Runs the Rust CLI and the C++ binary on one parameter file and reports the largest differences.
 - `examples/` Configuration files and sample data (e.g., `param_sample_01.json`, `SS-520-4/`).
@@ -19,6 +22,7 @@ This guide helps Claude Code work effectively with the OpenTsiolkovsky project, 
   - CLI: `cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --verbose`.
   - WASM: `wasm-pack build --target web --features wasm`.
 - Frontend (Vite+ toolchain, `vp` from `frontend/node_modules/.bin`): `cd frontend && bun install && bun run dev` (build: `bun run build`; frontend only: `bunx vp build`).
+- Agent/script interface (`src/agent.rs`, `src/mcp.rs`; see `docs/ai.md`): `openTsiolkovsky-cli run --json`, `validate --json`, `schema [param|dispersion]`, `share`, `mcp` (stdio MCP server, also in `.mcp.json`). Keep the JSON keys, error kinds and exit codes (0 ok, 1 failure, 2 usage, 3 invalid config) stable; document changes in `docs/ai.md`.
 - Legacy C++ build: `cd legacy_cpp && make` (needs Boost: `brew install boost` on macOS; outputs `legacy_cpp/bin/OpenTsiolkovsky`), clean: `make clean`.
 - Rust vs C++: `cargo build --release && python3 tools/compare_cpp.py examples/param_momo.json`.
 - Legacy C++ run: `./legacy_cpp/bin/OpenTsiolkovsky examples/param_sample_01.json`.

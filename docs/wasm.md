@@ -2,6 +2,8 @@
 
 ブラウザ上でOpenTsiolkovskyを実行するためのWASMビルド方法を説明します。
 
+AI・スクリプト向けの機能（`src/agent.rs`・`src/mcp.rs`）はネイティブの CLI 専用で、WASM には入りません（[AI エージェントからの利用](ai.md)）。
+
 ## 必要環境
 
 - Rust toolchain (stable)

@@ -1,9 +1,12 @@
 # Repository Guidelines
 
+> To *use* the simulator (fly vehicles, validate configs, run Monte Carlo, make web links) rather than develop it, read `docs/ai.md`: `openTsiolkovsky-cli run --json`, `validate --json`, `schema`, `share`, and the MCP server (`.mcp.json`). Claude Code also has the `rocket-sim` skill.
+
 This guide helps contributors work effectively across the Rust core, legacy C++ reference, and frontend.
 
 ## Project Structure & Module Organization
 - `src/` Main Rust simulator with CLI binary and WASM library for physics simulation.
+  - `src/agent.rs` / `src/mcp.rs`: machine-readable interface for AI agents (`--json`, `schema`, `share`, MCP server); spec and current status in `docs/ai.md`.
 - `tests/` Rust integration tests.
 - `examples/` Configuration files and sample data (e.g., `param_sample_01.json`, `SS-520-4/`).
 - `frontend/` Vite + React + TypeScript UI for the web API.
@@ -19,6 +22,7 @@ This guide helps contributors work effectively across the Rust core, legacy C++ 
   - CLI: `cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --verbose`.
   - WASM: `wasm-pack build --target web --features wasm` or `./scripts/wasm_build.sh`.
 - Frontend: `cd frontend && bun install && bun run dev` (build: `bun run build`).
+- Agent/script interface (`src/agent.rs`, `src/mcp.rs`; see `docs/ai.md`): `openTsiolkovsky-cli run --json`, `validate --json`, `schema [param|dispersion]`, `share`, `mcp` (stdio MCP server, also in `.mcp.json`). Keep the JSON keys, error kinds and exit codes (0 ok, 1 failure, 2 usage, 3 invalid config) stable; document changes in `docs/ai.md`.
 - Legacy C++ build: `cd legacy_cpp && make` (outputs `legacy_cpp/bin/OpenTsiolkovsky`), clean: `make clean`.
 - Legacy C++ run: `./legacy_cpp/bin/OpenTsiolkovsky examples/param_sample_01.json`.
 - Flight script: `python legacy_cpp/test/test_flight.py` (expects built C++ binary).

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "opentsiolkovsky": {
+      "command": "cargo",
+      "args": ["run", "--quiet", "--release", "--bin", "openTsiolkovsky-cli", "--", "mcp"]
+    }
+  }
+}

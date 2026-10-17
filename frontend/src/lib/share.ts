@@ -1,6 +1,10 @@
 // Shareable links. An unedited preset is linked by id (`#preset=h3_22s`); an
 // edited config travels in the fragment as deflated, base64url-encoded JSON
-// (`#c=...`). The fragment never reaches the server.
+// (`#c=...`). The fragment never reaches the server. The CLI (`share`) and
+// the MCP server link CLI parameter files the same way, as
+// `{ "legacy": param_*.json, "files": { "name.csv": text } }`.
+
+import { baseName, isLegacyParamFile } from './legacy'
 
 const toBase64Url = (bytes: Uint8Array) => {
   let bin = ''
@@ -44,4 +48,22 @@ export async function buildShareUrl(base: string, config: unknown, presetId: str
   const url = new URL(base)
   url.hash = presetId !== 'custom' ? `preset=${encodeURIComponent(presetId)}` : `c=${await encodePayload(config)}`
   return url.toString()
+}
+
+/** A CLI parameter file and the CSV tables it references, keyed by file name. */
+export interface LegacyBundle {
+  param: Record<string, unknown>
+  files: Map<string, string>
+}
+
+/** The CLI parameter file a share payload carries (bare or with its tables), if any. */
+export function asLegacyBundle(value: unknown): LegacyBundle | null {
+  if (isLegacyParamFile(value)) return { param: value, files: new Map() }
+  if (!value || typeof value !== 'object') return null
+  const { legacy, files } = value as { legacy?: unknown; files?: unknown }
+  if (!isLegacyParamFile(legacy)) return null
+  const tables = new Map<string, string>()
+  if (files && typeof files === 'object')
+    for (const [name, text] of Object.entries(files)) if (typeof text === 'string') tables.set(baseName(name), text)
+  return { param: legacy, files: tables }
 }

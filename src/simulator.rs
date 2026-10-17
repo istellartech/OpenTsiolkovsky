@@ -567,7 +567,17 @@ impl Simulator {
             .filter(|&t| t > 0.0 && t < end_time)
             .collect();
         event_times.sort_by(f64::total_cmp);
-        event_times.dedup();
+        // Merge times that differ only by rounding (a burnout summed from other
+        // stage times can land a few ulps before the separation it coincides
+        // with); keep the later one so stopping there passes both.
+        let mut merged: Vec<f64> = Vec::with_capacity(event_times.len());
+        for t in event_times {
+            match merged.last_mut() {
+                Some(last) if t - *last <= 1.0e-9 => *last = t,
+                _ => merged.push(t),
+            }
+        }
+        let event_times = merged;
 
         let mut sim = Simulator {
             config,
@@ -872,7 +882,13 @@ impl Simulator {
             if powered && at(rt.burn_start) {
                 kinds.push((EventKind::Ignition, rt.index));
             }
-            if powered && at(rt.power_end) && !initial {
+            // Skip when the propellant already ran out (located by root
+            // finding) within the tolerance of the scheduled end
+            let burned_out = self
+                .events
+                .iter()
+                .any(|e| e.kind == EventKind::Burnout && e.stage as usize == rt.index + 1);
+            if powered && at(rt.power_end) && !initial && !burned_out {
                 kinds.push((EventKind::Burnout, rt.index));
             }
             let has_next = rt.index + 1 < self.stage_runtime.len();
@@ -2051,6 +2067,40 @@ mod tests {
         stage2.stage.separation_time = 1.0e6;
         config.stages.push(stage2);
         config
+    }
+
+    #[test]
+    fn test_separation_coinciding_with_burnout_up_to_rounding() {
+        // Burnout a few ulps before the separation must not push the
+        // separation to the next output sample.
+        let mut config = two_stage_config();
+        config.stages[0].stage.separation_time = 6.25; // between output samples
+        config.stages[0].thrust.burn_end_time = 6.25 - 4.0e-15;
+        config.stages[0].thrust.forced_cutoff_time = 6.25 - 4.0e-15;
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        sim.run();
+        let bodies = sim.simulate_fall_bodies();
+        assert_eq!(bodies.len(), 1);
+        assert!((bodies[0].release_time_s - 6.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_single_burnout_when_propellant_runs_out_at_burn_end() {
+        // Propellant for the burn to 10 s less a hair: depletion is found
+        // just before the scheduled end, which must not add a second burnout.
+        let mut config = two_stage_config();
+        let s2 = &mut config.stages[1];
+        let flow = s2.thrust.const_thrust_vac / (s2.thrust.const_isp_vac * G0);
+        s2.mass_dry = Some(s2.mass_initial - flow * 9.0 * (1.0 - 1.0e-12));
+        let mut sim = Simulator::new(Rocket::new(config)).unwrap();
+        sim.run();
+        let burnouts: Vec<_> = sim
+            .events
+            .iter()
+            .filter(|e| e.kind == EventKind::Burnout && e.stage == 2)
+            .collect();
+        assert_eq!(burnouts.len(), 1);
+        assert!((burnouts[0].time_s - 16.0).abs() < 1e-6);
     }
 
     #[test]

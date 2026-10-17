@@ -4,6 +4,8 @@ CLI が読む `param_*.json`（旧C++版と同じ形式）の項目と、そこ�
 
 キー名は単位や型を含めて一字一句そのまま書きます（例: `"burn end time(time of each stage)[s]"`）。表で既定値のある項目は省略できます。既定値が「—」の項目は必須です。
 
+機械可読な定義（JSON Schema）は `openTsiolkovsky-cli schema` で出力できます（分散ファイルは `schema dispersion`）。書いた設定は `openTsiolkovsky-cli validate -c FILE` で、飛ばさずに確かめられます（[AI エージェントからの利用](ai.md)）。
+
 ## 最小構成の例
 
 ```json

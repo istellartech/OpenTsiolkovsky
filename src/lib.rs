@@ -6,6 +6,11 @@ pub mod physics;
 pub mod rocket;
 pub mod simulator;
 
+// Native only: file access, threads and stdio (the web app uses `wasm`)
+#[cfg(all(feature = "cli", not(target_arch = "wasm32")))]
+pub mod agent;
+#[cfg(all(feature = "cli", not(target_arch = "wasm32")))]
+pub mod mcp;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
