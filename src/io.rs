@@ -701,6 +701,9 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
         "acc_body_x[m/s2]",
         "acc_body_y[m/s2]",
         "acc_body_z[m/s2]",
+        "flight_mode",
+        "IIP_lat[deg]",
+        "IIP_lon[deg]",
     ])?;
 
     // Write data
@@ -726,6 +729,9 @@ pub fn save_trajectory_csv<P: AsRef<Path>>(
             state.acc_body.x.to_string(),
             state.acc_body.y.to_string(),
             state.acc_body.z.to_string(),
+            state.flight_mode.as_str().to_string(),
+            state.iip_lat_deg.map_or(String::new(), |v| v.to_string()),
+            state.iip_lon_deg.map_or(String::new(), |v| v.to_string()),
         ])?;
     }
 
