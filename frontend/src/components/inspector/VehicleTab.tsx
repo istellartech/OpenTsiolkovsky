@@ -101,7 +101,11 @@ export function VehicleTab({
           </button>
         ))}
         {stages.length < MAX_STAGE_COUNT && (
-          <button type="button" onClick={addStage} className="flex h-8 items-center gap-1 rounded-[6px] px-2 text-[12px] text-ink-2 hover:bg-surface-2 hover:text-ink">
+          <button
+            type="button"
+            onClick={addStage}
+            className="flex h-8 items-center gap-1 rounded-[6px] px-2 text-[12px] text-ink-2 hover:bg-surface-2 hover:text-ink"
+          >
             <Plus className="h-3.5 w-3.5" /> {tr('段を追加', 'Add stage')}
           </button>
         )}
@@ -116,7 +120,10 @@ export function VehicleTab({
       >
         <NumberField
           label={tr('段の質量', 'Stage mass')}
-          hint={tr('この段単体の質量（推進剤込み）。上の段は含めません。', 'Mass of this stage alone, including propellant. Excludes upper stages.')}
+          hint={tr(
+            'この段単体の質量（推進剤込み）。上の段は含めません。',
+            'Mass of this stage alone, including propellant. Excludes upper stages.',
+          )}
           unit="kg"
           path={p('mass_initial_kg')}
           value={stage.mass_initial_kg}
@@ -134,21 +141,36 @@ export function VehicleTab({
           <div className="flex min-h-8 items-center justify-between py-[3px] text-ink-2">
             <span>
               {tr('推進剤', 'Propellant')}
-              <span className="block text-[10px] leading-snug text-ink-3">{tr('推力・Ispのテーブルから計算', 'Computed from thrust and Isp tables')}</span>
+              <span className="block text-[10px] leading-snug text-ink-3">
+                {tr('推力・Ispのテーブルから計算', 'Computed from thrust and Isp tables')}
+              </span>
             </span>
             <span className="num w-[9.5rem] pr-2 text-right text-[13px] text-ink">{fmtMass(spec.propellant)}</span>
           </div>
         )}
         <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 rounded-[6px] bg-surface-2 px-2.5 py-2 text-[11px]">
           <Readout k={tr('燃焼時間', 'Burn time')} v={`${fmt(spec.burnTime)} s`} />
-          <Readout k={tr('燃焼後', 'Burnout mass')} v={fmtMass(Math.max(stage.mass_initial_kg - spec.propellant, 0))} warn={spec.propellant >= stage.mass_initial_kg} />
-          <Readout k={tr('推進剤比', 'Propellant fraction')} v={`${fmt((spec.propellant / Math.max(stage.mass_initial_kg, 1e-9)) * 100, 0)} %`} />
-          <Readout k={tr('推力重量比', 'Thrust-to-weight')} v={fmt(spec.thrustIgnition / Math.max(spec.stackMass * 9.80665, 1e-9), 2)} warn={idx === 0 && spec.thrustIgnition < spec.stackMass * 9.80665} />
+          <Readout
+            k={tr('燃焼後', 'Burnout mass')}
+            v={fmtMass(Math.max(stage.mass_initial_kg - spec.propellant, 0))}
+            warn={spec.propellant >= stage.mass_initial_kg}
+          />
+          <Readout
+            k={tr('推進剤比', 'Propellant fraction')}
+            v={`${fmt((spec.propellant / Math.max(stage.mass_initial_kg, 1e-9)) * 100, 0)} %`}
+          />
+          <Readout
+            k={tr('推力重量比', 'Thrust-to-weight')}
+            v={fmt(spec.thrustIgnition / Math.max(spec.stackMass * 9.80665, 1e-9), 2)}
+            warn={idx === 0 && spec.thrustIgnition < spec.stackMass * 9.80665}
+          />
           <Readout k={tr('Δv（理想）', 'Δv (ideal)')} v={`${fmt(spec.dv / 1000, 2)} km/s`} />
           <Readout k={tr('点火時総質量', 'Mass at ignition')} v={fmtMass(spec.stackMass)} />
         </dl>
         {idx === 0 && spec.thrustIgnition < spec.stackMass * 9.80665 && (
-          <p className="mt-1 text-[11px] text-danger">{tr('推力が重量より小さく、離昇できません。', 'Thrust is less than weight; the vehicle cannot lift off.')}</p>
+          <p className="mt-1 text-[11px] text-danger">
+            {tr('推力が重量より小さく、離昇できません。', 'Thrust is less than weight; the vehicle cannot lift off.')}
+          </p>
         )}
       </Group>
 
@@ -170,9 +192,21 @@ export function VehicleTab({
         {thrustProfile.length > 0 ? (
           <ProfileTable
             title={tr(`${idx + 1}段の推力テーブル`, `Stage ${idx + 1} thrust table`)}
-            columns={[{ key: 'time', label: tr('時刻 s', 'Time s') }, { key: 'value', label: tr('推力 N', 'Thrust N') }]} rows={thrustProfile} onChange={(rows) => setStage({ thrust_profile: rows })} />
+            columns={[
+              { key: 'time', label: tr('時刻 s', 'Time s') },
+              { key: 'value', label: tr('推力 N', 'Thrust N') },
+            ]}
+            rows={thrustProfile}
+            onChange={(rows) => setStage({ thrust_profile: rows })}
+          />
         ) : (
-          <NumberField label={tr('推力（真空）', 'Thrust (vacuum)')} unit="N" path={p('thrust_constant')} value={stage.thrust_constant} onChange={(v) => setStage({ thrust_constant: v })} />
+          <NumberField
+            label={tr('推力（真空）', 'Thrust (vacuum)')}
+            unit="N"
+            path={p('thrust_constant')}
+            value={stage.thrust_constant}
+            onChange={(v) => setStage({ thrust_constant: v })}
+          />
         )}
         <Toggle
           label={tr('Isp を時刻テーブルで入力', 'Enter Isp as time table')}
@@ -191,9 +225,21 @@ export function VehicleTab({
         {ispProfile.length > 0 ? (
           <ProfileTable
             title={tr(`${idx + 1}段の比推力テーブル`, `Stage ${idx + 1} Isp table`)}
-            columns={[{ key: 'time', label: tr('時刻 s', 'Time s') }, { key: 'value', label: 'Isp s' }]} rows={ispProfile} onChange={(rows) => setStage({ isp_profile: rows })} />
+            columns={[
+              { key: 'time', label: tr('時刻 s', 'Time s') },
+              { key: 'value', label: 'Isp s' },
+            ]}
+            rows={ispProfile}
+            onChange={(rows) => setStage({ isp_profile: rows })}
+          />
         ) : (
-          <NumberField label={tr('比推力 Isp（真空）', 'Specific impulse Isp (vacuum)')} unit="s" path={p('isp_constant')} value={stage.isp_constant} onChange={(v) => setStage({ isp_constant: v })} />
+          <NumberField
+            label={tr('比推力 Isp（真空）', 'Specific impulse Isp (vacuum)')}
+            unit="s"
+            path={p('isp_constant')}
+            value={stage.isp_constant}
+            onChange={(v) => setStage({ isp_constant: v })}
+          />
         )}
       </Group>
 
@@ -208,27 +254,80 @@ export function VehicleTab({
               )
         }
       >
-        <NumberField label={tr('点火', 'Ignition')} note={abs(stage.burn_start_s)} unit="s" path={p('burn_start_s')} value={stage.burn_start_s} onChange={(v) => setStage({ burn_start_s: v })} />
-        <NumberField label={tr('燃焼終了', 'Burnout')} note={abs(stage.burn_end_s)} unit="s" path={p('burn_end_s')} value={stage.burn_end_s} onChange={(v) => setStage(setBurnEnd(v))} />
+        <NumberField
+          label={tr('点火', 'Ignition')}
+          note={abs(stage.burn_start_s)}
+          unit="s"
+          path={p('burn_start_s')}
+          value={stage.burn_start_s}
+          onChange={(v) => setStage({ burn_start_s: v })}
+        />
+        <NumberField
+          label={tr('燃焼終了', 'Burnout')}
+          note={abs(stage.burn_end_s)}
+          unit="s"
+          path={p('burn_end_s')}
+          value={stage.burn_end_s}
+          onChange={(v) => setStage(setBurnEnd(v))}
+        />
         <NumberField
           label={tr('強制停止', 'Forced cutoff')}
-          note={Math.abs(stage.forced_cutoff_s - stage.burn_end_s) < 1e-6 ? tr('燃焼終了と同じ（変更不要）', 'Same as burnout (no change needed)') : abs(stage.forced_cutoff_s)}
-          hint={Math.abs(stage.forced_cutoff_s - stage.burn_end_s) < 1e-6 ? undefined : tr('燃焼終了より前なら、その時刻で燃焼を打ち切ります', 'If earlier than burnout, the burn is cut off at this time')}
+          note={
+            Math.abs(stage.forced_cutoff_s - stage.burn_end_s) < 1e-6
+              ? tr('燃焼終了と同じ（変更不要）', 'Same as burnout (no change needed)')
+              : abs(stage.forced_cutoff_s)
+          }
+          hint={
+            Math.abs(stage.forced_cutoff_s - stage.burn_end_s) < 1e-6
+              ? undefined
+              : tr('燃焼終了より前なら、その時刻で燃焼を打ち切ります', 'If earlier than burnout, the burn is cut off at this time')
+          }
           unit="s"
           path={p('forced_cutoff_s')}
           value={stage.forced_cutoff_s}
           onChange={(v) => setStage({ forced_cutoff_s: v })}
         />
         {!isLast && (
-          <NumberField label={tr('分離', 'Separation')} note={abs(stage.separation_time_s)} unit="s" path={p('separation_time_s')} value={stage.separation_time_s} onChange={(v) => setStage({ separation_time_s: v })} />
+          <NumberField
+            label={tr('分離', 'Separation')}
+            note={abs(stage.separation_time_s)}
+            unit="s"
+            path={p('separation_time_s')}
+            value={stage.separation_time_s}
+            onChange={(v) => setStage({ separation_time_s: v })}
+          />
         )}
       </Group>
 
       <Group title={tr('飛行モード・補正', 'Flight modes & corrections')}>
-        <SelectField label={tr('動力飛行', 'Powered flight')} path={p('power_mode')} value={stage.power_mode} options={POWER_MODE_OPTIONS.map((o) => ({ ...o, label: o.label.replace(/^\d+:\s*/, '') }))} onChange={(v) => setStage({ power_mode: v })} />
-        <SelectField label={tr('慣性飛行', 'Coast')} path={p('free_mode')} value={stage.free_mode} options={FREE_MODE_OPTIONS.map((o) => ({ ...o, label: o.label.replace(/^\d+:\s*/, '') }))} onChange={(v) => setStage({ free_mode: v })} />
-        <NumberField label={tr('推力倍率', 'Thrust multiplier')} unit="×" path={p('thrust_multiplier')} value={stage.thrust_multiplier} onChange={(v) => setStage({ thrust_multiplier: v })} />
-        <NumberField label={tr('Isp倍率', 'Isp multiplier')} unit="×" path={p('isp_multiplier')} value={stage.isp_multiplier} onChange={(v) => setStage({ isp_multiplier: v })} />
+        <SelectField
+          label={tr('動力飛行', 'Powered flight')}
+          path={p('power_mode')}
+          value={stage.power_mode}
+          options={POWER_MODE_OPTIONS.map((o) => ({ ...o, label: o.label.replace(/^\d+:\s*/, '') }))}
+          onChange={(v) => setStage({ power_mode: v })}
+        />
+        <SelectField
+          label={tr('慣性飛行', 'Coast')}
+          path={p('free_mode')}
+          value={stage.free_mode}
+          options={FREE_MODE_OPTIONS.map((o) => ({ ...o, label: o.label.replace(/^\d+:\s*/, '') }))}
+          onChange={(v) => setStage({ free_mode: v })}
+        />
+        <NumberField
+          label={tr('推力倍率', 'Thrust multiplier')}
+          unit="×"
+          path={p('thrust_multiplier')}
+          value={stage.thrust_multiplier}
+          onChange={(v) => setStage({ thrust_multiplier: v })}
+        />
+        <NumberField
+          label={tr('Isp倍率', 'Isp multiplier')}
+          unit="×"
+          path={p('isp_multiplier')}
+          value={stage.isp_multiplier}
+          onChange={(v) => setStage({ isp_multiplier: v })}
+        />
       </Group>
 
       <Group
@@ -256,18 +355,56 @@ export function VehicleTab({
         />
         {stage.aero && (
           <>
-            <NumberField label={tr('機体直径', 'Body diameter')} unit="m" value={stage.aero.body_diameter_m ?? config.aerodynamics.body_diameter_m} onChange={(v) => setStage({ aero: { ...stage.aero, body_diameter_m: v } })} />
-            <NumberField label={tr('軸力係数 CA', 'Axial force coefficient CA')} unit="—" value={stage.aero.ca_constant ?? config.aerodynamics.ca_constant} onChange={(v) => setStage({ aero: { ...stage.aero, ca_constant: v } })} />
-            <NumberField label={tr('法線力係数 CN', 'Normal force coefficient CN')} unit="—" value={stage.aero.cn_constant ?? config.aerodynamics.cn_constant} onChange={(v) => setStage({ aero: { ...stage.aero, cn_constant: v } })} />
-            <NumberField label={tr('弾道係数', 'Ballistic coefficient')} unit="kg/m²" value={stage.aero.ballistic_coefficient ?? config.aerodynamics.ballistic_coefficient} onChange={(v) => setStage({ aero: { ...stage.aero, ballistic_coefficient: v } })} />
+            <NumberField
+              label={tr('機体直径', 'Body diameter')}
+              unit="m"
+              value={stage.aero.body_diameter_m ?? config.aerodynamics.body_diameter_m}
+              onChange={(v) => setStage({ aero: { ...stage.aero, body_diameter_m: v } })}
+            />
+            <NumberField
+              label={tr('軸力係数 CA', 'Axial force coefficient CA')}
+              unit="—"
+              value={stage.aero.ca_constant ?? config.aerodynamics.ca_constant}
+              onChange={(v) => setStage({ aero: { ...stage.aero, ca_constant: v } })}
+            />
+            <NumberField
+              label={tr('法線力係数 CN', 'Normal force coefficient CN')}
+              unit="—"
+              value={stage.aero.cn_constant ?? config.aerodynamics.cn_constant}
+              onChange={(v) => setStage({ aero: { ...stage.aero, cn_constant: v } })}
+            />
+            <NumberField
+              label={tr('弾道係数', 'Ballistic coefficient')}
+              unit="kg/m²"
+              value={stage.aero.ballistic_coefficient ?? config.aerodynamics.ballistic_coefficient}
+              onChange={(v) => setStage({ aero: { ...stage.aero, ballistic_coefficient: v } })}
+            />
           </>
         )}
       </Group>
 
       <Group title={tr('ノズル', 'Nozzle')}>
-        <NumberField label={tr('スロート径', 'Throat diameter')} unit="m" path={p('throat_diameter_m')} value={stage.throat_diameter_m} onChange={(v) => setStage({ throat_diameter_m: v })} />
-        <NumberField label={tr('膨張比', 'Expansion ratio')} unit="—" path={p('nozzle_expansion_ratio')} value={stage.nozzle_expansion_ratio} onChange={(v) => setStage({ nozzle_expansion_ratio: v })} />
-        <NumberField label={tr('出口圧', 'Exit pressure')} unit="Pa" path={p('nozzle_exit_pressure_pa')} value={stage.nozzle_exit_pressure_pa} onChange={(v) => setStage({ nozzle_exit_pressure_pa: v })} />
+        <NumberField
+          label={tr('スロート径', 'Throat diameter')}
+          unit="m"
+          path={p('throat_diameter_m')}
+          value={stage.throat_diameter_m}
+          onChange={(v) => setStage({ throat_diameter_m: v })}
+        />
+        <NumberField
+          label={tr('膨張比', 'Expansion ratio')}
+          unit="—"
+          path={p('nozzle_expansion_ratio')}
+          value={stage.nozzle_expansion_ratio}
+          onChange={(v) => setStage({ nozzle_expansion_ratio: v })}
+        />
+        <NumberField
+          label={tr('出口圧', 'Exit pressure')}
+          unit="Pa"
+          path={p('nozzle_exit_pressure_pa')}
+          value={stage.nozzle_exit_pressure_pa}
+          onChange={(v) => setStage({ nozzle_exit_pressure_pa: v })}
+        />
       </Group>
 
       {stages.length > 1 && (

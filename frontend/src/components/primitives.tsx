@@ -4,11 +4,7 @@ import { cn } from '../lib/cn'
 
 /* ------------------------------------------------------------------ Buttons */
 
-export function IconButton({
-  label,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
+export function IconButton({ label, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
     <button
       type="button"
@@ -335,10 +331,7 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
         aria-checked={checked}
         aria-label={typeof label === 'string' ? label : undefined}
         onClick={() => onChange(!checked)}
-        className={cn(
-          'relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors',
-          checked ? 'bg-signal' : 'bg-line-strong',
-        )}
+        className={cn('relative h-[18px] w-[30px] shrink-0 rounded-full transition-colors', checked ? 'bg-signal' : 'bg-line-strong')}
       >
         <span
           className={cn(

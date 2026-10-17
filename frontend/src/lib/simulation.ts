@@ -1,12 +1,12 @@
 // Types shared with the Rust/WASM solver, and the call into it.
 import type { Vec3 } from './geo'
 
-export type Vec3Json = { x: number, y: number, z: number } | [number, number, number]
+export type Vec3Json = { x: number; y: number; z: number } | [number, number, number]
 
 export type SimulationState = {
   time: number
   position: Vec3Json
-  position_eci?: Vec3Json  // For compatibility with older data formats
+  position_eci?: Vec3Json // For compatibility with older data formats
   velocity: Vec3Json
   mass: number
   stage: number
@@ -18,17 +18,17 @@ export type SimulationState = {
   drag_force: number
   downrange_km?: number
   // New fields for enhanced visualization
-  velocity_ned?: Vec3Json       // NED velocity components [m/s] (backward compatibility)
-  velocity_eci_ned?: Vec3Json   // ECI velocity in NED frame [m/s]
-  velocity_ecef_ned?: Vec3Json  // ECEF velocity in NED frame [m/s]
-  sea_level_mach?: number       // Mach number based on sea level sound speed
-  acceleration_magnitude?: number  // Total acceleration magnitude [m/s²]
-  acc_eci?: Vec3Json  // ECI acceleration components [m/s²]
-  acc_body?: Vec3Json  // Body-frame acceleration components [m/s²]
-  angle_of_attack?: number  // Attack of angle [deg]
-  sideslip_angle?: number   // Sideslip angle [deg]
-  attitude_azimuth?: number  // Attitude azimuth [deg]
-  attitude_elevation?: number  // Attitude elevation [deg]
+  velocity_ned?: Vec3Json // NED velocity components [m/s] (backward compatibility)
+  velocity_eci_ned?: Vec3Json // ECI velocity in NED frame [m/s]
+  velocity_ecef_ned?: Vec3Json // ECEF velocity in NED frame [m/s]
+  sea_level_mach?: number // Mach number based on sea level sound speed
+  acceleration_magnitude?: number // Total acceleration magnitude [m/s²]
+  acc_eci?: Vec3Json // ECI acceleration components [m/s²]
+  acc_body?: Vec3Json // Body-frame acceleration components [m/s²]
+  angle_of_attack?: number // Attack of angle [deg]
+  sideslip_angle?: number // Sideslip angle [deg]
+  attitude_azimuth?: number // Attitude azimuth [deg]
+  attitude_elevation?: number // Attitude elevation [deg]
 }
 
 export function vec3ToObject(vec: Vec3Json | undefined): Vec3 {
@@ -52,10 +52,10 @@ export function vec3ToObject(vec: Vec3Json | undefined): Vec3 {
   }
 }
 
-export type ClientTimeSample = { time: number, value: number }
-export type ClientMachSample = { mach: number, value: number }
-export type ClientAttitudeSample = { time: number, azimuth_deg: number, elevation_deg: number }
-export type ClientWindSample = { altitude_m: number, speed_mps: number, direction_deg: number }
+export type ClientTimeSample = { time: number; value: number }
+export type ClientMachSample = { mach: number; value: number }
+export type ClientAttitudeSample = { time: number; azimuth_deg: number; elevation_deg: number }
+export type ClientWindSample = { altitude_m: number; speed_mps: number; direction_deg: number }
 
 export type ClientStageConfig = {
   power_mode: number

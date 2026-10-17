@@ -105,10 +105,7 @@ function createViewer(container: HTMLElement, basemap: Basemap, theme: Theme): V
     skyBox: false,
     skyAtmosphere: false,
     // Offline fallback that ships with Cesium; online tiles are layered on top.
-    baseLayer: ImageryLayer.fromProviderAsync(
-      TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')),
-      {},
-    ),
+    baseLayer: ImageryLayer.fromProviderAsync(TileMapServiceImageryProvider.fromUrl(buildModuleUrl('Assets/Textures/NaturalEarthII')), {}),
   })
   setBasemap(viewer, basemap, theme)
   applySceneTheme(viewer, theme)
@@ -364,7 +361,6 @@ export default function Globe({ track, reference = null }: GlobeProps) {
     applySceneTheme(viewer, theme)
     setBasemap(viewer, basemapRef.current, theme)
   }, [theme])
-
 
   // Re-fit the overview when the map area is resized (layout switch, divider drag).
   const modeRef = useRef(mode)

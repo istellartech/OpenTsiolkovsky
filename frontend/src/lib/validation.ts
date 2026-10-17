@@ -69,16 +69,23 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
   if (!isFiniteNumber(simulation.output_step_s) || simulation.output_step_s <= 0) {
     push('simulation.output_step_s', tr('出力間隔は正の値にしてください。', 'Output interval must be positive.'))
   } else if (simulation.output_step_s > simulation.duration_s) {
-    push('simulation.output_step_s', tr('出力間隔はシミュレーション時間以下にしてください。', 'Output interval must not exceed the simulation time.'))
+    push(
+      'simulation.output_step_s',
+      tr('出力間隔はシミュレーション時間以下にしてください。', 'Output interval must not exceed the simulation time.'),
+    )
   }
 
-  if (!isFiniteNumber(simulation.air_density_percent) ||
-      simulation.air_density_percent < -100 ||
-      simulation.air_density_percent > 100) {
-    push('simulation.air_density_percent', tr('空気密度変動は-100〜100%の範囲で指定してください。', 'Air density variation must be between -100 and 100%.'))
+  if (!isFiniteNumber(simulation.air_density_percent) || simulation.air_density_percent < -100 || simulation.air_density_percent > 100) {
+    push(
+      'simulation.air_density_percent',
+      tr('空気密度変動は-100〜100%の範囲で指定してください。', 'Air density variation must be between -100 and 100%.'),
+    )
   }
 
-  const integrator = simulation.integrator || { method: 'rk4', rk4_step_s: simulation.output_step_s ? simulation.output_step_s / 2 : undefined }
+  const integrator = simulation.integrator || {
+    method: 'rk4',
+    rk4_step_s: simulation.output_step_s ? simulation.output_step_s / 2 : undefined,
+  }
   if (integrator.method !== 'rk4' && integrator.method !== 'rk45') {
     push('simulation.integrator.method', tr('積分器はRK4またはRK45を選択してください。', 'Integrator must be RK4 or RK45.'))
   }
@@ -86,7 +93,10 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
     if (!isFiniteNumber(integrator.rk4_step_s) || integrator.rk4_step_s <= 0) {
       push('simulation.integrator.rk4_step_s', tr('RK4の刻み幅は正の値にしてください。', 'RK4 step size must be positive.'))
     } else if (isFiniteNumber(simulation.duration_s) && integrator.rk4_step_s > simulation.duration_s) {
-      push('simulation.integrator.rk4_step_s', tr('RK4の刻み幅はシミュレーション時間以下にしてください。', 'RK4 step size must not exceed the simulation time.'))
+      push(
+        'simulation.integrator.rk4_step_s',
+        tr('RK4の刻み幅はシミュレーション時間以下にしてください。', 'RK4 step size must not exceed the simulation time.'),
+      )
     }
   }
 
@@ -100,12 +110,18 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
   }
 
   if (!isFiniteNumber(launch.altitude_m) || launch.altitude_m < -500 || launch.altitude_m > 100000) {
-    push('launch.altitude_m', tr('発射高度は-500〜100000 mの範囲で指定してください。', 'Launch altitude must be between -500 and 100,000 m.'))
+    push(
+      'launch.altitude_m',
+      tr('発射高度は-500〜100000 mの範囲で指定してください。', 'Launch altitude must be between -500 and 100,000 m.'),
+    )
   }
 
   const velocityMag = Math.hypot(...launch.velocity_ned_mps)
   if (!isFiniteNumber(velocityMag)) {
-    push('launch.velocity_ned_mps', tr('初期速度ベクトルに数値以外が含まれています。', 'Initial velocity vector contains non-numeric values.'))
+    push(
+      'launch.velocity_ned_mps',
+      tr('初期速度ベクトルに数値以外が含まれています。', 'Initial velocity vector contains non-numeric values.'),
+    )
   } else if (velocityMag > 5000) {
     push('launch.velocity_ned_mps', tr('初期速度は5,000 m/s以下にしてください。', 'Initial velocity must be 5,000 m/s or less.'))
   }
@@ -121,7 +137,10 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
     launchDate.getUTCSeconds() === second
 
   if (!isValidDate) {
-    push('launch.datetime_utc', tr('発射日時が不正です。存在する日時を指定してください。', 'Invalid launch date/time. Enter a date and time that exists.'))
+    push(
+      'launch.datetime_utc',
+      tr('発射日時が不正です。存在する日時を指定してください。', 'Invalid launch date/time. Enter a date and time that exists.'),
+    )
   }
 
   // First stage validation
@@ -145,16 +164,10 @@ export function validateConfig(config: ClientConfig): ValidationIssue[] {
   return issues
 }
 
-function validateStage(
-  stage: ClientStageConfig,
-  push: (field: string, message: string) => void,
-  prefix: string,
-  stageNum?: number
-) {
+function validateStage(stage: ClientStageConfig, push: (field: string, message: string) => void, prefix: string, stageNum?: number) {
   const fieldPrefix = prefix ? `${prefix}.` : 'stage.'
   // Prefix each message with the stage number for stages after the first.
-  const msg = (ja: string, en: string) =>
-    stageNum ? tr(`第${stageNum}段の${ja}`, `Stage ${stageNum}: ${en}`) : tr(ja, en)
+  const msg = (ja: string, en: string) => (stageNum ? tr(`第${stageNum}段の${ja}`, `Stage ${stageNum}: ${en}`) : tr(ja, en))
 
   if (!isFiniteNumber(stage.mass_initial_kg) || stage.mass_initial_kg <= 0) {
     push(`${fieldPrefix}mass_initial_kg`, msg('初期質量は正の値にしてください。', 'Initial mass must be positive.'))
@@ -187,7 +200,10 @@ function validateStage(
   }
 
   if (!isFiniteNumber(stage.nozzle_exit_pressure_pa) || stage.nozzle_exit_pressure_pa < 0) {
-    push(`${fieldPrefix}nozzle_exit_pressure_pa`, msg('ノズル出口圧力は0以上にしてください。', 'Nozzle exit pressure must be 0 or greater.'))
+    push(
+      `${fieldPrefix}nozzle_exit_pressure_pa`,
+      msg('ノズル出口圧力は0以上にしてください。', 'Nozzle exit pressure must be 0 or greater.'),
+    )
   }
 
   if (!isFiniteNumber(stage.thrust_constant) || stage.thrust_constant < 0) {
@@ -207,11 +223,17 @@ function validateStage(
   }
 
   if (!POWER_MODE_OPTIONS.some((option) => option.value === stage.power_mode)) {
-    push(`${fieldPrefix}power_mode`, msg('Power flight mode は 0〜3 のプリセットから選択してください。', 'Power flight mode must be one of the presets 0–3.'))
+    push(
+      `${fieldPrefix}power_mode`,
+      msg('Power flight mode は 0〜3 のプリセットから選択してください。', 'Power flight mode must be one of the presets 0–3.'),
+    )
   }
 
   if (!FREE_MODE_OPTIONS.some((option) => option.value === stage.free_mode)) {
-    push(`${fieldPrefix}free_mode`, msg('Free flight mode は 0〜2 のプリセットから選択してください。', 'Free flight mode must be one of the presets 0–2.'))
+    push(
+      `${fieldPrefix}free_mode`,
+      msg('Free flight mode は 0〜2 のプリセットから選択してください。', 'Free flight mode must be one of the presets 0–2.'),
+    )
   }
 
   // Profile validations
@@ -219,7 +241,7 @@ function validateStage(
     validateTimeSeriesProfile(stage.thrust_profile, push, `${fieldPrefix}thrust_profile`, tr('推力プロファイル', 'Thrust table'), {
       timeMin: 0,
       valueMin: 0,
-      valueName: tr('推力', 'thrust')
+      valueName: tr('推力', 'thrust'),
     })
   }
 
@@ -228,7 +250,7 @@ function validateStage(
       timeMin: 0,
       valueMin: 0.01,
       valueName: 'Isp',
-      valuePositive: true
+      valuePositive: true,
     })
   }
 }
@@ -289,7 +311,10 @@ function validateAttitude(attitude: ClientConfig['attitude'], push: (field: stri
   const gyroMax = 100
   attitude.gyro_bias_deg_h?.forEach((bias, idx) => {
     if (!isFiniteNumber(bias) || Math.abs(bias) > gyroMax) {
-      push(`attitude.gyro_bias_deg_h[${idx}]`, tr(`ジャイロバイアスは±${gyroMax} deg/h以内にしてください。`, `Gyro bias must be within ±${gyroMax} deg/h.`))
+      push(
+        `attitude.gyro_bias_deg_h[${idx}]`,
+        tr(`ジャイロバイアスは±${gyroMax} deg/h以内にしてください。`, `Gyro bias must be within ±${gyroMax} deg/h.`),
+      )
     }
   })
 
@@ -301,15 +326,27 @@ function validateAttitude(attitude: ClientConfig['attitude'], push: (field: stri
         break
       }
       if (sample.time <= prevTime) {
-        push('attitude.profile', tr('姿勢プロファイルは時刻昇順に並べてください。', 'Attitude table must be sorted by time in ascending order.'))
+        push(
+          'attitude.profile',
+          tr('姿勢プロファイルは時刻昇順に並べてください。', 'Attitude table must be sorted by time in ascending order.'),
+        )
         break
       }
       if (!isFiniteNumber(sample.azimuth_deg) || sample.azimuth_deg < 0 || sample.azimuth_deg >= 360) {
-        push('attitude.profile', tr('姿勢プロファイルの方位角は0〜360度未満で指定してください。', 'Attitude table azimuths must be at least 0° and less than 360°.'))
+        push(
+          'attitude.profile',
+          tr(
+            '姿勢プロファイルの方位角は0〜360度未満で指定してください。',
+            'Attitude table azimuths must be at least 0° and less than 360°.',
+          ),
+        )
         break
       }
       if (!isFiniteNumber(sample.elevation_deg) || sample.elevation_deg < -90 || sample.elevation_deg > 90) {
-        push('attitude.profile', tr('姿勢プロファイルの仰角は-90〜90度で指定してください。', 'Attitude table elevations must be between -90 and 90°.'))
+        push(
+          'attitude.profile',
+          tr('姿勢プロファイルの仰角は-90〜90度で指定してください。', 'Attitude table elevations must be between -90 and 90°.'),
+        )
         break
       }
       prevTime = sample.time
@@ -342,7 +379,10 @@ function validateWind(wind: ClientConfig['wind'], push: (field: string, message:
         break
       }
       if (!isFiniteNumber(sample.direction_deg) || sample.direction_deg < 0 || sample.direction_deg >= 360) {
-        push('wind.profile', tr('風プロファイルの風向は0〜360度未満で指定してください。', 'Wind table directions must be at least 0° and less than 360°.'))
+        push(
+          'wind.profile',
+          tr('風プロファイルの風向は0〜360度未満で指定してください。', 'Wind table directions must be at least 0° and less than 360°.'),
+        )
         break
       }
       prevAlt = sample.altitude_m
@@ -360,7 +400,7 @@ function validateTimeSeriesProfile(
     valueMin: number
     valueName: string
     valuePositive?: boolean
-  }
+  },
 ) {
   let prevTime = -Infinity
   for (const sample of profile) {
@@ -410,23 +450,30 @@ function validateMachProfile(
   push: (field: string, message: string) => void,
   fieldName: string,
   profileName: string,
-  options: { valueMin?: number } = {}
+  options: { valueMin?: number } = {},
 ) {
   let prevMach = -Infinity
   for (const sample of profile) {
     if (!isFiniteNumber(sample.mach) || sample.mach < 0) {
-      push(fieldName, tr(`${profileName}プロファイルのMachは0以上で指定してください。`, `${profileName} table Mach numbers must be 0 or greater.`))
+      push(
+        fieldName,
+        tr(`${profileName}プロファイルのMachは0以上で指定してください。`, `${profileName} table Mach numbers must be 0 or greater.`),
+      )
       break
     }
     if (sample.mach <= prevMach) {
-      push(fieldName, tr(`${profileName}プロファイルのMachは昇順に並べてください。`, `${profileName} table Mach numbers must be in ascending order.`))
+      push(
+        fieldName,
+        tr(`${profileName}プロファイルのMachは昇順に並べてください。`, `${profileName} table Mach numbers must be in ascending order.`),
+      )
       break
     }
     const minValue = options.valueMin ?? -Infinity
     if (!isFiniteNumber(sample.value) || sample.value < minValue) {
-      const message = minValue > -Infinity
-        ? tr(`${profileName}プロファイルの値は${minValue}以上で指定してください。`, `${profileName} table values must be ≥ ${minValue}.`)
-        : tr(`${profileName}プロファイルの値は数値で指定してください。`, `${profileName} table values must be numbers.`)
+      const message =
+        minValue > -Infinity
+          ? tr(`${profileName}プロファイルの値は${minValue}以上で指定してください。`, `${profileName} table values must be ≥ ${minValue}.`)
+          : tr(`${profileName}プロファイルの値は数値で指定してください。`, `${profileName} table values must be numbers.`)
       push(fieldName, message)
       break
     }

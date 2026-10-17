@@ -100,7 +100,10 @@ export default function App() {
         await navigator.clipboard.writeText(url)
         showToast(
           url.length > 8000
-            ? tr('共有リンクをコピーしました（長いため、使う場所によっては途中で切れることがあります）。', 'Share link copied. It is long, so some apps may cut it off.')
+            ? tr(
+                '共有リンクをコピーしました（長いため、使う場所によっては途中で切れることがあります）。',
+                'Share link copied. It is long, so some apps may cut it off.',
+              )
             : tr('共有リンクをコピーしました。', 'Share link copied.'),
           'ok',
         )
@@ -127,7 +130,15 @@ export default function App() {
     </FieldContext.Provider>
   )
 
-  const globe = <GlobeStage track={track} reference={reference?.track ?? null} status={sim.status} error={sim.error} compactTelemetry={isMobile || split.ratio < 0.35} />
+  const globe = (
+    <GlobeStage
+      track={track}
+      reference={reference?.track ?? null}
+      status={sim.status}
+      error={sim.error}
+      compactTelemetry={isMobile || split.ratio < 0.35}
+    />
+  )
 
   return (
     <div className="flex h-full flex-col">
@@ -213,7 +224,9 @@ export default function App() {
                     compare={compare}
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-ink-3">{sim.status === 'running' ? tr('計算中…', 'Computing…') : ''}</div>
+                  <div className="flex h-full items-center justify-center text-ink-3">
+                    {sim.status === 'running' ? tr('計算中…', 'Computing…') : ''}
+                  </div>
                 )
               }
             />
@@ -229,7 +242,10 @@ export default function App() {
             <FolderOpen className="mx-auto mb-2 h-6 w-6 text-ink-2" />
             <p className="text-[14px] font-semibold">{tr('ドロップして設定ファイルを開く', 'Drop to open a settings file')}</p>
             <p className="mt-1 text-[12px] text-ink-3">
-              {tr('このアプリの設定 .json、または CLI 用 param_*.json と CSV をまとめて', 'A .json saved from this app, or a CLI param_*.json together with its CSV files')}
+              {tr(
+                'このアプリの設定 .json、または CLI 用 param_*.json と CSV をまとめて',
+                'A .json saved from this app, or a CLI param_*.json together with its CSV files',
+              )}
             </p>
           </div>
         </div>
@@ -255,7 +271,9 @@ export default function App() {
             >
               <Icon className="h-4 w-4" />
               {label}
-              {id === 'params' && sim.issues.length > 0 && <span className="sr-only">{tr('（入力エラーあり）', ' (has input errors)')}</span>}
+              {id === 'params' && sim.issues.length > 0 && (
+                <span className="sr-only">{tr('（入力エラーあり）', ' (has input errors)')}</span>
+              )}
             </button>
           ))}
         </nav>

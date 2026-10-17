@@ -12,4 +12,8 @@ export function saveFile(name: string, content: string, type: string) {
 }
 
 /** File-name-safe version of the vehicle name (keeps Japanese). */
-export const fileBase = (s: string) => s.trim().replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') || 'rocket'
+export const fileBase = (s: string) =>
+  s
+    .trim()
+    .replace(/[\\/:*?"<>|\s]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'rocket'

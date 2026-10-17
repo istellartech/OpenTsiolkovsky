@@ -18,12 +18,42 @@ export interface InspectorNav {
 }
 
 const TABS: { id: InspectorTab; label: string }[] = [
-  { id: 'overview', get label() { return tr('概要', 'Overview') } },
-  { id: 'launch', get label() { return tr('発射', 'Launch') } },
-  { id: 'vehicle', get label() { return tr('機体', 'Vehicle') } },
-  { id: 'aero', get label() { return tr('空力', 'Aero') } },
-  { id: 'flight', get label() { return tr('姿勢・風', 'Attitude & Wind') } },
-  { id: 'solver', get label() { return tr('計算', 'Solver') } },
+  {
+    id: 'overview',
+    get label() {
+      return tr('概要', 'Overview')
+    },
+  },
+  {
+    id: 'launch',
+    get label() {
+      return tr('発射', 'Launch')
+    },
+  },
+  {
+    id: 'vehicle',
+    get label() {
+      return tr('機体', 'Vehicle')
+    },
+  },
+  {
+    id: 'aero',
+    get label() {
+      return tr('空力', 'Aero')
+    },
+  },
+  {
+    id: 'flight',
+    get label() {
+      return tr('姿勢・風', 'Attitude & Wind')
+    },
+  },
+  {
+    id: 'solver',
+    get label() {
+      return tr('計算', 'Solver')
+    },
+  },
 ]
 
 /** Which tab (and stage) holds a validation field. */
@@ -65,7 +95,12 @@ export function Inspector({ config, patch, presetId, specs, nav, onNav, issueFie
             )}
           >
             {t.label}
-            {tabsWithIssues.has(t.id) && <span className="absolute right-1 top-2 h-1.5 w-1.5 rounded-full bg-danger" aria-label={tr('入力エラーあり', 'Has input errors')} />}
+            {tabsWithIssues.has(t.id) && (
+              <span
+                className="absolute right-1 top-2 h-1.5 w-1.5 rounded-full bg-danger"
+                aria-label={tr('入力エラーあり', 'Has input errors')}
+              />
+            )}
             {nav.tab === t.id && <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-ink" />}
           </button>
         ))}

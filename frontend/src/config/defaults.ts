@@ -2,16 +2,46 @@ import type { ClientStageConfig } from '../lib/simulation'
 import { tr } from '../lib/i18n'
 
 export const POWER_MODE_OPTIONS = [
-  { value: 0, get label() { return tr('0: 3DoF（標準）', '0: 3DoF (standard)') } },
-  { value: 1, get label() { return tr('1: 3DoF（遅れ付き）', '1: 3DoF (with lag)') } },
+  {
+    value: 0,
+    get label() {
+      return tr('0: 3DoF（標準）', '0: 3DoF (standard)')
+    },
+  },
+  {
+    value: 1,
+    get label() {
+      return tr('1: 3DoF（遅れ付き）', '1: 3DoF (with lag)')
+    },
+  },
   { value: 2, label: '2: 6DoF' },
-  { value: 3, get label() { return tr('3: 6DoF（空力安定）', '3: 6DoF (aerodynamically stable)') } },
+  {
+    value: 3,
+    get label() {
+      return tr('3: 6DoF（空力安定）', '3: 6DoF (aerodynamically stable)')
+    },
+  },
 ]
 
 export const FREE_MODE_OPTIONS = [
-  { value: 0, get label() { return tr('0: 空力安定', '0: Aerodynamically stable') } },
-  { value: 1, get label() { return tr('1: 3DoF 指定姿勢', '1: 3DoF, commanded attitude') } },
-  { value: 2, get label() { return tr('2: 弾道飛行', '2: Ballistic') } },
+  {
+    value: 0,
+    get label() {
+      return tr('0: 空力安定', '0: Aerodynamically stable')
+    },
+  },
+  {
+    value: 1,
+    get label() {
+      return tr('1: 3DoF 指定姿勢', '1: 3DoF, commanded attitude')
+    },
+  },
+  {
+    value: 2,
+    get label() {
+      return tr('2: 弾道飛行', '2: Ballistic')
+    },
+  },
 ]
 
 export const MAX_STAGE_COUNT = 5

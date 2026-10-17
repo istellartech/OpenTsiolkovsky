@@ -19,7 +19,10 @@ export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patc
   }
   return (
     <>
-      <Group title={tr('発射地点', 'Launch site')} note={tr('射場を選ぶと座標が入ります（座標は概略値）。', 'Picking a site fills in its coordinates (approximate).')}>
+      <Group
+        title={tr('発射地点', 'Launch site')}
+        note={tr('射場を選ぶと座標が入ります（座標は概略値）。', 'Picking a site fills in its coordinates (approximate).')}
+      >
         <label className="flex min-h-8 items-center gap-3 py-[3px]">
           <span className="min-w-0 flex-1 text-ink-2">{tr('射場', 'Site')}</span>
           <select
@@ -43,15 +46,47 @@ export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patc
             ))}
           </select>
         </label>
-        <NumberField label={tr('緯度', 'Latitude')} unit="°" path="launch.latitude_deg" value={launch.latitude_deg} onChange={(v) => setLaunch({ latitude_deg: v })} />
-        <NumberField label={tr('経度', 'Longitude')} unit="°" path="launch.longitude_deg" value={launch.longitude_deg} onChange={(v) => setLaunch({ longitude_deg: v })} />
-        <NumberField label={tr('標高', 'Altitude')} unit="m" path="launch.altitude_m" value={launch.altitude_m} onChange={(v) => setLaunch({ altitude_m: v })} />
+        <NumberField
+          label={tr('緯度', 'Latitude')}
+          unit="°"
+          path="launch.latitude_deg"
+          value={launch.latitude_deg}
+          onChange={(v) => setLaunch({ latitude_deg: v })}
+        />
+        <NumberField
+          label={tr('経度', 'Longitude')}
+          unit="°"
+          path="launch.longitude_deg"
+          value={launch.longitude_deg}
+          onChange={(v) => setLaunch({ longitude_deg: v })}
+        />
+        <NumberField
+          label={tr('標高', 'Altitude')}
+          unit="m"
+          path="launch.altitude_m"
+          value={launch.altitude_m}
+          onChange={(v) => setLaunch({ altitude_m: v })}
+        />
       </Group>
       <Group title={tr('日時', 'Date & time')}>
-        <TextInputField label={tr('日付 (UTC)', 'Date (UTC)')} type="date" path="launch.datetime_utc" value={`${dt.year}-${pad2(dt.month)}-${pad2(dt.day)}`} onChange={setDate} />
-        <TextInputField label={tr('時刻 (UTC)', 'Time (UTC)')} type="time" value={`${pad2(dt.hour)}:${pad2(dt.minute)}:${pad2(dt.second)}`} onChange={setTime} />
+        <TextInputField
+          label={tr('日付 (UTC)', 'Date (UTC)')}
+          type="date"
+          path="launch.datetime_utc"
+          value={`${dt.year}-${pad2(dt.month)}-${pad2(dt.day)}`}
+          onChange={setDate}
+        />
+        <TextInputField
+          label={tr('時刻 (UTC)', 'Time (UTC)')}
+          type="time"
+          value={`${pad2(dt.hour)}:${pad2(dt.minute)}:${pad2(dt.second)}`}
+          onChange={setTime}
+        />
       </Group>
-      <Group title={tr('初期速度', 'Initial velocity')} note={tr('地上からの発射なら 0。空中発射などで使います。', 'Zero for a ground launch; used for air launch and similar cases.')}>
+      <Group
+        title={tr('初期速度', 'Initial velocity')}
+        note={tr('地上からの発射なら 0。空中発射などで使います。', 'Zero for a ground launch; used for air launch and similar cases.')}
+      >
         <VectorField
           label={tr('速度', 'Velocity')}
           unit={tr('m/s · 北/東/下', 'm/s · N/E/D')}

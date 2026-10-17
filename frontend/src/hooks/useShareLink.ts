@@ -24,14 +24,24 @@ export function useOpenSharedLink(
     if (target.kind === 'preset') {
       const preset = PRESET_OPTIONS.find((p) => p.id === target.id)
       if (preset) load(preset.create(), preset.id)
-      else notify(tr(`リンク先のサンプル機体「${target.id}」が見つかりません。`, `Sample vehicle "${target.id}" from the link was not found.`), 'error')
+      else
+        notify(
+          tr(`リンク先のサンプル機体「${target.id}」が見つかりません。`, `Sample vehicle "${target.id}" from the link was not found.`),
+          'error',
+        )
       return
     }
     decodePayload(target.data)
       .then((parsed) => {
         if (!isValidClientConfig(parsed)) throw new Error('invalid')
         load(parsed)
-        notify(tr('共有リンクの設定を開きました。⌘Z / Ctrl+Z で元の設定に戻せます。', 'Opened the shared configuration. Press ⌘Z / Ctrl+Z to restore your previous settings.'), 'ok')
+        notify(
+          tr(
+            '共有リンクの設定を開きました。⌘Z / Ctrl+Z で元の設定に戻せます。',
+            'Opened the shared configuration. Press ⌘Z / Ctrl+Z to restore your previous settings.',
+          ),
+          'ok',
+        )
       })
       .catch(() =>
         notify(

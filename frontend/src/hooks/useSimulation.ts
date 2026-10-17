@@ -103,7 +103,8 @@ export function useSimulation() {
       try {
         const track = await solver.run(config)
         if (seq !== runSeq.current) return
-        if (!track) throw new Error(
+        if (!track)
+          throw new Error(
             tr(
               '計算結果のデータ点が不足しています。計算時間や出力間隔を確認してください。',
               'Not enough output data points. Check the simulation time and output interval.',
@@ -138,74 +139,87 @@ export function useSimulation() {
    * file (param_*.json) together with the CSV tables it references.
    * Resolves with a user-facing result message.
    */
-  const importFiles = useCallback(async (files: File[]): Promise<ImportResult> => {
-    const jsonFiles = files.filter((f) => /\.json$/i.test(f.name) || f.type === 'application/json')
-    const csvFiles = files.filter((f) => /\.csv$/i.test(f.name))
-    if (jsonFiles.length === 0) {
-      return {
-        ok: false,
-        message: csvFiles.length
-          ? tr('CSV だけでは開けません。設定の .json ファイルも一緒に選んでください。', 'CSV files alone cannot be opened. Select the configuration .json file as well.')
-          : tr('.json ファイルを選んでください。', 'Select a .json file.'),
+  const importFiles = useCallback(
+    async (files: File[]): Promise<ImportResult> => {
+      const jsonFiles = files.filter((f) => /\.json$/i.test(f.name) || f.type === 'application/json')
+      const csvFiles = files.filter((f) => /\.csv$/i.test(f.name))
+      if (jsonFiles.length === 0) {
+        return {
+          ok: false,
+          message: csvFiles.length
+            ? tr(
+                'CSV だけでは開けません。設定の .json ファイルも一緒に選んでください。',
+                'CSV files alone cannot be opened. Select the configuration .json file as well.',
+              )
+            : tr('.json ファイルを選んでください。', 'Select a .json file.'),
+        }
       }
-    }
-    if (jsonFiles.length > 1) return { ok: false, message: tr('設定の .json ファイルは1つだけ選んでください。', 'Select only one configuration .json file.') }
-    const file = jsonFiles[0]
+      if (jsonFiles.length > 1)
+        return { ok: false, message: tr('設定の .json ファイルは1つだけ選んでください。', 'Select only one configuration .json file.') }
+      const file = jsonFiles[0]
 
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(await file.text())
-    } catch {
-      return { ok: false, message: tr(`「${file.name}」はJSONとして読めませんでした。`, `Could not parse "${file.name}" as JSON.`) }
-    }
-
-    if (isLegacyParamFile(parsed)) {
-      const csv = new Map<string, string>()
-      for (const f of csvFiles) csv.set(baseName(f.name), await f.text())
-      let imported
+      let parsed: unknown
       try {
-        imported = fromLegacyParamFile(parsed, csv)
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err)
-        return { ok: false, message: tr(`「${file.name}」を変換できませんでした：${reason}`, `Could not convert "${file.name}": ${reason}`) }
+        parsed = JSON.parse(await file.text())
+      } catch {
+        return { ok: false, message: tr(`「${file.name}」はJSONとして読めませんでした。`, `Could not parse "${file.name}" as JSON.`) }
       }
-      load(imported.config)
-      const notes: string[] = []
-      if (imported.missing.length) {
-        notes.push(
-          tr(
-            `参照しているCSVが見つからないため定数値を使っています（${imported.missing.join('、')}）。JSONと一緒に選ぶかドロップしてください。`,
-            `Referenced CSV files not found, so constant values are used (${imported.missing.join(', ')}). Select or drop them together with the JSON.`,
-          ),
-        )
-      }
-      if (imported.unsupported.length) {
-        notes.push(
-          tr(
-            `この画面では扱えない設定は無視しました：${imported.unsupported.join('、')}。`,
-            `Ignored settings not supported here: ${imported.unsupported.join(', ')}.`,
-          ),
-        )
-      }
-      const n = csvFiles.length
-      const loaded = n
-        ? tr(`CLI用の「${file.name}」（CSV ${n}件）を読み込みました。`, `Loaded CLI file "${file.name}" (${n} CSV file${n === 1 ? '' : 's'}).`)
-        : tr(`CLI用の「${file.name}」を読み込みました。`, `Loaded CLI file "${file.name}".`)
-      return { ok: imported.missing.length === 0, message: [loaded, ...notes].join(' ') }
-    }
 
-    if (!isValidClientConfig(parsed)) {
-      return {
-        ok: false,
-        message: tr(
-          `「${file.name}」は設定ファイルとして読めませんでした（このアプリで保存した設定か、CLI用の param_*.json を選んでください）。`,
-          `Could not read "${file.name}" as a configuration file. Select a configuration saved from this app or a CLI param_*.json file.`,
-        ),
+      if (isLegacyParamFile(parsed)) {
+        const csv = new Map<string, string>()
+        for (const f of csvFiles) csv.set(baseName(f.name), await f.text())
+        let imported
+        try {
+          imported = fromLegacyParamFile(parsed, csv)
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err)
+          return {
+            ok: false,
+            message: tr(`「${file.name}」を変換できませんでした：${reason}`, `Could not convert "${file.name}": ${reason}`),
+          }
+        }
+        load(imported.config)
+        const notes: string[] = []
+        if (imported.missing.length) {
+          notes.push(
+            tr(
+              `参照しているCSVが見つからないため定数値を使っています（${imported.missing.join('、')}）。JSONと一緒に選ぶかドロップしてください。`,
+              `Referenced CSV files not found, so constant values are used (${imported.missing.join(', ')}). Select or drop them together with the JSON.`,
+            ),
+          )
+        }
+        if (imported.unsupported.length) {
+          notes.push(
+            tr(
+              `この画面では扱えない設定は無視しました：${imported.unsupported.join('、')}。`,
+              `Ignored settings not supported here: ${imported.unsupported.join(', ')}.`,
+            ),
+          )
+        }
+        const n = csvFiles.length
+        const loaded = n
+          ? tr(
+              `CLI用の「${file.name}」（CSV ${n}件）を読み込みました。`,
+              `Loaded CLI file "${file.name}" (${n} CSV file${n === 1 ? '' : 's'}).`,
+            )
+          : tr(`CLI用の「${file.name}」を読み込みました。`, `Loaded CLI file "${file.name}".`)
+        return { ok: imported.missing.length === 0, message: [loaded, ...notes].join(' ') }
       }
-    }
-    load(parsed)
-    return { ok: true, message: tr(`「${file.name}」を読み込みました。`, `Loaded "${file.name}".`) }
-  }, [load])
+
+      if (!isValidClientConfig(parsed)) {
+        return {
+          ok: false,
+          message: tr(
+            `「${file.name}」は設定ファイルとして読めませんでした（このアプリで保存した設定か、CLI用の param_*.json を選んでください）。`,
+            `Could not read "${file.name}" as a configuration file. Select a configuration saved from this app or a CLI param_*.json file.`,
+          ),
+        }
+      }
+      load(parsed)
+      return { ok: true, message: tr(`「${file.name}」を読み込みました。`, `Loaded "${file.name}".`) }
+    },
+    [load],
+  )
 
   return {
     config,

@@ -101,14 +101,14 @@ function Scrubber({ track }: { track: Track }) {
       {/* Event short labels under the track on wide screens */}
       <div className="pointer-events-none absolute inset-x-0 top-[22px] hidden h-3 md:block">
         {spacedLabels(track, pct).map((e) => (
-            <span
-              key={`l-${e.kind}-${e.t}`}
-              className="num absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none text-ink-3"
-              style={{ left: `${pct(e.t)}%` }}
-            >
-              {eventShort(e)}
-            </span>
-          ))}
+          <span
+            key={`l-${e.kind}-${e.t}`}
+            className="num absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none text-ink-3"
+            style={{ left: `${pct(e.t)}%` }}
+          >
+            {eventShort(e)}
+          </span>
+        ))}
       </div>
     </div>
   )

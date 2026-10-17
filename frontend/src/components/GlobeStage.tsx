@@ -28,8 +28,14 @@ export function GlobeStage({
         resetKey={track}
         fallback={(reset) => (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-bg p-6 text-center text-[13px] text-ink-2">
-            <p>{tr('3D表示でエラーが発生しました。グラフと数値は引き続き使えます。', 'The 3D view failed. Charts and figures still work.')}</p>
-            <button type="button" onClick={reset} className="h-8 rounded-[6px] border border-line-strong bg-surface px-3 text-[12px] hover:bg-surface-2">
+            <p>
+              {tr('3D表示でエラーが発生しました。グラフと数値は引き続き使えます。', 'The 3D view failed. Charts and figures still work.')}
+            </p>
+            <button
+              type="button"
+              onClick={reset}
+              className="h-8 rounded-[6px] border border-line-strong bg-surface px-3 text-[12px] hover:bg-surface-2"
+            >
               {tr('もう一度表示する', 'Try again')}
             </button>
           </div>

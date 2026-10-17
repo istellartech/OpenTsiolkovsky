@@ -90,13 +90,21 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
             )}
             onSelect={() => input.current?.click()}
           />
-          <MenuItem onClose={close} icon={Save} title={tr('設定を保存', 'Save settings')}
-            detail={tr(`いまの入力を ${files.base}.json として保存します。`, `Saves the current inputs as ${files.base}.json.`)} onSelect={files.saveJson} />
+          <MenuItem
+            onClose={close}
+            icon={Save}
+            title={tr('設定を保存', 'Save settings')}
+            detail={tr(`いまの入力を ${files.base}.json として保存します。`, `Saves the current inputs as ${files.base}.json.`)}
+            onSelect={files.saveJson}
+          />
           <MenuItem
             onClose={close}
             icon={Link2}
             title={tr('共有リンクをコピー', 'Copy share link')}
-            detail={tr('いまの設定を URL に埋め込みます。開くと同じ機体・条件で計算されます。', 'Embeds the current settings in a URL; opening it runs the same vehicle and conditions.')}
+            detail={tr(
+              'いまの設定を URL に埋め込みます。開くと同じ機体・条件で計算されます。',
+              'Embeds the current settings in a URL; opening it runs the same vehicle and conditions.',
+            )}
             onSelect={files.copyLink}
           />
           <div className="my-1 h-px bg-line" />
@@ -105,12 +113,21 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
             onClose={close}
             icon={Table2}
             title={tr('軌道データ（CSV）', 'Trajectory data (CSV)')}
-            detail={tr('時刻ごとの位置・高度・速度・推力など。表計算ソフトで開けます。', 'Position, altitude, velocity, thrust and more per time step. Opens in any spreadsheet.')}
+            detail={tr(
+              '時刻ごとの位置・高度・速度・推力など。表計算ソフトで開けます。',
+              'Position, altitude, velocity, thrust and more per time step. Opens in any spreadsheet.',
+            )}
             onSelect={files.saveCsv}
             disabled={!hasResult}
           />
-          <MenuItem onClose={close} icon={MapIcon} title={tr('Google Earth 用（KML）', 'Google Earth (KML)')}
-            detail={tr('飛行経路を Google Earth で 3D 表示できます。', 'View the flight path in 3D in Google Earth.')} onSelect={files.saveKml} disabled={!hasResult} />
+          <MenuItem
+            onClose={close}
+            icon={MapIcon}
+            title={tr('Google Earth 用（KML）', 'Google Earth (KML)')}
+            detail={tr('飛行経路を Google Earth で 3D 表示できます。', 'View the flight path in 3D in Google Earth.')}
+            onSelect={files.saveKml}
+            disabled={!hasResult}
+          />
         </div>
       )}
     </div>

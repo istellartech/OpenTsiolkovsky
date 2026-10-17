@@ -41,7 +41,12 @@ export function Overview({
         className="-mx-1.5 w-[calc(100%+12px)] rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[17px] font-semibold tracking-tight outline-none hover:border-line focus:border-signal"
       />
       <p className="mt-0.5 text-[12px] text-ink-2">
-        {preset ? `${preset.kind} · ${preset.site}` : tr(`${specs.stages.length}段 · カスタム設定`, `${specs.stages.length} stage${specs.stages.length === 1 ? '' : 's'} · Custom configuration`)}
+        {preset
+          ? `${preset.kind} · ${preset.site}`
+          : tr(
+              `${specs.stages.length}段 · カスタム設定`,
+              `${specs.stages.length} stage${specs.stages.length === 1 ? '' : 's'} · Custom configuration`,
+            )}
       </p>
       {preset && <p className="mt-2 text-[12px] leading-relaxed text-ink-2">{preset.description}</p>}
 
@@ -90,7 +95,10 @@ export function Overview({
                 title={tr(`${s.index + 1}段の設定を開く`, `Open stage ${s.index + 1} settings`)}
               >
                 <td className="py-1.5 pr-2">
-                  <span className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style={{ background: stageColorVar(s.index + 1) }} />
+                  <span
+                    className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
+                    style={{ background: stageColorVar(s.index + 1) }}
+                  />
                   {s.index + 1}
                 </td>
                 <td className="num py-1.5 pr-2 text-right">{fmtMass(s.ownMass)}</td>
@@ -150,7 +158,12 @@ export function Overview({
           <ul className="space-y-0.5 text-[11px] leading-relaxed">
             {preset.sources.map((src) => (
               <li key={src.url}>
-                <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink hover:decoration-ink">
+                <a
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-ink-2 underline decoration-line-strong underline-offset-2 hover:text-ink hover:decoration-ink"
+                >
                   {src.label}
                 </a>
               </li>
@@ -181,7 +194,10 @@ function SequenceChart({ specs }: { specs: VehicleSpec }) {
               {/* Burn */}
               <div
                 className="absolute top-0.5 h-3 rounded-[3px]"
-                title={tr(`点火 T+${fmt(s.ignition)} s / 燃焼終了 T+${fmt(s.burnout)} s`, `Ignition T+${fmt(s.ignition)} s / burnout T+${fmt(s.burnout)} s`)}
+                title={tr(
+                  `点火 T+${fmt(s.ignition)} s / 燃焼終了 T+${fmt(s.burnout)} s`,
+                  `Ignition T+${fmt(s.ignition)} s / burnout T+${fmt(s.burnout)} s`,
+                )}
                 style={{
                   left: pct(s.ignition),
                   width: `max(3px, calc(${pct(s.burnout)} - ${pct(s.ignition)}))`,

@@ -27,8 +27,18 @@ export interface PresetOption {
 }
 
 export const PRESET_CATEGORIES: { id: PresetCategory; label: string }[] = [
-  { id: 'sounding', get label() { return tr('観測ロケット（弾道飛行）', 'Sounding rockets (suborbital)') } },
-  { id: 'orbital', get label() { return tr('人工衛星打上げロケット', 'Orbital launch vehicles') } },
+  {
+    id: 'sounding',
+    get label() {
+      return tr('観測ロケット（弾道飛行）', 'Sounding rockets (suborbital)')
+    },
+  },
+  {
+    id: 'orbital',
+    get label() {
+      return tr('人工衛星打上げロケット', 'Orbital launch vehicles')
+    },
+  },
 ]
 
 /* ------------------------------------------------------------ Launch sites */
@@ -42,7 +52,6 @@ const SITES = {
   yoshinobu: siteById('tanegashima'),
 }
 
-
 /* ---------------------------------------------------------- Sounding rockets */
 
 // Calibrated total-impulse factors: thrust is scaled so that the simulated
@@ -54,9 +63,26 @@ export const CAL = {
   momoElevation: 86.71, // splashdown 37 km
   ss520Stage1: 1.3752, // 2.0 km/s at 26 km at stage-1 burnout
   saturnIsp1: 315.96, // S-IC vacuum Isp; tuned to the S-IC cutoff / S-II cutoff / parking orbit
-  saturnPitch: [[30, 82.08], [70, 60.42], [120, 31.62], [161, 29.04], [300, 18.86], [450, 15.48], [550, 13.19], [700, 1.07]] as [number, number][],
+  saturnPitch: [
+    [30, 82.08],
+    [70, 60.42],
+    [120, 31.62],
+    [161, 29.04],
+    [300, 18.86],
+    [450, 15.48],
+    [550, 13.19],
+    [700, 1.07],
+  ] as [number, number][],
   saturnAzimuth: 74.85, // published flight azimuth 72.058°; adjusted to the 32.52° inclination
-  ariane5Pitch: [[20, 82.85], [60, 63.19], [137, 41.03], [300, 10.54], [520, 6.2], [1000, 1.24], [1500, -1.32]] as [number, number][], // GTO 250 × 35,786 km
+  ariane5Pitch: [
+    [20, 82.85],
+    [60, 63.19],
+    [137, 41.03],
+    [300, 10.54],
+    [520, 6.2],
+    [1000, 1.24],
+    [1500, -1.32],
+  ] as [number, number][], // GTO 250 × 35,786 km
   ariane5Azimuth: 90,
   ariane5Cutoff: 978, // full ESC-A burn
 }
@@ -78,7 +104,13 @@ function s310(): ClientConfig {
         burn,
         exitArea: exitAreaFromDiameter(0.27),
         // "Early high thrust, later low thrust" (ISAS); shape is illustrative
-        shape: [[0, 1.6], [0.25, 1.2], [0.5, 0.9], [0.95, 0.6], [1, 0]],
+        shape: [
+          [0, 1.6],
+          [0.25, 1.2],
+          [0.5, 0.9],
+          [0.95, 0.6],
+          [1, 0],
+        ],
         freeMode: 0,
       }),
     ],
@@ -107,7 +139,12 @@ function s520(): ClientConfig {
         burn,
         // Expansion ratio 8 (ISAS); exit diameter estimated
         exitArea: exitAreaFromDiameter(0.42),
-        shape: [[0, 1.3], [0.3, 1.1], [0.9, 0.85], [1, 0]],
+        shape: [
+          [0, 1.3],
+          [0.3, 1.1],
+          [0.9, 0.85],
+          [1, 0],
+        ],
         freeMode: 0,
       }),
     ],
@@ -144,7 +181,13 @@ function ss520_5(): ClientConfig {
         // Negligible: the solver needs a positive nozzle, the curve already
         // includes back-pressure.
         exitArea: 1e-4,
-        shape: [[0, 160], [10 / 31.8, 100], [30 / 31.8, 50], [31.7 / 31.8, 20], [1, 0]],
+        shape: [
+          [0, 160],
+          [10 / 31.8, 100],
+          [30 / 31.8, 50],
+          [31.7 / 31.8, 20],
+          [1, 0],
+        ],
         freeMode: 1,
       }),
       stage({
@@ -155,7 +198,11 @@ function ss520_5(): ClientConfig {
         burn: 24.5,
         separation: sep2 - sep1,
         exitArea: exitAreaFromDiameter(0.1) * 10,
-        shape: [[0, 45500], [23.7 / 24.5, 24500], [1, 0]],
+        shape: [
+          [0, 45500],
+          [23.7 / 24.5, 24500],
+          [1, 0],
+        ],
         freeMode: 1,
       }),
       stage({
@@ -167,7 +214,11 @@ function ss520_5(): ClientConfig {
         ignition: 238 - sep2,
         burn: 25.7,
         exitArea: exitAreaFromDiameter(0.05) * 10,
-        shape: [[0, 13000], [25.6 / 25.7, 2000], [1, 0]],
+        shape: [
+          [0, 13000],
+          [25.6 / 25.7, 2000],
+          [1, 0],
+        ],
         freeMode: 1,
       }),
     ],
@@ -219,7 +270,6 @@ function momo(): ClientConfig {
   })
 }
 
-
 /* ---------------------------------------------------------------- Saturn V */
 
 function saturnV(): ClientConfig {
@@ -233,7 +283,12 @@ function saturnV(): ClientConfig {
   // S-IC: centre engine cutoff 135.20, outboard cutoff 161.63, separation 162.3
   const sicBurn = 161.63 - t0
   const ceco = (135.2 - t0) / sicBurn
-  const sicShape: [number, number][] = [[0, 1], [ceco, 1], [ceco + 0.0005, 0.8], [1, 0.8]]
+  const sicShape: [number, number][] = [
+    [0, 1],
+    [ceco, 1],
+    [ceco + 0.0005, 0.8],
+    [1, 0.8],
+  ]
   const sicProp = 2278688 - 39307 - 168015 // ignition→OECO minus hold-down burn
   // Exit area from the published sea-level thrust (sum of five F-1, 33,596 kN)
   const shapeArea = ceco + (1 - ceco) * 0.8
@@ -270,7 +325,12 @@ function saturnV(): ClientConfig {
         separation: sep2,
         exitArea: 5 * exitAreaFromDiameter(1.96),
         // 5,141.5 kN, then 4,093.1 kN after centre engine cutoff (report §6.3)
-        shape: [[0, 5141.5], [siiCeco, 5141.5], [siiCeco + 0.0005, 4093.1], [1, 4093.1]],
+        shape: [
+          [0, 5141.5],
+          [siiCeco, 5141.5],
+          [siiCeco + 0.0005, 4093.1],
+          [1, 4093.1],
+        ],
         freeMode: 1,
       }),
       stage({
@@ -291,7 +351,6 @@ function saturnV(): ClientConfig {
     step: 1,
   })
 }
-
 
 /* ------------------------------------------------------------------ Kourou */
 
@@ -393,7 +452,13 @@ function epsilon(): ClientConfig {
     diameter: 2.6,
     ca: CA_SLENDER,
     // Pitch program tuned to the achieved orbit (954 × 1157 km)
-    attitude: pitchProgram(90, [[40, 70], [112, 51], [266, 31], [620, 3], [720, -12]]),
+    attitude: pitchProgram(90, [
+      [40, 70],
+      [112, 51],
+      [266, 31],
+      [620, 3],
+      [720, -12],
+    ]),
     duration: 2400,
     step: 2,
   })
@@ -449,7 +514,16 @@ function h2a202(): ClientConfig {
     diameter: 4.0,
     ca: CA_SLENDER,
     // Pitch program and SECO tuned to a 660 × 672 km, 98° orbit
-    attitude: pitchProgram(191.2, [[30, 82.12], [70, 70.63], [124, 55.89], [200, 50.07], [300, 46.61], [400, 34.19], [550, 5.7], [700, -4.08]]),
+    attitude: pitchProgram(191.2, [
+      [30, 82.12],
+      [70, 70.63],
+      [124, 55.89],
+      [200, 50.07],
+      [300, 46.61],
+      [400, 34.19],
+      [550, 5.7],
+      [700, -4.08],
+    ]),
     duration: 2400,
     step: 2,
   })
@@ -505,7 +579,16 @@ function h3_22s(): ClientConfig {
     diameter: 5.2,
     ca: CA_SLENDER,
     // Pitch program and SECO tuned to a 669 × 681 km, 98.1° orbit
-    attitude: pitchProgram(191.3, [[30, 78.76], [70, 63.01], [116, 48.46], [200, 40.52], [303, 23.86], [450, 5.33], [650, 3.17], [850, -5.97]]),
+    attitude: pitchProgram(191.3, [
+      [30, 78.76],
+      [70, 63.01],
+      [116, 48.46],
+      [200, 40.52],
+      [303, 23.86],
+      [450, 5.33],
+      [650, 3.17],
+      [850, -5.97],
+    ]),
     duration: 2400,
     step: 2,
   })
@@ -521,15 +604,51 @@ const src = (ja: string, en: string, url: string): PresetSource => ({
   url,
 })
 
-const ISAS_HANDBOOK = src('JAXA/ISAS 観測ロケット ユーザーハンドブック（3章 機体概要、付録B 飛行実績）', 'JAXA/ISAS Sounding Rocket User Handbook (Ch. 3 Vehicle Overview, App. B Flight Record)', 'https://www.isas.jaxa.jp/home/kansoku/images/pdf/RSL-2018012H_%E8%A6%B3%E6%B8%AC%E3%83%AD%E3%82%B1%E3%83%83%E3%83%88_%E3%83%A6%E3%83%BC%E3%82%B6%E3%83%BC%E3%83%8F%E3%83%B3%E3%83%89%E3%83%96%E3%83%83%E3%82%AF(%E5%85%AC%E9%96%8B%E7%94%A8).pdf')
-const ISAS_S310 = src('JAXA/ISAS S-310 主要諸元', 'JAXA/ISAS S-310 Specifications', 'https://www.isas.jaxa.jp/home/kansoku/rocket/s310.html')
-const ISAS_S520 = src('JAXA/ISAS S-520 主要諸元', 'JAXA/ISAS S-520 Specifications', 'https://www.isas.jaxa.jp/home/kansoku/rocket/s520.html')
-const JAXA_SROCKETS = src('JAXA 観測ロケット（諸元一覧）', 'JAXA Sounding Rockets (specifications)', 'https://global.jaxa.jp/projects/rockets/s_rockets/index.html')
-const MEXT_SS520_5 = src('文部科学省 SS-520 5号機のミッション概要（飛行シーケンス・目標軌道）', 'MEXT, SS-520-5 Mission Overview (flight sequence, target orbit)', 'https://www.mext.go.jp/b_menu/shingi/gijyutu/gijyutu2/060/shiryo/__icsFiles/afieldfile/2017/10/12/1396928_13.pdf')
-const JAXA_SS520_5 = src('JAXA SS-520 5号機 説明資料（全備質量・衛星）', 'JAXA, SS-520-5 Briefing Material (gross mass, satellite)', 'https://www.isas.jaxa.jp/topics/files/20180202_ss-520-5.pdf')
-const OT_SS520_4 = src('OpenTsiolkovsky 同梱 SS-520-4 設定例（推力履歴・比推力）', 'OpenTsiolkovsky bundled SS-520-4 example (thrust curve, Isp)', 'https://github.com/istellartech/OpenTsiolkovsky/tree/master/examples/SS-520-4')
-const IST_MOMO_F3 = src('インターステラテクノロジズ MOMO3号機（主要諸元）', 'Interstellar Technologies, MOMO F3 (specifications)', 'https://www.istellartech.com/technology/momo_f3/')
-const IST_MOMO_F3_PR = src('インターステラテクノロジズ プレスリリース 2019-05-05（到達高度・飛行時間）', 'Interstellar Technologies press release, 2019-05-05 (apogee, flight time)', 'https://www.istellartech.com/7hbym/wp-content/uploads/2019/05/IST-PressRelease_2019050501.pdf')
+const ISAS_HANDBOOK = src(
+  'JAXA/ISAS 観測ロケット ユーザーハンドブック（3章 機体概要、付録B 飛行実績）',
+  'JAXA/ISAS Sounding Rocket User Handbook (Ch. 3 Vehicle Overview, App. B Flight Record)',
+  'https://www.isas.jaxa.jp/home/kansoku/images/pdf/RSL-2018012H_%E8%A6%B3%E6%B8%AC%E3%83%AD%E3%82%B1%E3%83%83%E3%83%88_%E3%83%A6%E3%83%BC%E3%82%B6%E3%83%BC%E3%83%8F%E3%83%B3%E3%83%89%E3%83%96%E3%83%83%E3%82%AF(%E5%85%AC%E9%96%8B%E7%94%A8).pdf',
+)
+const ISAS_S310 = src(
+  'JAXA/ISAS S-310 主要諸元',
+  'JAXA/ISAS S-310 Specifications',
+  'https://www.isas.jaxa.jp/home/kansoku/rocket/s310.html',
+)
+const ISAS_S520 = src(
+  'JAXA/ISAS S-520 主要諸元',
+  'JAXA/ISAS S-520 Specifications',
+  'https://www.isas.jaxa.jp/home/kansoku/rocket/s520.html',
+)
+const JAXA_SROCKETS = src(
+  'JAXA 観測ロケット（諸元一覧）',
+  'JAXA Sounding Rockets (specifications)',
+  'https://global.jaxa.jp/projects/rockets/s_rockets/index.html',
+)
+const MEXT_SS520_5 = src(
+  '文部科学省 SS-520 5号機のミッション概要（飛行シーケンス・目標軌道）',
+  'MEXT, SS-520-5 Mission Overview (flight sequence, target orbit)',
+  'https://www.mext.go.jp/b_menu/shingi/gijyutu/gijyutu2/060/shiryo/__icsFiles/afieldfile/2017/10/12/1396928_13.pdf',
+)
+const JAXA_SS520_5 = src(
+  'JAXA SS-520 5号機 説明資料（全備質量・衛星）',
+  'JAXA, SS-520-5 Briefing Material (gross mass, satellite)',
+  'https://www.isas.jaxa.jp/topics/files/20180202_ss-520-5.pdf',
+)
+const OT_SS520_4 = src(
+  'OpenTsiolkovsky 同梱 SS-520-4 設定例（推力履歴・比推力）',
+  'OpenTsiolkovsky bundled SS-520-4 example (thrust curve, Isp)',
+  'https://github.com/istellartech/OpenTsiolkovsky/tree/master/examples/SS-520-4',
+)
+const IST_MOMO_F3 = src(
+  'インターステラテクノロジズ MOMO3号機（主要諸元）',
+  'Interstellar Technologies, MOMO F3 (specifications)',
+  'https://www.istellartech.com/technology/momo_f3/',
+)
+const IST_MOMO_F3_PR = src(
+  'インターステラテクノロジズ プレスリリース 2019-05-05（到達高度・飛行時間）',
+  'Interstellar Technologies press release, 2019-05-05 (apogee, flight time)',
+  'https://www.istellartech.com/7hbym/wp-content/uploads/2019/05/IST-PressRelease_2019050501.pdf',
+)
 
 const soundingNotes = () => [
   tr(
@@ -539,22 +658,75 @@ const soundingNotes = () => [
   tr('打上げ方位角は公開値が見当たらないため仮定値です。', 'The launch azimuth is assumed, as no published value was found.'),
 ]
 
-const NASA_AS506 = { label: 'NASA MSFC Saturn V Launch Vehicle Flight Evaluation Report AS-506 Apollo 11 Mission (MPR-SAT-FE-69-9)', url: 'https://ibiblio.org/apollo/Documents/lvfea-AS506-Apollo11.pdf' }
-const A5_UM = src("Arianespace Ariane 5 User's Manual Issue 5 Rev 2（Fig. 1-7 主要諸元）", "Arianespace Ariane 5 User's Manual Issue 5 Rev 2 (Fig. 1-7, main characteristics)", 'https://courses.edx.org/asset-v1:DelftX%2BAEASM1x%2B1T2022%2Btype%40asset%2Bblock/Ariane5_Users-Manual_October2016_Red.pdf')
-const A5_VA247 = src('Arianespace VA247 Launch Kit（機体構成・飛行シーケンス・目標軌道）', 'Arianespace VA247 Launch Kit (vehicle configuration, flight sequence, target orbit)', 'https://www.arianespace.com/wp-content/uploads/2019/01/VA247-launchkit-EN.pdf')
-const JAXA_EPSILON_PRESSKIT = src('JAXA イプシロンロケット試験機 プレスキット（主要諸元）', 'JAXA, Epsilon Launch Vehicle Test Flight Press Kit (specifications)', 'https://fanfun.jaxa.jp/countdown/epsilon/files/presskit_epsilon_j.pdf')
-const JAXA_EPSILON_RESULT = src('JAXA イプシロンロケット試験機の打上げ結果（飛行シーケンス・軌道）', 'JAXA, Epsilon Test Flight Launch Results (flight sequence, orbit)', 'https://www.jaxa.jp/press/2013/12/20131224_epsilon_j.pdf')
-const JAXA_HISAKI = src('JAXA 惑星分光観測衛星「ひさき」パンフレット（衛星質量）', 'JAXA, Spectroscopic Planet Observatory "Hisaki" brochure (satellite mass)', 'https://www.jaxa.jp/projects/pr/brochure/pdf/04/sat35.pdf')
-const MHI_H2A_MANUAL = src('三菱重工 H-IIA ユーザーズマニュアル Ver.4.0（Table 1.3-1）', "Mitsubishi Heavy Industries, H-IIA User's Manual Ver. 4.0 (Table 1.3-1)", 'https://www.mhi.com/jp/products/pdf/manual.pdf')
-const JAXA_H2A_LEAFLET = src('JAXA H-IIAロケット リーフレット（主要諸元）', 'JAXA, H-IIA Launch Vehicle leaflet (specifications)', 'https://www.jaxa.jp/projects/pr/model/files/p_h2a_2025.pdf')
-const MEXT_H2A_F50 = src('文部科学省 宇宙開発利用部会 資料 H-IIA 50号機 打上げ結果（飛行シーケンス）', 'MEXT Space Development and Utilization Committee, H-IIA F50 Launch Results (flight sequence)', 'https://www.mext.go.jp/content/20250703-mxt_uchukai01-000043486_000002.pdf')
-const MELCO_GOSATGW = src('三菱電機 GOSAT-GW（衛星質量）', 'Mitsubishi Electric, GOSAT-GW (satellite mass)', 'https://www.mitsubishielectric.co.jp/society/space/satellite/observation/gosat_gw.html')
-const MEXT_H3_TF1 = src('文部科学省 H3試験機1号機 調査報告（主要諸元・計画シーケンス）', 'MEXT, H3 Test Flight No. 1 Investigation Report (specifications, planned sequence)', 'https://www.mext.go.jp/content/20231026-mxt_uchukai01-000030341_3.pdf')
-const JAXA_H3_LEAFLET = src('JAXA H3ロケット リーフレット', 'JAXA, H3 Launch Vehicle leaflet', 'https://www.jaxa.jp/projects/pr/model/files/p_h3_2025.pdf')
+const NASA_AS506 = {
+  label: 'NASA MSFC Saturn V Launch Vehicle Flight Evaluation Report AS-506 Apollo 11 Mission (MPR-SAT-FE-69-9)',
+  url: 'https://ibiblio.org/apollo/Documents/lvfea-AS506-Apollo11.pdf',
+}
+const A5_UM = src(
+  "Arianespace Ariane 5 User's Manual Issue 5 Rev 2（Fig. 1-7 主要諸元）",
+  "Arianespace Ariane 5 User's Manual Issue 5 Rev 2 (Fig. 1-7, main characteristics)",
+  'https://courses.edx.org/asset-v1:DelftX%2BAEASM1x%2B1T2022%2Btype%40asset%2Bblock/Ariane5_Users-Manual_October2016_Red.pdf',
+)
+const A5_VA247 = src(
+  'Arianespace VA247 Launch Kit（機体構成・飛行シーケンス・目標軌道）',
+  'Arianespace VA247 Launch Kit (vehicle configuration, flight sequence, target orbit)',
+  'https://www.arianespace.com/wp-content/uploads/2019/01/VA247-launchkit-EN.pdf',
+)
+const JAXA_EPSILON_PRESSKIT = src(
+  'JAXA イプシロンロケット試験機 プレスキット（主要諸元）',
+  'JAXA, Epsilon Launch Vehicle Test Flight Press Kit (specifications)',
+  'https://fanfun.jaxa.jp/countdown/epsilon/files/presskit_epsilon_j.pdf',
+)
+const JAXA_EPSILON_RESULT = src(
+  'JAXA イプシロンロケット試験機の打上げ結果（飛行シーケンス・軌道）',
+  'JAXA, Epsilon Test Flight Launch Results (flight sequence, orbit)',
+  'https://www.jaxa.jp/press/2013/12/20131224_epsilon_j.pdf',
+)
+const JAXA_HISAKI = src(
+  'JAXA 惑星分光観測衛星「ひさき」パンフレット（衛星質量）',
+  'JAXA, Spectroscopic Planet Observatory "Hisaki" brochure (satellite mass)',
+  'https://www.jaxa.jp/projects/pr/brochure/pdf/04/sat35.pdf',
+)
+const MHI_H2A_MANUAL = src(
+  '三菱重工 H-IIA ユーザーズマニュアル Ver.4.0（Table 1.3-1）',
+  "Mitsubishi Heavy Industries, H-IIA User's Manual Ver. 4.0 (Table 1.3-1)",
+  'https://www.mhi.com/jp/products/pdf/manual.pdf',
+)
+const JAXA_H2A_LEAFLET = src(
+  'JAXA H-IIAロケット リーフレット（主要諸元）',
+  'JAXA, H-IIA Launch Vehicle leaflet (specifications)',
+  'https://www.jaxa.jp/projects/pr/model/files/p_h2a_2025.pdf',
+)
+const MEXT_H2A_F50 = src(
+  '文部科学省 宇宙開発利用部会 資料 H-IIA 50号機 打上げ結果（飛行シーケンス）',
+  'MEXT Space Development and Utilization Committee, H-IIA F50 Launch Results (flight sequence)',
+  'https://www.mext.go.jp/content/20250703-mxt_uchukai01-000043486_000002.pdf',
+)
+const MELCO_GOSATGW = src(
+  '三菱電機 GOSAT-GW（衛星質量）',
+  'Mitsubishi Electric, GOSAT-GW (satellite mass)',
+  'https://www.mitsubishielectric.co.jp/society/space/satellite/observation/gosat_gw.html',
+)
+const MEXT_H3_TF1 = src(
+  '文部科学省 H3試験機1号機 調査報告（主要諸元・計画シーケンス）',
+  'MEXT, H3 Test Flight No. 1 Investigation Report (specifications, planned sequence)',
+  'https://www.mext.go.jp/content/20231026-mxt_uchukai01-000030341_3.pdf',
+)
+const JAXA_H3_LEAFLET = src(
+  'JAXA H3ロケット リーフレット',
+  'JAXA, H3 Launch Vehicle leaflet',
+  'https://www.jaxa.jp/projects/pr/model/files/p_h3_2025.pdf',
+)
 
 const orbitalNotes = () => [
-  tr('ノズル出口面積（地上での推力低下に効く）は公開値が見当たらないため推定値です。', 'Nozzle exit areas (which set the thrust loss at low altitude) are estimated, as no published values were found.'),
-  tr('姿勢は時刻テーブルで与えた簡易プログラムで、実機の誘導則ではありません。', 'Attitude is a simple time-tabled program, not the actual guidance law.'),
+  tr(
+    'ノズル出口面積（地上での推力低下に効く）は公開値が見当たらないため推定値です。',
+    'Nozzle exit areas (which set the thrust loss at low altitude) are estimated, as no published values were found.',
+  ),
+  tr(
+    '姿勢は時刻テーブルで与えた簡易プログラムで、実機の誘導則ではありません。',
+    'Attitude is a simple time-tabled program, not the actual guidance law.',
+  ),
 ]
 
 export const PRESET_OPTIONS: PresetOption[] = [
@@ -584,7 +756,10 @@ export const PRESET_OPTIONS: PresetOption[] = [
           '計算上の最高到達時刻は T+244 s（公表 T+240 s）、着水点までの距離は 37.9 km（公表 37 km）。計算上の飛行時間は 407 s で公表の 515 s より短く、降下中の空気抵抗の違いによるものと考えられます。',
           'Simulated apogee is at T+244 s (published T+240 s) and splashdown range is 37.9 km (published 37 km). The simulated flight time of 407 s is shorter than the published 515 s, likely due to differences in drag during descent.',
         ),
-        tr('ノズル出口径と発射地点の座標は推定・概略です。', 'The nozzle exit diameter is estimated and the launch coordinates are approximate.'),
+        tr(
+          'ノズル出口径と発射地点の座標は推定・概略です。',
+          'The nozzle exit diameter is estimated and the launch coordinates are approximate.',
+        ),
       ]
     },
     sources: [IST_MOMO_F3, IST_MOMO_F3_PR],
@@ -711,7 +886,10 @@ export const PRESET_OPTIONS: PresetOption[] = [
     },
     get modelNotes() {
       return [
-        tr('各段の推力は推進薬質量・比推力・燃焼時間から求めた平均値（一定推力）です。', 'Each stage uses a constant average thrust derived from propellant mass, Isp and burn time.'),
+        tr(
+          '各段の推力は推進薬質量・比推力・燃焼時間から求めた平均値（一定推力）です。',
+          'Each stage uses a constant average thrust derived from propellant mass, Isp and burn time.',
+        ),
         tr(
           '3段にはPBS（ポスト・ブースト・ステージ）付き形態の質量を使い、PBSの噴射は省略しています。',
           'Stage 3 uses the mass of the configuration with the PBS (post-boost stage); PBS firings are omitted.',
@@ -793,7 +971,10 @@ export const PRESET_OPTIONS: PresetOption[] = [
           'SRB-3 の比推力は公開値が見当たらないため SRB-A と同程度（283 s）と仮定しています。',
           'SRB-3 Isp is assumed to be similar to the SRB-A (283 s), as no published value was found.',
         ),
-        tr('SRB-3 と第1段の同時燃焼は「SRB分離までの段」として近似しています。', 'The combined burn of the SRB-3s and the first stage is approximated as a separate stage ending at SRB separation.'),
+        tr(
+          'SRB-3 と第1段の同時燃焼は「SRB分離までの段」として近似しています。',
+          'The combined burn of the SRB-3s and the first stage is approximated as a separate stage ending at SRB separation.',
+        ),
         tr(
           'フェアリング（約1.8 t）は投棄時刻（211 s）ではなく1/2段分離（303 s）まで機体に含めています。',
           'The fairing (about 1.8 t) is carried until stage 1/2 separation (303 s) rather than its jettison time (211 s).',
@@ -914,7 +1095,14 @@ export function createBlankConfig(launch?: ClientConfig['launch']): ClientConfig
     name: tr('新しいロケット', 'New rocket'),
     site: launch ? { lat: launch.latitude_deg, lon: launch.longitude_deg, alt: launch.altitude_m } : SITES.taiki,
     date: launch
-      ? [launch.datetime_utc.year, launch.datetime_utc.month, launch.datetime_utc.day, launch.datetime_utc.hour, launch.datetime_utc.minute, launch.datetime_utc.second]
+      ? [
+          launch.datetime_utc.year,
+          launch.datetime_utc.month,
+          launch.datetime_utc.day,
+          launch.datetime_utc.hour,
+          launch.datetime_utc.minute,
+          launch.datetime_utc.second,
+        ]
       : [2025, 1, 1, 0, 0, 0],
     stages: [stage({ mass: 1000, propellant: 700, isp: 250, burn: (700 * 250 * 9.80665) / 20000, exitArea: exitAreaFromDiameter(0.25) })],
     diameter: 0.5,

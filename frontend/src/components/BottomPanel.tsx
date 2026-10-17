@@ -76,7 +76,10 @@ export function CompareControl({ reference, onPin, onUnpin }: CompareProps) {
       <button
         type="button"
         onClick={onPin}
-        title={tr('いまの結果を点線で残し、パラメータを変えたときの違いを比べます', 'Keep this result as a dashed line to compare against as you change parameters')}
+        title={tr(
+          'いまの結果を点線で残し、パラメータを変えたときの違いを比べます',
+          'Keep this result as a dashed line to compare against as you change parameters',
+        )}
         className="flex h-7 shrink-0 items-center gap-1 rounded-[6px] px-2 text-[12px] text-ink-2 hover:bg-surface-2 hover:text-ink"
       >
         <Pin className="h-3.5 w-3.5" />
@@ -90,8 +93,13 @@ export function CompareControl({ reference, onPin, onUnpin }: CompareProps) {
       <span className="truncate" title={reference.label}>
         {tr('比較', 'Pinned')}: {reference.label}
       </span>
-      <button type="button" onClick={onUnpin} aria-label={tr('比較をやめる', 'Unpin')}
-        title={tr('比較をやめる', 'Unpin')} className="rounded-full p-0.5 text-ink-3 hover:bg-surface-2 hover:text-ink">
+      <button
+        type="button"
+        onClick={onUnpin}
+        aria-label={tr('比較をやめる', 'Unpin')}
+        title={tr('比較をやめる', 'Unpin')}
+        className="rounded-full p-0.5 text-ink-3 hover:bg-surface-2 hover:text-ink"
+      >
         <X className="h-3 w-3" />
       </button>
     </span>
@@ -109,7 +117,13 @@ export function Summary({ track, reference, inline = false }: { track: Track; re
     [tr('最大速度', 'Max speed'), fmt(s.maxSpeed, 0), 'm/s', `M ${fmt(s.maxMach, 1)}`, r && signed(s.maxSpeed - r.maxSpeed, 0)],
     [tr('最大動圧', 'Max-Q'), fmt(s.maxQ / 1000, 1), 'kPa', `T+${fmt(s.maxQTime, 0)} s`, r && signed((s.maxQ - r.maxQ) / 1000, 1)],
     [tr('最大加速度', 'Max accel.'), fmt(s.maxAccel, 1), 'G', undefined, r && signed(s.maxAccel - r.maxAccel, 1)],
-    [s.landed ? tr('落下距離', 'Impact range') : tr('到達距離', 'Range'), fmt(s.range, 1), 'km', undefined, r && signed(s.range - r.range, 1)],
+    [
+      s.landed ? tr('落下距離', 'Impact range') : tr('到達距離', 'Range'),
+      fmt(s.range, 1),
+      'km',
+      undefined,
+      r && signed(s.range - r.range, 1),
+    ],
     [tr('飛行時間', 'Flight time'), fmt(s.duration, 0), 's', undefined, r && signed(s.duration - r.duration, 0)],
   ]
   return (

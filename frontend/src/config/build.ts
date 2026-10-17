@@ -187,7 +187,12 @@ export function vehicle(v: VehicleInput): ClientConfig {
  */
 export function pitchProgram(azimuth: number, knots: [number, number][]): [number, number, number][] {
   const last = knots[knots.length - 1]
-  return [[0, azimuth, 90], [8, azimuth, 90], ...knots.map(([t, e]) => [t, azimuth, e] as [number, number, number]), [last[0] + 5000, azimuth, last[1]]]
+  return [
+    [0, azimuth, 90],
+    [8, azimuth, 90],
+    ...knots.map(([t, e]) => [t, azimuth, e] as [number, number, number]),
+    [last[0] + 5000, azimuth, last[1]],
+  ]
 }
 
 function round(v: number, d: number) {

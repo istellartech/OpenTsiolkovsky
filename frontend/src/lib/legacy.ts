@@ -78,8 +78,10 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
   const stages: ClientStageConfig[] = rawStages.map((st, i) => {
     const t = obj(st.thrust)
     const hasNext = i < rawStages.length - 1
-    if (bool(obj(st['dumping product'])['dumping product exist?(bool)'])) unsupported.push(tr(`${i + 1}段の投棄物（dumping product）`, `stage ${i + 1} dumping product`))
-    if (bool(obj(st['attitude neutrality(3DoF)'])['considering neutrality?(bool)'])) unsupported.push(tr(`${i + 1}段の姿勢中立性（3DoF）`, `stage ${i + 1} attitude neutrality (3DoF)`))
+    if (bool(obj(st['dumping product'])['dumping product exist?(bool)']))
+      unsupported.push(tr(`${i + 1}段の投棄物（dumping product）`, `stage ${i + 1} dumping product`))
+    if (bool(obj(st['attitude neutrality(3DoF)'])['considering neutrality?(bool)']))
+      unsupported.push(tr(`${i + 1}段の姿勢中立性（3DoF）`, `stage ${i + 1} attitude neutrality (3DoF)`))
     return {
       power_mode: num(st['power flight mode(int)']),
       free_mode: num(st['free flight mode(int)']),
@@ -134,7 +136,8 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
     const name = baseName(str(aero['normal coefficient file name(str)']))
     const text = csvByName.get(name)
     if (text === undefined) missing.push(name)
-    else if (isSurface(text)) unsupported.push(tr(`CN の2次元テーブル（${name}）— 定数 CN を使います`, `2-D CN table (${name}) — constant CN is used instead`))
+    else if (isSurface(text))
+      unsupported.push(tr(`CN の2次元テーブル（${name}）— 定数 CN を使います`, `2-D CN table (${name}) — constant CN is used instead`))
     else cnProfile = machSeries(parseCsvRows(text, 2))
   }
 
@@ -170,7 +173,14 @@ export function fromLegacyParamFile(json: Json, csvByName: Map<string, string>):
       longitude_deg: num(llh[1]),
       altitude_m: num(llh[2]),
       velocity_ned_mps: [num(ned[0]), num(ned[1]), num(ned[2])],
-      datetime_utc: { year: num(ts[0]), month: num(ts[1], 1), day: num(ts[2], 1), hour: num(ts[3]), minute: num(ts[4]), second: num(ts[5]) },
+      datetime_utc: {
+        year: num(ts[0]),
+        month: num(ts[1], 1),
+        day: num(ts[2], 1),
+        hour: num(ts[3]),
+        minute: num(ts[4]),
+        second: num(ts[5]),
+      },
     },
     stages,
     aerodynamics: {

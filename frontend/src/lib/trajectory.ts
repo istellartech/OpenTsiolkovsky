@@ -236,8 +236,23 @@ export function indexAt(samples: TrackSample[], t: number): number {
 }
 
 const NUMERIC_KEYS = [
-  'lat', 'lon', 'alt', 'downrange', 'speed', 'groundSpeed', 'mach', 'q', 'thrust', 'drag',
-  'mass', 'accel', 'accelAxial', 'aoa', 'sideslip', 'azimuth', 'elevation',
+  'lat',
+  'lon',
+  'alt',
+  'downrange',
+  'speed',
+  'groundSpeed',
+  'mach',
+  'q',
+  'thrust',
+  'drag',
+  'mass',
+  'accel',
+  'accelAxial',
+  'aoa',
+  'sideslip',
+  'azimuth',
+  'elevation',
 ] as const
 
 /** Linearly interpolated state at time t. */
@@ -259,15 +274,47 @@ export function sampleAt(track: Track, t: number): TrackSample {
 
 export function trackToCsv(track: Track): string {
   const header = [
-    'time_s', 'stage', 'latitude_deg', 'longitude_deg', 'altitude_m', 'downrange_km',
-    'speed_inertial_mps', 'speed_ground_mps', 'mach', 'dynamic_pressure_pa', 'thrust_n',
-    'drag_n', 'mass_kg', 'accel_g', 'accel_axial_g', 'aoa_deg', 'sideslip_deg',
-    'attitude_azimuth_deg', 'attitude_elevation_deg',
+    'time_s',
+    'stage',
+    'latitude_deg',
+    'longitude_deg',
+    'altitude_m',
+    'downrange_km',
+    'speed_inertial_mps',
+    'speed_ground_mps',
+    'mach',
+    'dynamic_pressure_pa',
+    'thrust_n',
+    'drag_n',
+    'mass_kg',
+    'accel_g',
+    'accel_axial_g',
+    'aoa_deg',
+    'sideslip_deg',
+    'attitude_azimuth_deg',
+    'attitude_elevation_deg',
   ]
   const rows = track.samples.map((s) =>
     [
-      s.t, s.stage, s.lat, s.lon, s.alt, s.downrange, s.speed, s.groundSpeed, s.mach, s.q,
-      s.thrust, s.drag, s.mass, s.accel, s.accelAxial, s.aoa, s.sideslip, s.azimuth, s.elevation,
+      s.t,
+      s.stage,
+      s.lat,
+      s.lon,
+      s.alt,
+      s.downrange,
+      s.speed,
+      s.groundSpeed,
+      s.mach,
+      s.q,
+      s.thrust,
+      s.drag,
+      s.mass,
+      s.accel,
+      s.accelAxial,
+      s.aoa,
+      s.sideslip,
+      s.azimuth,
+      s.elevation,
     ].join(','),
   )
   return [header.join(','), ...rows].join('\n')

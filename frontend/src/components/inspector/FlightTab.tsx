@@ -13,7 +13,10 @@ export function FlightTab({ config, patch }: { config: ClientConfig; patch: Patc
     <>
       <Group
         title={tr('姿勢', 'Attitude')}
-        note={tr('方位角は北から時計回り、仰角は水平から上向き。時刻は打上げからの秒です。', 'Azimuth is clockwise from north; elevation is up from horizontal. Times are seconds after launch.')}
+        note={tr(
+          '方位角は北から時計回り、仰角は水平から上向き。時刻は打上げからの秒です。',
+          'Azimuth is clockwise from north; elevation is up from horizontal. Times are seconds after launch.',
+        )}
       >
         <Toggle
           label={tr('姿勢プログラム（時刻テーブル）', 'Attitude program (time table)')}
@@ -43,8 +46,20 @@ export function FlightTab({ config, patch }: { config: ClientConfig; patch: Patc
           />
         ) : (
           <>
-            <NumberField label={tr('方位角', 'Azimuth')} unit="°" path="attitude.azimuth_deg" value={at.azimuth_deg} onChange={(v) => setAt({ azimuth_deg: v })} />
-            <NumberField label={tr('仰角', 'Elevation')} unit="°" path="attitude.elevation_deg" value={at.elevation_deg} onChange={(v) => setAt({ elevation_deg: v })} />
+            <NumberField
+              label={tr('方位角', 'Azimuth')}
+              unit="°"
+              path="attitude.azimuth_deg"
+              value={at.azimuth_deg}
+              onChange={(v) => setAt({ azimuth_deg: v })}
+            />
+            <NumberField
+              label={tr('仰角', 'Elevation')}
+              unit="°"
+              path="attitude.elevation_deg"
+              value={at.elevation_deg}
+              onChange={(v) => setAt({ elevation_deg: v })}
+            />
           </>
         )}
       </Group>
@@ -62,12 +77,39 @@ export function FlightTab({ config, patch }: { config: ClientConfig; patch: Patc
         />
       </Group>
       <Group title={tr('姿勢の誤差', 'Attitude errors')}>
-        <NumberField label={tr('ピッチ', 'Pitch')} unit="°" path="attitude.pitch_offset_deg" value={at.pitch_offset_deg} onChange={(v) => setAt({ pitch_offset_deg: v })} />
-        <NumberField label={tr('ヨー', 'Yaw')} unit="°" path="attitude.yaw_offset_deg" value={at.yaw_offset_deg} onChange={(v) => setAt({ yaw_offset_deg: v })} />
-        <NumberField label={tr('ロール', 'Roll')} unit="°" path="attitude.roll_offset_deg" value={at.roll_offset_deg} onChange={(v) => setAt({ roll_offset_deg: v })} />
-        <VectorField label={tr('ジャイロバイアス', 'Gyro bias')} unit="°/h" axes={['X', 'Y', 'Z']} value={at.gyro_bias_deg_h} onChange={(v) => setAt({ gyro_bias_deg_h: v })} />
+        <NumberField
+          label={tr('ピッチ', 'Pitch')}
+          unit="°"
+          path="attitude.pitch_offset_deg"
+          value={at.pitch_offset_deg}
+          onChange={(v) => setAt({ pitch_offset_deg: v })}
+        />
+        <NumberField
+          label={tr('ヨー', 'Yaw')}
+          unit="°"
+          path="attitude.yaw_offset_deg"
+          value={at.yaw_offset_deg}
+          onChange={(v) => setAt({ yaw_offset_deg: v })}
+        />
+        <NumberField
+          label={tr('ロール', 'Roll')}
+          unit="°"
+          path="attitude.roll_offset_deg"
+          value={at.roll_offset_deg}
+          onChange={(v) => setAt({ roll_offset_deg: v })}
+        />
+        <VectorField
+          label={tr('ジャイロバイアス', 'Gyro bias')}
+          unit="°/h"
+          axes={['X', 'Y', 'Z']}
+          value={at.gyro_bias_deg_h}
+          onChange={(v) => setAt({ gyro_bias_deg_h: v })}
+        />
       </Group>
-      <Group title={tr('風', 'Wind')} note={tr('風向は風が吹いてくる方位（北=0°、時計回り）。', 'Wind direction is where the wind blows from (north = 0°, clockwise).')}>
+      <Group
+        title={tr('風', 'Wind')}
+        note={tr('風向は風が吹いてくる方位（北=0°、時計回り）。', 'Wind direction is where the wind blows from (north = 0°, clockwise).')}
+      >
         <Toggle
           label={tr('高度別に入力（テーブル）', 'Enter by altitude (table)')}
           checked={w.profile.length > 0}
@@ -96,8 +138,20 @@ export function FlightTab({ config, patch }: { config: ClientConfig; patch: Patc
           />
         ) : (
           <>
-            <NumberField label={tr('風速', 'Wind speed')} unit="m/s" path="wind.speed_mps" value={w.speed_mps} onChange={(v) => setW({ speed_mps: v })} />
-            <NumberField label={tr('風向', 'Wind direction')} unit="°" path="wind.direction_deg" value={w.direction_deg} onChange={(v) => setW({ direction_deg: v })} />
+            <NumberField
+              label={tr('風速', 'Wind speed')}
+              unit="m/s"
+              path="wind.speed_mps"
+              value={w.speed_mps}
+              onChange={(v) => setW({ speed_mps: v })}
+            />
+            <NumberField
+              label={tr('風向', 'Wind direction')}
+              unit="°"
+              path="wind.direction_deg"
+              value={w.direction_deg}
+              onChange={(v) => setW({ direction_deg: v })}
+            />
           </>
         )}
       </Group>

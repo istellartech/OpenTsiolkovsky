@@ -34,7 +34,12 @@ export function Toast({ toast, onDismiss }: { toast: ToastState | null; onDismis
         )}
       >
         <span className="flex-1">{toast.text}</span>
-        <button type="button" onClick={onDismiss} aria-label={tr('閉じる', 'Close')} className="-mr-1 shrink-0 rounded p-0.5 text-ink-3 hover:text-ink">
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label={tr('閉じる', 'Close')}
+          className="-mr-1 shrink-0 rounded p-0.5 text-ink-3 hover:text-ink"
+        >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

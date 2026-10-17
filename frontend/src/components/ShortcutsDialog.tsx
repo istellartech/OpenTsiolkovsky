@@ -55,7 +55,12 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
       >
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-[14px] font-semibold">{tr('キーボードショートカット', 'Keyboard shortcuts')}</h2>
-          <button type="button" onClick={onClose} aria-label={tr('閉じる (Esc)', 'Close (Esc)')} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={tr('閉じる (Esc)', 'Close (Esc)')}
+            className="flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

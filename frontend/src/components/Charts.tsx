@@ -24,46 +24,204 @@ export interface ChartSpec {
 }
 
 export const CHARTS: ChartSpec[] = [
-  { id: 'altitude', get title() { return tr('高度', 'Altitude') }, unit: 'km', x: 'time', digits: 1, series: [{ get label() { return tr('高度', 'Altitude') }, get: (s) => s.alt / 1000 }] },
   {
-    id: 'velocity', get title() { return tr('速度', 'Velocity') }, unit: 'm/s', x: 'time', digits: 0,
+    id: 'altitude',
+    get title() {
+      return tr('高度', 'Altitude')
+    },
+    unit: 'km',
+    x: 'time',
+    digits: 1,
     series: [
-      { get label() { return tr('慣性', 'Inertial') }, get: (s) => s.speed },
-      { get label() { return tr('対地', 'Ground-relative') }, get: (s) => s.groundSpeed, secondary: true },
-    ],
-  },
-  { id: 'mach', get title() { return tr('マッハ数', 'Mach number') }, unit: '', x: 'time', digits: 2, series: [{ label: 'Mach', get: (s) => s.mach }] },
-  { id: 'q', get title() { return tr('動圧', 'Dynamic pressure') }, unit: 'kPa', x: 'time', digits: 1, series: [{ get label() { return tr('動圧', 'Dynamic pressure') }, get: (s) => s.q / 1000 }] },
-  {
-    id: 'force', get title() { return tr('推力・抗力', 'Thrust and drag') }, unit: 'kN', x: 'time', digits: 1,
-    series: [
-      { get label() { return tr('推力', 'Thrust') }, get: (s) => s.thrust / 1000 },
-      { get label() { return tr('抗力', 'Drag') }, get: (s) => s.drag / 1000, secondary: true },
-    ],
-  },
-  {
-    id: 'accel', get title() { return tr('加速度', 'Acceleration') }, unit: 'G', x: 'time', digits: 2,
-    series: [
-      { get label() { return tr('機軸 (センサ)', 'Axial (sensed)') }, get: (s) => s.accelAxial },
-      { get label() { return tr('慣性 |a|', 'Inertial |a|') }, get: (s) => s.accel, secondary: true },
-    ],
-  },
-  { id: 'mass', get title() { return tr('質量', 'Mass') }, unit: 'kg', x: 'time', digits: 0, series: [{ get label() { return tr('質量', 'Mass') }, get: (s) => s.mass }] },
-  {
-    id: 'attitude', get title() { return tr('姿勢', 'Attitude') }, unit: '°', x: 'time', digits: 1,
-    series: [
-      { get label() { return tr('仰角', 'Elevation') }, get: (s) => s.elevation },
-      { get label() { return tr('方位角', 'Azimuth') }, get: (s) => s.azimuth, secondary: true },
+      {
+        get label() {
+          return tr('高度', 'Altitude')
+        },
+        get: (s) => s.alt / 1000,
+      },
     ],
   },
   {
-    id: 'aoa', get title() { return tr('迎角・横滑り角', 'Angle of attack and sideslip') }, unit: '°', x: 'time', digits: 2,
+    id: 'velocity',
+    get title() {
+      return tr('速度', 'Velocity')
+    },
+    unit: 'm/s',
+    x: 'time',
+    digits: 0,
     series: [
-      { get label() { return tr('迎角', 'Angle of attack') }, get: (s) => s.aoa },
-      { get label() { return tr('横滑り角', 'Sideslip') }, get: (s) => s.sideslip, secondary: true },
+      {
+        get label() {
+          return tr('慣性', 'Inertial')
+        },
+        get: (s) => s.speed,
+      },
+      {
+        get label() {
+          return tr('対地', 'Ground-relative')
+        },
+        get: (s) => s.groundSpeed,
+        secondary: true,
+      },
     ],
   },
-  { id: 'profile', get title() { return tr('高度 × ダウンレンジ', 'Altitude vs downrange') }, unit: 'km', x: 'downrange', digits: 1, series: [{ get label() { return tr('高度', 'Altitude') }, get: (s) => s.alt / 1000 }] },
+  {
+    id: 'mach',
+    get title() {
+      return tr('マッハ数', 'Mach number')
+    },
+    unit: '',
+    x: 'time',
+    digits: 2,
+    series: [{ label: 'Mach', get: (s) => s.mach }],
+  },
+  {
+    id: 'q',
+    get title() {
+      return tr('動圧', 'Dynamic pressure')
+    },
+    unit: 'kPa',
+    x: 'time',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('動圧', 'Dynamic pressure')
+        },
+        get: (s) => s.q / 1000,
+      },
+    ],
+  },
+  {
+    id: 'force',
+    get title() {
+      return tr('推力・抗力', 'Thrust and drag')
+    },
+    unit: 'kN',
+    x: 'time',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('推力', 'Thrust')
+        },
+        get: (s) => s.thrust / 1000,
+      },
+      {
+        get label() {
+          return tr('抗力', 'Drag')
+        },
+        get: (s) => s.drag / 1000,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'accel',
+    get title() {
+      return tr('加速度', 'Acceleration')
+    },
+    unit: 'G',
+    x: 'time',
+    digits: 2,
+    series: [
+      {
+        get label() {
+          return tr('機軸 (センサ)', 'Axial (sensed)')
+        },
+        get: (s) => s.accelAxial,
+      },
+      {
+        get label() {
+          return tr('慣性 |a|', 'Inertial |a|')
+        },
+        get: (s) => s.accel,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'mass',
+    get title() {
+      return tr('質量', 'Mass')
+    },
+    unit: 'kg',
+    x: 'time',
+    digits: 0,
+    series: [
+      {
+        get label() {
+          return tr('質量', 'Mass')
+        },
+        get: (s) => s.mass,
+      },
+    ],
+  },
+  {
+    id: 'attitude',
+    get title() {
+      return tr('姿勢', 'Attitude')
+    },
+    unit: '°',
+    x: 'time',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('仰角', 'Elevation')
+        },
+        get: (s) => s.elevation,
+      },
+      {
+        get label() {
+          return tr('方位角', 'Azimuth')
+        },
+        get: (s) => s.azimuth,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'aoa',
+    get title() {
+      return tr('迎角・横滑り角', 'Angle of attack and sideslip')
+    },
+    unit: '°',
+    x: 'time',
+    digits: 2,
+    series: [
+      {
+        get label() {
+          return tr('迎角', 'Angle of attack')
+        },
+        get: (s) => s.aoa,
+      },
+      {
+        get label() {
+          return tr('横滑り角', 'Sideslip')
+        },
+        get: (s) => s.sideslip,
+        secondary: true,
+      },
+    ],
+  },
+  {
+    id: 'profile',
+    get title() {
+      return tr('高度 × ダウンレンジ', 'Altitude vs downrange')
+    },
+    unit: 'km',
+    x: 'downrange',
+    digits: 1,
+    series: [
+      {
+        get label() {
+          return tr('高度', 'Altitude')
+        },
+        get: (s) => s.alt / 1000,
+      },
+    ],
+  },
 ]
 
 function themeColors() {
@@ -152,8 +310,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
       segment: ser.secondary
         ? undefined
         : {
-            borderColor: (ctx: { p0DataIndex: number }) =>
-              stageColors.get(track.samples[ctx.p0DataIndex]?.stage ?? 0) ?? c.ink,
+            borderColor: (ctx: { p0DataIndex: number }) => stageColors.get(track.samples[ctx.p0DataIndex]?.stage ?? 0) ?? c.ink,
           },
       pointRadius: 0,
       pointHoverRadius: 0,
@@ -200,8 +357,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
             cornerRadius: 4,
             displayColors: false,
             callbacks: {
-              title: (items) =>
-                spec.x === 'time' ? `T+ ${fmt(items[0].parsed.x ?? 0, 1)} s` : `${fmt(items[0].parsed.x ?? 0, 1)} km`,
+              title: (items) => (spec.x === 'time' ? `T+ ${fmt(items[0].parsed.x ?? 0, 1)} s` : `${fmt(items[0].parsed.x ?? 0, 1)} km`),
               label: (item) => `${item.dataset.label}  ${fmt(item.parsed.y ?? 0, spec.digits)} ${spec.unit}`,
             },
           },
@@ -213,16 +369,34 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
             max: spec.x === 'time' ? t1 : undefined,
             border: { color: c.line },
             grid: { color: c.line, drawTicks: false },
-            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 12 : 6, padding: 4, includeBounds: false },
+            ticks: {
+              color: c.ink3,
+              font: { family: 'IBM Plex Mono', size: tick },
+              maxTicksLimit: large ? 12 : 6,
+              padding: 4,
+              includeBounds: false,
+            },
             title: large
-              ? { display: true, text: spec.x === 'time' ? tr('打上げからの時間 [s]', 'Time since launch [s]') : tr('ダウンレンジ [km]', 'Downrange [km]'), color: c.ink3, font: { size: 11 } }
+              ? {
+                  display: true,
+                  text: spec.x === 'time' ? tr('打上げからの時間 [s]', 'Time since launch [s]') : tr('ダウンレンジ [km]', 'Downrange [km]'),
+                  color: c.ink3,
+                  font: { size: 11 },
+                }
               : undefined,
           },
           y: {
             border: { display: false },
             grid: { color: c.line, drawTicks: false },
-            ticks: { color: c.ink3, font: { family: 'IBM Plex Mono', size: tick }, maxTicksLimit: large ? 9 : 5, padding: 6, includeBounds: false },
-            title: large && spec.unit ? { display: true, text: `${spec.title} [${spec.unit}]`, color: c.ink3, font: { size: 11 } } : undefined,
+            ticks: {
+              color: c.ink3,
+              font: { family: 'IBM Plex Mono', size: tick },
+              maxTicksLimit: large ? 9 : 5,
+              padding: 6,
+              includeBounds: false,
+            },
+            title:
+              large && spec.unit ? { display: true, text: `${spec.title} [${spec.unit}]`, color: c.ink3, font: { size: 11 } } : undefined,
           },
         },
         onClick: (_e, _els, chart) => {
@@ -382,7 +556,11 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
         )}
         <span ref={valueRef} className={`num ml-auto whitespace-nowrap text-ink ${large ? 'text-[14px]' : 'text-[12px]'}`} />
         {large && zoomed && (
-          <button type="button" onClick={() => setRange()} className="flex h-7 items-center gap-1 rounded-[6px] border border-line px-2 text-[12px] text-ink-2 hover:bg-surface-2">
+          <button
+            type="button"
+            onClick={() => setRange()}
+            className="flex h-7 items-center gap-1 rounded-[6px] border border-line px-2 text-[12px] text-ink-2 hover:bg-surface-2"
+          >
             <RotateCcw className="h-3 w-3" /> {tr('全体を表示', 'Show all')}
           </button>
         )}
@@ -396,7 +574,13 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
           <Download className="h-3.5 w-3.5" />
         </button>
         {!large && onExpand && (
-          <button type="button" onClick={onExpand} aria-label={tr(`${spec.title}を拡大`, `Enlarge ${spec.title}`)} title={tr('拡大（ダブルクリックでも開きます）', 'Enlarge (or double-click)')} className={`${iconBtn} -mr-1 ${revealOnHover}`}>
+          <button
+            type="button"
+            onClick={onExpand}
+            aria-label={tr(`${spec.title}を拡大`, `Enlarge ${spec.title}`)}
+            title={tr('拡大（ダブルクリックでも開きます）', 'Enlarge (or double-click)')}
+            className={`${iconBtn} -mr-1 ${revealOnHover}`}
+          >
             <Maximize2 className="h-3.5 w-3.5" />
           </button>
         )}
@@ -415,7 +599,10 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
       </div>
       {large && (
         <p className="pt-1 text-[11px] text-ink-3">
-          {tr('横にドラッグで範囲を拡大 · ダブルクリックで全体に戻す · クリックでその時刻へ移動', 'Drag across to zoom · double-click to reset · click to jump to that time')}
+          {tr(
+            '横にドラッグで範囲を拡大 · ダブルクリックで全体に戻す · クリックでその時刻へ移動',
+            'Drag across to zoom · double-click to reset · click to jump to that time',
+          )}
         </p>
       )}
     </figure>
@@ -468,7 +655,13 @@ function ChartDialog({
               </button>
             ))}
           </div>
-          <button type="button" onClick={onClose} aria-label={tr('閉じる (Esc)', 'Close (Esc)')} title={tr('閉じる (Esc)', 'Close (Esc)')} className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={tr('閉じる (Esc)', 'Close (Esc)')}
+            title={tr('閉じる (Esc)', 'Close (Esc)')}
+            className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface-2"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>

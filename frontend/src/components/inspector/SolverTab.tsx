@@ -9,9 +9,24 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
   const set = (v: Partial<ClientConfig['simulation']>) => patch((c) => ({ ...c, simulation: { ...c.simulation, ...v } }))
   return (
     <>
-      <Group title={tr('時間', 'Time')} note={tr('着地するか計算時間に達すると終了します。', 'The run ends at impact or when the duration is reached.')}>
-        <NumberField label={tr('計算時間', 'Duration')} unit="s" path="simulation.duration_s" value={s.duration_s} onChange={(v) => set({ duration_s: v })} />
-        <NumberField label={tr('出力間隔', 'Output interval')} unit="s" path="simulation.output_step_s" value={s.output_step_s} onChange={(v) => set({ output_step_s: v })} />
+      <Group
+        title={tr('時間', 'Time')}
+        note={tr('着地するか計算時間に達すると終了します。', 'The run ends at impact or when the duration is reached.')}
+      >
+        <NumberField
+          label={tr('計算時間', 'Duration')}
+          unit="s"
+          path="simulation.duration_s"
+          value={s.duration_s}
+          onChange={(v) => set({ duration_s: v })}
+        />
+        <NumberField
+          label={tr('出力間隔', 'Output interval')}
+          unit="s"
+          path="simulation.output_step_s"
+          value={s.output_step_s}
+          onChange={(v) => set({ output_step_s: v })}
+        />
       </Group>
       <Group title={tr('数値積分', 'Integration')}>
         <SelectField
@@ -26,7 +41,7 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
             set({
               integrator: {
                 method,
-                rk4_step_s: method === 'rk4' ? integrator.rk4_step_s ?? Math.max(s.output_step_s / 2, 0.001) : integrator.rk4_step_s,
+                rk4_step_s: method === 'rk4' ? (integrator.rk4_step_s ?? Math.max(s.output_step_s / 2, 0.001)) : integrator.rk4_step_s,
               },
             })
           }
@@ -42,7 +57,13 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
         )}
       </Group>
       <Group title={tr('大気', 'Atmosphere')}>
-        <NumberField label={tr('密度の変動', 'Density variation')} unit="%" path="simulation.air_density_percent" value={s.air_density_percent} onChange={(v) => set({ air_density_percent: v })} />
+        <NumberField
+          label={tr('密度の変動', 'Density variation')}
+          unit="%"
+          path="simulation.air_density_percent"
+          value={s.air_density_percent}
+          onChange={(v) => set({ air_density_percent: v })}
+        />
       </Group>
     </>
   )
