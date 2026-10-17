@@ -36,7 +36,7 @@ export function setLang(next: Lang) {
   } catch {
     /* storage may be unavailable */
   }
-  document.documentElement.lang = next
+  if (typeof document !== 'undefined') document.documentElement.lang = next
   listeners.forEach((l) => l())
 }
 

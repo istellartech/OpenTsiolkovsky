@@ -39,7 +39,9 @@ export function posEciToLlh(pos: Vec3, timeSeconds: number): { lat: number; lon:
     if (Math.abs(next - lat) < 1e-12) break
     lat = next
   }
-  const alt = rXY / Math.cos(lat) - n
+  // Stable at all latitudes (rXY / cos φ − N breaks down near the poles).
+  const sinLat = Math.sin(lat)
+  const alt = rXY * Math.cos(lat) + (z + WGS84_E2 * n * sinLat) * sinLat - n
   return { lat: lat / DEG, lon: lon / DEG, alt: alt / 1000.0 }
 }
 
