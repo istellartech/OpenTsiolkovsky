@@ -486,6 +486,25 @@ function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
   })
 }
 
+/** Turn the view so north is up, keeping the point being looked at (or the tracked vehicle) in place. */
+function faceNorth(viewer: Viewer) {
+  const camera = viewer.camera
+  if (viewer.trackedEntity) {
+    // Tracking: the camera orbits the vehicle in its local east-north-up frame.
+    camera.rotateRight(camera.heading)
+    return
+  }
+  const canvas = viewer.canvas
+  const ray = camera.getPickRay(new Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2))
+  const center = ray && viewer.scene.globe.pick(ray, viewer.scene)
+  if (!center) {
+    camera.flyTo({ destination: camera.positionWC.clone(), orientation: { heading: 0, pitch: camera.pitch, roll: 0 }, duration: 0.6 })
+    return
+  }
+  const range = Cartesian3.distance(camera.positionWC, center)
+  camera.flyToBoundingSphere(new BoundingSphere(center, 0), { offset: new HeadingPitchRange(0, camera.pitch, range), duration: 0.6 })
+}
+
 interface GlobeProps {
   track: Track | null
   reference?: Track | null
@@ -507,6 +526,8 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
   const builtRef = useRef<Built | null>(null)
   const launchKeyRef = useRef<string>('')
   const [mode, setMode] = useState<CameraMode>('overview')
+  // Camera heading [deg] for the compass, updated only when it moves noticeably
+  const [heading, setHeading] = useState(0)
   const theme = useTheme()
   const lang = useLang()
   const themeRef = useRef(theme)
@@ -550,8 +571,17 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
     if (!containerRef.current) return
     const viewer = createViewer(containerRef.current, basemapRef.current, themeRef.current)
     viewerRef.current = viewer
+    let shown = 0
+    const removeHeading = viewer.scene.postRender.addEventListener(() => {
+      const h = CesiumMath.toDegrees(viewer.camera.heading)
+      if (Math.abs(((h - shown + 540) % 360) - 180) > 0.5) {
+        shown = h
+        setHeading(h)
+      }
+    })
     if (import.meta.env.DEV) (window as unknown as { __viewer: Viewer }).__viewer = viewer
     return () => {
+      removeHeading()
       viewer.destroy()
       viewerRef.current = null
     }
@@ -669,6 +699,18 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
             { value: 'follow', label: tr('追従', 'Follow'), title: tr('機体を追いかける視点', 'Follow the vehicle') },
           ]}
         />
+        <button
+          type="button"
+          onClick={() => viewerRef.current && faceNorth(viewerRef.current)}
+          title={tr('北を上にする', 'Face north')}
+          aria-label={tr('北を上にする', 'Face north')}
+          className="flex h-8 w-8 items-center justify-center rounded-[7px] bg-surface text-ink-2 ring-1 ring-line-strong shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:text-ink"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" style={{ transform: `rotate(${-heading}deg)` }} aria-hidden="true">
+            <path d="M12 2.5 15.5 12h-7Z" fill="var(--signal)" />
+            <path d="M12 21.5 8.5 12h7Z" fill="currentColor" opacity="0.45" />
+          </svg>
+        </button>
         <div ref={layersRef} className="relative">
           <button
             type="button"
