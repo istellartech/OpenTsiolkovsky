@@ -8,14 +8,14 @@
   - `vehicle.rs`: loaded vehicle model; `sim/`: solver (integration, forces, events, released bodies, output samples); `output.rs`: result files; `montecarlo.rs`; `physics/`, `math/`.
   - `agent.rs` / `mcp.rs`: machine-readable interface for AI agents; spec and status in `docs/ai.md`.
 - `tests/` Integration tests: `cpp_reference.rs` converts legacy parameter files and compares against stored C++ output; `conservation.rs` checks energy and angular momentum.
-- `examples/` Configuration files (`sample_01.json`, `momo.json`, `SS-520-4/` with CSV tables, `dispersion.json`).
+- `examples/` Vehicle configurations, shared with the web app's sample vehicles (`frontend/src/config/presets.ts` adds their descriptions and sources); `SS-520-4/` uses CSV tables; `dispersion.json`.
 - `frontend/` Web app (Vite+ / React / TypeScript); its config types in `frontend/src/lib/config.ts` mirror `src/config/mod.rs`.
 - `scripts/` WASM and Vercel build scripts. `docs/` Documentation.
 - The former C++ simulator and `tools/compare_cpp.py` are kept at the git tag `cpp-v0.52`.
 
 ## Commands
 - Rust: `cargo build --release`, `cargo test`, `cargo fmt && cargo clippy --all-targets -- -D warnings` (WASM: add `--target wasm32-unknown-unknown --features wasm --no-default-features`).
-- CLI: `cargo run --bin openTsiolkovsky-cli -- run examples/sample_01.json -o out`; also `monte-carlo`, `validate`, `schema [config|dispersion]`, `convert`, `share`, `mcp`.
+- CLI: `cargo run --bin openTsiolkovsky-cli -- run examples/momo.json -o out`; also `monte-carlo`, `validate`, `schema [config|dispersion]`, `convert`, `share`, `mcp`.
 - WASM: `bash scripts/wasm_build.sh` (outputs to `frontend/src/wasm`).
 - Frontend (`vp` from `frontend/node_modules/.bin`): `cd frontend && bun install && bun run dev`; check `bunx vp check` (`--fix` to format); test `bunx vp test run`; build `bun run build`.
 

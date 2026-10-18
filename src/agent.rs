@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn validate_reports_errors_instead_of_failing() {
-        let ok = validate(&ConfigInput::from_path(example("sample_01.json")).unwrap());
+        let ok = validate(&ConfigInput::from_path(example("momo.json")).unwrap());
         assert_eq!(ok["valid"], true, "{ok}");
 
         let bad = ConfigInput::from_json(
@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn run_returns_summary_and_samples() {
-        let input = ConfigInput::from_path(example("sample_01.json")).unwrap();
+        let input = ConfigInput::from_path(example("momo.json")).unwrap();
         let result = run(
             &input,
             &RunOptions {
@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn monte_carlo_checks_case_count() {
-        let input = ConfigInput::from_path(example("sample_01.json")).unwrap();
+        let input = ConfigInput::from_path(example("momo.json")).unwrap();
         let options = MonteCarloOptions {
             cases: 0,
             seed: 1,

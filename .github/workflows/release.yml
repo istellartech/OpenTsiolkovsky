@@ -1,0 +1,76 @@
+name: release
+
+# Builds the command-line simulator for Windows, macOS (Apple Silicon) and
+# Linux and attaches the archives to the GitHub release of the tag.
+# Runs when a v* tag is pushed, or by hand for an existing tag.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build (e.g. v1.0.0); its release must exist or is created
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+          - os: macos-14
+            target: aarch64-apple-darwin
+            name: macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          dir="openTsiolkovsky-${TAG}-${{ matrix.name }}"
+          mkdir "$dir"
+          exe=openTsiolkovsky-cli
+          if [ "${{ runner.os }}" = Windows ]; then exe="$exe.exe"; fi
+          cp "target/${{ matrix.target }}/release/$exe" "$dir/"
+          cp LICENSE README*.md "$dir/"
+          cp -r examples "$dir/"
+          if [ "${{ runner.os }}" = Windows ]; then
+            7z a "$dir.zip" "$dir" > /dev/null
+            echo "ASSET=$dir.zip" >> "$GITHUB_ENV"
+          else
+            tar czf "$dir.tar.gz" "$dir"
+            echo "ASSET=$dir.tar.gz" >> "$GITHUB_ENV"
+          fi
+      - name: Smoke test
+        shell: bash
+        run: |
+          exe="target/${{ matrix.target }}/release/openTsiolkovsky-cli"
+          "$exe" --version
+          "$exe" run examples/momo.json -o smoke --json > /dev/null
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "" --verify-tag
+          gh release upload "$TAG" "$ASSET" --clobber

@@ -1,6 +1,6 @@
 # 設定ファイル
 
-CLI・Webアプリ・WASM・MCP サーバーは同じ JSON 設定を読みます。キーは snake_case で、末尾が単位です（`_s` 秒、`_m` メートル、`_kg`、`_n` ニュートン、`_deg` 度、`_mps` m/s、`_percent` % など）。サンプルは `examples/sample_01.json`、`examples/momo.json`、`examples/SS-520-4/ss520_4.json`（CSV テーブル付きの3段）です。
+CLI・Webアプリ・WASM・MCP サーバーは同じ JSON 設定を読みます。キーは snake_case で、末尾が単位です（`_s` 秒、`_m` メートル、`_kg`、`_n` ニュートン、`_deg` 度、`_mps` m/s、`_percent` % など）。サンプルは `examples/` にあります（Webアプリのサンプル機体と同じファイル。`SS-520-4/` は CSV テーブルを使う例）。
 
 - 機械可読な定義（JSON Schema）: `openTsiolkovsky-cli schema`
 - 飛ばさずに確認: `openTsiolkovsky-cli validate CONFIG`（問題のある値を JSON パスで示します）

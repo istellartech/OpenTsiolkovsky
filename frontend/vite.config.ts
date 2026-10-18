@@ -27,6 +27,10 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  server: {
+    // The sample vehicles are read from ../examples, shared with the CLI.
+    fs: { allow: ['..'] },
+  },
   build: {
     // Cesium alone is ~4 MB; it and Chart.js are already split off by the
     // lazy imports of the globe and chart views.

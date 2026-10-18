@@ -13,7 +13,7 @@ To build such links, use `openTsiolkovsky-cli share config.json` or the MCP tool
 
 ## Running simulations as an agent
 
-The CLI and an MCP server (stdio) give machine-readable results: JSON Schema of the configuration, validation with JSON paths, single runs, Monte Carlo dispersion, conversion of legacy C++ parameter files and share links.
+The CLI and an MCP server (stdio) give machine-readable results: JSON Schema of the configuration, validation with JSON paths, single runs, Monte Carlo dispersion and share links. The sample vehicles are in `examples/` of the repository.
 
 - [AI agents: JSON output, MCP server, share links](https://github.com/istellartech/OpenTsiolkovsky/blob/master/docs/ai.md)
 - [Configuration reference](https://github.com/istellartech/OpenTsiolkovsky/blob/master/docs/configuration.md)

@@ -216,7 +216,7 @@ fn get_config_schema(args: &Args) -> Result<Value, AgentError> {
 
 fn example_config() -> Value {
     let full: Value =
-        serde_json::from_str(include_str!("../examples/sample_01.json")).unwrap_or_default();
+        serde_json::from_str(include_str!("../examples/momo.json")).unwrap_or_default();
     json!({
         "minimal": {
             "name": "minimal",
@@ -231,9 +231,9 @@ fn example_config() -> Value {
             output every 1 s, no wind, no aerodynamic coefficients (ballistic coefficient 100 kg/m2). \
             See get_config_schema for every key.",
         "full": full,
-        "full_notes": "examples/sample_01.json: single stage with constant thrust, aerodynamics, \
-            attitude and wind. examples/SS-520-4/ss520_4.json in the repository is a three-stage \
-            vehicle with CSV tables.",
+        "full_notes": "examples/momo.json: a single-stage liquid sounding rocket with an \
+            elevation program. examples/ in the repository has more vehicles (S-520, SS-520-5, \
+            H-IIA, H3, Falcon 9, Saturn V, ...) and examples/SS-520-4/ uses CSV tables.",
         "default_dispersion": Dispersion::default(),
     })
 }
@@ -515,7 +515,7 @@ mod tests {
             1,
             "tools/call",
             json!({ "name": "run_simulation", "arguments": {
-                "config_path": example("sample_01.json"), "trajectory_points": 5 } }),
+                "config_path": example("momo.json"), "trajectory_points": 5 } }),
         );
         let result = &run["result"];
         assert_eq!(result["isError"], false, "{result}");
