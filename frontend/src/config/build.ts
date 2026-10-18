@@ -33,6 +33,8 @@ export interface StageInput {
   exitArea: number
   /** Normalised thrust shape over the burn: [fraction of burn, relative level] */
   shape?: [number, number][]
+  /** Vacuum Isp over the burn: [fraction of burn, Isp]; `isp` is then the impulse-weighted mean */
+  ispShape?: [number, number][]
   powerMode?: number
   freeMode?: number
 }
@@ -86,7 +88,7 @@ export function stage(s: StageInput): ClientStageConfig {
     thrust_profile: profile,
     isp_constant: s.isp,
     isp_multiplier: 1,
-    isp_profile: [],
+    isp_profile: (s.ispShape ?? []).map(([x, v]) => ({ time: round(ignition + x * s.burn, 2), value: round(v, 3) })),
   }
 }
 
@@ -94,30 +96,51 @@ export function stage(s: StageInput): ClientStageConfig {
  * Two parallel phases (e.g. core + SRBs) as sequential solver stages: the
  * first carries the boosters plus the core propellant burned while they fire,
  * the second is the core with what is left.
+ *
+ * By default the phase burns at a constant rate until jettison. With `shaped`,
+ * it has boosters + core thrust until the boosters burn out, then core thrust
+ * alone (with the matching Isp) until jettison.
  */
 export function parallelPhase(o: {
   booster: { mass: number; propellant: number; isp: number; burn: number; exitArea: number }
   core: { propellant: number; isp: number; burn: number; exitArea: number }
   /** When the boosters are jettisoned (≥ booster burn) */
   jettison: number
+  shaped?: boolean
 }): { phase: StageInput; coreUsed: number } {
   const coreFlow = o.core.propellant / o.core.burn
   const coreUsed = coreFlow * o.jettison
-  // Total impulse over the phase; the solver burns it at a constant rate
-  // until jettison, which keeps propellant mass and impulse exact.
+  // Total impulse over the phase; propellant mass and impulse stay exact.
   const impulse = o.booster.propellant * o.booster.isp * G0 + coreUsed * o.core.isp * G0
   const prop = o.booster.propellant + coreUsed
-  return {
-    phase: {
-      mass: o.booster.mass + coreUsed,
-      propellant: prop,
-      isp: impulse / (prop * G0),
-      burn: o.jettison,
-      separation: o.jettison,
-      exitArea: o.booster.exitArea + o.core.exitArea,
-    },
-    coreUsed,
+  const phase: StageInput = {
+    mass: o.booster.mass + coreUsed,
+    propellant: prop,
+    isp: impulse / (prop * G0),
+    burn: o.jettison,
+    separation: o.jettison,
+    exitArea: o.booster.exitArea + o.core.exitArea,
   }
+  if (o.shaped && o.booster.burn < o.jettison - 0.5) {
+    const boosterFlow = o.booster.propellant / o.booster.burn
+    const fCore = coreFlow * o.core.isp * G0
+    const fBoth = boosterFlow * o.booster.isp * G0 + fCore
+    const ispBoth = fBoth / ((boosterFlow + coreFlow) * G0)
+    const x = o.booster.burn / o.jettison
+    phase.shape = [
+      [0, fBoth],
+      [x, fBoth],
+      [x + 0.0005, fCore],
+      [1, fCore],
+    ]
+    phase.ispShape = [
+      [0, ispBoth],
+      [x, ispBoth],
+      [x + 0.0005, o.core.isp],
+      [1, o.core.isp],
+    ]
+  }
+  return { phase, coreUsed }
 }
 
 export interface VehicleInput {
