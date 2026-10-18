@@ -32,7 +32,6 @@ B=./target/release/openTsiolkovsky-cli
 $B run examples/momo.json -o out/momo            # trajectory.csv・summary.json・bodies/*.csv を出力
 $B monte-carlo examples/SS-520-4/ss520_4.json -n 500 -o out/ss520
 $B validate my_rocket.json                       # 飛ばさずに設定を確認
-$B convert param_old.json -o my_rocket.json      # 旧C++版の param_*.json を変換
 ```
 
 設定は JSON ファイルです。キーの末尾が単位で、変化する量は定数・表・CSV ファイルのどれでも書けます。
@@ -51,7 +50,7 @@ $B convert param_old.json -o my_rocket.json      # 旧C++版の param_*.json を
 }
 ```
 
-ほかの例は [`examples/`](examples/) にあります。Web アプリも同じファイルを読み書きします。
+[`examples/`](examples/) には Web アプリのサンプル機体が設定ファイルとして入っています：`momo`、`s310`、`s520`、`ss520-5`、`epsilon`、`h2a202`、`h3-22s`、`falcon9`、`saturn-v`、`ariane5`、`soyuz-2.1a`、`long-march-3b`（`SS-520-4/` は CSV テーブルの例）。Web アプリも同じファイルを読み書きします。
 
 ### AI エージェント
 

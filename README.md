@@ -32,7 +32,6 @@ B=./target/release/openTsiolkovsky-cli
 $B run examples/momo.json -o out/momo            # trajectory.csv, summary.json, bodies/*.csv
 $B monte-carlo examples/SS-520-4/ss520_4.json -n 500 -o out/ss520
 $B validate my_rocket.json                       # check a configuration without flying it
-$B convert param_old.json -o my_rocket.json      # convert a C++-era param_*.json file
 ```
 
 A configuration is a JSON file. Keys end in their unit, and anything that varies can be a constant, a table or a CSV file:
@@ -51,7 +50,7 @@ A configuration is a JSON file. Keys end in their unit, and anything that varies
 }
 ```
 
-More examples are in [`examples/`](examples/). The web app reads and writes the same files.
+[`examples/`](examples/) holds the web app's sample vehicles as configuration files: `momo`, `s310`, `s520`, `ss520-5`, `epsilon`, `h2a202`, `h3-22s`, `falcon9`, `saturn-v`, `ariane5`, `soyuz-2.1a` and `long-march-3b` (`SS-520-4/` shows CSV tables). The web app reads and writes the same files.
 
 ### AI agents
 

@@ -10,6 +10,13 @@ describe('validateConfig', () => {
     expect(validateConfig(config)).toEqual([])
   })
 
+  it('has a preset for every vehicle in examples/', () => {
+    const files = Object.keys(import.meta.glob('../../../examples/*.json'))
+      .map((f) => f.replace(/^.*\//, '').replace(/\.json$/, ''))
+      .filter((id) => id !== 'dispersion')
+    expect(files.sort()).toEqual(PRESET_OPTIONS.map((p) => p.id).sort())
+  })
+
   it('accepts the blank config', () => {
     expect(validateConfig(createBlankConfig())).toEqual([])
   })

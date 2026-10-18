@@ -12,7 +12,7 @@ cargo build --release
 B=./target/release/openTsiolkovsky-cli
 ```
 
-1. **Know the format.** `$B schema` prints the JSON Schema of the configuration (units, defaults, descriptions). Human docs: `docs/configuration.md`. Start from `examples/sample_01.json` (single stage), `examples/momo.json` or `examples/SS-520-4/ss520_4.json` (three stages with CSV tables). A C++ simulator `param_*.json` must first be converted: `$B convert param.json -o config.json`.
+1. **Know the format.** `$B schema` prints the JSON Schema of the configuration (units, defaults, descriptions). Human docs: `docs/configuration.md`. Start from a vehicle in `examples/` (`momo.json`, `s520.json` single stage; `ss520-5.json`, `h3-22s.json`, `falcon9.json` multi-stage; `SS-520-4/` uses CSV tables). A C++ simulator `param_*.json` must first be converted: `$B convert param.json -o config.json`.
 2. **Write the file.** Keys are snake_case with units (`thrust_vac_n`, `burn_end_s`); any curve is a constant, `[[x, y], ...]` rows or `{"file": "name.csv"}`. Pitfalls:
    - stage times (burn start/end, separation, table times) are relative to that stage's start; attitude times are from launch;
    - `mass_initial_kg` is the stage alone, without upper stages;

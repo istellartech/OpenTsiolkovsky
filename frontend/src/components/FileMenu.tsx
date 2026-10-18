@@ -85,8 +85,8 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
             icon={FolderOpen}
             title={tr('設定ファイルを開く…', 'Open settings file…')}
             detail={tr(
-              '設定の .json（CLI と同じ形式）。CSV の表を使う設定や旧C++版の param_*.json は、CSV も一緒に選びます。画面へのドロップでも開けます。',
-              'A configuration .json (the format the CLI reads). For one that uses CSV tables, or a C++ simulator param_*.json, select the CSV files too. You can also drop files on the window.',
+              '設定の .json（CLI と同じ形式）。CSV の表を使う設定は CSV も一緒に選びます。画面へのドロップでも開けます。',
+              'A configuration .json (the format the CLI reads). If it uses CSV tables, select the CSV files too. You can also drop files on the window.',
             )}
             onSelect={() => input.current?.click()}
           />

@@ -1,37 +1,55 @@
 {
-  "name": "MOMO",
+  "name": "MOMO (Flight 3 record)",
   "simulation": {
     "end_time_s": 700,
-    "output_step_s": 0.5
+    "output_step_s": 0.5,
+    "integrator": {
+      "method": "rk45"
+    }
   },
   "launch": {
-    "latitude_deg": 42.4925,
-    "longitude_deg": 143.4333,
-    "altitude_m": 20,
-    "time_utc": "2024-07-01T01:00:00Z"
-  },
-  "wind": {
-    "speed_mps": 0,
-    "direction_deg": 270
+    "latitude_deg": 42.5,
+    "longitude_deg": 143.44,
+    "altitude_m": 15,
+    "time_utc": "2019-05-03T20:45:00Z"
   },
   "attitude": {
-    "azimuth_deg": 113,
-    "elevation_deg": 88
+    "azimuth_deg": 112.5,
+    "elevation_deg": [
+      [0, 89.66],
+      [20, 89.51],
+      [40, 89.19],
+      [60, 87.69],
+      [80, 85.8],
+      [116, 84.87],
+      [5116, 84.87]
+    ]
   },
   "stages": [
     {
       "mass_initial_kg": 1150,
+      "mass_dry_kg": 282.9638783,
       "engine": {
-        "thrust_vac_n": 30000,
-        "isp_vac_s": 250,
-        "burn_end_s": 62,
-        "nozzle_exit_area_m2": 0.0531
+        "thrust_vac_n": 15183,
+        "isp_vac_s": 207.14,
+        "burn_start_s": 0,
+        "burn_end_s": 116,
+        "nozzle_exit_area_m2": 0.03142
       },
+      "free_flight": "aero_stable",
       "aero": {
         "diameter_m": 0.5,
-        "ca": 0.5,
+        "ca": [
+          [0, 0.35],
+          [0.8, 0.38],
+          [1.1, 0.55],
+          [1.5, 0.5],
+          [2.5, 0.4],
+          [4, 0.32],
+          [8, 0.26]
+        ],
         "cn_alpha_per_rad": 0.2,
-        "ballistic_coefficient_kg_m2": 110
+        "ballistic_coefficient_kg_m2": 100
       }
     }
   ]

@@ -1,10 +1,9 @@
-// Sample vehicles built from published figures. Each preset lists its
-// sources and the simplifications made, which the overview tab shows.
+// Sample vehicles built from published figures (configurations in
+// examples/*.json). Each preset lists its sources and the simplifications
+// made, which the overview tab shows.
 import type { Config } from '../lib/config'
-import { launchDate } from '../lib/config'
 import { tr } from '../lib/i18n'
 import { siteById } from './sites'
-import { CA_SLENDER, exitAreaFromDiameter, exitAreaFromThrust, parallelPhase, stage, vehicle } from './build'
 
 export interface PresetSource {
   label: string
@@ -82,1118 +81,17 @@ export const PRESET_COUNTRIES: { id: PresetCountry; label: string }[] = [
 
 /* ------------------------------------------------------------ Launch sites */
 
-const SITES = {
-  ksc39a: siteById('ksc-39a'),
-  ela3: siteById('csg-ela3'),
-  uchinouraKS: siteById('uchinoura-ks'),
-  taiki: siteById('taiki'),
-  uchinouraMV: siteById('uchinoura-m'),
-  yoshinobu: siteById('tanegashima'),
-  slc40: siteById('ccsfs-40'),
-  baikonur31: siteById('baikonur-31'),
-  xichang: siteById('xichang-lc2'),
-}
+/* ------------------------------------------------------------ Vehicle data */
 
-/* ---------------------------------------------------------- Sounding rockets */
+// The configurations live in examples/<id>.json, shared with the CLI; this
+// file adds what the picker and the overview tab show about them.
+const EXAMPLES = import.meta.glob<Config>('../../../examples/*.json', { eager: true, import: 'default' })
 
-// Calibrated total-impulse factors: thrust is scaled so that the simulated
-// apogee matches the published flight record (see the notes on each preset).
-export const CAL = {
-  s310: 1.2508, // apogee 180 km
-  s520: 0.9288, // apogee 304 km
-  momoIsp: 207.14, // apogee 113.4 km
-  ss520Stage1: 1.3682, // 2.0 km/s at 26 km at stage-1 burnout
-  saturnIsp1: 319.06, // S-IC vacuum Isp; tuned to the S-IC cutoff / S-II cutoff / parking orbit
-  ariane5Cutoff: 978, // full ESC-A burn
-  falcon9S2Cutoff: 360.34, // stage 2 burn to SECO-1 at full thrust
-  // [t, azimuth, elevation]: southeast off the Florida coast, gravity turn,
-  // dogleg south by stage 2; fairing and stage 1 land in the NAVAREA IV 133/24
-  // hazard areas (PACE 676.5 km, 98°)
-  falcon9Attitude: [
-    [0, 131.49, 90],
-    [10, 131.49, 90],
-    [20, 131.49, 88.74],
-    [24, 134.24, 88.58],
-    [28, 134.99, 88.13],
-    [32, 135.55, 87.63],
-    [36, 136.02, 87.11],
-    [40, 136.41, 86.57],
-    [44, 136.75, 86.01],
-    [48, 137.04, 85.44],
-    [52, 137.31, 84.87],
-    [56, 137.55, 84.3],
-    [60, 137.77, 83.73],
-    [64, 137.98, 83.17],
-    [68, 138.17, 82.63],
-    [72, 138.35, 82.1],
-    [76, 138.52, 81.58],
-    [80, 138.68, 81.08],
-    [84, 138.83, 80.6],
-    [88, 138.98, 80.14],
-    [92, 139.12, 79.7],
-    [96, 139.26, 79.28],
-    [100, 139.39, 78.88],
-    [104, 139.52, 78.49],
-    [108, 139.65, 78.13],
-    [112, 139.77, 77.79],
-    [116, 139.89, 77.46],
-    [120, 140.01, 77.16],
-    [124, 140.13, 76.87],
-    [128, 140.25, 76.6],
-    [132, 140.36, 76.35],
-    [200, 205.02, 66.56],
-    [250, 204.51, 62.75],
-    [300, 202.93, 33.52],
-    [400, 197.28, -13.68],
-    [460, 187.55, -6.07],
-    [520, 195.71, -15.19],
-    [5520, 195.71, -15.19],
-  ] as [number, number, number][],
-  lm3bCutoff: 1095.11, // stage 3 time from first ignition to guidance cutoff
-  // Fin-stabilised: the axis follows the velocity from the launcher (weathercocking)
-  s310Attitude: [
-    [0, 135, 76],
-    [2, 135.04, 72.73],
-    [4, 135.08, 71.25],
-    [6, 135.12, 70.29],
-    [8, 135.15, 69.56],
-    [10, 135.19, 68.97],
-    [12, 135.23, 68.46],
-    [14, 135.26, 68.02],
-    [16, 135.3, 67.62],
-    [18, 135.34, 67.26],
-    [20, 135.37, 66.94],
-    [22, 135.41, 66.65],
-    [24, 135.45, 66.39],
-    [26, 135.48, 66.15],
-    [28, 135.52, 65.91],
-    [5028, 135.52, 65.91],
-  ] as [number, number, number][],
-  s520Attitude: [
-    [0, 135, 79],
-    [2, 135.04, 75.7],
-    [4, 135.09, 74.17],
-    [6, 135.13, 73.19],
-    [8, 135.17, 72.45],
-    [10, 135.22, 71.86],
-    [12, 135.26, 71.37],
-    [14, 135.3, 70.95],
-    [16, 135.34, 70.59],
-    [18, 135.38, 70.27],
-    [20, 135.42, 70],
-    [22, 135.46, 69.76],
-    [24, 135.5, 69.54],
-    [26, 135.54, 69.36],
-    [28, 135.58, 69.2],
-    [30, 135.62, 69.03],
-    [5030, 135.62, 69.03],
-  ] as [number, number, number][],
-  // Guided, slow off the pad: near-vertical, pitching over gently (small α at max-Q)
-  momoAttitude: [
-    [0, 112.5, 89.66],
-    [20, 112.5, 89.51],
-    [40, 112.5, 89.19],
-    [60, 112.5, 87.69],
-    [80, 112.5, 85.8],
-    [116, 112.5, 84.87],
-    [5116, 112.5, 84.87],
-  ] as [number, number, number][],
-  ss520Attitude: [
-    [0, 91.4, 70.3],
-    [2, 91.41, 65.56],
-    [4, 91.42, 63.4],
-    [6, 91.43, 62],
-    [8, 91.44, 60.92],
-    [10, 91.45, 60.04],
-    [12, 91.47, 59.27],
-    [14, 91.48, 58.6],
-    [16, 91.5, 57.99],
-    [18, 91.51, 57.43],
-    [20, 91.53, 56.92],
-    [22, 91.54, 56.45],
-    [24, 91.56, 56.02],
-    [26, 91.58, 55.61],
-    [28, 91.6, 55.23],
-    [30, 91.62, 54.87],
-    [32, 91.64, 54.51],
-    [34, 91.66, 54.15],
-    [36, 91.68, 53.8],
-    [38, 91.7, 53.44],
-    [40, 91.72, 53.08],
-    [42, 91.74, 52.7],
-    [44, 91.76, 52.33],
-    [46, 91.78, 51.94],
-    [48, 91.8, 51.55],
-    [50, 91.82, 51.15],
-    [52, 91.84, 50.74],
-    [54, 91.86, 50.32],
-    [56, 91.88, 49.9],
-    [58, 91.9, 49.47],
-    [60, 91.92, 49.03],
-    [70.5, 91.4, 49.03],
-    [117.6, 91.4, 46.27],
-    [236, 91.4, 46.27],
-    [238, 91.4, -7.71],
-    [5238, 91.4, -7.71],
-  ] as [number, number, number][],
-  h2aCutoff: 484.77, // stage 2 time from ignition to guidance cutoff
-  h3Cutoff: 667,
-  // Attitude tables [t, azimuth, elevation]: vertical rise, pitch kick, zero-angle-of-attack
-  // gravity turn through the atmosphere, then a pitch (and yaw) program tuned to the orbit
-  epsilonAttitude: [
-    [0, 94.2, 90],
-    [8, 94.2, 90],
-    [18, 94.2, 80.75],
-    [22, 94.27, 80.75],
-    [26, 94.3, 78.58],
-    [30, 94.32, 76.37],
-    [34, 94.35, 74.19],
-    [38, 94.38, 72.06],
-    [42, 94.4, 69.99],
-    [46, 94.43, 68],
-    [50, 94.45, 66.09],
-    [54, 94.48, 64.28],
-    [58, 94.51, 62.58],
-    [62, 94.54, 60.97],
-    [66, 94.57, 59.48],
-    [70, 94.6, 58.09],
-    [74, 94.63, 56.8],
-    [78, 94.66, 55.61],
-    [82, 94.69, 54.51],
-    [86, 94.73, 53.5],
-    [90, 94.77, 52.57],
-    [94, 94.81, 51.72],
-    [98, 94.85, 50.95],
-    [102, 94.9, 50.24],
-    [106, 94.94, 49.6],
-    [110, 94.99, 49.02],
-    [161, 94.2, 48.69],
-    [266, 94.2, 34.02],
-    [620, 94.2, -4.12],
-    [720, 94.2, -10.77],
-    [5720, 94.2, -10.77],
-  ] as [number, number, number][],
-  h2aAttitude: [
-    [0, 114.34, 90],
-    [8, 114.34, 90],
-    [20, 114.34, 87.98],
-    [24, 114.34, 86.81],
-    [28, 114.34, 85.48],
-    [32, 114.34, 83.97],
-    [36, 114.34, 82.3],
-    [40, 114.34, 80.51],
-    [44, 114.34, 78.63],
-    [48, 114.34, 76.69],
-    [52, 114.34, 74.73],
-    [56, 114.34, 72.76],
-    [60, 114.34, 70.81],
-    [64, 114.34, 68.88],
-    [68, 114.34, 67.01],
-    [72, 114.34, 65.19],
-    [76, 114.34, 63.44],
-    [80, 114.34, 61.77],
-    [84, 114.34, 60.18],
-    [88, 114.34, 58.67],
-    [92, 114.34, 57.25],
-    [96, 114.34, 55.91],
-    [100, 114.34, 54.65],
-    [104, 114.34, 53.46],
-    [108, 114.34, 52.35],
-    [112, 114.34, 51.13],
-    [116, 114.34, 50.01],
-    [120, 114.34, 48.87],
-    [124, 114.34, 47.71],
-    [150, 144.45, 28.88],
-    [200, 179.44, 33.88],
-    [266, 208.36, 38.77],
-    [400, 200.48, 43.77],
-    [550, 194.03, 41.85],
-    [700, 196.02, 13.55],
-    [916, 204.87, -22.42],
-    [5916, 204.87, -22.42],
-  ] as [number, number, number][],
-  h3Attitude: [
-    [0, 90.8, 90],
-    [8, 90.8, 90],
-    [20, 90.8, 88.36],
-    [24, 90.8, 87.26],
-    [28, 90.8, 86.01],
-    [32, 90.8, 84.55],
-    [36, 90.8, 82.89],
-    [40, 90.8, 81.07],
-    [44, 90.8, 79.13],
-    [48, 90.8, 77.08],
-    [52, 90.8, 74.98],
-    [56, 90.8, 72.83],
-    [60, 90.8, 70.66],
-    [64, 90.8, 68.51],
-    [68, 90.8, 66.37],
-    [72, 90.8, 64.28],
-    [76, 90.8, 62.25],
-    [80, 90.8, 60.28],
-    [84, 90.8, 58.4],
-    [88, 90.8, 56.59],
-    [92, 90.8, 54.88],
-    [96, 90.8, 53.25],
-    [100, 90.8, 51.71],
-    [104, 90.8, 50.26],
-    [108, 90.8, 48.89],
-    [112, 90.8, 47.51],
-    [116, 90.8, 46.18],
-    [140, 144.22, 35.13],
-    [170, 173.72, 38.68],
-    [211, 208.24, 43.6],
-    [303, 205.56, 27.61],
-    [450, 197.49, 19.65],
-    [650, 197.06, 21.59],
-    [850, 197.49, 7.94],
-    [982, 197.23, 6.81],
-    [5982, 197.23, 6.81],
-  ] as [number, number, number][],
-  saturnAttitude: [
-    [0, 75.12, 90],
-    [12, 75.12, 90],
-    [25, 75.12, 88.49],
-    [29, 74.52, 87.12],
-    [33, 74.41, 85.59],
-    [37, 74.35, 83.71],
-    [41, 74.31, 81.5],
-    [45, 74.28, 79],
-    [49, 74.26, 76.26],
-    [53, 74.25, 73.35],
-    [57, 74.24, 70.32],
-    [61, 74.24, 67.24],
-    [65, 74.24, 64.16],
-    [69, 74.24, 61.11],
-    [73, 74.25, 58.13],
-    [77, 74.25, 55.26],
-    [81, 74.26, 52.5],
-    [85, 74.28, 49.88],
-    [89, 74.29, 47.4],
-    [93, 74.31, 45.06],
-    [97, 74.32, 42.88],
-    [101, 74.34, 40.83],
-    [105, 74.37, 38.92],
-    [109, 74.39, 37.14],
-    [113, 74.42, 35.48],
-    [117, 74.44, 33.94],
-    [121, 74.47, 32.51],
-    [125, 74.51, 31.19],
-    [129, 74.54, 29.96],
-    [133, 74.58, 28.82],
-    [137, 74.62, 27.73],
-    [141, 74.66, 26.72],
-    [145, 74.71, 25.79],
-    [149, 74.75, 24.91],
-    [153, 74.8, 24.08],
-    [157, 74.86, 23.31],
-    [200, 75.12, 26.75],
-    [300, 75.12, 22.83],
-    [450, 75.12, 16.06],
-    [550, 75.12, 12.2],
-    [700, 75.12, -2.24],
-    [5700, 75.12, -2.24],
-  ] as [number, number, number][],
-  ariane5Attitude: [
-    [0, 90, 90],
-    [8, 90, 90],
-    [18, 90, 89.45],
-    [22, 89.98, 88.77],
-    [26, 89.98, 87.88],
-    [30, 89.99, 86.68],
-    [34, 89.99, 85.19],
-    [38, 89.99, 83.41],
-    [42, 89.99, 81.38],
-    [46, 90, 79.15],
-    [50, 90, 76.76],
-    [54, 90, 74.26],
-    [58, 90.01, 71.7],
-    [62, 90.01, 69.12],
-    [66, 90.01, 66.56],
-    [70, 90.02, 64.03],
-    [74, 90.02, 61.58],
-    [78, 90.02, 59.21],
-    [82, 90.03, 56.95],
-    [86, 90.03, 54.79],
-    [90, 90.04, 52.76],
-    [94, 90.04, 50.84],
-    [98, 90.05, 49.04],
-    [102, 90.05, 47.35],
-    [106, 90.06, 45.78],
-    [110, 90.06, 44.32],
-    [114, 90.07, 42.96],
-    [118, 90.07, 41.7],
-    [122, 90.08, 40.53],
-    [126, 90.09, 39.45],
-    [130, 90.09, 38.45],
-    [134, 90.1, 37.54],
-    [300, 90, 12.11],
-    [520, 90, 6.75],
-    [1000, 90, -0.57],
-    [1500, 90, -3.57],
-    [6500, 90, -3.57],
-  ] as [number, number, number][],
-  soyuzAttitude: [
-    [0, 65.39, 90],
-    [8, 65.39, 90],
-    [18, 65.39, 84.45],
-    [22, 65.2, 82.27],
-    [26, 65.16, 79.3],
-    [30, 65.14, 76.02],
-    [34, 65.13, 72.56],
-    [38, 65.13, 69.01],
-    [42, 65.14, 65.45],
-    [46, 65.15, 61.94],
-    [50, 65.16, 58.53],
-    [54, 65.17, 55.27],
-    [58, 65.19, 52.16],
-    [62, 65.22, 49.24],
-    [66, 65.24, 46.49],
-    [70, 65.27, 43.94],
-    [74, 65.3, 41.56],
-    [78, 65.34, 39.36],
-    [82, 65.38, 37.32],
-    [86, 65.42, 35.44],
-    [90, 65.46, 33.7],
-    [94, 65.51, 32.1],
-    [98, 65.57, 30.62],
-    [102, 65.63, 29.26],
-    [106, 65.69, 28.01],
-    [110, 65.76, 26.86],
-    [114, 65.83, 25.8],
-    [160, 65.39, 30.93],
-    [200, 65.39, 30.48],
-    [287, 65.39, 19.29],
-    [400, 65.39, 10.77],
-    [530, 65.39, -3.53],
-    [5530, 65.39, -3.53],
-  ] as [number, number, number][],
-  lm3bAttitude: [
-    [0, 97.5, 90],
-    [10, 97.5, 90],
-    [20, 97.5, 84.48],
-    [24, 97.63, 82.96],
-    [28, 97.67, 80.41],
-    [32, 97.71, 77.56],
-    [36, 97.74, 74.51],
-    [40, 97.77, 71.33],
-    [44, 97.8, 68.09],
-    [48, 97.82, 64.83],
-    [52, 97.85, 61.6],
-    [56, 97.88, 58.45],
-    [60, 97.9, 55.39],
-    [64, 97.93, 52.46],
-    [68, 97.96, 49.67],
-    [72, 97.98, 47.02],
-    [76, 98.01, 44.53],
-    [80, 98.04, 42.19],
-    [84, 98.07, 40],
-    [88, 98.1, 37.95],
-    [92, 98.13, 36.04],
-    [96, 98.17, 34.27],
-    [100, 98.2, 32.62],
-    [104, 98.24, 31.09],
-    [108, 98.28, 29.67],
-    [112, 98.32, 28.36],
-    [116, 98.36, 27.14],
-    [120, 98.41, 26.02],
-    [124, 98.46, 24.98],
-    [128, 98.51, 24.03],
-    [132, 98.56, 23.15],
-    [136, 98.62, 22.35],
-    [140, 98.68, 21.62],
-    [159, 97.5, 26.19],
-    [250, 97.5, 9.74],
-    [345, 97.5, 2.6],
-    [500, 97.5, 1.73],
-    [630, 97.5, 0.83],
-    [1276, 120.28, -1.92],
-    [1470, 122.49, 6.31],
-    [6470, 122.49, 6.31],
-  ] as [number, number, number][],
-}
-
-function s310(): Config {
-  // S-310-40 flight record: elevation 76°, apogee 180 km, 727 kg, burnout ~28 s.
-  const isp = 250 // assumed
-  const burn = 28
-  const propellant = 380 * CAL.s310
-  return vehicle({
-    name: tr('S-310（40号機の飛行実績）', 'S-310 (Flight 40 record)'),
-    site: SITES.uchinouraKS,
-    date: [2020, 1, 15, 3, 0, 0],
-    stages: [
-      stage({
-        mass: 727,
-        propellant,
-        isp,
-        burn,
-        exitArea: exitAreaFromDiameter(0.27),
-        // "Early high thrust, later low thrust" (ISAS); shape is illustrative
-        shape: [
-          [0, 1.6],
-          [0.25, 1.2],
-          [0.5, 0.9],
-          [0.95, 0.6],
-          [1, 0],
-        ],
-        freeFlight: 'aero_stable',
-      }),
-    ],
-    diameter: 0.31,
-    ca: CA_SLENDER,
-    attitude: CAL.s310Attitude,
-    duration: 600,
-    step: 0.5,
-  })
-}
-
-function s520(): Config {
-  // S-520-33 flight record: elevation 79°, apogee 304 km, 2273 kg; burnout 31 s.
-  const isp = 265 // assumed (unverified public figure)
-  const burn = 31
-  const propellant = 1700 * CAL.s520
-  return vehicle({
-    name: tr('S-520（33号機の飛行実績）', 'S-520 (Flight 33 record)'),
-    site: SITES.uchinouraKS,
-    date: [2020, 1, 15, 3, 0, 0],
-    stages: [
-      stage({
-        mass: 2273,
-        propellant,
-        isp,
-        burn,
-        // Expansion ratio 8 (ISAS); exit diameter estimated
-        exitArea: exitAreaFromDiameter(0.42),
-        shape: [
-          [0, 1.3],
-          [0.3, 1.1],
-          [0.9, 0.85],
-          [1, 0],
-        ],
-        freeFlight: 'aero_stable',
-      }),
-    ],
-    diameter: 0.52,
-    ca: CA_SLENDER,
-    attitude: CAL.s520Attitude,
-    duration: 800,
-    step: 0.5,
-  })
-}
-
-function ss520_5(): Config {
-  // SS-520-5 / TRICOM-1R, 2018-02-03. Event times (MEXT): 1st burnout 31.7 s,
-  // 1/2 sep 68 s, 2nd 180–204.4 s, 2/3 sep 235 s, 3rd 238–263.6 s.
-  // Thrust curves and Isp from OpenTsiolkovsky's bundled SS-520-4 example.
-  const payload = 3
-  const sep1 = 68
-  const sep2 = 235
-  return vehicle({
-    name: 'SS-520-5（TRICOM-1R）',
-    site: SITES.uchinouraKS,
-    date: [2018, 2, 3, 5, 3, 0],
-    stages: [
-      stage({
-        // Total 2.6 t (JAXA); stages 2 and 3 from the example, stage 1 the rest
-        mass: 2600 - 510 - (86 + payload),
-        // Example thrust curve scaled so burnout matches MEXT (2.0 km/s at
-        // 26 km, 31.7 s); Isp assumed as for S-520. The curve is already a
-        // ground-level thrust, so no extra back-pressure loss is applied.
-        propellant: (2860500 * CAL.ss520Stage1) / (265 * 9.80665),
-        isp: 265,
-        burn: 31.8,
-        separation: sep1,
-        // Negligible: the solver needs a positive nozzle, the curve already
-        // includes back-pressure.
-        exitArea: 1e-4,
-        shape: [
-          [0, 160],
-          [10 / 31.8, 100],
-          [30 / 31.8, 50],
-          [31.7 / 31.8, 20],
-          [1, 0],
-        ],
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        mass: 510,
-        propellant: 841575 / (264.8 * 9.80665),
-        isp: 264.8,
-        ignition: 180 - sep1,
-        burn: 24.5,
-        separation: sep2 - sep1,
-        exitArea: exitAreaFromDiameter(0.1) * 10,
-        shape: [
-          [0, 45500],
-          [23.7 / 24.5, 24500],
-          [1, 0],
-        ],
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        // 78 kg propellant (JAXA SS-520-4 briefing, as reported); the example
-        // thrust curve is scaled to that impulse at the example Isp.
-        mass: 86 + payload,
-        propellant: 78,
-        isp: 264.8,
-        ignition: 238 - sep2,
-        burn: 25.7,
-        exitArea: exitAreaFromDiameter(0.05) * 10,
-        shape: [
-          [0, 13000],
-          [25.6 / 25.7, 2000],
-          [1, 0],
-        ],
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 0.52,
-    ca: CA_SLENDER,
-    attitude: CAL.ss520Attitude,
-    duration: 3000,
-    step: 1,
-  })
-}
-
-function momo(): Config {
-  // MOMO F3, 2019-05-04: 1150 kg, 12 kN, burn 116 s, apogee 113.4 km at 240 s,
-  // splashdown 37 km ESE of the pad, 515 s flight.
-  // Thrust is held at the published 12 kN at sea level; Isp and the attitude
-  // program are calibrated to the published apogee and splashdown range.
-  const exitArea = exitAreaFromDiameter(0.2) // estimated
-  const fVac = 12000 + exitArea * 101325
-  const isp = CAL.momoIsp
-  const burn = 116
-  return vehicle({
-    name: tr('MOMO（3号機の飛行実績）', 'MOMO (Flight 3 record)'),
-    site: SITES.taiki,
-    date: [2019, 5, 3, 20, 45, 0],
-    stages: [
-      stage({
-        mass: 1150,
-        propellant: (fVac * burn) / (isp * 9.80665),
-        isp,
-        burn,
-        exitArea,
-        freeFlight: 'aero_stable',
-      }),
-    ],
-    diameter: 0.5,
-    ca: CA_SLENDER,
-    attitude: CAL.momoAttitude,
-    duration: 700,
-    step: 0.5,
-  })
-}
-
-/* ---------------------------------------------------------------- Saturn V */
-
-function saturnV(): Config {
-  // Apollo 11 (AS-506), 1969-07-16, from the Saturn V flight evaluation report
-  // (MPR-SAT-FE-69-9). Times are from liftoff (holddown release, range 0.3 s).
-  const t0 = 0.3
-  const liftoff = 2899008 // vehicle at holddown release
-  const atSII = 479706 + 174365 // S-II at ignition + everything above it
-  const atSIVB = 166571 // vehicle at S-IVB ignition
-
-  // S-IC: centre engine cutoff 135.20, outboard cutoff 161.63, separation 162.3
-  const sicBurn = 161.63 - t0
-  const ceco = (135.2 - t0) / sicBurn
-  const sicShape: [number, number][] = [
-    [0, 1],
-    [ceco, 1],
-    [ceco + 0.0005, 0.8],
-    [1, 0.8],
-  ]
-  const sicProp = 2278688 - 39307 - 168015 // ignition→OECO minus hold-down burn
-  // Exit area from the published sea-level thrust (sum of five F-1, 33,596 kN)
-  const shapeArea = ceco + (1 - ceco) * 0.8
-  const fVac0 = (sicProp * CAL.saturnIsp1 * 9.80665) / sicBurn / shapeArea
-  const sicExit = Math.max(fVac0 - 33596e3, 0) / 101325
-
-  // S-II: start 163.0, OECO 548.22 (385.2 s), CECO 460.6, separation 549.0
-  const sep1 = 162.3 - t0
-  const siiBurn = 548.22 - 163.0
-  const siiCeco = (460.6 - 163.0) / siiBurn
-  const sep2 = 549.0 - t0 - sep1
-
-  return vehicle({
-    name: tr('サターンV（アポロ11号）', 'Saturn V (Apollo 11)'),
-    site: SITES.ksc39a,
-    date: [1969, 7, 16, 13, 32, 0],
-    stages: [
-      stage({
-        mass: liftoff - atSII,
-        propellant: sicProp,
-        isp: CAL.saturnIsp1,
-        burn: sicBurn,
-        separation: sep1,
-        exitArea: sicExit,
-        shape: sicShape,
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        mass: atSII - atSIVB,
-        propellant: 479706 - 43564,
-        isp: 423.2,
-        ignition: 163.0 - t0 - sep1,
-        burn: siiBurn,
-        separation: sep2,
-        exitArea: 5 * exitAreaFromDiameter(1.96),
-        // 5,141.5 kN, then 4,093.1 kN after centre engine cutoff (report §6.3)
-        shape: [
-          [0, 5141.5],
-          [siiCeco, 5141.5],
-          [siiCeco + 0.0005, 4093.1],
-          [1, 4093.1],
-        ],
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        mass: atSIVB,
-        propellant: 118939 - 87550,
-        isp: 428.7,
-        ignition: 552.2 - t0 - sep1 - sep2,
-        burn: 699.34 - 552.2,
-        exitArea: exitAreaFromDiameter(1.96),
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 10.06,
-    ca: CA_SLENDER,
-    // Rolled to a 72.058° flight azimuth; pitch program tuned to the report
-    attitude: CAL.saturnAttitude,
-    duration: 1500,
-    step: 1,
-  })
-}
-
-/* ------------------------------------------------------------------ Kourou */
-
-function ariane5(): Config {
-  // VA247 (HS-4/SGS-1 + GSAT-31), 2019-02-05. Times after liftoff (H0+7.3 s):
-  // EAP separation 136.7, EPC end of thrust 513.7, separation 519.7,
-  // ESC-A ignition 523.7, extinction 1501.7.
-  const jettison = 136.7
-  const eapBurn = 130
-  // EPC: 174 t (kit) burned from H0+1 to H0+521; 6.3 s of it before liftoff
-  const epcFlow = 174000 / 520
-  const epcAtLiftoff = 174000 - epcFlow * 6.3
-  const { phase, coreUsed } = parallelPhase({
-    booster: { mass: 2 * 277000, propellant: 2 * 240000, isp: 274.5, burn: eapBurn, exitArea: 2 * exitAreaFromDiameter(3.0) },
-    // Exit area from Vulcain 2's published vacuum / sea-level thrust (1390 / 960 kN)
-    core: { propellant: epcAtLiftoff, isp: 432, burn: 513.7, exitArea: exitAreaFromThrust(1390e3, 960e3) },
-    jettison,
-  })
-  const payload = 10052 // both satellites with carrying structures (kit)
-  return vehicle({
-    name: tr('アリアン5 ECA（VA247）', 'Ariane 5 ECA (VA247)'),
-    site: SITES.ela3,
-    date: [2019, 2, 5, 21, 1, 0],
-    stages: [
-      stage({ ...phase, freeFlight: 'attitude_program' }),
-      stage({
-        // EPC 188 t (kit) less what burned before EAP separation, + fairing 2.4 t
-        mass: 188000 - (174000 - epcAtLiftoff) - coreUsed + 2400,
-        propellant: epcAtLiftoff - coreUsed,
-        isp: 432,
-        burn: 513.7 - jettison,
-        separation: 519.7 - jettison,
-        exitArea: exitAreaFromThrust(1390e3, 960e3),
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        // ESC-A 19 t + vehicle equipment bay 0.97 t + payload
-        mass: 19000 + 970 + payload,
-        propellant: 14900,
-        isp: 446,
-        ignition: 523.7 - 519.7,
-        burn: 1501.7 - 523.7,
-        cutoff: CAL.ariane5Cutoff,
-        exitArea: exitAreaFromDiameter(1.0),
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 5.4,
-    ca: CA_SLENDER,
-    attitude: CAL.ariane5Attitude,
-    duration: 2400,
-    step: 2,
-  })
-}
-
-/* ----------------------------------------------------------------- Epsilon */
-
-function epsilon(): Config {
-  // Epsilon test flight / SPRINT-A (Hisaki), 2013-09-14.
-  // Event times from the flight results (planned values), converted to
-  // stage-local times: 1/2 sep 161, 2nd ign 165, 2/3 sep 624, 3rd ign 628.
-  const payload = 348
-  return vehicle({
-    name: tr('Epsilon（試験機 / ひさき）', 'Epsilon (test flight / Hisaki)'),
-    site: SITES.uchinouraMV,
-    date: [2013, 9, 14, 5, 0, 0],
-    stages: [
-      stage({
-        // SRB-A 75.0 t (+0.8 t fairing carried until stage separation)
-        mass: 75000 + 800,
-        propellant: 66300,
-        isp: 284,
-        burn: 112.6,
-        separation: 161,
-        exitArea: exitAreaFromDiameter(1.6),
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        mass: 12300,
-        propellant: 10800,
-        isp: 300,
-        ignition: 4,
-        burn: 101.3,
-        separation: 463,
-        exitArea: exitAreaFromDiameter(1.1),
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        // KM-V2b + PBS (3.3 t in the optional configuration) + satellite
-        mass: 3300 + payload,
-        propellant: 2500,
-        isp: 301,
-        ignition: 4,
-        burn: 88.7,
-        exitArea: exitAreaFromDiameter(0.8),
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 2.6,
-    ca: CA_SLENDER,
-    attitude: CAL.epsilonAttitude,
-    duration: 2400,
-    step: 2,
-  })
-}
-
-/* ------------------------------------------------------------------- H-IIA */
-
-function h2a202(): Config {
-  // H-IIA F50 / GOSAT-GW, 2025-06-29. SRB-A separation 124 s, MECO 400 s,
-  // 1/2 separation 408 s, SELI 417 s, SECO 916 s (actual values).
-  const meco = 400
-  const jettison = 124
-  const sep = 408
-  const { phase, coreUsed } = parallelPhase({
-    // Two SRB-A (H2A202 type): 77 t / 65 t each, Isp 283 s; burnout 108 s (F40 plan)
-    booster: { mass: 2 * 77000, propellant: 2 * 65000, isp: 283, burn: 108, exitArea: 2 * exitAreaFromDiameter(1.6) },
-    // LE-7A core: 114 t, 100 t usable propellant, Isp 440 s, burns until MECO
-    core: { propellant: 100000, isp: 440, burn: meco, exitArea: exitAreaFromDiameter(1.8) },
-    jettison,
-    shaped: true,
-  })
-  const payload = 2600
-  // LE-5B: 137 kN, Isp 448 s; SELI→SECO 499 s burns 137 kN × 499 s / (448 s · g0)
-  const s2burn = 916 - 417
-  const s2prop = (137000 * s2burn) / (448 * 9.80665)
-  return vehicle({
-    name: tr('H-IIA 202（50号機 / いぶきGW）', 'H-IIA 202 (F50 / IBUKI GW)'),
-    site: SITES.yoshinobu,
-    date: [2025, 6, 28, 16, 33, 3],
-    stages: [
-      stage({ ...phase, freeFlight: 'attitude_program' }),
-      stage({
-        mass: 114000 - coreUsed,
-        propellant: 100000 - coreUsed,
-        isp: 440,
-        burn: meco - jettison,
-        separation: sep - jettison,
-        exitArea: exitAreaFromDiameter(1.8),
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        mass: 20000 + payload,
-        propellant: s2prop,
-        isp: 448,
-        ignition: 417 - sep,
-        burn: s2burn,
-        // Guidance cutoff on reaching the target orbit
-        cutoff: CAL.h2aCutoff,
-        exitArea: exitAreaFromDiameter(1.6),
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 4.0,
-    ca: CA_SLENDER,
-    attitude: CAL.h2aAttitude,
-    duration: 2400,
-    step: 2,
-  })
-}
-
-/* ---------------------------------------------------------------------- H3 */
-
-function h3_22s(): Config {
-  // H3 test flight 1 (H3-22S / ALOS-3) planned sequence: SRB-3 separation
-  // 116 s, MECO 296 s, 1/2 separation 303 s, SELI 315 s, SECO 982 s.
-  const meco = 296
-  const jettison = 116
-  const sep = 303
-  // 2× LE-9: 2942 kN vac, Isp 425 s → propellant burned until MECO
-  const coreProp = (2942000 * meco) / (425 * 9.80665)
-  const { phase, coreUsed } = parallelPhase({
-    // Two SRB-3: 152.4 t / 134.4 t total, ~110 s burn; Isp assumed 283 s
-    booster: { mass: 152400, propellant: 134400, isp: 283, burn: 110, exitArea: 2 * exitAreaFromDiameter(1.6) },
-    core: { propellant: coreProp, isp: 425, burn: meco, exitArea: 2 * exitAreaFromDiameter(1.8) },
-    jettison,
-    shaped: true,
-  })
-  const payload = 3000
-  const s2burn = 982 - 315
-  const s2prop = (137000 * s2burn) / (448 * 9.80665)
-  return vehicle({
-    name: tr('H3-22S（試験機1号機の計画値）', 'H3-22S (Test Flight 1, planned)'),
-    site: SITES.yoshinobu,
-    date: [2023, 3, 7, 1, 37, 55],
-    stages: [
-      stage({ ...phase, freeFlight: 'attitude_program' }),
-      {
-        ...stage({
-          // Core 240 t + fairing ~1.8 t, released at fairing separation (211 s)
-          mass: 240000 + 1800 - coreUsed,
-          propellant: coreProp - coreUsed,
-          isp: 425,
-          burn: meco - jettison,
-          separation: sep - jettison,
-          exitArea: 2 * exitAreaFromDiameter(1.8),
-          freeFlight: 'attitude_program',
-        }),
-        jettisons: [{ name: 'fairing', time_s: 211 - jettison, mass_kg: 1800, ballistic_coefficient_kg_m2: 50 }],
-      },
-      stage({
-        mass: 28000 + payload,
-        propellant: s2prop,
-        isp: 448,
-        ignition: 315 - sep,
-        burn: s2burn,
-        // Guidance cutoff on reaching the target orbit
-        cutoff: CAL.h3Cutoff,
-        exitArea: exitAreaFromDiameter(1.6),
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 5.2,
-    ca: CA_SLENDER,
-    attitude: CAL.h3Attitude,
-    duration: 2400,
-    step: 2,
-  })
-}
-
-/* ---------------------------------------------------------------- Falcon 9 */
-
-function falcon9(): Config {
-  // NASA PACE, 2024-02-08 from SLC-40, booster returned to LZ-1. Timeline
-  // (SpaceX / NASA, approximate): MECO 2:19, stage separation 2:23, SES-1
-  // 2:30, fairing deploy 4:15, SECO-1 10:20.
-  const meco = 139
-  const sep = 143
-  // 9× Merlin 1D: 8,227 kN vacuum / 7,607 kN sea level (SpaceX), Isp 311 s
-  // vacuum. Burning all 410.9 t at full thrust would take ~152 s; the rest is
-  // kept for the boostback, entry and landing burns.
-  const s1prop = 410900
-  const s1burn = (s1prop * 311 * 9.80665) / 8227e3
-  const ses1 = 150
-  const s2prop = 107500
-  const payload = 1700
-  const fairing = 2000
-  const s2 = stage({
-    // Stage 2 111.5 t + fairing + PACE
-    mass: 111500 + fairing + payload,
-    propellant: s2prop,
-    isp: 348,
-    ignition: ses1 - sep,
-    // MVac at full thrust (981 kN), shut down on reaching orbit
-    burn: (s2prop * 348 * 9.80665) / 981e3,
-    cutoff: CAL.falcon9S2Cutoff,
-    exitArea: exitAreaFromDiameter(3.3),
-    freeFlight: 'attitude_program',
-  })
-  return vehicle({
-    name: tr('ファルコン9（PACE）', 'Falcon 9 (PACE)'),
-    site: SITES.slc40,
-    date: [2024, 2, 8, 6, 33, 32],
-    stages: [
-      stage({
-        mass: 433100,
-        propellant: s1prop,
-        isp: 311,
-        burn: s1burn,
-        cutoff: meco,
-        separation: sep,
-        exitArea: exitAreaFromThrust(8227e3, 7607e3),
-        freeFlight: 'attitude_program',
-      }),
-      {
-        ...s2,
-        jettisons: [{ name: 'fairing', time_s: 255 - sep, mass_kg: fairing, ballistic_coefficient_kg_m2: 50 }],
-      },
-    ],
-    diameter: 3.66,
-    ca: CA_SLENDER,
-    attitude: CAL.falcon9Attitude,
-    duration: 2400,
-    step: 2,
-  })
-}
-
-/* ------------------------------------------------------------------- Soyuz */
-
-function soyuz21a(): Config {
-  // Progress MS-30, 2025-02-27 from Baikonur Site 31. Telemetry times after
-  // liftoff: booster separation 117.85, core separation 287.42, third-stage
-  // cutoff 525.45, spacecraft separation 528.75 s.
-  const jettison = 117.85
-  const coreSep = 287.42
-  // RD-107A / RD-108A: vacuum / sea-level thrust 1021.3 / 838.5 kN and
-  // 990.2 / 792.5 kN, both at Isp 319 s vacuum (Soyuz user's manual)
-  const boosterExit = exitAreaFromThrust(1021.3e3, 838.5e3)
-  const coreExit = exitAreaFromThrust(990.2e3, 792.5e3)
-  const { phase, coreUsed } = parallelPhase({
-    booster: { mass: 4 * 44413, propellant: 4 * 39160, isp: 319, burn: 118, exitArea: 4 * boosterExit },
-    core: { propellant: 90100, isp: 319, burn: coreSep, exitArea: coreExit },
-    jettison,
-  })
-  // Block I (RD-0110): 297.9 kN, Isp 325 s, burning from core separation to cutoff
-  const s3burn = 525.45 - coreSep
-  const s3prop = (297900 * s3burn) / (325 * 9.80665)
-  const payload = 7280
-  return vehicle({
-    name: tr('ソユーズ2.1a（プログレスMS-30）', 'Soyuz-2.1a (Progress MS-30)'),
-    site: SITES.baikonur31,
-    date: [2025, 2, 27, 21, 24, 27],
-    stages: [
-      stage({ ...phase, freeFlight: 'attitude_program' }),
-      {
-        ...stage({
-          // Block A 99.8 t + fairing 1.7 t, released at its jettison (183.08 s)
-          mass: 99765 + 1700 - coreUsed,
-          propellant: 90100 - coreUsed,
-          isp: 319,
-          burn: coreSep - jettison,
-          separation: coreSep - jettison,
-          exitArea: coreExit,
-          freeFlight: 'attitude_program',
-        }),
-        jettisons: [{ name: 'fairing', time_s: 183.08 - jettison, mass_kg: 1700, ballistic_coefficient_kg_m2: 50 }],
-      },
-      stage({
-        mass: 25300 + payload,
-        propellant: s3prop,
-        isp: 325,
-        burn: s3burn,
-        exitArea: 4 * exitAreaFromDiameter(0.5),
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 2.95,
-    ca: CA_SLENDER,
-    attitude: CAL.soyuzAttitude,
-    duration: 2400,
-    step: 2,
-  })
-}
-
-/* ------------------------------------------------------------- Long March */
-
-function longMarch3b(): Config {
-  // LM-3B/E standard GTO mission (LM-3A Series User's Manual, Table 3-7).
-  // Times after liftoff: booster cutoff 140.1 / separation 141.6, stage 1
-  // cutoff 157.5 / separation 159.0, stage 2 main cutoff 339.4, vernier cutoff
-  // 344.4, stage 3 burns 345.4–628.6 and 1276.1–1470.5 s.
-  const g0 = 9.80665
-  // First-stage engines: the manual gives ground thrust and Isp only. Vacuum
-  // Isp assumed 289 s (YF-20 family); vacuum thrust follows from the flow.
-  const ispVac = 289
-  const boosterFlow = 740.4e3 / 2556.2
-  const coreFlow = 2961.6e3 / 2556.5
-  const boosterExit = exitAreaFromThrust(boosterFlow * ispVac * g0, 740.4e3)
-  const coreExit = exitAreaFromThrust(coreFlow * ispVac * g0, 2961.6e3)
-  const jettison = 141.6
-  const sep1 = 159.0
-  const { phase, coreUsed } = parallelPhase({
-    booster: { mass: 4 * 44300, propellant: 4 * 41100, isp: ispVac, burn: 140.1, exitArea: 4 * boosterExit },
-    core: { propellant: 186200, isp: ispVac, burn: 157.5, exitArea: coreExit },
-    jettison,
-  })
-  // Stage 2: YF-24E main chamber 742 kN (2922.57 N·s/kg) + verniers 47.1 kN
-  // (2910.5 N·s/kg); the verniers run 5 s longer.
-  const mainBurn = 339.4 - sep1
-  const s2burn = 344.4 - sep1
-  const mainFlow = 742e3 / 2922.57
-  const vernFlow = 47.1e3 / 2910.5
-  const s2prop = (mainFlow + vernFlow) * mainBurn + vernFlow * (s2burn - mainBurn)
-  const s2isp = (742e3 * mainBurn + 47.1e3 * s2burn) / (s2prop * g0)
-  // Stage 3: 2×YF-75, Isp 4295 N·s/kg, 18.2 t burned over two burns with a coast
-  const s3ign = 345.4
-  const span = 1470.5 - s3ign
-  const b1 = (628.6 - s3ign) / span
-  const b2 = (1276.1 - s3ign) / span
-  const payload = 5500
-  return vehicle({
-    name: tr('長征3B/E（標準GTOミッション）', 'Long March 3B/E (standard GTO mission)'),
-    site: SITES.xichang,
-    date: [2024, 3, 1, 16, 0, 0],
-    stages: [
-      stage({ ...phase, freeFlight: 'attitude_program' }),
-      stage({
-        mass: 198800 - coreUsed,
-        propellant: 186200 - coreUsed,
-        isp: ispVac,
-        burn: 157.5 - jettison,
-        separation: sep1 - jettison,
-        exitArea: coreExit,
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        // Stage 2 53.5 t + 4.0 m fairing 1.5 t carried until stage separation
-        mass: 53453 + 1500,
-        propellant: s2prop,
-        isp: s2isp,
-        burn: s2burn,
-        separation: s3ign - sep1,
-        exitArea: exitAreaFromDiameter(1.5),
-        shape: [
-          [0, 789.1],
-          [mainBurn / s2burn, 789.1],
-          [mainBurn / s2burn + 0.0005, 47.1],
-          [1, 47.1],
-        ],
-        freeFlight: 'attitude_program',
-      }),
-      stage({
-        mass: 20933 + payload,
-        propellant: 18200,
-        isp: 4295 / g0,
-        burn: span,
-        cutoff: CAL.lm3bCutoff,
-        exitArea: 2 * exitAreaFromDiameter(0.8),
-        // First burn, coast (no thrust), second burn
-        shape: [
-          [0, 1],
-          [b1, 1],
-          [b1 + 0.0005, 0],
-          [b2 - 0.0005, 0],
-          [b2, 1],
-          [1, 1],
-        ],
-        freeFlight: 'attitude_program',
-      }),
-    ],
-    diameter: 3.35,
-    ca: CA_SLENDER,
-    attitude: CAL.lm3bAttitude,
-    duration: 2400,
-    step: 2,
-  })
+/** Fresh copy of examples/<id>.json, named in the current language */
+const example = (id: string, name: () => string) => (): Config => {
+  const config = EXAMPLES[`../../../examples/${id}.json`]
+  if (!config) throw new Error(`examples/${id}.json not found`)
+  return { ...structuredClone(config), name: name() }
 }
 
 /* ---------------------------------------------------------------- Registry */
@@ -1479,7 +377,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [IST_MOMO_F3, IST_MOMO_F3_PR],
-    create: momo,
+    create: example('momo', () => tr('MOMO（3号機の飛行実績）', 'MOMO (Flight 3 record)')),
   },
   {
     id: 's310',
@@ -1513,7 +411,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [ISAS_HANDBOOK, ISAS_S310, JAXA_SROCKETS],
-    create: s310,
+    create: example('s310', () => tr('S-310（40号機の飛行実績）', 'S-310 (Flight 40 record)')),
   },
   {
     id: 's520',
@@ -1544,7 +442,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [ISAS_HANDBOOK, ISAS_S520, JAXA_SROCKETS],
-    create: s520,
+    create: example('s520', () => tr('S-520（33号機の飛行実績）', 'S-520 (Flight 33 record)')),
   },
   {
     id: 'ss520-5',
@@ -1586,7 +484,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [MEXT_SS520_5, JAXA_SS520_5, OT_SS520_4],
-    create: ss520_5,
+    create: example('ss520-5', () => 'SS-520-5（TRICOM-1R）'),
   },
   {
     id: 'epsilon',
@@ -1630,7 +528,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [JAXA_EPSILON_PRESSKIT, JAXA_EPSILON_RESULT, JAXA_HISAKI],
-    create: epsilon,
+    create: example('epsilon', () => tr('Epsilon（試験機 / ひさき）', 'Epsilon (test flight / Hisaki)')),
   },
   {
     id: 'h2a202',
@@ -1673,7 +571,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [MHI_H2A_MANUAL, JAXA_H2A_LEAFLET, MEXT_H2A_F50, JCG_H2A_F50, JAXA_H2A_F40_PLAN, MELCO_GOSATGW],
-    create: h2a202,
+    create: example('h2a202', () => tr('H-IIA 202（50号機 / いぶきGW）', 'H-IIA 202 (F50 / IBUKI GW)')),
   },
   {
     id: 'h3-22s',
@@ -1719,7 +617,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [JAXA_H3_TF1_PLAN, MEXT_H3_TF1, JCG_H3_TF1, JAXA_H3_LEAFLET],
-    create: h3_22s,
+    create: example('h3-22s', () => tr('H3-22S（試験機1号機の計画値）', 'H3-22S (Test Flight 1, planned)')),
   },
   {
     id: 'saturn-v',
@@ -1770,7 +668,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [NASA_AS506],
-    create: saturnV,
+    create: example('saturn-v', () => tr('サターンV（アポロ11号）', 'Saturn V (Apollo 11)')),
   },
   {
     id: 'ariane5',
@@ -1818,7 +716,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [A5_UM, A5_VA247],
-    create: ariane5,
+    create: example('ariane5', () => tr('アリアン5 ECA（VA247）', 'Ariane 5 ECA (VA247)')),
   },
   {
     id: 'falcon9',
@@ -1881,7 +779,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       SFN_SAOCOM1B,
       WP_F9B5,
     ],
-    create: falcon9,
+    create: example('falcon9', () => tr('ファルコン9（PACE）', 'Falcon 9 (PACE)')),
   },
   {
     id: 'soyuz-2.1a',
@@ -1925,7 +823,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [SOYUZ_UM_CSG, SOYUZ_UM_STARSEM, RSW_PROGRESS_MS30, WP_PROGRESS_MS30],
-    create: soyuz21a,
+    create: example('soyuz-2.1a', () => tr('ソユーズ2.1a（プログレスMS-30）', 'Soyuz-2.1a (Progress MS-30)')),
   },
   {
     id: 'long-march-3b',
@@ -1977,7 +875,7 @@ export const PRESET_OPTIONS: PresetOption[] = [
       ]
     },
     sources: [CALT_LM3A_UM, CGWIC_LM3B, SF_LM3BE],
-    create: longMarch3b,
+    create: example('long-march-3b', () => tr('長征3B/E（標準GTOミッション）', 'Long March 3B/E (standard GTO mission)')),
   },
 ]
 
@@ -1986,16 +884,22 @@ export const PRESET_OPTIONS: PresetOption[] = [
  * point (or Taiki): 1 t, 70 % propellant, 20 kN, Isp 250 s.
  */
 export function createBlankConfig(launch?: Config['launch']): Config {
-  const d = launch ? launchDate({ launch } as Config) : new Date(Date.UTC(2025, 0, 1))
-  return vehicle({
+  const taiki = siteById('taiki')
+  return {
     name: tr('新しいロケット', 'New rocket'),
-    site: launch ? { lat: launch.latitude_deg, lon: launch.longitude_deg, alt: launch.altitude_m ?? 0 } : SITES.taiki,
-    date: [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()],
-    stages: [stage({ mass: 1000, propellant: 700, isp: 250, burn: (700 * 250 * 9.80665) / 20000, exitArea: exitAreaFromDiameter(0.25) })],
-    diameter: 0.5,
-    ca: 0.4,
-    attitude: { azimuth: 90, elevation: 85 },
-    duration: 600,
-    step: 0.5,
-  })
+    simulation: { end_time_s: 600, output_step_s: 0.5, integrator: { method: 'rk45' } },
+    launch: launch
+      ? { latitude_deg: launch.latitude_deg, longitude_deg: launch.longitude_deg, altitude_m: launch.altitude_m, time_utc: launch.time_utc }
+      : { latitude_deg: taiki.lat, longitude_deg: taiki.lon, altitude_m: taiki.alt, time_utc: '2025-01-01T00:00:00Z' },
+    attitude: { azimuth_deg: 90, elevation_deg: 85 },
+    stages: [
+      {
+        mass_initial_kg: 1000,
+        mass_dry_kg: 300,
+        engine: { thrust_vac_n: 20000, isp_vac_s: 250, burn_start_s: 0, burn_end_s: 85.81, nozzle_exit_area_m2: 0.04909 },
+        aero: { diameter_m: 0.5, ca: 0.4, cn_alpha_per_rad: 0.2, ballistic_coefficient_kg_m2: 100 },
+        free_flight: 'aero_stable',
+      },
+    ],
+  }
 }

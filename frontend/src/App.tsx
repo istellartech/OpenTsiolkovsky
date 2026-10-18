@@ -253,10 +253,7 @@ export default function App() {
             <FolderOpen className="mx-auto mb-2 h-6 w-6 text-ink-2" />
             <p className="text-[14px] font-semibold">{tr('ドロップして設定ファイルを開く', 'Drop to open a settings file')}</p>
             <p className="mt-1 text-[12px] text-ink-3">
-              {tr(
-                '設定の .json（表の CSV や旧C++版の param_*.json も一緒にドロップできます）',
-                'A configuration .json, with its CSV tables or a C++ simulator param_*.json',
-              )}
+              {tr('設定の .json（表の CSV も一緒にドロップできます）', 'A configuration .json, with its CSV tables if it uses any')}
             </p>
           </div>
         </div>
