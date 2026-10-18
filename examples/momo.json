@@ -1,7 +1,7 @@
 {
   "name": "MOMO",
   "simulation": {
-    "end_time_s": 450,
+    "end_time_s": 700,
     "output_step_s": 0.5
   },
   "launch": {

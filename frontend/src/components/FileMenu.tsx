@@ -85,8 +85,8 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
             icon={FolderOpen}
             title={tr('設定ファイルを開く…', 'Open settings file…')}
             detail={tr(
-              'このアプリで保存した .json、または CLI 用の param_*.json（参照する CSV も一緒に選択）。画面へのドロップでも開けます。',
-              'A .json saved from this app, or a CLI param_*.json (select the CSV files it references too). You can also drop files on the window.',
+              '設定の .json（CLI と同じ形式）。CSV の表を使う設定や旧C++版の param_*.json は、CSV も一緒に選びます。画面へのドロップでも開けます。',
+              'A configuration .json (the format the CLI reads). For one that uses CSV tables, or a C++ simulator param_*.json, select the CSV files too. You can also drop files on the window.',
             )}
             onSelect={() => input.current?.click()}
           />
@@ -114,8 +114,8 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
             icon={Table2}
             title={tr('軌道データ（CSV）', 'Trajectory data (CSV)')}
             detail={tr(
-              '時刻ごとの位置・高度・速度・推力など。表計算ソフトで開けます。',
-              'Position, altitude, velocity, thrust and more per time step. Opens in any spreadsheet.',
+              '時刻ごとの位置・速度・推力・姿勢など（CLI の trajectory.csv と同じ列）。表計算ソフトで開けます。',
+              'Position, velocity, thrust, attitude and more per time step (the columns of the CLI’s trajectory.csv). Opens in any spreadsheet.',
             )}
             onSelect={files.saveCsv}
             disabled={!hasResult}

@@ -254,8 +254,8 @@ export default function App() {
             <p className="text-[14px] font-semibold">{tr('ドロップして設定ファイルを開く', 'Drop to open a settings file')}</p>
             <p className="mt-1 text-[12px] text-ink-3">
               {tr(
-                'このアプリの設定 .json、または CLI 用 param_*.json と CSV をまとめて',
-                'A .json saved from this app, or a CLI param_*.json together with its CSV files',
+                '設定の .json（表の CSV や旧C++版の param_*.json も一緒にドロップできます）',
+                'A configuration .json, with its CSV tables or a C++ simulator param_*.json',
               )}
             </p>
           </div>

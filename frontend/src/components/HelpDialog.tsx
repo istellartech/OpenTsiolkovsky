@@ -110,8 +110,8 @@ export function HelpDialog({ onClose, showShortcuts }: { onClose: () => void; sh
           </p>
           <p>
             {tr(
-              'パラメータを編集し、地球儀とグラフで結果を確かめます。分散解析では落下点のばらつきを出せます。ファイルメニューから設定の保存や共有リンクの作成ができます。',
-              'Edit the parameters and check the result on the globe and charts. Monte Carlo gives the dispersion of impact points. The file menu saves settings and makes share links.',
+              'サンプル機体を選ぶか白紙から作り、パラメータを編集して地球儀とグラフで結果を確かめます。使用済みの段や投棄物の落下点も計算し、「分散解析」で落下点のばらつき（誤差楕円）を出せます。設定ファイルは CLI と同じ形式で、ファイルメニューから保存・読み込み・共有リンクの作成ができます。',
+              'Pick a sample vehicle or start from scratch, edit the parameters and check the result on the globe and charts. Impact points of spent stages and jettisoned parts are computed too, and "Dispersion" gives the scatter of impact points (error ellipses). Settings files use the same format as the CLI; the file menu saves, opens and shares them.',
             )}
           </p>
         </Section>
@@ -119,8 +119,8 @@ export function HelpDialog({ onClose, showShortcuts }: { onClose: () => void; sh
         <Section title={tr('理論・物理モデル', 'Theory and physics')}>
           <p>
             {tr(
-              '質点の 3 自由度（3DoF）運動を地球中心慣性系で解きます。重力は WGS84 の J2 項まで、大気は標準大気、空力は CA・CN テーブル、姿勢は指定したプログラムに従います（姿勢の運動は解きません）。',
-              'Point-mass three-degree-of-freedom (3DoF) motion in an Earth-centred inertial frame: WGS84 gravity up to J2, a standard atmosphere, CA/CN aerodynamic tables and a prescribed attitude program (attitude dynamics are not solved).',
+              '質点の 3 自由度（3DoF）運動を地球中心慣性系で解きます。重力は WGS84 の J2 項まで、大気は U.S. 標準大気 1976、空力は段ごとの CA・CN、姿勢は指定したプログラムに従います（姿勢の運動は解きません）。',
+              'Point-mass three-degree-of-freedom (3DoF) motion in an Earth-centred inertial frame: WGS84 gravity up to J2, the U.S. Standard Atmosphere 1976, per-stage CA/CN aerodynamics and a prescribed attitude program (attitude dynamics are not solved).',
             )}
           </p>
           <Links
@@ -134,8 +134,8 @@ export function HelpDialog({ onClose, showShortcuts }: { onClose: () => void; sh
         <Section title={tr('AI 連携', 'Using with AI')}>
           <p>
             {tr(
-              'Claude Code などの AI エージェントから、CLI（JSON 出力）や MCP サーバーで同じ計算を実行できます。AI が作った設定は共有リンクにして、このアプリの地球儀とグラフで確かめられます。',
-              'AI agents such as Claude Code can run the same simulation through the CLI (JSON output) or the MCP server. Settings an AI writes can be turned into a share link and checked on this app’s globe and charts.',
+              'Claude Code などの AI エージェントは、CLI（JSON 出力）や MCP サーバーで同じ計算を実行できます。AI が作った設定は共有リンク（share）にすると、このアプリで開いて確かめられます。',
+              'AI agents such as Claude Code can run the same simulation through the CLI (JSON output) or the MCP server. A configuration an AI writes can be turned into a share link and opened in this app.',
             )}
           </p>
           <ul className="list-disc space-y-0.5 pl-4">
