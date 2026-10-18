@@ -1,7 +1,7 @@
 //! Regression against the legacy C++ simulator.
 //!
 //! `tests/cpp_reference/*_cpp.csv` are every-10-second samples of the C++
-//! simulator (`legacy_cpp`, v0.52) run on the legacy parameter file next to
+//! simulator (v0.52; source at the git tag `cpp-v0.52`) run on the legacy parameter file next to
 //! them. Each file is converted (`convert_legacy`) and flown. The cases use
 //! a zero constant CN, because the C++ code applies a constant CN as a
 //! fixed side force regardless of the angle of attack, or a CN table:
@@ -10,7 +10,7 @@
 //!   a wind profile crossing north and an air density deviation table
 //! - `momo_trim`: CN/CP tables, CG/gimbal file and thrust trim with wind
 //!
-//! To regenerate: run `legacy_cpp/bin/OpenTsiolkovsky <name>.json` in that
+//! To regenerate: check out `cpp-v0.52`, build `legacy_cpp`, run `legacy_cpp/bin/OpenTsiolkovsky <name>.json` in that
 //! directory and keep the rows at multiples of 10 s of the listed columns.
 
 use openTsiolkovsky::config::{DirSource, convert_legacy};

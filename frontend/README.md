@@ -38,7 +38,7 @@ bunx vp test run # Vitest（src/wasm があれば全サンプル機体を WASM �
 bunx vp build    # WASM を作り直さずに本番ビルド
 ```
 
-WASM だけ作り直すときは、リポジトリ直下で `bash scripts/wasm_build.sh` を実行します（[docs/wasm.md](../docs/wasm.md)）。
+WASM だけ作り直すときは、リポジトリ直下で `bash scripts/wasm_build.sh` を実行します（[開発ガイド](../docs/development.md#wasm)）。
 
 ## 構成
 

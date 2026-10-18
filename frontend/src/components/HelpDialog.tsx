@@ -126,8 +126,7 @@ export function HelpDialog({ onClose, showShortcuts }: { onClose: () => void; sh
           <Links
             items={[
               [tr('物理モデルと数値計算', 'Physics models and numerics'), doc('physics.md')],
-              [tr('設定ファイルの項目', 'Parameter reference'), doc('configuration.md')],
-              [tr('技術資料 (PDF)', 'Technical document (PDF)'), doc('OpenTsiolkovsky_techdoc.pdf')],
+              [tr('設定ファイルの項目', 'Configuration reference'), doc('configuration.md')],
             ]}
           />
         </Section>

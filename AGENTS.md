@@ -2,50 +2,32 @@
 
 > To *use* the simulator (fly vehicles, validate configs, run Monte Carlo, make web links) rather than develop it, read `docs/ai.md`: `openTsiolkovsky-cli run CONFIG --json`, `validate --json`, `schema`, `convert`, `share`, and the MCP server (`.mcp.json`). Claude Code also has the `rocket-sim` skill.
 
-This guide helps contributors work effectively across the Rust core, legacy C++ reference, and frontend.
+## Project Structure
+- `src/` Rust simulator: library, CLI binary (`main.rs`) and WASM bindings (`wasm.rs`).
+  - `config/`: the JSON configuration (types, tables, validation, conversion of legacy C++ `param_*.json`).
+  - `vehicle.rs`: loaded vehicle model; `sim/`: solver (integration, forces, events, released bodies, output samples); `output.rs`: result files; `montecarlo.rs`; `physics/`, `math/`.
+  - `agent.rs` / `mcp.rs`: machine-readable interface for AI agents; spec and status in `docs/ai.md`.
+- `tests/` Integration tests: `cpp_reference.rs` converts legacy parameter files and compares against stored C++ output; `conservation.rs` checks energy and angular momentum.
+- `examples/` Configuration files (`sample_01.json`, `momo.json`, `SS-520-4/` with CSV tables, `dispersion.json`).
+- `frontend/` Web app (Vite+ / React / TypeScript); its config types in `frontend/src/lib/config.ts` mirror `src/config/mod.rs`.
+- `scripts/` WASM and Vercel build scripts. `docs/` Documentation.
+- The former C++ simulator and `tools/compare_cpp.py` are kept at the git tag `cpp-v0.52`.
 
-## Project Structure & Module Organization
-- `src/` Main Rust simulator with CLI binary and WASM library for physics simulation.
-  - `src/config/`: the JSON configuration (types, tables, validation, conversion of legacy C++ `param_*.json`); `src/vehicle.rs`: loaded vehicle model; `src/sim/`: solver; `src/output.rs`: result files; `src/montecarlo.rs`.
-  - `src/agent.rs` / `src/mcp.rs`: machine-readable interface for AI agents (`--json`, `schema`, `share`, MCP server); spec and current status in `docs/ai.md`.
-- `tests/` Rust integration tests.
-- `examples/` Configuration files and sample data (e.g., `sample_01.json`, `momo.json`, `SS-520-4/`).
-- `frontend/` Vite + React + TypeScript UI for the web API.
-- `legacy_cpp/` Legacy C++ simulator (C++14, Eigen/Boost headers) kept for reference.
-  - `legacy_cpp/src/` C++ source. Builds to `legacy_cpp/bin/OpenTsiolkovsky`.
-  - `legacy_cpp/bin/` Python utilities and compiled C++ binary.
-  - `legacy_cpp/test/` Small C++ math tests and a Python flight script.
-- `scripts/` Build helpers (e.g., WASM tooling).
-- `docs/` Reference materials and documentation.
+## Commands
+- Rust: `cargo build --release`, `cargo test`, `cargo fmt && cargo clippy --all-targets -- -D warnings` (WASM: add `--target wasm32-unknown-unknown --features wasm --no-default-features`).
+- CLI: `cargo run --bin openTsiolkovsky-cli -- run examples/sample_01.json -o out`; also `monte-carlo`, `validate`, `schema [config|dispersion]`, `convert`, `share`, `mcp`.
+- WASM: `bash scripts/wasm_build.sh` (outputs to `frontend/src/wasm`).
+- Frontend (`vp` from `frontend/node_modules/.bin`): `cd frontend && bun install && bun run dev`; check `bunx vp check` (`--fix` to format); test `bunx vp test run`; build `bun run build`.
 
-## Build, Test, and Development Commands
-- Rust: `cargo build` or `cargo build --release`.
-  - CLI: `cargo run --bin openTsiolkovsky-cli -- run examples/sample_01.json -o out`.
-  - WASM: `wasm-pack build --target web --features wasm` or `./scripts/wasm_build.sh`.
-- Frontend: `cd frontend && bun install && bun run dev` (build: `bun run build`).
-- Agent/script interface (`src/agent.rs`, `src/mcp.rs`; see `docs/ai.md`): `openTsiolkovsky-cli run CONFIG --json`, `monte-carlo`, `validate --json`, `schema [config|dispersion]`, `convert`, `share`, `mcp` (stdio MCP server, also in `.mcp.json`). Keep the JSON keys, error kinds and exit codes (0 ok, 1 failure, 2 usage, 3 invalid config) stable; document changes in `docs/ai.md`.
-- Legacy C++ build: `cd legacy_cpp && make` (outputs `legacy_cpp/bin/OpenTsiolkovsky`), clean: `make clean`.
-- Legacy C++ run: `cd legacy_cpp/bin && ./OpenTsiolkovsky param_sample_01.json`.
-- Flight script: `python legacy_cpp/test/test_flight.py` (expects built C++ binary).
+## Rules for Changes
+- After Rust changes run `cargo test`, fmt and clippy (native and WASM); after frontend changes run `bunx vp check` and `bunx vp test run`.
+- Configuration format: keep `src/config/mod.rs`, `frontend/src/lib/config.ts`, `frontend/src/lib/validation.ts`, the docs (`docs/configuration.md`) and `examples/` in step. Unknown keys are rejected by the solver.
+- Output format: `trajectory.csv` columns are the `Sample` fields (`src/sim/sample.rs`); keep column order and names stable and update `docs/output.md` with sample output when changing them.
+- Agent interface: keep JSON keys, error kinds and exit codes (0 ok, 1 failure, 2 usage, 3 invalid config) stable; document changes in `docs/ai.md`.
+- Physics: `tests/cpp_reference.rs` must keep passing; intended differences from the C++ version are listed in `docs/physics.md`.
+- Keep changes minimal and focused; match existing patterns.
 
-## Lint and Type Check Commands
-- Rust: `cargo fmt && cargo clippy --all-targets -- -D warnings`.
-- Frontend: `cd frontend && bunx vp check` (format, lint, type check) and `bunx vp test run`.
-
-## Coding Style & Naming Conventions
-- Rust: Idiomatic snake_case for items; keep modules tidy and formatted with `cargo fmt`.
-- Frontend: TypeScript strict; React components in PascalCase (e.g., `TrajectoryViewer.tsx`).
-- Legacy C++: C++14, 4-space indent, `.hpp/.cpp`. Follow adjacent naming; typically snake_case for functions/vars, UpperCamelCase for types. Avoid introducing `using namespace` in new headers. Keep includes relative to `lib/` and `boost/`.
-
-## Testing Guidelines
-- Rust: `cargo test` (unit tests live alongside modules). Prefer numeric assertions with tolerances (e.g., `approx`).
-- Legacy C++: lightweight manual tests in `legacy_cpp/test/` (e.g., `cd legacy_cpp && g++ -std=gnu++14 -I lib -I boost test/test_quat.cpp -o build/test_quat && ./build/test_quat`).
-- CSV/JSON outputs: preserve column order and field names; include before/after samples when changing.
-
-## Commit & Pull Request Guidelines
-- Commits: imperative mood, concise; optional scope tags like `cpp:`, `rust:`, `web:`.
-- PRs: include purpose, changes, run/bench steps, and linked issues. For output format changes, attach sample `trajectory.csv` and `summary.json` diffs or files.
-
-## Agent-Specific Instructions
-- Scope: applies to the entire repo. Match existing patterns; keep changes minimal and focused.
-- When altering CLI/web flags or output schema, update README/docs and examples. Ensure C++ and Rust outputs remain comparable.
+## Style
+- Rust: idiomatic snake_case, `cargo fmt`, numeric test assertions with tolerances (`approx`).
+- Frontend: TypeScript strict; components in PascalCase; UI strings through `tr('日本語', 'English')`.
+- Commits: imperative mood, concise; optional scope (`rust:`, `web:`, `docs:`).

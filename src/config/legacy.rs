@@ -818,7 +818,7 @@ mod tests {
 
     #[test]
     fn ss520_tables_are_inlined_per_stage() {
-        let (text, dir) = example("legacy_cpp/bin/param_sample_01.json");
+        let (text, dir) = example("tests/cpp_reference/param_sample_01.json");
         assert!(convert_legacy(&text, &dir).is_ok());
 
         let (text, dir) = example("tests/cpp_reference/momo_trim.json");

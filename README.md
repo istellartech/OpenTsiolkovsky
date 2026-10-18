@@ -2,7 +2,7 @@
 
 ![OpenTsiolkovsky](docs/OpenTsiolkovsky_Logo_small.png)
 
-OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core is written in Rust and runs both as a command-line tool and, compiled to WebAssembly, in a web app that needs no server. A legacy C++ implementation is kept for reference.
+OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core is written in Rust and runs both as a command-line tool and, compiled to WebAssembly, in a web app that needs no server. The former C++ implementation is kept at the git tag `cpp-v0.52`.
 
 ## Features
 
@@ -70,7 +70,7 @@ $B monte-carlo examples/SS-520-4/ss520_4.json -n 500 --dispersion examples/dispe
 # -> out/ss520/montecarlo_cases.csv, out/ss520/montecarlo_summary.json
 
 # A C++ simulator parameter file (its CSV tables are read and inlined)
-$B convert legacy_cpp/bin/param_momo.json -o momo.json
+$B convert tests/cpp_reference/param_sample_01.json -o sample.json
 ```
 
 More examples are in [`examples/`](examples/): `momo.json` and `SS-520-4/` (three stages with CSV tables).
@@ -114,22 +114,18 @@ OpenTsiolkovsky/
 ├── tests/            # Rust integration tests (incl. regression against the C++ output)
 ├── examples/         # Configuration files and CSV tables
 ├── frontend/         # Web app (React + TypeScript, Vite+, CesiumJS, Chart.js)
-├── legacy_cpp/       # Legacy C++ implementation (reference)
 ├── scripts/          # Build scripts (WASM, Vercel)
-├── tools/            # compare_cpp.py: run the Rust and C++ simulators side by side
 └── docs/             # Documentation
 ```
 
 ## Documentation
-- [Quick Start](docs/quick-start.md)
-- [Development guide](docs/development.md)
+- [Development guide (incl. WASM build)](docs/development.md)
 - [Configuration file](docs/configuration.md)
 - [Output files](docs/output.md)
 - [AI agents: JSON output, MCP server, share links](docs/ai.md)
 - [Physics models and numerics](docs/physics.md)
 - [Web app](frontend/README.md)
-- [WASM build](docs/wasm.md)
-- [Legacy C++ implementation](legacy_cpp/)
+- Legacy C++ implementation: git tag [`cpp-v0.52`](https://github.com/istellartech/OpenTsiolkovsky/tree/cpp-v0.52/legacy_cpp)
 
 Read more on the [Wiki](https://github.com/istellartech/OpenTsiolkovsky/wiki) (it describes the C++ version's `param_*.json` format, which `convert` reads).
 
