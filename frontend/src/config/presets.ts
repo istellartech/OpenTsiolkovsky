@@ -1,6 +1,7 @@
 // Sample vehicles built from published figures. Each preset lists its
 // sources and the simplifications made, which the overview tab shows.
-import type { ClientConfig } from '../lib/simulation'
+import type { Config } from '../lib/config'
+import { launchDate } from '../lib/config'
 import { tr } from '../lib/i18n'
 import { siteById } from './sites'
 import { CA_SLENDER, exitAreaFromDiameter, exitAreaFromThrust, parallelPhase, stage, vehicle } from './build'
@@ -28,7 +29,7 @@ export interface PresetOption {
   /** Simplifications and estimates made when modelling */
   modelNotes: string[]
   sources: PresetSource[]
-  create: () => ClientConfig
+  create: () => Config
 }
 
 export const PRESET_CATEGORIES: { id: PresetCategory; label: string }[] = [
@@ -512,7 +513,7 @@ export const CAL = {
   ] as [number, number, number][],
 }
 
-function s310(): ClientConfig {
+function s310(): Config {
   // S-310-40 flight record: elevation 76°, apogee 180 km, 727 kg, burnout ~28 s.
   const isp = 250 // assumed
   const burn = 28
@@ -536,7 +537,7 @@ function s310(): ClientConfig {
           [0.95, 0.6],
           [1, 0],
         ],
-        freeMode: 0,
+        freeFlight: 'aero_stable',
       }),
     ],
     diameter: 0.31,
@@ -547,7 +548,7 @@ function s310(): ClientConfig {
   })
 }
 
-function s520(): ClientConfig {
+function s520(): Config {
   // S-520-33 flight record: elevation 79°, apogee 304 km, 2273 kg; burnout 31 s.
   const isp = 265 // assumed (unverified public figure)
   const burn = 31
@@ -570,7 +571,7 @@ function s520(): ClientConfig {
           [0.9, 0.85],
           [1, 0],
         ],
-        freeMode: 0,
+        freeFlight: 'aero_stable',
       }),
     ],
     diameter: 0.52,
@@ -581,7 +582,7 @@ function s520(): ClientConfig {
   })
 }
 
-function ss520_5(): ClientConfig {
+function ss520_5(): Config {
   // SS-520-5 / TRICOM-1R, 2018-02-03. Event times (MEXT): 1st burnout 31.7 s,
   // 1/2 sep 68 s, 2nd 180–204.4 s, 2/3 sep 235 s, 3rd 238–263.6 s.
   // Thrust curves and Isp from OpenTsiolkovsky's bundled SS-520-4 example.
@@ -613,7 +614,7 @@ function ss520_5(): ClientConfig {
           [31.7 / 31.8, 20],
           [1, 0],
         ],
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         mass: 510,
@@ -628,7 +629,7 @@ function ss520_5(): ClientConfig {
           [23.7 / 24.5, 24500],
           [1, 0],
         ],
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         // 78 kg propellant (JAXA SS-520-4 briefing, as reported); the example
@@ -644,7 +645,7 @@ function ss520_5(): ClientConfig {
           [25.6 / 25.7, 2000],
           [1, 0],
         ],
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 0.52,
@@ -655,7 +656,7 @@ function ss520_5(): ClientConfig {
   })
 }
 
-function momo(): ClientConfig {
+function momo(): Config {
   // MOMO F3, 2019-05-04: 1150 kg, 12 kN, burn 116 s, apogee 113.4 km at 240 s,
   // splashdown 37 km ESE of the pad, 515 s flight.
   // Thrust is held at the published 12 kN at sea level; Isp and the attitude
@@ -675,7 +676,7 @@ function momo(): ClientConfig {
         isp,
         burn,
         exitArea,
-        freeMode: 0,
+        freeFlight: 'aero_stable',
       }),
     ],
     diameter: 0.5,
@@ -688,7 +689,7 @@ function momo(): ClientConfig {
 
 /* ---------------------------------------------------------------- Saturn V */
 
-function saturnV(): ClientConfig {
+function saturnV(): Config {
   // Apollo 11 (AS-506), 1969-07-16, from the Saturn V flight evaluation report
   // (MPR-SAT-FE-69-9). Times are from liftoff (holddown release, range 0.3 s).
   const t0 = 0.3
@@ -730,7 +731,7 @@ function saturnV(): ClientConfig {
         separation: sep1,
         exitArea: sicExit,
         shape: sicShape,
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         mass: atSII - atSIVB,
@@ -747,7 +748,7 @@ function saturnV(): ClientConfig {
           [siiCeco + 0.0005, 4093.1],
           [1, 4093.1],
         ],
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         mass: atSIVB,
@@ -756,7 +757,7 @@ function saturnV(): ClientConfig {
         ignition: 552.2 - t0 - sep1 - sep2,
         burn: 699.34 - 552.2,
         exitArea: exitAreaFromDiameter(1.96),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 10.06,
@@ -770,7 +771,7 @@ function saturnV(): ClientConfig {
 
 /* ------------------------------------------------------------------ Kourou */
 
-function ariane5(): ClientConfig {
+function ariane5(): Config {
   // VA247 (HS-4/SGS-1 + GSAT-31), 2019-02-05. Times after liftoff (H0+7.3 s):
   // EAP separation 136.7, EPC end of thrust 513.7, separation 519.7,
   // ESC-A ignition 523.7, extinction 1501.7.
@@ -791,7 +792,7 @@ function ariane5(): ClientConfig {
     site: SITES.ela3,
     date: [2019, 2, 5, 21, 1, 0],
     stages: [
-      stage({ ...phase, freeMode: 1 }),
+      stage({ ...phase, freeFlight: 'attitude_program' }),
       stage({
         // EPC 188 t (kit) less what burned before EAP separation, + fairing 2.4 t
         mass: 188000 - (174000 - epcAtLiftoff) - coreUsed + 2400,
@@ -800,7 +801,7 @@ function ariane5(): ClientConfig {
         burn: 513.7 - jettison,
         separation: 519.7 - jettison,
         exitArea: exitAreaFromThrust(1390e3, 960e3),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         // ESC-A 19 t + vehicle equipment bay 0.97 t + payload
@@ -811,7 +812,7 @@ function ariane5(): ClientConfig {
         burn: 1501.7 - 523.7,
         cutoff: CAL.ariane5Cutoff,
         exitArea: exitAreaFromDiameter(1.0),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 5.4,
@@ -824,7 +825,7 @@ function ariane5(): ClientConfig {
 
 /* ----------------------------------------------------------------- Epsilon */
 
-function epsilon(): ClientConfig {
+function epsilon(): Config {
   // Epsilon test flight / SPRINT-A (Hisaki), 2013-09-14.
   // Event times from the flight results (planned values), converted to
   // stage-local times: 1/2 sep 161, 2nd ign 165, 2/3 sep 624, 3rd ign 628.
@@ -842,7 +843,7 @@ function epsilon(): ClientConfig {
         burn: 112.6,
         separation: 161,
         exitArea: exitAreaFromDiameter(1.6),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         mass: 12300,
@@ -852,7 +853,7 @@ function epsilon(): ClientConfig {
         burn: 101.3,
         separation: 463,
         exitArea: exitAreaFromDiameter(1.1),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         // KM-V2b + PBS (3.3 t in the optional configuration) + satellite
@@ -862,7 +863,7 @@ function epsilon(): ClientConfig {
         ignition: 4,
         burn: 88.7,
         exitArea: exitAreaFromDiameter(0.8),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 2.6,
@@ -875,7 +876,7 @@ function epsilon(): ClientConfig {
 
 /* ------------------------------------------------------------------- H-IIA */
 
-function h2a202(): ClientConfig {
+function h2a202(): Config {
   // H-IIA F50 / GOSAT-GW, 2025-06-29. SRB-A separation 124 s, MECO 400 s,
   // 1/2 separation 408 s, SELI 417 s, SECO 916 s (actual values).
   const meco = 400
@@ -898,7 +899,7 @@ function h2a202(): ClientConfig {
     site: SITES.yoshinobu,
     date: [2025, 6, 28, 16, 33, 3],
     stages: [
-      stage({ ...phase, freeMode: 1 }),
+      stage({ ...phase, freeFlight: 'attitude_program' }),
       stage({
         mass: 114000 - coreUsed,
         propellant: 100000 - coreUsed,
@@ -906,7 +907,7 @@ function h2a202(): ClientConfig {
         burn: meco - jettison,
         separation: sep - jettison,
         exitArea: exitAreaFromDiameter(1.8),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         mass: 20000 + payload,
@@ -917,7 +918,7 @@ function h2a202(): ClientConfig {
         // Guidance cutoff on reaching the target orbit
         cutoff: CAL.h2aCutoff,
         exitArea: exitAreaFromDiameter(1.6),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 4.0,
@@ -930,7 +931,7 @@ function h2a202(): ClientConfig {
 
 /* ---------------------------------------------------------------------- H3 */
 
-function h3_22s(): ClientConfig {
+function h3_22s(): Config {
   // H3 test flight 1 (H3-22S / ALOS-3) planned sequence: SRB-3 separation
   // 116 s, MECO 296 s, 1/2 separation 303 s, SELI 315 s, SECO 982 s.
   const meco = 296
@@ -953,7 +954,7 @@ function h3_22s(): ClientConfig {
     site: SITES.yoshinobu,
     date: [2023, 3, 7, 1, 37, 55],
     stages: [
-      stage({ ...phase, freeMode: 1 }),
+      stage({ ...phase, freeFlight: 'attitude_program' }),
       {
         ...stage({
           // Core 240 t + fairing ~1.8 t, released at fairing separation (211 s)
@@ -963,14 +964,9 @@ function h3_22s(): ClientConfig {
           burn: meco - jettison,
           separation: sep - jettison,
           exitArea: 2 * exitAreaFromDiameter(1.8),
-          freeMode: 1,
+          freeFlight: 'attitude_program',
         }),
-        dumping_product: {
-          separation_time_s: 211 - jettison,
-          mass_kg: 1800,
-          ballistic_coefficient: 50,
-          additional_velocity_ned_mps: [0, 0, 0],
-        },
+        jettisons: [{ name: 'fairing', time_s: 211 - jettison, mass_kg: 1800, ballistic_coefficient_kg_m2: 50 }],
       },
       stage({
         mass: 28000 + payload,
@@ -981,7 +977,7 @@ function h3_22s(): ClientConfig {
         // Guidance cutoff on reaching the target orbit
         cutoff: CAL.h3Cutoff,
         exitArea: exitAreaFromDiameter(1.6),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 5.2,
@@ -994,7 +990,7 @@ function h3_22s(): ClientConfig {
 
 /* ---------------------------------------------------------------- Falcon 9 */
 
-function falcon9(): ClientConfig {
+function falcon9(): Config {
   // NASA PACE, 2024-02-08 from SLC-40, booster returned to LZ-1. Timeline
   // (SpaceX / NASA, approximate): MECO 2:19, stage separation 2:23, SES-1
   // 2:30, fairing deploy 4:15, SECO-1 10:20.
@@ -1019,7 +1015,7 @@ function falcon9(): ClientConfig {
     burn: (s2prop * 348 * 9.80665) / 981e3,
     cutoff: CAL.falcon9S2Cutoff,
     exitArea: exitAreaFromDiameter(3.3),
-    freeMode: 1,
+    freeFlight: 'attitude_program',
   })
   return vehicle({
     name: tr('ファルコン9（PACE）', 'Falcon 9 (PACE)'),
@@ -1034,16 +1030,11 @@ function falcon9(): ClientConfig {
         cutoff: meco,
         separation: sep,
         exitArea: exitAreaFromThrust(8227e3, 7607e3),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       {
         ...s2,
-        dumping_product: {
-          separation_time_s: 255 - sep,
-          mass_kg: fairing,
-          ballistic_coefficient: 50,
-          additional_velocity_ned_mps: [0, 0, 0],
-        },
+        jettisons: [{ name: 'fairing', time_s: 255 - sep, mass_kg: fairing, ballistic_coefficient_kg_m2: 50 }],
       },
     ],
     diameter: 3.66,
@@ -1056,7 +1047,7 @@ function falcon9(): ClientConfig {
 
 /* ------------------------------------------------------------------- Soyuz */
 
-function soyuz21a(): ClientConfig {
+function soyuz21a(): Config {
   // Progress MS-30, 2025-02-27 from Baikonur Site 31. Telemetry times after
   // liftoff: booster separation 117.85, core separation 287.42, third-stage
   // cutoff 525.45, spacecraft separation 528.75 s.
@@ -1080,7 +1071,7 @@ function soyuz21a(): ClientConfig {
     site: SITES.baikonur31,
     date: [2025, 2, 27, 21, 24, 27],
     stages: [
-      stage({ ...phase, freeMode: 1 }),
+      stage({ ...phase, freeFlight: 'attitude_program' }),
       {
         ...stage({
           // Block A 99.8 t + fairing 1.7 t, released at its jettison (183.08 s)
@@ -1090,14 +1081,9 @@ function soyuz21a(): ClientConfig {
           burn: coreSep - jettison,
           separation: coreSep - jettison,
           exitArea: coreExit,
-          freeMode: 1,
+          freeFlight: 'attitude_program',
         }),
-        dumping_product: {
-          separation_time_s: 183.08 - jettison,
-          mass_kg: 1700,
-          ballistic_coefficient: 50,
-          additional_velocity_ned_mps: [0, 0, 0],
-        },
+        jettisons: [{ name: 'fairing', time_s: 183.08 - jettison, mass_kg: 1700, ballistic_coefficient_kg_m2: 50 }],
       },
       stage({
         mass: 25300 + payload,
@@ -1105,7 +1091,7 @@ function soyuz21a(): ClientConfig {
         isp: 325,
         burn: s3burn,
         exitArea: 4 * exitAreaFromDiameter(0.5),
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 2.95,
@@ -1118,7 +1104,7 @@ function soyuz21a(): ClientConfig {
 
 /* ------------------------------------------------------------- Long March */
 
-function longMarch3b(): ClientConfig {
+function longMarch3b(): Config {
   // LM-3B/E standard GTO mission (LM-3A Series User's Manual, Table 3-7).
   // Times after liftoff: booster cutoff 140.1 / separation 141.6, stage 1
   // cutoff 157.5 / separation 159.0, stage 2 main cutoff 339.4, vernier cutoff
@@ -1157,7 +1143,7 @@ function longMarch3b(): ClientConfig {
     site: SITES.xichang,
     date: [2024, 3, 1, 16, 0, 0],
     stages: [
-      stage({ ...phase, freeMode: 1 }),
+      stage({ ...phase, freeFlight: 'attitude_program' }),
       stage({
         mass: 198800 - coreUsed,
         propellant: 186200 - coreUsed,
@@ -1165,7 +1151,7 @@ function longMarch3b(): ClientConfig {
         burn: 157.5 - jettison,
         separation: sep1 - jettison,
         exitArea: coreExit,
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         // Stage 2 53.5 t + 4.0 m fairing 1.5 t carried until stage separation
@@ -1181,7 +1167,7 @@ function longMarch3b(): ClientConfig {
           [mainBurn / s2burn + 0.0005, 47.1],
           [1, 47.1],
         ],
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
       stage({
         mass: 20933 + payload,
@@ -1199,7 +1185,7 @@ function longMarch3b(): ClientConfig {
           [b2, 1],
           [1, 1],
         ],
-        freeMode: 1,
+        freeFlight: 'attitude_program',
       }),
     ],
     diameter: 3.35,
@@ -1999,20 +1985,12 @@ export const PRESET_OPTIONS: PresetOption[] = [
  * A minimal single-stage rocket to start from scratch, at the given launch
  * point (or Taiki): 1 t, 70 % propellant, 20 kN, Isp 250 s.
  */
-export function createBlankConfig(launch?: ClientConfig['launch']): ClientConfig {
-  const c = vehicle({
+export function createBlankConfig(launch?: Config['launch']): Config {
+  const d = launch ? launchDate({ launch } as Config) : new Date(Date.UTC(2025, 0, 1))
+  return vehicle({
     name: tr('新しいロケット', 'New rocket'),
-    site: launch ? { lat: launch.latitude_deg, lon: launch.longitude_deg, alt: launch.altitude_m } : SITES.taiki,
-    date: launch
-      ? [
-          launch.datetime_utc.year,
-          launch.datetime_utc.month,
-          launch.datetime_utc.day,
-          launch.datetime_utc.hour,
-          launch.datetime_utc.minute,
-          launch.datetime_utc.second,
-        ]
-      : [2025, 1, 1, 0, 0, 0],
+    site: launch ? { lat: launch.latitude_deg, lon: launch.longitude_deg, alt: launch.altitude_m ?? 0 } : SITES.taiki,
+    date: [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()],
     stages: [stage({ mass: 1000, propellant: 700, isp: 250, burn: (700 * 250 * 9.80665) / 20000, exitArea: exitAreaFromDiameter(0.25) })],
     diameter: 0.5,
     ca: 0.4,
@@ -2020,5 +1998,4 @@ export function createBlankConfig(launch?: ClientConfig['launch']): ClientConfig
     duration: 600,
     step: 0.5,
   })
-  return c
 }

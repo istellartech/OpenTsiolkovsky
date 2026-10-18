@@ -20,7 +20,7 @@ import { Toast, useToast } from './components/Toast'
 import { ThemeToggle } from './components/ThemeToggle'
 import { LangToggle } from './components/LangToggle'
 import { HelpDialog } from './components/HelpDialog'
-import { trackToCsv } from './lib/trajectory'
+import { samplesToCsv } from './lib/trajectory'
 import { computeSpecs } from './lib/specs'
 import { generateKML } from './lib/kml'
 import { fileBase, saveFile } from './lib/download'
@@ -134,7 +134,7 @@ export default function App() {
         showToast(tr('共有リンクをコピーできませんでした。', 'Could not copy the share link.'), 'error')
       }
     },
-    saveCsv: () => track && saveFile(`${base}_trajectory.csv`, trackToCsv(track), 'text/csv'),
+    saveCsv: () => track && saveFile(`${base}_trajectory.csv`, samplesToCsv(track.raw), 'text/csv'),
     saveKml: () => track && saveFile(`${base}_trajectory.kml`, generateKML(track, config.name), 'application/vnd.google-earth.kml+xml'),
   }
   const dragging = useFileDrop(openFiles)

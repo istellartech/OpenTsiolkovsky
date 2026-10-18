@@ -1,6 +1,7 @@
 import type { InspectorNav } from '../Inspector'
 import { AlertTriangle } from 'lucide-react'
-import type { ClientConfig } from '../../lib/simulation'
+import type { Config } from '../../lib/config'
+import { curveRows, curveValue, isRows, launchDate } from '../../lib/config'
 import { PRESET_OPTIONS } from '../../config/presets'
 
 import type { VehicleSpec } from '../../lib/specs'
@@ -16,7 +17,7 @@ export function Overview({
   specs,
   onNav,
 }: {
-  config: ClientConfig
+  config: Config
   patch: Patch
   presetId: string
   specs: VehicleSpec
@@ -24,7 +25,10 @@ export function Overview({
 }) {
   const preset = PRESET_OPTIONS.find((p) => p.id === presetId)
   const { launch } = config
-  const dt = launch.datetime_utc
+  const dt = launchDate(config)
+  const az = config.attitude?.azimuth_deg
+  const el = config.attitude?.elevation_deg
+  const programPoints = Math.max(curveRows(az).length, curveRows(el).length)
   const figures: [string, string, string?][] = [
     [tr('全備質量', 'Liftoff mass'), fmtMass(specs.liftoffMass)],
     [tr('離昇推力', 'Liftoff thrust'), fmtForce(specs.liftoffThrust), tr('真空', 'vacuum')],
@@ -125,23 +129,20 @@ export function Overview({
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
         <dt className="text-ink-3">{tr('地点', 'Site')}</dt>
         <dd className="num">
-          {fmt(launch.latitude_deg, 3)}°, {fmt(launch.longitude_deg, 3)}° · {tr('標高', 'alt.')} {launch.altitude_m} m
+          {fmt(launch.latitude_deg, 3)}°, {fmt(launch.longitude_deg, 3)}° · {tr('標高', 'alt.')} {launch.altitude_m ?? 0} m
         </dd>
         <dt className="text-ink-3">{tr('日時', 'Date')}</dt>
         <dd className="num">
-          {dt.year}-{pad2(dt.month)}-{pad2(dt.day)} {pad2(dt.hour)}:{pad2(dt.minute)} UTC
+          {dt.getUTCFullYear()}-{pad2(dt.getUTCMonth() + 1)}-{pad2(dt.getUTCDate())} {pad2(dt.getUTCHours())}:{pad2(dt.getUTCMinutes())} UTC
         </dd>
         <dt className="text-ink-3">{tr('打上げ方位', 'Launch azimuth')}</dt>
         <dd className="num">
-          {config.attitude.profile.length > 0
+          {isRows(az) || isRows(el)
             ? tr(
-                `${config.attitude.profile[0].azimuth_deg}°（姿勢プログラム ${config.attitude.profile.length}点）`,
-                `${config.attitude.profile[0].azimuth_deg}° (attitude program, ${config.attitude.profile.length} points)`,
+                `${curveValue(az)}°（姿勢プログラム ${programPoints}点）`,
+                `${curveValue(az)}° (attitude program, ${programPoints} points)`,
               )
-            : tr(
-                `${config.attitude.azimuth_deg}° · 仰角 ${config.attitude.elevation_deg}°`,
-                `${config.attitude.azimuth_deg}° · elevation ${config.attitude.elevation_deg}°`,
-              )}
+            : tr(`${curveValue(az)}° · 仰角 ${curveValue(el, 90)}°`, `${curveValue(az)}° · elevation ${curveValue(el, 90)}°`)}
         </dd>
       </dl>
 

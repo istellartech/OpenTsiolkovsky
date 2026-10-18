@@ -1,41 +1,36 @@
 // Monte Carlo dispersion runs: types shared with the Rust/WASM side
 // (src/montecarlo.rs), the parallel runner and geometry for the error ellipse.
-import { initWasm, type ClientConfig, type ImpactPointJson } from './simulation'
+import type { Config } from './config'
+import { initWasm, type ImpactPointJson } from './simulation'
 
 /** How each dispersion is drawn (`Distribution` in src/montecarlo.rs) */
 export type Distribution = 'normal' | 'uniform'
 
-/** Scalar dispersions present in every case (CSV order) */
-type BaseDispersion = {
-  thrust_percent: number
-  isp_percent: number
-  mass_percent: number
-  drag_percent: number
-  elevation_deg: number
-  azimuth_deg: number
-  wind_speed_mps: number
-  wind_direction_deg: number
-  air_density_percent: number
-}
+/** Numeric 1-sigma dispersions, in the CSV column order of the Rust side */
+export const DISPERSION_KEYS = [
+  'thrust_percent',
+  'isp_percent',
+  'mass_percent',
+  'drag_percent',
+  'normal_percent',
+  'separation_time_s',
+  'elevation_deg',
+  'azimuth_deg',
+  'wind_speed_percent',
+  'wind_speed_mps',
+  'wind_direction_deg',
+  'air_density_percent',
+] as const
 
-/** Dispersions added later; zero when unset (the Rust side omits them then) */
-type ExtraDispersion = {
-  /** CN [%] */
-  normal_percent?: number
-  /** Stage separation time [s] */
-  separation_time_s?: number
-  /** Scale of the wind speed at every altitude [%] */
-  wind_speed_percent?: number
-}
+export type NumericDispersionKey = (typeof DISPERSION_KEYS)[number]
 
-/** 1-sigma dispersions; same keys as the Rust `Dispersion` */
-export type Dispersion = BaseDispersion &
-  ExtraDispersion & {
-    /** Default `normal`; `uniform` draws ±√3σ with the same standard deviation */
-    distribution?: Distribution
-    /** Draw thrust, Isp, mass, drag, CN and separation time for each stage separately */
-    independent_stages?: boolean
-  }
+/** 1-sigma dispersions (`Dispersion` in src/montecarlo.rs) */
+export type Dispersion = Record<NumericDispersionKey, number> & {
+  /** `uniform` draws ±√3σ with the same standard deviation */
+  distribution: Distribution
+  /** Draw thrust, Isp, mass, drag, CN and separation time for each stage separately */
+  independent_stages: boolean
+}
 
 /** Rust `Dispersion::default()` */
 export const DEFAULT_DISPERSION: Dispersion = {
@@ -43,24 +38,16 @@ export const DEFAULT_DISPERSION: Dispersion = {
   isp_percent: 0.5,
   mass_percent: 1,
   drag_percent: 5,
+  normal_percent: 0,
+  separation_time_s: 0,
   elevation_deg: 0.5,
   azimuth_deg: 0.5,
+  wind_speed_percent: 0,
   wind_speed_mps: 2,
   wind_direction_deg: 10,
   air_density_percent: 5,
-}
-
-export const DISPERSION_KEYS = Object.keys(DEFAULT_DISPERSION) as (keyof BaseDispersion)[]
-export const EXTRA_DISPERSION_KEYS: (keyof ExtraDispersion)[] = ['normal_percent', 'separation_time_s', 'wind_speed_percent']
-export type NumericDispersionKey = keyof BaseDispersion | keyof ExtraDispersion
-
-/** Drop keys at their defaults so the JSON matches what the Rust side writes. */
-export function tidyDispersion(d: Dispersion): Dispersion {
-  const out: Dispersion = { ...d }
-  for (const k of EXTRA_DISPERSION_KEYS) if (!out[k]) delete out[k]
-  if (out.distribution !== 'uniform') delete out.distribution
-  if (!out.independent_stages) delete out.independent_stages
-  return out
+  distribution: 'normal',
+  independent_stages: false,
 }
 
 /** One stage's draw when the dispersion has `independent_stages` */
@@ -74,11 +61,10 @@ export type StagePerturbation = {
 }
 
 /** The values drawn for one case (Rust `Perturbation`) */
-export type Perturbation = BaseDispersion &
-  ExtraDispersion & {
-    /** Per-stage draws, stage 1 first; the scalar fields then hold stage 1's values */
-    stages?: StagePerturbation[]
-  }
+export type Perturbation = Record<NumericDispersionKey, number> & {
+  /** Per-stage draws, stage 1 first; the common fields then hold stage 1's values */
+  stages?: StagePerturbation[]
+}
 
 export type BodyImpact = { body: string; impact: ImpactPointJson | null }
 
@@ -102,11 +88,11 @@ export type ImpactStatistics = {
   ellipse_minor_m: number
   /** Azimuth of the major axis, clockwise from north [deg] */
   ellipse_azimuth_deg: number
-  /** Ellipses holding 95 % and 99 % of a 2-D Gaussian (1-sigma × 2.448 and × 3.035); missing from older solver builds */
-  ellipse_95_major_m?: number
-  ellipse_95_minor_m?: number
-  ellipse_99_major_m?: number
-  ellipse_99_minor_m?: number
+  /** Ellipses holding 95 % and 99 % of a 2-D Gaussian (1-sigma × 2.448 and × 3.035) */
+  ellipse_95_major_m: number
+  ellipse_95_minor_m: number
+  ellipse_99_major_m: number
+  ellipse_99_minor_m: number
   max_distance_m: number
 }
 
@@ -119,15 +105,11 @@ export const DEFAULT_ELLIPSE: EllipseLevel = 'p99'
 /** Short name of an ellipse level, e.g. "95%" */
 export const ellipseLabel = (level: EllipseLevel) => (level === 'sigma1' ? '1σ' : level === 'p95' ? '95%' : '99%')
 
-/** Scale of each ellipse relative to 1-sigma: √(−2 ln(1 − p)) */
-const ELLIPSE_SCALE: Record<EllipseLevel, number> = { sigma1: 1, p95: 2.447746830680816, p99: 3.034854258770293 }
-
-/** Semi-axes [m] of the chosen ellipse; scaled from 1-sigma when the solver did not send them. */
+/** Semi-axes [m] of the chosen ellipse */
 export function ellipseAxes(s: ImpactStatistics, level: EllipseLevel): { major: number; minor: number } {
-  const major = level === 'p95' ? s.ellipse_95_major_m : level === 'p99' ? s.ellipse_99_major_m : s.ellipse_major_m
-  const minor = level === 'p95' ? s.ellipse_95_minor_m : level === 'p99' ? s.ellipse_99_minor_m : s.ellipse_minor_m
-  const k = ELLIPSE_SCALE[level]
-  return { major: major ?? k * s.ellipse_major_m, minor: minor ?? k * s.ellipse_minor_m }
+  if (level === 'p95') return { major: s.ellipse_95_major_m, minor: s.ellipse_95_minor_m }
+  if (level === 'p99') return { major: s.ellipse_99_major_m, minor: s.ellipse_99_minor_m }
+  return { major: s.ellipse_major_m, minor: s.ellipse_minor_m }
 }
 
 export interface MonteCarloSettings {
@@ -173,42 +155,33 @@ export function ellipsePoints(
   return out
 }
 
-/** One row per case, columns as the CLI's `<out>_montecarlo.csv`. */
+/** One row per case, with the columns of the CLI's montecarlo_cases.csv. */
 export function casesToCsv(cases: CaseResult[], bodies: string[]): string {
+  const stageCount = Math.max(0, ...cases.map((c) => c.perturbation.stages?.length ?? 0))
+  const stageKeys = ['thrust_percent', 'isp_percent', 'mass_percent', 'drag_percent', 'normal_percent', 'separation_time_s'] as const
   const header = [
     'case',
-    'thrust[%]',
-    'isp[%]',
-    'mass[%]',
-    'drag[%]',
-    'elevation[deg]',
-    'azimuth[deg]',
-    'wind_speed[m/s]',
-    'wind_direction[deg]',
-    'air_density[%]',
-    'max_altitude[m]',
-    ...bodies.flatMap((b) => [`${b}_impact_time[s]`, `${b}_impact_lat[deg]`, `${b}_impact_lon[deg]`]),
-    // Added later: appended so the earlier columns keep their place
-    'normal[%]',
-    'separation_time[s]',
-    'wind_speed_scale[%]',
+    ...DISPERSION_KEYS,
+    ...Array.from({ length: stageCount }, (_, k) => stageKeys.map((c) => `stage${k + 1}_${c}`)).flat(),
+    'max_altitude_m',
+    ...bodies.flatMap((b) => [`${b}_impact_time_s`, `${b}_impact_latitude_deg`, `${b}_impact_longitude_deg`]),
   ]
   const rows = [...cases]
     .sort((a, b) => a.index - b.index)
     .map((c) => {
       const p = c.perturbation
+      const stages = Array.from({ length: stageCount }, (_, k) => stageKeys.map((key) => p.stages?.[k]?.[key] ?? '')).flat()
       const impacts = bodies.flatMap((b): (number | string)[] => {
         const i = c.impacts.find((x) => x.body === b)?.impact
         return i ? [i.time_s, i.latitude_deg, i.longitude_deg] : ['', '', '']
       })
-      const extras = EXTRA_DISPERSION_KEYS.map((k) => p[k] ?? 0)
-      return [c.index, ...DISPERSION_KEYS.map((k) => p[k]), c.max_altitude_m ?? '', ...impacts, ...extras].join(',')
+      return [c.index, ...DISPERSION_KEYS.map((k) => p[k]), ...stages, c.max_altitude_m ?? '', ...impacts].join(',')
     })
   return [header.join(','), ...rows].join('\n')
 }
 
 export type McWorkerRequest = {
-  config: ClientConfig
+  config: Config
   dispersion: Dispersion
   seed: number
   indices: number[]
@@ -228,7 +201,7 @@ const createWorker = () => new Worker(new URL('../workers/montecarlo.worker.ts',
  * Run `count` cases split over several workers. `onProgress` receives the
  * cases finished so far (in completion order). Returns a cancel function.
  */
-export function startMonteCarlo(config: ClientConfig, settings: MonteCarloSettings, onProgress: (p: McProgress) => void): () => void {
+export function startMonteCarlo(config: Config, settings: MonteCarloSettings, onProgress: (p: McProgress) => void): () => void {
   const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 2 : 2
   const n = Math.max(1, Math.min(settings.count, Math.max(cores - 1, 1), 8))
   const cases: CaseResult[] = []
@@ -264,13 +237,13 @@ export function startMonteCarlo(config: ClientConfig, settings: MonteCarloSettin
       stop()
       onProgress({ cases, done: true, error: e.message || 'Monte Carlo worker failed' })
     }
-    worker.postMessage({ config, dispersion: tidyDispersion(settings.dispersion), seed: settings.seed, indices } satisfies McWorkerRequest)
+    worker.postMessage({ config, dispersion: settings.dispersion, seed: settings.seed, indices } satisfies McWorkerRequest)
   }
   return stop
 }
 
-/** Per-body statistics, computed by the Rust code (`monte_carlo_statistics`). */
+/** Per-body statistics, computed by the Rust code (`impact_statistics`). */
 export async function impactStatistics(cases: CaseResult[]): Promise<ImpactStatistics[]> {
   const mod = await initWasm()
-  return JSON.parse(mod.monte_carlo_statistics(JSON.stringify(cases))) as ImpactStatistics[]
+  return JSON.parse(mod.monte_carlo_statistics_json(JSON.stringify(cases))) as ImpactStatistics[]
 }

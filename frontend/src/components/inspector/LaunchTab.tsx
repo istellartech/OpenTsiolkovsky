@@ -1,21 +1,26 @@
-import type { ClientConfig } from '../../lib/simulation'
+import type { Config } from '../../lib/config'
+import { isoUtc, launchDate } from '../../lib/config'
 import { LAUNCH_SITES, findSite } from '../../config/sites'
 import { NumberField, TextInputField, VectorField } from '../primitives'
 import { pad2, Group, type Patch } from './shared'
 import { tr } from '../../lib/i18n'
 
-export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
+export function LaunchTab({ config, patch }: { config: Config; patch: Patch }) {
   const { launch } = config
-  const dt = launch.datetime_utc
+  const dt = launchDate(config)
   const site = findSite(launch.latitude_deg, launch.longitude_deg)
-  const setLaunch = (l: Partial<ClientConfig['launch']>) => patch((c) => ({ ...c, launch: { ...c.launch, ...l } }))
+  const setLaunch = (l: Partial<Config['launch']>) => patch((c) => ({ ...c, launch: { ...c.launch, ...l } }))
+  const setUtc = (y: number, mo: number, d: number, h: number, mi: number, s: number) => {
+    const t = new Date(Date.UTC(y, mo - 1, d, h, mi, s))
+    if (!Number.isNaN(t.getTime())) setLaunch({ time_utc: isoUtc(t) })
+  }
   const setDate = (v: string) => {
     const [y, m, d] = v.split('-').map(Number)
-    if ([y, m, d].every(Number.isFinite)) setLaunch({ datetime_utc: { ...dt, year: y, month: m, day: d } })
+    if ([y, m, d].every(Number.isFinite)) setUtc(y, m, d, dt.getUTCHours(), dt.getUTCMinutes(), dt.getUTCSeconds())
   }
   const setTime = (v: string) => {
     const [h, mi, s = 0] = v.split(':').map(Number)
-    if ([h, mi, s].every(Number.isFinite)) setLaunch({ datetime_utc: { ...dt, hour: h, minute: mi, second: s } })
+    if ([h, mi, s].every(Number.isFinite)) setUtc(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate(), h, mi, s)
   }
   return (
     <>
@@ -64,7 +69,7 @@ export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patc
           label={tr('標高', 'Altitude')}
           unit="m"
           path="launch.altitude_m"
-          value={launch.altitude_m}
+          value={launch.altitude_m ?? 0}
           onChange={(v) => setLaunch({ altitude_m: v })}
         />
       </Group>
@@ -87,14 +92,14 @@ export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patc
         <TextInputField
           label={tr('日付 (UTC)', 'Date (UTC)')}
           type="date"
-          path="launch.datetime_utc"
-          value={`${dt.year}-${pad2(dt.month)}-${pad2(dt.day)}`}
+          path="launch.time_utc"
+          value={`${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`}
           onChange={setDate}
         />
         <TextInputField
           label={tr('時刻 (UTC)', 'Time (UTC)')}
           type="time"
-          value={`${pad2(dt.hour)}:${pad2(dt.minute)}:${pad2(dt.second)}`}
+          value={`${pad2(dt.getUTCHours())}:${pad2(dt.getUTCMinutes())}:${pad2(dt.getUTCSeconds())}`}
           onChange={setTime}
         />
       </Group>
@@ -107,7 +112,7 @@ export function LaunchTab({ config, patch }: { config: ClientConfig; patch: Patc
           unit={tr('m/s · 北/東/下', 'm/s · N/E/D')}
           axes={['N', 'E', 'D']}
           path="launch.velocity_ned_mps"
-          value={launch.velocity_ned_mps}
+          value={launch.velocity_ned_mps ?? [0, 0, 0]}
           onChange={(v) => setLaunch({ velocity_ned_mps: v })}
         />
       </Group>

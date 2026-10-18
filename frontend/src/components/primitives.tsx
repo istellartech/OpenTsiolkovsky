@@ -3,6 +3,8 @@ import { Info } from 'lucide-react'
 import { TableSummary } from './TableEditor'
 import { cn } from '../lib/cn'
 import { fmtInput, unitHint } from '../lib/format'
+import { curveValue, isFileTable, isRows, type Curve } from '../lib/config'
+import { tr } from '../lib/i18n'
 
 /* ------------------------------------------------------------------ Buttons */
 
@@ -400,35 +402,102 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
   )
 }
 
-/* ---------------------------------------------------------- Profile table */
+/* ------------------------------------------------------------ Tables */
 
-export interface ProfileColumn<T> {
-  key: keyof T & string
-  label: string
-}
-
-export function ProfileTable<T extends Record<string, number>>({
+/** A table of numeric rows (the first column ascending), summarized with an editor behind it. */
+export function RowsTable<R extends number[]>({
   columns,
   rows,
   onChange,
   path,
   title,
 }: {
-  columns: ProfileColumn<T>[]
-  rows: T[]
-  onChange: (rows: T[]) => void
+  /** Column labels */
+  columns: string[]
+  rows: R[]
+  onChange: (rows: R[]) => void
   path?: string
   title?: string
 }) {
   const { error, ref } = useFieldState(path)
   return (
     <TableSummary
-      title={title ?? columns.map((c) => c.label).join(' · ')}
-      columns={columns}
-      rows={rows.map((r) => columns.map((c) => r[c.key]))}
-      onChange={(next) => onChange(next.map((vals) => Object.fromEntries(columns.map((c, i) => [c.key, vals[i]])) as T))}
+      title={title ?? columns.join(' · ')}
+      columns={columns.map((label, i) => ({ key: String(i), label }))}
+      rows={rows}
+      onChange={(next) => onChange(next as R[])}
       error={error}
       registerRef={ref}
     />
+  )
+}
+
+/**
+ * A quantity that is a constant or a table over one variable (`Curve` in
+ * lib/config). The toggle switches between the two, seeding the table from
+ * the constant (two rows at `span`) and the constant from the table.
+ */
+export function CurveField({
+  label,
+  tableLabel,
+  title,
+  unit,
+  xLabel,
+  yLabel,
+  value,
+  onChange,
+  span,
+  path,
+  hint,
+  note,
+}: {
+  label: ReactNode
+  /** Toggle text, e.g. "Enter as Mach table" */
+  tableLabel: ReactNode
+  /** Title of the table editor */
+  title?: string
+  unit?: string
+  xLabel: string
+  yLabel: string
+  value: Curve | undefined
+  onChange: (v: Curve) => void
+  /** x of the two rows a new table starts with */
+  span: [number, number]
+  path?: string
+  hint?: string
+  note?: ReactNode
+}) {
+  const table = isRows(value)
+  return (
+    <>
+      <Toggle
+        label={tableLabel}
+        checked={table}
+        onChange={(on) => {
+          const v = curveValue(value)
+          onChange(
+            on
+              ? [
+                  [span[0], v],
+                  [span[1], v],
+                ]
+              : v,
+          )
+        }}
+      />
+      {isFileTable(value) && (
+        <p className="mb-1 text-[11px] text-danger">
+          {tr(
+            `CSVファイル（${value.file}）はブラウザでは読めません。表を有効にして読み込んでください。`,
+            `The CSV file (${value.file}) cannot be read in the browser. Turn on the table and load it there.`,
+          )}
+        </p>
+      )}
+      {table ? (
+        <RowsTable path={path} title={title} columns={[xLabel, yLabel]} rows={value} onChange={onChange} />
+      ) : (
+        <NumberField label={label} unit={unit} path={path} hint={hint} note={note} value={curveValue(value)} onChange={onChange} />
+      )}
+    </>
   )
 }

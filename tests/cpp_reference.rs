@@ -1,20 +1,20 @@
 //! Regression against the legacy C++ simulator.
 //!
 //! `tests/cpp_reference/*_cpp.csv` are every-10-second samples of the C++
-//! simulator (`legacy_cpp`, v0.52) run on the JSON next to them. The cases
-//! use a zero constant CN, because the C++ code applies a constant CN as a
+//! simulator (v0.52; source at the git tag `cpp-v0.52`) run on the legacy parameter file next to
+//! them. Each file is converted (`convert_legacy`) and flown. The cases use
+//! a zero constant CN, because the C++ code applies a constant CN as a
 //! fixed side force regardless of the angle of attack, or a CN table:
 //! - `sample_01_cn0`: single stage, constant thrust, ballistic coast
 //! - `momo_offsets_wind`: attitude misalignment offsets, gyro bias drift,
-//!   a wind profile crossing north and an air density variation table
-//! - `momo_trim`: CN/CP tables, CG/controller file and thrust trim
-//!   ("attitude neutrality") with wind
+//!   a wind profile crossing north and an air density deviation table
+//! - `momo_trim`: CN/CP tables, CG/gimbal file and thrust trim with wind
 //!
-//! To regenerate: run `legacy_cpp/bin/OpenTsiolkovsky <name>.json` in that
+//! To regenerate: check out `cpp-v0.52`, build `legacy_cpp`, run `legacy_cpp/bin/OpenTsiolkovsky <name>.json` in that
 //! directory and keep the rows at multiples of 10 s of the listed columns.
 
-use openTsiolkovsky::io::create_rocket_from_config;
-use openTsiolkovsky::simulator::Simulator;
+use openTsiolkovsky::config::{DirSource, convert_legacy};
+use openTsiolkovsky::{Vehicle, simulate};
 use std::path::PathBuf;
 
 struct Reference {
@@ -23,8 +23,7 @@ struct Reference {
 }
 
 fn reference(name: &str) -> Reference {
-    let path = dir().join(format!("{name}_cpp.csv"));
-    let text = std::fs::read_to_string(&path).expect("reference CSV");
+    let text = std::fs::read_to_string(dir().join(format!("{name}_cpp.csv"))).unwrap();
     let mut lines = text.lines();
     let header = lines
         .next()
@@ -44,33 +43,40 @@ fn dir() -> PathBuf {
 
 /// Largest differences [mass kg, lat deg, lon deg, alt m, vel m/s, gimbal deg]
 fn compare(name: &str) -> [f64; 6] {
-    let rocket = create_rocket_from_config(dir().join(format!("{name}.json"))).expect("config");
-    let mut sim = Simulator::new(rocket).unwrap();
-    sim.run();
+    let text = std::fs::read_to_string(dir().join(format!("{name}.json"))).unwrap();
+    let source = DirSource(dir());
+    let converted = convert_legacy(&text, &source).expect("convert");
+    assert!(converted.warnings.is_empty(), "{:?}", converted.warnings);
+    let (vehicle, _) = Vehicle::load(&converted.config, &source).expect("valid");
+    let flight = simulate(&vehicle);
     let reference = reference(name);
     let col = |k: &str| reference.header.iter().position(|h| h == k).unwrap();
     let mut worst = [0.0f64; 6];
     let mut matched = 0;
     for row in &reference.rows {
         let t = row[col("time(s)")];
-        let Some(r) = sim.telemetry_cpp.iter().find(|r| (r.time - t).abs() < 1e-9) else {
+        let Some(s) = flight
+            .trajectory
+            .iter()
+            .find(|s| (s.time_s - t).abs() < 1e-9)
+        else {
             continue;
         };
         matched += 1;
         let diffs = [
-            (r.mass - row[col("mass(kg)")]).abs(),
-            (r.lat_deg - row[col("lat(deg)")]).abs(),
-            (r.lon_deg - row[col("lon(deg)")]).abs(),
-            (r.alt_m - row[col("altitude(m)")]).abs(),
-            (r.vel_ned.x - row[col("vel_NED_X(m/s)")])
+            (s.mass_kg - row[col("mass(kg)")]).abs(),
+            (s.latitude_deg - row[col("lat(deg)")]).abs(),
+            (s.longitude_deg - row[col("lon(deg)")]).abs(),
+            (s.altitude_m - row[col("altitude(m)")]).abs(),
+            (s.vel_north_mps - row[col("vel_NED_X(m/s)")])
                 .abs()
-                .max((r.vel_ned.y - row[col("vel_NED_Y(m/s)")]).abs())
-                .max((r.vel_ned.z - row[col("vel_NED_Z(m/s)")]).abs()),
+                .max((s.vel_east_mps - row[col("vel_NED_Y(m/s)")]).abs())
+                .max((s.vel_down_mps - row[col("vel_NED_Z(m/s)")]).abs()),
             // The C++ code keeps the last trim angles after burnout
-            if r.is_powered == 1 {
-                (r.gimbal_pitch_deg - row[col("gimbal_angle_pitch(deg)")])
+            if s.thrust_n > 0.0 {
+                (s.gimbal_pitch_deg - row[col("gimbal_angle_pitch(deg)")])
                     .abs()
-                    .max((r.gimbal_yaw_deg - row[col("gimbal_angle_yaw(deg)")]).abs())
+                    .max((s.gimbal_yaw_deg - row[col("gimbal_angle_yaw(deg)")]).abs())
             } else {
                 0.0
             },

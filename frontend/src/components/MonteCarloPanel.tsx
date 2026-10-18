@@ -9,7 +9,6 @@ import {
   casesToCsv,
   ellipseAxes,
   ellipseLabel,
-  tidyDispersion,
   type Dispersion,
   type EllipseLevel,
   type ImpactStatistics,
@@ -59,8 +58,7 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
   const total = result?.total ?? settings.count
   // Settings fold away once there are results, giving the table the full width.
   const [settingsOpen, setSettingsOpen] = useState(!result)
-  const setDispersion = (d: Partial<Dispersion>) =>
-    setSettings({ ...settings, dispersion: tidyDispersion({ ...settings.dispersion, ...d }) })
+  const setDispersion = (d: Partial<Dispersion>) => setSettings({ ...settings, dispersion: { ...settings.dispersion, ...d } })
   const level = settings.ellipse ?? DEFAULT_ELLIPSE
 
   const saveCsv = () => {
@@ -105,7 +103,7 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
           ))}
           <SelectField
             label={tr('分布', 'Distribution')}
-            value={settings.dispersion.distribution ?? 'normal'}
+            value={settings.dispersion.distribution}
             options={[
               { value: 'normal', label: tr('正規分布', 'Normal') },
               { value: 'uniform', label: tr('一様分布（±√3σ）', 'Uniform (±√3σ)') },
@@ -114,7 +112,7 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
           />
           <Toggle
             label={tr('段ごとに独立に引く', 'Draw each stage independently')}
-            checked={!!settings.dispersion.independent_stages}
+            checked={settings.dispersion.independent_stages}
             onChange={(independent_stages) => setDispersion({ independent_stages })}
           />
           <p className="mb-1 text-[11px] leading-relaxed text-ink-3">

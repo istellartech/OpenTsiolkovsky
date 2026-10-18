@@ -1,13 +1,13 @@
 // Helpers to describe a vehicle from published figures (propellant, Isp,
 // burn time, thrust) and turn it into a solver config.
 //
-// Solver conventions (src/simulator.rs):
+// Solver conventions (src/sim/):
 //  - mass_initial_kg is each stage's own fuelled mass;
 //  - stage times are measured from that stage's start (previous separation);
 //  - thrust = F_vac − A_exit · p_ambient, mass flow = F_vac / (Isp_vac · g0).
-import type { ClientConfig, ClientStageConfig } from '../lib/simulation'
+import type { Config, Curve, FreeFlight, Stage } from '../lib/config'
+import { isoUtc } from '../lib/config'
 import { G0 } from '../lib/geo'
-import { createDefaultStage } from './defaults'
 
 const P0 = 101325
 
@@ -35,8 +35,8 @@ export interface StageInput {
   shape?: [number, number][]
   /** Vacuum Isp over the burn: [fraction of burn, Isp]; `isp` is then the impulse-weighted mean */
   ispShape?: [number, number][]
-  powerMode?: number
-  freeMode?: number
+  /** Motion after burnout (default aerodynamically stable) */
+  freeFlight?: FreeFlight
 }
 
 /** Exit area implied by published vacuum and sea-level thrust. */
@@ -48,16 +48,13 @@ export const exitAreaFromDiameter = (d: number) => (Math.PI * d * d) / 4
 /** Average vacuum thrust that burns `propellant` in `burn` seconds at `isp`. */
 export const avgThrust = (propellant: number, isp: number, burn: number) => (propellant * isp * G0) / burn
 
-export function stage(s: StageInput): ClientStageConfig {
+export function stage(s: StageInput): Stage {
   const ignition = s.ignition ?? 0
   // A guidance cutoff ends the burn early; unburned propellant stays aboard.
   const end = ignition + (s.cutoff !== undefined ? Math.min(s.cutoff, s.burn) : s.burn)
   const meanVac = avgThrust(s.propellant, s.isp, s.burn)
-  // Represent the exit area as throat diameter × expansion ratio (ε fixed at 10).
-  const expansion = 10
-  const throat = Math.sqrt((4 * s.exitArea) / (Math.PI * expansion))
 
-  let profile: { time: number; value: number }[] = []
+  let thrust: Curve = Math.round(meanVac)
   if (s.shape && s.shape.length > 1) {
     // Scale the shape so its integral equals the total impulse.
     let area = 0
@@ -67,28 +64,23 @@ export function stage(s: StageInput): ClientStageConfig {
       area += ((y0 + y1) / 2) * (x1 - x0)
     }
     const k = meanVac / area
-    profile = s.shape.map(([x, y]) => ({ time: round(ignition + x * s.burn, 2), value: Math.round(y * k) }))
+    thrust = s.shape.map(([x, y]) => [round(ignition + x * s.burn, 2), Math.round(y * k)])
   }
+  const isp: Curve =
+    s.ispShape && s.ispShape.length > 0 ? s.ispShape.map(([x, v]) => [round(ignition + x * s.burn, 2), round(v, 3)]) : s.isp
 
   return {
-    ...createDefaultStage(),
-    power_mode: s.powerMode ?? 0,
-    free_mode: s.freeMode ?? 0,
     mass_initial_kg: s.mass,
     mass_dry_kg: s.mass - s.propellant,
-    burn_start_s: ignition,
-    burn_end_s: round(end, 2),
-    forced_cutoff_s: round(end, 2),
-    separation_time_s: s.separation ?? 1e6,
-    throat_diameter_m: round(throat, 4),
-    nozzle_expansion_ratio: expansion,
-    nozzle_exit_pressure_pa: 0,
-    thrust_constant: Math.round(meanVac),
-    thrust_multiplier: 1,
-    thrust_profile: profile,
-    isp_constant: s.isp,
-    isp_multiplier: 1,
-    isp_profile: (s.ispShape ?? []).map(([x, v]) => ({ time: round(ignition + x * s.burn, 2), value: round(v, 3) })),
+    engine: {
+      thrust_vac_n: thrust,
+      isp_vac_s: isp,
+      burn_start_s: ignition,
+      burn_end_s: round(end, 2),
+      nozzle_exit_area_m2: round(s.exitArea, 5),
+    },
+    free_flight: s.freeFlight ?? 'aero_stable',
+    ...(s.separation !== undefined && { separation_time_s: s.separation }),
   }
 }
 
@@ -148,7 +140,8 @@ export interface VehicleInput {
   site: { lat: number; lon: number; alt: number }
   /** UTC [y, m, d, h, min, s] */
   date: [number, number, number, number, number, number]
-  stages: ClientStageConfig[]
+  stages: Stage[]
+  /** Reference diameter of every stage without its own `aero` [m] */
   diameter: number
   ca: number | [number, number][]
   cn?: number
@@ -159,48 +152,39 @@ export interface VehicleInput {
   ballistic?: number
 }
 
-export function vehicle(v: VehicleInput): ClientConfig {
-  const fixed = !Array.isArray(v.attitude)
-  const az = fixed ? (v.attitude as { azimuth: number }).azimuth : (v.attitude as [number, number, number][])[0][1]
-  const el = fixed ? (v.attitude as { elevation: number }).elevation : (v.attitude as [number, number, number][])[0][2]
+export function vehicle(v: VehicleInput): Config {
+  const [y, mo, d, h, mi, sec] = v.date
+  const program = Array.isArray(v.attitude) ? v.attitude : null
+  const fixed = Array.isArray(v.attitude) ? null : v.attitude
+  // Constant azimuth: a single value rather than a column of equal values
+  const azimuths = program?.map(([, az]) => az) ?? []
+  const constantAzimuth = azimuths.length > 0 && azimuths.every((az) => az === azimuths[0])
+  const last = v.stages.length - 1
   return {
     name: v.name,
-    simulation: {
-      duration_s: v.duration,
-      output_step_s: v.step,
-      air_density_percent: 0,
-      integrator: { method: 'rk45', rk4_step_s: 0.1 },
-    },
+    simulation: { end_time_s: v.duration, output_step_s: v.step, integrator: { method: 'rk45' } },
     launch: {
       latitude_deg: v.site.lat,
       longitude_deg: v.site.lon,
       altitude_m: v.site.alt,
-      velocity_ned_mps: [0, 0, 0],
-      datetime_utc: { year: v.date[0], month: v.date[1], day: v.date[2], hour: v.date[3], minute: v.date[4], second: v.date[5] },
+      time_utc: isoUtc(new Date(Date.UTC(y, mo - 1, d, h, mi, sec))),
     },
-    stages: v.stages,
-    aerodynamics: {
-      body_diameter_m: v.diameter,
-      cn_constant: v.cn ?? 0.2,
-      cn_multiplier: 1,
-      cn_profile: [],
-      ca_constant: typeof v.ca === 'number' ? v.ca : v.ca[0][1],
-      ca_multiplier: 1,
-      ca_profile: typeof v.ca === 'number' ? [] : v.ca.map(([mach, value]) => ({ mach, value })),
-      ballistic_coefficient: v.ballistic ?? 100,
-    },
-    attitude: {
-      elevation_deg: el,
-      azimuth_deg: az,
-      pitch_offset_deg: 0,
-      yaw_offset_deg: 0,
-      roll_offset_deg: 0,
-      gyro_bias_deg_h: [0, 0, 0],
-      profile: fixed
-        ? []
-        : (v.attitude as [number, number, number][]).map(([time, azimuth_deg, elevation_deg]) => ({ time, azimuth_deg, elevation_deg })),
-    },
-    wind: { speed_mps: 0, direction_deg: 0, profile: [] },
+    attitude: program
+      ? {
+          azimuth_deg: constantAzimuth ? azimuths[0] : program.map(([t, az]) => [t, az] as [number, number]),
+          elevation_deg: program.map(([t, , el]) => [t, el] as [number, number]),
+        }
+      : { azimuth_deg: fixed!.azimuth, elevation_deg: fixed!.elevation },
+    stages: v.stages.map(({ separation_time_s, ...st }, i) => ({
+      ...st,
+      aero: st.aero ?? {
+        diameter_m: v.diameter,
+        ca: v.ca,
+        cn_alpha_per_rad: v.cn ?? 0.2,
+        ballistic_coefficient_kg_m2: v.ballistic ?? 100,
+      },
+      ...(i < last && { separation_time_s: separation_time_s ?? 0 }),
+    })),
   }
 }
 

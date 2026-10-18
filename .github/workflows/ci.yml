@@ -31,20 +31,6 @@ jobs:
       - name: Test
         run: cargo test --locked
 
-  legacy_cpp:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: legacy_cpp
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libboost-dev
-      - name: Build legacy C++
-        run: |
-          make
-          ./bin/OpenTsiolkovsky ../examples/param_sample_01.json || true
-
   frontend:
     runs-on: ubuntu-latest
     defaults:

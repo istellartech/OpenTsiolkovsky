@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test'
 import { PRESET_OPTIONS } from '../config/presets'
-import { asLegacyBundle, buildShareUrl, decodePayload, encodePayload, parseShareHash } from './share'
+import { buildShareUrl, decodePayload, encodePayload, parseShareHash } from './share'
 
 describe('share links', () => {
   it('round-trips a config through the URL fragment', async () => {
@@ -30,20 +30,13 @@ describe('share links', () => {
     await expect(decodePayload(data.slice(0, 10))).rejects.toThrow()
   })
 
-  it('reads CLI parameter files linked with their CSV tables', () => {
-    const param = { 'name(str)': 'cli' }
-    const bundle = asLegacyBundle({ legacy: param, files: { 'data/thrust.csv': 't,f\n0,1\n', bad: 3 } })
-    expect(bundle?.param).toEqual(param)
-    expect([...(bundle?.files ?? [])]).toEqual([['thrust.csv', 't,f\n0,1\n']])
-    expect(asLegacyBundle(param)?.files.size).toBe(0)
-    expect(asLegacyBundle({ name: 'web config' })).toBeNull()
-    expect(asLegacyBundle(null)).toBeNull()
-  })
-
-  it('decodes a payload deflated by the CLI', async () => {
-    // `agent::encode_share_payload` (Rust, miniz_oxide) of this bundle
-    const cli = '3c9BCoAgEAXQu_xVwRC19SxtBpkiMBeNSCJzd_Uabt7-VVxPEIWr4M1rhkOifMadjimAEYLc7MsoRn5l0fStvfnDrAE'
-    const csv = 't,v\n' + '0,1\n'.repeat(40)
-    expect(await decodePayload(cli)).toEqual({ legacy: { 'name(str)': 'x' }, files: { 'a.csv': csv } })
+  it('decodes a link written by the CLI', async () => {
+    // `openTsiolkovsky-cli share` of a minimal configuration (Rust, miniz_oxide)
+    const cli =
+      'TZBBbsMgEEXvMms3miTKIpyjq1YVmuKxPSrgyAxVVct3L2CrisTqi__-gxUiBQYDP9BBkpA9qcwRzAoce6sS2CYwZzxhB3PWR1ablB8tPOHWgacc3VQLtaq5Z9vzCOZ6qxU_x_EpPF_vNSV_3AxgGrntZHVF5IKIL3gu5xXRtPMGZYd079Ql-i2mOu3MBmDP3818z-7Y3JLSyMX0fYVAKVmJokLeflUVbEXiZa7IXso_KC-70q0DRwf6k7yXpOKsm3kYxAlHLQgbLgelLA0Lsx28jJOWN_xXYPvY_gA'
+    const config = (await decodePayload(cli)) as { name: string; stages: { mass_initial_kg: number }[]; launch: { time_utc: string } }
+    expect(config.name).toBe('x')
+    expect(config.stages[0].mass_initial_kg).toBe(100)
+    expect(config.launch.time_utc).toBe('2000-01-01T00:00:00Z')
   })
 })

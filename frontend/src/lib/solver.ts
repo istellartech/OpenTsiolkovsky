@@ -3,13 +3,13 @@
 // The WASM solver runs synchronously, so a run in progress cannot be
 // interrupted from inside; a superseded run is cancelled by terminating its
 // worker and starting a fresh one.
-import type { ClientConfig } from './simulation'
+import type { Config } from './config'
 import { runSimulation } from './simulation'
 import { trackFromOutput, type Track } from './trajectory'
 
 export interface SolverRequest {
   id: number
-  config: ClientConfig
+  config: Config
 }
 
 export type SolverResponse = { id: number; ok: true; track: Track | null } | { id: number; ok: false; error: string }
@@ -37,7 +37,7 @@ class Solver {
   private useWorker = typeof Worker !== 'undefined'
 
   /** Solve `config`; a call made while another is running cancels the older one. */
-  run(config: ClientConfig): Promise<Track | null> {
+  run(config: Config): Promise<Track | null> {
     if (!this.useWorker) return runSimulation(config).then(trackFromOutput)
     if (this.pending) {
       this.pending.reject(new SolverCancelled())

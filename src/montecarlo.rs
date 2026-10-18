@@ -1,63 +1,51 @@
 //! Monte Carlo dispersion analysis
 //!
-//! Each case perturbs the nominal vehicle with Gaussian draws (thrust, Isp,
-//! mass, drag, launch attitude, wind, air density), flies it together with
-//! its spent stages and dumping products, and records where every body comes
-//! down. `impact_statistics` reduces the cases to a mean impact point and a
-//! 1-sigma error ellipse per body.
+//! Each case perturbs the nominal vehicle with random draws (thrust, Isp,
+//! mass, drag, attitude, wind, air density, ...), flies it together with
+//! its spent stages and jettisoned bodies, and records where every body
+//! comes down. [`impact_statistics`] reduces the cases to a mean impact
+//! point and error ellipses per body.
 
 use crate::math::constants::WGS84_A;
-use crate::rocket::Rocket;
-use crate::simulator::{FallBodyKind, ImpactPoint, Simulator, impact_point};
+use crate::sim::{ImpactPoint, simulate};
+use crate::vehicle::{NormalForce, Vehicle};
 use serde::{Deserialize, Serialize};
 
-/// 1-sigma dispersions (Gaussian, zero mean)
+/// 1-sigma dispersions (zero mean)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Dispersion {
-    /// Thrust scale [%]
+    /// Thrust scale: the burn is shorter in proportion, same impulse [%]
     pub thrust_percent: f64,
-    /// Specific impulse scale [%]
+    /// Specific impulse scale: thrust scales too, same mass flow [%]
     pub isp_percent: f64,
-    /// Initial mass of every stage [%]
+    /// Initial and dry mass of every stage [%]
     pub mass_percent: f64,
     /// Axial force coefficient (ballistic coefficients scale inversely) [%]
     pub drag_percent: f64,
+    /// Normal force coefficient [%]
+    pub normal_percent: f64,
+    /// Stage separation time [s]
+    pub separation_time_s: f64,
     /// Attitude elevation offset [deg]
     pub elevation_deg: f64,
     /// Attitude azimuth offset [deg]
     pub azimuth_deg: f64,
+    /// Wind speed scale, all altitudes [%] (applied before the offset)
+    pub wind_speed_percent: f64,
     /// Wind speed offset, all altitudes [m/s]
     pub wind_speed_mps: f64,
     /// Wind direction offset, all altitudes [deg]
     pub wind_direction_deg: f64,
-    /// Air density variation [%] (U.S. Standard Atmosphere profile)
+    /// Air density: added to the seasonal variation, or to the density
+    /// deviation table when one is given [%]
     pub air_density_percent: f64,
-    /// Normal force coefficient [%]
-    #[serde(skip_serializing_if = "is_zero")]
-    pub normal_percent: f64,
-    /// Stage separation time [s]
-    #[serde(skip_serializing_if = "is_zero")]
-    pub separation_time_s: f64,
-    /// Wind speed scale, all altitudes [%] (applied before the offset)
-    #[serde(skip_serializing_if = "is_zero")]
-    pub wind_speed_percent: f64,
     /// Shape of the draws (the values above are 1-sigma either way)
-    #[serde(skip_serializing_if = "is_default")]
     pub distribution: Distribution,
-    /// Draw thrust, Isp, mass, drag, CN and separation time for every stage
-    /// separately (otherwise one draw scales all stages alike)
-    #[serde(skip_serializing_if = "is_default")]
+    /// Draw thrust, Isp, mass, drag, normal force and separation time for
+    /// every stage separately (otherwise one draw scales all stages alike)
     pub independent_stages: bool,
-}
-
-fn is_zero(v: &f64) -> bool {
-    *v == 0.0
-}
-
-fn is_default<T: Default + PartialEq>(v: &T) -> bool {
-    *v == T::default()
 }
 
 /// Probability distribution of a dispersed parameter
@@ -79,45 +67,42 @@ impl Default for Dispersion {
             isp_percent: 0.5,
             mass_percent: 1.0,
             drag_percent: 5.0,
+            normal_percent: 0.0,
+            separation_time_s: 0.0,
             elevation_deg: 0.5,
             azimuth_deg: 0.5,
+            wind_speed_percent: 0.0,
             wind_speed_mps: 2.0,
             wind_direction_deg: 10.0,
             air_density_percent: 5.0,
-            normal_percent: 0.0,
-            separation_time_s: 0.0,
-            wind_speed_percent: 0.0,
             distribution: Distribution::Normal,
             independent_stages: false,
         }
     }
 }
 
-/// Perturbation drawn for one case, in the units of `Dispersion`
+/// Perturbation drawn for one case, in the units of [`Dispersion`]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Perturbation {
     pub thrust_percent: f64,
     pub isp_percent: f64,
     pub mass_percent: f64,
     pub drag_percent: f64,
+    pub normal_percent: f64,
+    pub separation_time_s: f64,
     pub elevation_deg: f64,
     pub azimuth_deg: f64,
+    pub wind_speed_percent: f64,
     pub wind_speed_mps: f64,
     pub wind_direction_deg: f64,
     pub air_density_percent: f64,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub normal_percent: f64,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub separation_time_s: f64,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub wind_speed_percent: f64,
-    /// Per-stage draws (stage 1 first) when the dispersion asks for
-    /// independent stages; the scalar fields then hold stage 1's values
+    /// Per-stage draws (stage 1 first) with `independent_stages`; the
+    /// common fields then hold stage 1's values
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stages: Vec<StagePerturbation>,
 }
 
-/// Perturbation of one stage (see `Dispersion::independent_stages`)
+/// Perturbation of one stage (see [`Dispersion::independent_stages`])
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct StagePerturbation {
     pub thrust_percent: f64,
@@ -128,12 +113,70 @@ pub struct StagePerturbation {
     pub separation_time_s: f64,
 }
 
+impl Perturbation {
+    /// CSV column names of [`Perturbation::values`]
+    pub const COLUMNS: [&str; 12] = [
+        "thrust_percent",
+        "isp_percent",
+        "mass_percent",
+        "drag_percent",
+        "normal_percent",
+        "separation_time_s",
+        "elevation_deg",
+        "azimuth_deg",
+        "wind_speed_percent",
+        "wind_speed_mps",
+        "wind_direction_deg",
+        "air_density_percent",
+    ];
+
+    pub fn values(&self) -> [f64; 12] {
+        [
+            self.thrust_percent,
+            self.isp_percent,
+            self.mass_percent,
+            self.drag_percent,
+            self.normal_percent,
+            self.separation_time_s,
+            self.elevation_deg,
+            self.azimuth_deg,
+            self.wind_speed_percent,
+            self.wind_speed_mps,
+            self.wind_direction_deg,
+            self.air_density_percent,
+        ]
+    }
+}
+
+impl StagePerturbation {
+    /// CSV column names of [`StagePerturbation::values`]
+    pub const COLUMNS: [&str; 6] = [
+        "thrust_percent",
+        "isp_percent",
+        "mass_percent",
+        "drag_percent",
+        "normal_percent",
+        "separation_time_s",
+    ];
+
+    pub fn values(&self) -> [f64; 6] {
+        [
+            self.thrust_percent,
+            self.isp_percent,
+            self.mass_percent,
+            self.drag_percent,
+            self.normal_percent,
+            self.separation_time_s,
+        ]
+    }
+}
+
 /// SplitMix64: small, seedable and identical on every platform (incl. WASM)
 struct Rng(u64);
 
 impl Rng {
     fn new(seed: u64, index: u32) -> Self {
-        let mut rng = Rng(seed ^ (index as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let mut rng = Rng(seed ^ u64::from(index).wrapping_mul(0x9E37_79B9_7F4A_7C15));
         rng.next_u64(); // decorrelate neighbouring seeds
         rng
     }
@@ -167,129 +210,120 @@ impl Rng {
 }
 
 impl Perturbation {
-    /// Draw the perturbation of case `index` for `seed` (single stage)
-    pub fn draw(dispersion: &Dispersion, seed: u64, index: u32) -> Self {
-        Self::draw_for(dispersion, seed, index, 1)
-    }
-
-    /// Draw the perturbation of case `index` for a vehicle of
-    /// `stage_count` stages. The draws of the original nine parameters
-    /// come first, so they do not change when other dispersions are added.
-    pub fn draw_for(dispersion: &Dispersion, seed: u64, index: u32, stage_count: usize) -> Self {
+    /// Draw the perturbation of case `index` for a vehicle of `stage_count`
+    /// stages; the same seed and index always give the same draw
+    pub fn draw(dispersion: &Dispersion, seed: u64, index: u32, stage_count: usize) -> Self {
         let mut rng = Rng::new(seed, index);
         let shape = dispersion.distribution;
         let mut n = |sigma: f64| sigma * rng.standard(shape);
+        let d = dispersion;
         let mut p = Self {
-            thrust_percent: n(dispersion.thrust_percent),
-            isp_percent: n(dispersion.isp_percent),
-            mass_percent: n(dispersion.mass_percent),
-            drag_percent: n(dispersion.drag_percent),
-            elevation_deg: n(dispersion.elevation_deg),
-            azimuth_deg: n(dispersion.azimuth_deg),
-            wind_speed_mps: n(dispersion.wind_speed_mps),
-            wind_direction_deg: n(dispersion.wind_direction_deg),
-            air_density_percent: n(dispersion.air_density_percent),
-            normal_percent: n(dispersion.normal_percent),
-            separation_time_s: n(dispersion.separation_time_s),
-            wind_speed_percent: n(dispersion.wind_speed_percent),
+            thrust_percent: n(d.thrust_percent),
+            isp_percent: n(d.isp_percent),
+            mass_percent: n(d.mass_percent),
+            drag_percent: n(d.drag_percent),
+            normal_percent: n(d.normal_percent),
+            separation_time_s: n(d.separation_time_s),
+            elevation_deg: n(d.elevation_deg),
+            azimuth_deg: n(d.azimuth_deg),
+            wind_speed_percent: n(d.wind_speed_percent),
+            wind_speed_mps: n(d.wind_speed_mps),
+            wind_direction_deg: n(d.wind_direction_deg),
+            air_density_percent: n(d.air_density_percent),
             stages: Vec::new(),
         };
-        if dispersion.independent_stages {
-            p.stages.push(StagePerturbation {
-                thrust_percent: p.thrust_percent,
-                isp_percent: p.isp_percent,
-                mass_percent: p.mass_percent,
-                drag_percent: p.drag_percent,
-                normal_percent: p.normal_percent,
-                separation_time_s: p.separation_time_s,
-            });
+        if d.independent_stages {
+            p.stages.push(p.common_stage());
             for _ in 1..stage_count {
                 p.stages.push(StagePerturbation {
-                    thrust_percent: n(dispersion.thrust_percent),
-                    isp_percent: n(dispersion.isp_percent),
-                    mass_percent: n(dispersion.mass_percent),
-                    drag_percent: n(dispersion.drag_percent),
-                    normal_percent: n(dispersion.normal_percent),
-                    separation_time_s: n(dispersion.separation_time_s),
+                    thrust_percent: n(d.thrust_percent),
+                    isp_percent: n(d.isp_percent),
+                    mass_percent: n(d.mass_percent),
+                    drag_percent: n(d.drag_percent),
+                    normal_percent: n(d.normal_percent),
+                    separation_time_s: n(d.separation_time_s),
                 });
             }
         }
         p
     }
 
-    /// Stage perturbation of stage `index` (the common values when the
-    /// stages are not drawn separately)
+    fn common_stage(&self) -> StagePerturbation {
+        StagePerturbation {
+            thrust_percent: self.thrust_percent,
+            isp_percent: self.isp_percent,
+            mass_percent: self.mass_percent,
+            drag_percent: self.drag_percent,
+            normal_percent: self.normal_percent,
+            separation_time_s: self.separation_time_s,
+        }
+    }
+
+    /// Perturbation of stage `index`
     fn stage(&self, index: usize) -> StagePerturbation {
         self.stages
             .get(index)
             .cloned()
-            .unwrap_or(StagePerturbation {
-                thrust_percent: self.thrust_percent,
-                isp_percent: self.isp_percent,
-                mass_percent: self.mass_percent,
-                drag_percent: self.drag_percent,
-                normal_percent: self.normal_percent,
-                separation_time_s: self.separation_time_s,
-            })
+            .unwrap_or_else(|| self.common_stage())
     }
 
-    /// Copy of `rocket` with this perturbation applied
-    pub fn apply(&self, rocket: &Rocket) -> Rocket {
+    /// Copy of `vehicle` with this perturbation applied
+    pub fn apply(&self, vehicle: &Vehicle) -> Vehicle {
         let scale = |percent: f64| (1.0 + percent / 100.0).max(0.0);
-        let elevation = |el: f64| (el + self.elevation_deg).clamp(-90.0, 90.0);
-
-        let mut out = rocket.clone();
-        for (i, stage) in out.stage_configs.iter_mut().enumerate() {
+        let mut out = vehicle.clone();
+        for (i, stage) in out.stages.iter_mut().enumerate() {
             let sp = self.stage(i);
-            let (thrust, isp, mass) = (
-                scale(sp.thrust_percent),
-                scale(sp.isp_percent),
-                scale(sp.mass_percent),
-            );
+            let thrust = scale(sp.thrust_percent).max(1e-6);
+            let isp = scale(sp.isp_percent);
+            let mass = scale(sp.mass_percent);
             let drag = scale(sp.drag_percent).max(1e-6);
             let normal = scale(sp.normal_percent);
-            // The coefficients act on constant and tabulated values alike:
-            // thrust scales the burn rate (same impulse, shorter burn), Isp
-            // the impulse (same mass flow)
-            stage.thrust.thrust_coefficient *= thrust;
-            stage.thrust.isp_coefficient *= isp;
+            if let Some(e) = &mut stage.engine {
+                // Faster burn of the same impulse; Isp scales thrust at the
+                // same mass flow
+                e.thrust = e.thrust.compressed(thrust).scaled(thrust * isp);
+                e.isp = e.isp.compressed(thrust).scaled(isp);
+                e.burn_end = e.burn_start + (e.burn_end - e.burn_start) / thrust;
+            }
             stage.mass_initial *= mass;
             stage.mass_dry = stage.mass_dry.map(|m| m * mass);
-            stage.aero.const_axial_coefficient *= drag;
-            stage.aero.axial_multiplier *= drag;
+            stage.aero.ca = stage.aero.ca.scaled(drag);
+            stage.aero.ca_power_off = stage.aero.ca_power_off.as_ref().map(|c| c.scaled(drag));
             stage.aero.ballistic_coefficient /= drag;
-            stage.dumping_product.dumping_product_ballistic_coefficient /= drag;
-            stage.aero.const_normal_coefficient *= normal;
-            stage.aero.normal_multiplier *= normal;
-            if stage.stage.following_stage_exists {
-                stage.stage.separation_time =
-                    (stage.stage.separation_time + sp.separation_time_s).max(0.0);
+            for j in &mut stage.jettisons {
+                j.ballistic_coefficient /= drag;
             }
-            stage.attitude.const_azimuth += self.azimuth_deg;
-            stage.attitude.const_elevation = elevation(stage.attitude.const_elevation);
-        }
-        out.config.stages = out.stage_configs.clone();
-        if let Some(profile) = out.attitude_data.as_mut() {
-            for (_, az, el) in profile.iter_mut() {
-                *az += self.azimuth_deg;
-                *el = elevation(*el);
+            stage.aero.normal = match &stage.aero.normal {
+                NormalForce::Slope(s) => NormalForce::Slope(s.scaled(normal)),
+                NormalForce::Table(t) => NormalForce::Table(t.scaled(normal)),
+            };
+            if let Some(t) = &mut stage.separation_time {
+                *t = (*t + sp.separation_time_s).max(0.0);
             }
         }
+
+        let att = &mut out.attitude;
+        att.azimuth = att.azimuth.offset(self.azimuth_deg);
+        let del = self.elevation_deg;
+        att.elevation = att.elevation.map(|el| (el + del).clamp(-90.0, 90.0));
 
         let wind_scale = scale(self.wind_speed_percent);
-        let wind = &mut out.config.wind.const_wind;
-        wind[0] = (wind[0] * wind_scale + self.wind_speed_mps).max(0.0);
-        wind[1] += self.wind_direction_deg;
-        if let Some(profile) = out.wind_data.as_mut() {
-            for (_, speed, dir) in profile.iter_mut() {
-                *speed = (*speed * wind_scale + self.wind_speed_mps).max(0.0);
-                *dir += self.wind_direction_deg;
-            }
+        for row in &mut out.wind.rows {
+            row[1] = (row[1] * wind_scale + self.wind_speed_mps).max(0.0);
+            row[2] += self.wind_direction_deg;
         }
 
-        let calc = &mut out.config.calculate_condition;
-        calc.air_density_variation =
-            (calc.air_density_variation + self.air_density_percent).clamp(-100.0, 100.0);
+        let atm = &mut out.atmosphere;
+        match &atm.density_deviation {
+            Some(table) => {
+                atm.density_deviation =
+                    Some(table.map(|v| (v + self.air_density_percent).max(-100.0)))
+            }
+            None => {
+                atm.seasonal_variation =
+                    (atm.seasonal_variation + self.air_density_percent).clamp(-100.0, 100.0)
+            }
+        }
         out
     }
 }
@@ -297,7 +331,7 @@ impl Perturbation {
 /// Where one body of a case came down
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BodyImpact {
-    /// `vehicle`, `stage<N>` (spent stage) or `stage<N>_dump`
+    /// `vehicle`, or the id of a released body (`stage1`, `stage2_fairing`, ...)
     pub body: String,
     pub impact: Option<ImpactPoint>,
 }
@@ -307,35 +341,37 @@ pub struct BodyImpact {
 pub struct CaseResult {
     pub index: u32,
     pub perturbation: Perturbation,
+    /// NaN when the case produced no trajectory
     pub max_altitude_m: f64,
     pub impacts: Vec<BodyImpact>,
 }
 
-/// Fly case `index` of the dispersion run
-pub fn run_case(rocket: &Rocket, dispersion: &Dispersion, seed: u64, index: u32) -> CaseResult {
-    let perturbation = Perturbation::draw_for(dispersion, seed, index, rocket.stage_count());
-    let mut impacts = Vec::new();
-    let mut max_altitude_m = f64::NAN;
-    if let Ok(mut sim) = Simulator::new(perturbation.apply(rocket)) {
-        let trajectory = sim.run();
-        max_altitude_m = trajectory
+impl CaseResult {
+    pub fn impact_of(&self, body: &str) -> Option<ImpactPoint> {
+        self.impacts
             .iter()
-            .map(|s| s.altitude)
-            .fold(f64::NAN, f64::max);
-        impacts.push(BodyImpact {
-            body: "vehicle".to_string(),
-            impact: impact_point(&trajectory),
-        });
-        for body in sim.simulate_fall_bodies() {
-            impacts.push(BodyImpact {
-                body: match body.kind {
-                    FallBodyKind::Stage => format!("stage{}", body.stage),
-                    FallBodyKind::Dump => format!("stage{}_dump", body.stage),
-                },
-                impact: body.impact,
-            });
-        }
+            .find(|i| i.body == body)
+            .and_then(|i| i.impact)
     }
+}
+
+/// Fly case `index` of a dispersion run
+pub fn run_case(vehicle: &Vehicle, dispersion: &Dispersion, seed: u64, index: u32) -> CaseResult {
+    let perturbation = Perturbation::draw(dispersion, seed, index, vehicle.stage_count());
+    let flight = simulate(&perturbation.apply(vehicle));
+    let max_altitude_m = flight
+        .trajectory
+        .iter()
+        .map(|s| s.altitude_m)
+        .fold(f64::NAN, f64::max);
+    let mut impacts = vec![BodyImpact {
+        body: "vehicle".to_string(),
+        impact: flight.impact(),
+    }];
+    impacts.extend(flight.bodies.into_iter().map(|b| BodyImpact {
+        body: b.id,
+        impact: b.impact,
+    }));
     CaseResult {
         index,
         perturbation,
@@ -346,7 +382,7 @@ pub fn run_case(rocket: &Rocket, dispersion: &Dispersion, seed: u64, index: u32)
 
 /// Run `count` cases; uses every CPU core where threads are available
 pub fn run_cases(
-    rocket: &Rocket,
+    vehicle: &Vehicle,
     dispersion: &Dispersion,
     seed: u64,
     count: u32,
@@ -363,7 +399,7 @@ pub fn run_cases(
                     scope.spawn(move || {
                         (w..count)
                             .step_by(workers as usize)
-                            .map(|i| run_case(rocket, dispersion, seed, i))
+                            .map(|i| run_case(vehicle, dispersion, seed, i))
                             .collect::<Vec<_>>()
                     })
                 })
@@ -379,8 +415,55 @@ pub fn run_cases(
     #[cfg(target_arch = "wasm32")]
     {
         (0..count)
-            .map(|i| run_case(rocket, dispersion, seed, i))
+            .map(|i| run_case(vehicle, dispersion, seed, i))
             .collect()
+    }
+}
+
+/// A complete Monte Carlo run
+#[derive(Debug, Clone)]
+pub struct MonteCarlo {
+    pub seed: u64,
+    pub dispersion: Dispersion,
+    pub cases: Vec<CaseResult>,
+    pub statistics: Vec<ImpactStatistics>,
+}
+
+/// Overview of a Monte Carlo run (`montecarlo_summary.json`)
+#[derive(Debug, Clone, Serialize)]
+pub struct MonteCarloSummary {
+    pub cases: usize,
+    /// Cases that produced no trajectory
+    pub failed_cases: usize,
+    pub seed: u64,
+    pub dispersion: Dispersion,
+    pub statistics: Vec<ImpactStatistics>,
+}
+
+impl MonteCarlo {
+    pub fn run(vehicle: &Vehicle, dispersion: &Dispersion, seed: u64, count: u32) -> Self {
+        let cases = run_cases(vehicle, dispersion, seed, count);
+        let statistics = impact_statistics(&cases);
+        Self {
+            seed,
+            dispersion: dispersion.clone(),
+            cases,
+            statistics,
+        }
+    }
+
+    pub fn summary(&self) -> MonteCarloSummary {
+        MonteCarloSummary {
+            cases: self.cases.len(),
+            failed_cases: self
+                .cases
+                .iter()
+                .filter(|c| c.max_altitude_m.is_nan())
+                .count(),
+            seed: self.seed,
+            dispersion: self.dispersion.clone(),
+            statistics: self.statistics.clone(),
+        }
     }
 }
 
@@ -415,7 +498,7 @@ fn wrap_deg(d: f64) -> f64 {
     (d + 180.0).rem_euclid(360.0) - 180.0
 }
 
-/// Mean impact point and error ellipse of every body, in first-seen order
+/// Mean impact point and error ellipses of every body, in first-seen order
 pub fn impact_statistics(cases: &[CaseResult]) -> Vec<ImpactStatistics> {
     let mut bodies: Vec<String> = Vec::new();
     for case in cases {
@@ -431,8 +514,8 @@ pub fn impact_statistics(cases: &[CaseResult]) -> Vec<ImpactStatistics> {
         .map(|body| {
             let points: Vec<(f64, f64)> = cases
                 .iter()
-                .filter_map(|c| c.impacts.iter().find(|i| i.body == body))
-                .filter_map(|i| i.impact.map(|p| (p.latitude_deg, p.longitude_deg)))
+                .filter_map(|c| c.impact_of(&body))
+                .map(|p| (p.latitude_deg, p.longitude_deg))
                 .collect();
             let n = points.len();
             let mut stats = ImpactStatistics {
@@ -510,36 +593,39 @@ pub fn impact_statistics(cases: &[CaseResult]) -> Vec<ImpactStatistics> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rocket::ClientConfig;
+    use crate::vehicle::test_vehicle;
     use approx::assert_relative_eq;
 
-    fn rocket() -> Rocket {
-        let json = r#"{
+    fn vehicle() -> Vehicle {
+        test_vehicle(
+            r#"{
             "name": "mc",
-            "simulation": { "duration_s": 400, "output_step_s": 1 },
-            "launch": {
-                "latitude_deg": 31.25, "longitude_deg": 131.08,
-                "datetime_utc": { "year": 2020, "month": 1, "day": 1, "hour": 0, "minute": 0, "second": 0 }
-            },
+            "simulation": { "end_time_s": 400 },
+            "launch": { "latitude_deg": 31.25, "longitude_deg": 131.08 },
+            "attitude": { "elevation_deg": 80, "azimuth_deg": 90 },
             "stages": [
-                { "mass_initial_kg": 500, "burn_end_s": 10, "forced_cutoff_s": 10, "separation_time_s": 12,
-                  "thrust_constant": 20000, "isp_constant": 200 },
-                { "mass_initial_kg": 100, "burn_end_s": 8, "forced_cutoff_s": 8,
-                  "thrust_constant": 4000, "isp_constant": 220 }
-            ],
-            "aerodynamics": { "body_diameter_m": 0.3, "ca_constant": 0.4, "ballistic_coefficient": 300 },
-            "attitude": { "elevation_deg": 80, "azimuth_deg": 90 }
-        }"#;
-        serde_json::from_str::<ClientConfig>(json)
-            .unwrap()
-            .into_rocket()
+                { "mass_initial_kg": 500, "separation_time_s": 12,
+                  "engine": { "thrust_vac_n": 20000, "isp_vac_s": 200, "burn_end_s": 10 },
+                  "aero": { "diameter_m": 0.3, "ca": 0.4, "ballistic_coefficient_kg_m2": 300 } },
+                { "mass_initial_kg": 100,
+                  "engine": { "thrust_vac_n": 4000, "isp_vac_s": 220, "burn_end_s": 8 },
+                  "aero": { "diameter_m": 0.3, "ca": 0.4, "ballistic_coefficient_kg_m2": 300 } }
+            ]
+        }"#,
+        )
     }
 
     #[test]
     fn draws_are_deterministic_and_scaled() {
         let d = Dispersion::default();
-        assert_eq!(Perturbation::draw(&d, 7, 3), Perturbation::draw(&d, 7, 3));
-        assert_ne!(Perturbation::draw(&d, 7, 3), Perturbation::draw(&d, 7, 4));
+        assert_eq!(
+            Perturbation::draw(&d, 7, 3, 1),
+            Perturbation::draw(&d, 7, 3, 1)
+        );
+        assert_ne!(
+            Perturbation::draw(&d, 7, 3, 1),
+            Perturbation::draw(&d, 7, 4, 1)
+        );
 
         let zero = Dispersion {
             thrust_percent: 0.0,
@@ -553,12 +639,12 @@ mod tests {
             air_density_percent: 0.0,
             ..Dispersion::default()
         };
-        assert_eq!(Perturbation::draw(&zero, 1, 0), Perturbation::default());
+        assert_eq!(Perturbation::draw(&zero, 1, 0, 1), Perturbation::default());
 
         // Sample sigma close to the requested one
         let n = 4000;
         let draws: Vec<f64> = (0..n)
-            .map(|i| Perturbation::draw(&d, 42, i).wind_direction_deg)
+            .map(|i| Perturbation::draw(&d, 42, i, 1).wind_direction_deg)
             .collect();
         let mean = draws.iter().sum::<f64>() / n as f64;
         let sigma = (draws.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64).sqrt();
@@ -568,7 +654,7 @@ mod tests {
 
     #[test]
     fn apply_scales_vehicle() {
-        let rocket = rocket();
+        let vehicle = vehicle();
         let p = Perturbation {
             thrust_percent: 10.0,
             mass_percent: -5.0,
@@ -578,44 +664,57 @@ mod tests {
             air_density_percent: 200.0,
             ..Default::default()
         };
-        let out = p.apply(&rocket);
-        let s = out.stage_config(0);
-        assert_relative_eq!(s.thrust.thrust_coefficient, 1.1, epsilon = 1e-12);
-        assert_relative_eq!(out.thrust_at(0, 0.0), 22000.0, epsilon = 1e-9);
+        let out = p.apply(&vehicle);
+        let s = &out.stages[0];
+        let e = s.engine.as_ref().unwrap();
+        assert_relative_eq!(e.thrust.eval(0.0), 22000.0, epsilon = 1e-9);
         // Same impulse: the burn is 1/1.1 as long
-        assert_relative_eq!(out.burn_end_time(0), 10.0 / 1.1, epsilon = 1e-9);
+        assert_relative_eq!(e.burn_end, 10.0 / 1.1, epsilon = 1e-9);
         assert_relative_eq!(s.mass_initial, 475.0, epsilon = 1e-9);
-        assert_relative_eq!(s.aero.const_axial_coefficient, 0.5, epsilon = 1e-12);
+        assert_relative_eq!(s.ca(0.5, true), 0.5, epsilon = 1e-12);
         assert_relative_eq!(s.aero.ballistic_coefficient, 240.0, epsilon = 1e-9);
-        assert_eq!(s.attitude.const_elevation, 90.0); // clamped
-        assert_eq!(out.config.stages[1].mass_initial, 95.0);
-        assert_eq!(out.config.wind.const_wind[0], 3.0);
-        assert_eq!(out.config.calculate_condition.air_density_variation, 100.0);
+        assert_eq!(out.attitude.elevation.eval(0.0), 90.0); // clamped
+        assert_eq!(out.stages[1].mass_initial, 95.0);
+        assert_eq!(out.wind.rows[0][1], 3.0);
+        assert_eq!(out.atmosphere.seasonal_variation, 100.0);
     }
 
     #[test]
-    fn new_dispersions_keep_the_original_draws() {
-        let base = Dispersion::default();
+    fn independent_stages_draw_per_stage() {
         let more = Dispersion {
             normal_percent: 5.0,
             separation_time_s: 0.2,
-            wind_speed_percent: 10.0,
             independent_stages: true,
             ..Dispersion::default()
         };
-        let (a, b) = (
-            Perturbation::draw_for(&base, 3, 7, 3),
-            Perturbation::draw_for(&more, 3, 7, 3),
+        let p = Perturbation::draw(&more, 3, 7, 3);
+        assert_eq!(p.stages.len(), 3);
+        assert_eq!(p.stages[0].thrust_percent, p.thrust_percent);
+        assert_ne!(p.stages[1].thrust_percent, p.stages[2].thrust_percent);
+
+        let p = Perturbation {
+            stages: vec![
+                StagePerturbation {
+                    thrust_percent: 10.0,
+                    separation_time_s: 0.5,
+                    ..Default::default()
+                },
+                StagePerturbation {
+                    thrust_percent: -10.0,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let out = p.apply(&vehicle());
+        let thrust = |i: usize| out.stages[i].engine.as_ref().unwrap().thrust.eval(0.0);
+        assert_relative_eq!(thrust(0), 22000.0, epsilon = 1e-9);
+        assert_relative_eq!(thrust(1), 4000.0 * 0.9, epsilon = 1e-9);
+        assert_relative_eq!(
+            out.stages[0].separation_time.unwrap(),
+            12.5,
+            epsilon = 1e-12
         );
-        assert_eq!(a.thrust_percent, b.thrust_percent);
-        assert_eq!(a.air_density_percent, b.air_density_percent);
-        assert!(a.stages.is_empty());
-        assert_eq!(b.stages.len(), 3);
-        assert_eq!(b.stages[0].thrust_percent, b.thrust_percent);
-        assert_ne!(b.stages[1].thrust_percent, b.stages[2].thrust_percent);
-        // Defaults serialize exactly as before (the web app compares them)
-        let json = serde_json::to_value(Dispersion::default()).unwrap();
-        assert_eq!(json.as_object().unwrap().len(), 9);
     }
 
     #[test]
@@ -626,7 +725,7 @@ mod tests {
             ..Dispersion::default()
         };
         let draws: Vec<f64> = (0..20_000)
-            .map(|i| Perturbation::draw(&d, 11, i).thrust_percent)
+            .map(|i| Perturbation::draw(&d, 11, i, 1).thrust_percent)
             .collect();
         let limit = 2.0 * 3f64.sqrt();
         assert!(draws.iter().all(|x| x.abs() <= limit));
@@ -635,86 +734,41 @@ mod tests {
     }
 
     #[test]
-    fn independent_stages_scale_each_stage() {
-        let rocket = rocket();
-        let p = Perturbation {
-            stages: vec![
-                StagePerturbation {
-                    thrust_percent: 10.0,
-                    separation_time_s: 0.5,
-                    ..Default::default()
-                },
-                StagePerturbation {
-                    thrust_percent: -10.0,
-                    normal_percent: 50.0,
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-        let out = p.apply(&rocket);
-        assert_relative_eq!(
-            out.stage_config(0).thrust.thrust_coefficient,
-            1.1,
-            epsilon = 1e-12
-        );
-        assert_relative_eq!(
-            out.stage_config(1).thrust.thrust_coefficient,
-            0.9,
-            epsilon = 1e-12
-        );
-        assert_relative_eq!(
-            out.stage_config(0).stage.separation_time,
-            12.5,
-            epsilon = 1e-12
-        );
-        assert_relative_eq!(
-            out.stage_config(1).aero.normal_multiplier,
-            1.5,
-            epsilon = 1e-12
-        );
-    }
-
-    #[test]
-    fn confidence_ellipses_scale_the_one_sigma_ellipse() {
-        let cases = run_cases(&rocket(), &Dispersion::default(), 1, 8);
-        let s = &impact_statistics(&cases)[0];
-        assert_relative_eq!(
-            s.ellipse_95_major_m / s.ellipse_major_m,
-            2.4477,
-            epsilon = 1e-4
-        );
-        assert_relative_eq!(
-            s.ellipse_99_minor_m / s.ellipse_minor_m,
-            3.0349,
-            epsilon = 1e-4
-        );
-    }
-
-    #[test]
     fn cases_report_every_body() {
-        let rocket = rocket();
-        let cases = run_cases(&rocket, &Dispersion::default(), 1, 6);
-        assert_eq!(cases.len(), 6);
-        assert!(cases.iter().enumerate().all(|(i, c)| c.index == i as u32));
-        for case in &cases {
+        let vehicle = vehicle();
+        let mc = MonteCarlo::run(&vehicle, &Dispersion::default(), 1, 6);
+        assert_eq!(mc.cases.len(), 6);
+        assert!(
+            mc.cases
+                .iter()
+                .enumerate()
+                .all(|(i, c)| c.index == i as u32)
+        );
+        for case in &mc.cases {
             let bodies: Vec<&str> = case.impacts.iter().map(|i| i.body.as_str()).collect();
             assert_eq!(bodies, ["vehicle", "stage1"]);
             assert!(case.impacts.iter().all(|i| i.impact.is_some()));
         }
         // Same seed, same results; parallel and sequential agree
-        let again = run_case(&rocket, &Dispersion::default(), 1, 4);
-        assert_eq!(
-            again.impacts[0].impact.unwrap(),
-            cases[4].impacts[0].impact.unwrap()
-        );
+        let again = run_case(&vehicle, &Dispersion::default(), 1, 4);
+        assert_eq!(again.impact_of("vehicle"), mc.cases[4].impact_of("vehicle"));
 
-        let stats = impact_statistics(&cases);
+        let stats = &mc.statistics;
         assert_eq!(stats.len(), 2);
         assert_eq!(stats[0].body, "vehicle");
         assert_eq!(stats[0].impacts, 6);
         assert!(stats[0].ellipse_major_m >= stats[0].ellipse_minor_m);
         assert!(stats[0].ellipse_major_m > 0.0);
+        assert_relative_eq!(
+            stats[0].ellipse_95_major_m / stats[0].ellipse_major_m,
+            2.4477,
+            epsilon = 1e-4
+        );
+        assert_relative_eq!(
+            stats[0].ellipse_99_minor_m / stats[0].ellipse_minor_m,
+            3.0349,
+            epsilon = 1e-4
+        );
     }
 
     #[test]

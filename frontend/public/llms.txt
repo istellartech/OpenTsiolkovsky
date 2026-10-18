@@ -1,25 +1,22 @@
 # OpenTsiolkovsky
 
-> Open-source rocket flight simulator (3DoF, multi-stage, launch to impact) by Interstellar Technologies. This web app runs the Rust simulation core compiled to WebAssembly entirely in the browser: 3D globe, charts, flight events, impact points of spent stages and jettisoned parts, and Monte Carlo impact dispersion.
+> Open-source rocket flight simulator (3DoF, multi-stage, launch to impact) by Interstellar Technologies. This web app runs the Rust simulation core compiled to WebAssembly entirely in the browser: 3D globe, charts, flight events, impact points of spent stages and jettisoned bodies, and Monte Carlo impact dispersion.
 
 ## Opening a configuration by URL
 
 The app reads its configuration from the URL fragment, which is never sent to the server:
 
 - `#preset=<id>`: a bundled sample vehicle (MOMO, S-310, S-520, SS-520-5, Epsilon, H-IIA, H3, Saturn V, Ariane 5, ...).
-- `#c=<payload>`: a configuration. The payload is JSON compressed with raw DEFLATE and encoded as base64url without padding. The JSON is one of:
-  - the web app configuration (`ClientConfig`, as written by the app's share link and settings export);
-  - a CLI parameter file (`param_*.json`, keys with units such as `"burn end time(time of each stage)[s]"`);
-  - `{"legacy": <param_*.json>, "files": {"<csv file name>": "<csv text>"}}`: a parameter file with the CSV tables it references.
+- `#c=<payload>`: a configuration. The payload is the configuration JSON compressed with raw DEFLATE and encoded as base64url without padding. The configuration is the same JSON the CLI reads (snake_case keys with units such as `thrust_vac_n`, tables inline as `[[x, y], ...]`; see the reference below).
 
-To build such links, use `openTsiolkovsky-cli share -c param.json` or the MCP tool `create_share_link`.
+To build such links, use `openTsiolkovsky-cli share config.json` or the MCP tool `create_share_link`; they inline any CSV file tables.
 
 ## Running simulations as an agent
 
-The CLI and an MCP server (stdio) give machine-readable results: JSON Schema of the parameter file, validation, single runs, Monte Carlo dispersion and share links.
+The CLI and an MCP server (stdio) give machine-readable results: JSON Schema of the configuration, validation with JSON paths, single runs, Monte Carlo dispersion, conversion of legacy C++ parameter files and share links.
 
 - [AI agents: JSON output, MCP server, share links](https://github.com/istellartech/OpenTsiolkovsky/blob/master/docs/ai.md)
-- [Parameter file reference](https://github.com/istellartech/OpenTsiolkovsky/blob/master/docs/configuration.md)
+- [Configuration reference](https://github.com/istellartech/OpenTsiolkovsky/blob/master/docs/configuration.md)
 - [Output files](https://github.com/istellartech/OpenTsiolkovsky/blob/master/docs/output.md)
 - [Physics models and numerics](https://github.com/istellartech/OpenTsiolkovsky/blob/master/docs/physics.md)
 - [Source code](https://github.com/istellartech/OpenTsiolkovsky)

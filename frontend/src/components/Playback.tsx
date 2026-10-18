@@ -235,7 +235,7 @@ export function Telemetry({
             <div className="mb-1.5 flex h-4 items-center gap-1.5 truncate text-[11px] text-ink-2">
               <span
                 aria-hidden
-                className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.mode === 'power_3DoF' ? 'bg-signal' : 'bg-line-strong')}
+                className={cn('h-1.5 w-1.5 shrink-0 rounded-full', s.mode === 'powered' ? 'bg-signal' : 'bg-line-strong')}
               />
               {flightModeLabel(s.mode)}
             </div>

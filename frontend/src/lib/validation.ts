@@ -1,5 +1,9 @@
-import type { ClientConfig, ClientMachSample, ClientStageConfig, ClientTimeSample } from './simulation'
-import { FREE_MODE_OPTIONS, POWER_MODE_OPTIONS, createDefaultStage } from '../config/defaults'
+// Checks of the configuration for the editor, with localized messages. The
+// fields are the JSON paths the solver's validator reports
+// (src/config/validate.rs), e.g. `stages[1].engine.burn_end_s`, so an issue
+// from either side points at the same input.
+import type { Config, Curve, FileTable } from './config'
+import { isFileTable, isRows, isValidDateTime } from './config'
 import { tr } from './i18n'
 
 export interface ValidationIssue {
@@ -7,556 +11,271 @@ export interface ValidationIssue {
   message: string
 }
 
-type Json = Record<string, unknown>
+export const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
 
-const isObject = (v: unknown): v is Json => !!v && typeof v === 'object' && !Array.isArray(v)
-const hasKeys = (o: Json, keys: string[]) => keys.every((k) => k in o)
+type Push = (field: string, message: string) => void
 
-/** Shape check for a config saved from this app (values are validated separately). */
-export function isValidClientConfig(obj: unknown): obj is ClientConfig {
-  if (!isObject(obj)) return false
-  const { simulation, launch, aerodynamics, attitude, wind } = obj
-  if (![simulation, launch, aerodynamics, attitude, wind].every(isObject)) return false
-  const sim = simulation as Json
-  const l = launch as Json
-  return (
-    hasKeys(sim, ['duration_s', 'output_step_s', 'air_density_percent']) &&
-    hasKeys(l, ['latitude_deg', 'longitude_deg', 'altitude_m']) &&
-    Array.isArray(l.velocity_ned_mps) &&
-    isObject(l.datetime_utc) &&
-    hasKeys(l.datetime_utc, ['year', 'month', 'day', 'hour', 'minute', 'second'])
+interface Requirement {
+  ja: string
+  en: string
+}
+
+/** Rows with ascending first column and every value passing `ok`; reports the first problem. */
+function checkRows(rows: number[][], push: Push, field: string, name: string, ok: (v: number) => boolean, requirement: Requirement) {
+  let prev = -Infinity
+  for (const row of rows) {
+    if (!row.every(isFiniteNumber)) {
+      push(field, tr(`${name}に数値以外が含まれています。`, `${name} contains values that are not numbers.`))
+      return
+    }
+    if (row[0] < prev) {
+      push(field, tr(`${name}の1列目は昇順に並べてください。`, `${name}: the first column must be in ascending order.`))
+      return
+    }
+    if (!row.slice(1).every(ok)) {
+      push(field, tr(`${name}の値は${requirement.ja}にしてください。`, `${name} values must be ${requirement.en}.`))
+      return
+    }
+    prev = row[0]
+  }
+  if (rows.length === 0) push(field, tr(`${name}に行がありません。`, `${name} has no rows.`))
+}
+
+const ANY: [(v: number) => boolean, Requirement] = [() => true, { ja: '数値', en: 'numbers' }]
+const NON_NEGATIVE: [(v: number) => boolean, Requirement] = [(v) => v >= 0, { ja: '0以上', en: '0 or greater' }]
+const POSITIVE: [(v: number) => boolean, Requirement] = [(v) => v > 0, { ja: '正の値', en: 'positive' }]
+
+/** A curve: a constant passing the check, or a valid table. Files cannot be read in the browser. */
+function checkCurve(c: Curve | undefined, push: Push, field: string, name: string, [ok, req]: [(v: number) => boolean, Requirement]) {
+  if (c === undefined) return
+  if (typeof c === 'number') {
+    if (!isFiniteNumber(c) || !ok(c)) push(field, tr(`${name}は${req.ja}にしてください。`, `${name} must be ${req.en}.`))
+  } else if (isRows(c)) {
+    checkRows(c, push, field, tr(`${name}のテーブル`, `${name} table`), ok, req)
+  } else if (isFileTable(c)) {
+    fileIssue(c, push, field)
+  }
+}
+
+function fileIssue(f: FileTable, push: Push, field: string) {
+  push(
+    field,
+    tr(
+      `CSVファイル（${f.file}）はブラウザでは読めません。表に読み込んでください。`,
+      `The CSV file (${f.file}) cannot be read in the browser; load it into a table.`,
+    ),
   )
 }
 
-export function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
+function checkRequired(v: number | undefined, push: Push, field: string, ok: boolean, ja: string, en: string) {
+  if (!isFiniteNumber(v) || !ok) push(field, tr(ja, en))
 }
 
-export function validateConfig(config: ClientConfig): ValidationIssue[] {
+export function validateConfig(config: Config): ValidationIssue[] {
   const issues: ValidationIssue[] = []
+  const push: Push = (field, message) => issues.push({ field, message })
 
-  // Add defensive null checks
-  if (!config) {
-    issues.push({ field: 'config', message: tr('設定オブジェクトが見つかりません。', 'Configuration object not found.') })
-    return issues
-  }
-
-  const simulation = config.simulation || {}
-  const launch = config.launch || {}
-  const aerodynamics = config.aerodynamics || {}
-  const attitude = config.attitude || {}
-  const wind = config.wind || {}
-  const stageList = config.stages && config.stages.length > 0 ? config.stages : [createDefaultStage()]
-
-  if (stageList.length === 0) {
-    issues.push({ field: 'stages', message: tr('少なくとも1段は設定してください。', 'Configure at least one stage.') })
-    return issues
-  }
-
-  const stage = stageList[0]
-
-  const push = (field: string, message: string) => {
-    issues.push({ field, message })
-  }
-
-  // Simulation validation
-  if (!isFiniteNumber(simulation.duration_s) || simulation.duration_s <= 0) {
-    push('simulation.duration_s', tr('シミュレーション時間は正の値にしてください。', 'Simulation time must be positive.'))
-  } else if (simulation.duration_s > 24 * 3600) {
-    push('simulation.duration_s', tr('シミュレーション時間は24時間以内で指定してください。', 'Simulation time must be 24 hours or less.'))
-  }
-
-  if (!isFiniteNumber(simulation.output_step_s) || simulation.output_step_s <= 0) {
-    push('simulation.output_step_s', tr('出力間隔は正の値にしてください。', 'Output interval must be positive.'))
-  } else if (simulation.output_step_s > simulation.duration_s) {
-    push(
-      'simulation.output_step_s',
-      tr('出力間隔はシミュレーション時間以下にしてください。', 'Output interval must not exceed the simulation time.'),
+  const sim = config.simulation
+  checkRequired(
+    sim.end_time_s,
+    push,
+    'simulation.end_time_s',
+    sim.end_time_s > 0,
+    '計算時間は正の値にしてください。',
+    'Simulation time must be positive.',
+  )
+  if (sim.end_time_s > 24 * 3600)
+    push('simulation.end_time_s', tr('計算時間は24時間以内で指定してください。', 'Simulation time must be 24 hours or less.'))
+  const step = sim.output_step_s ?? 1
+  checkRequired(step, push, 'simulation.output_step_s', step > 0, '出力間隔は正の値にしてください。', 'Output interval must be positive.')
+  if (step > sim.end_time_s)
+    push('simulation.output_step_s', tr('出力間隔は計算時間以下にしてください。', 'Output interval must not exceed the simulation time.'))
+  const integ = sim.integrator
+  if (integ?.method === 'rk4' && integ.step_s !== undefined) {
+    checkRequired(
+      integ.step_s,
+      push,
+      'simulation.integrator.step_s',
+      integ.step_s > 0,
+      'RK4の刻み幅は正の値にしてください。',
+      'RK4 step size must be positive.',
     )
   }
-
-  if (!isFiniteNumber(simulation.air_density_percent) || simulation.air_density_percent < -100 || simulation.air_density_percent > 100) {
-    push(
-      'simulation.air_density_percent',
-      tr('空気密度変動は-100〜100%の範囲で指定してください。', 'Air density variation must be between -100 and 100%.'),
-    )
-  }
-
-  const integrator = simulation.integrator || {
-    method: 'rk4',
-    rk4_step_s: simulation.output_step_s ? simulation.output_step_s / 2 : undefined,
-  }
-  if (integrator.method !== 'rk4' && integrator.method !== 'rk45') {
-    push('simulation.integrator.method', tr('積分器はRK4またはRK45を選択してください。', 'Integrator must be RK4 or RK45.'))
-  }
-  if (integrator.method === 'rk4') {
-    if (!isFiniteNumber(integrator.rk4_step_s) || integrator.rk4_step_s <= 0) {
-      push('simulation.integrator.rk4_step_s', tr('RK4の刻み幅は正の値にしてください。', 'RK4 step size must be positive.'))
-    } else if (isFiniteNumber(simulation.duration_s) && integrator.rk4_step_s > simulation.duration_s) {
-      push(
-        'simulation.integrator.rk4_step_s',
-        tr('RK4の刻み幅はシミュレーション時間以下にしてください。', 'RK4 step size must not exceed the simulation time.'),
-      )
-    }
-  }
-  if (integrator.method === 'rk45') {
-    for (const key of ['rk45_abs_tol', 'rk45_rel_tol'] as const) {
-      const tol = integrator[key]
-      if (tol !== undefined && (!isFiniteNumber(tol) || tol <= 0)) {
+  if (integ?.method === 'rk45') {
+    for (const key of ['abs_tol', 'rel_tol'] as const) {
+      const tol = integ[key]
+      if (tol !== undefined && (!isFiniteNumber(tol) || tol <= 0))
         push(`simulation.integrator.${key}`, tr('RK45の許容誤差は正の値にしてください。', 'RK45 tolerances must be positive.'))
-      }
-    }
-  }
-  if (simulation.atmosphere_model !== undefined && simulation.atmosphere_model !== 'legacy' && simulation.atmosphere_model !== 'ussa1976') {
-    push(
-      'simulation.atmosphere_model',
-      tr('大気モデルは legacy か ussa1976 を選択してください。', 'Atmosphere model must be legacy or ussa1976.'),
-    )
-  }
-  if (simulation.air_density_profile?.length) {
-    let prev = -Infinity
-    for (const p of simulation.air_density_profile) {
-      if (!isFiniteNumber(p.altitude_m) || !isFiniteNumber(p.percent) || p.altitude_m <= prev || p.percent <= -100) {
-        push(
-          'simulation.air_density_profile',
-          tr(
-            '密度変動テーブルは高度の昇順に、変動率は -100% より大きい数値で入力してください。',
-            'The density table needs ascending altitudes and variations above -100%.',
-          ),
-        )
-        break
-      }
-      prev = p.altitude_m
     }
   }
 
-  // Launch validation
-  if (!isFiniteNumber(launch.latitude_deg) || launch.latitude_deg < -90 || launch.latitude_deg > 90) {
-    push('launch.latitude_deg', tr('緯度は-90〜90度の範囲で指定してください。', 'Latitude must be between -90 and 90°.'))
-  }
-
-  if (!isFiniteNumber(launch.longitude_deg) || launch.longitude_deg < -180 || launch.longitude_deg > 180) {
-    push('launch.longitude_deg', tr('経度は-180〜180度の範囲で指定してください。', 'Longitude must be between -180 and 180°.'))
-  }
-
-  if (!isFiniteNumber(launch.altitude_m) || launch.altitude_m < -500 || launch.altitude_m > 100000) {
-    push(
-      'launch.altitude_m',
-      tr('発射高度は-500〜100000 mの範囲で指定してください。', 'Launch altitude must be between -500 and 100,000 m.'),
-    )
-  }
-
-  if (launch.rail_length_m !== undefined && (!isFiniteNumber(launch.rail_length_m) || launch.rail_length_m < 0)) {
-    push('launch.rail_length_m', tr('レール長は0以上で指定してください。', 'Rail length must be 0 or greater.'))
-  }
-
-  const velocityMag = Math.hypot(...launch.velocity_ned_mps)
-  if (!isFiniteNumber(velocityMag)) {
+  const launch = config.launch
+  const lat = launch.latitude_deg
+  checkRequired(
+    lat,
+    push,
+    'launch.latitude_deg',
+    Math.abs(lat) <= 90,
+    '緯度は-90〜90度の範囲で指定してください。',
+    'Latitude must be between -90 and 90°.',
+  )
+  const lon = launch.longitude_deg
+  checkRequired(
+    lon,
+    push,
+    'launch.longitude_deg',
+    Math.abs(lon) <= 180,
+    '経度は-180〜180度の範囲で指定してください。',
+    'Longitude must be between -180 and 180°.',
+  )
+  const alt = launch.altitude_m ?? 0
+  checkRequired(
+    alt,
+    push,
+    'launch.altitude_m',
+    alt >= -500 && alt <= 100000,
+    '発射高度は-500〜100000 mの範囲で指定してください。',
+    'Launch altitude must be between -500 and 100,000 m.',
+  )
+  const rail = launch.rail_length_m ?? 0
+  checkRequired(rail, push, 'launch.rail_length_m', rail >= 0, 'レール長は0以上で指定してください。', 'Rail length must be 0 or greater.')
+  const vel = launch.velocity_ned_mps ?? [0, 0, 0]
+  if (!vel.every(isFiniteNumber)) {
     push(
       'launch.velocity_ned_mps',
       tr('初期速度ベクトルに数値以外が含まれています。', 'Initial velocity vector contains non-numeric values.'),
     )
-  } else if (velocityMag > 5000) {
+  } else if (Math.hypot(...vel) > 5000) {
     push('launch.velocity_ned_mps', tr('初期速度は5,000 m/s以下にしてください。', 'Initial velocity must be 5,000 m/s or less.'))
   }
-
-  const { year, month, day, hour, minute, second } = launch.datetime_utc
-  const launchDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
-  const isValidDate =
-    launchDate.getUTCFullYear() === year &&
-    launchDate.getUTCMonth() === month - 1 &&
-    launchDate.getUTCDate() === day &&
-    launchDate.getUTCHours() === hour &&
-    launchDate.getUTCMinutes() === minute &&
-    launchDate.getUTCSeconds() === second
-
-  if (!isValidDate) {
+  if (launch.time_utc !== undefined && !isValidDateTime(launch.time_utc)) {
     push(
-      'launch.datetime_utc',
+      'launch.time_utc',
       tr('発射日時が不正です。存在する日時を指定してください。', 'Invalid launch date/time. Enter a date and time that exists.'),
     )
   }
 
-  // First stage validation
-  validateStage(stage, push, '', undefined, stageList.length > 1)
+  const atm = config.atmosphere
+  const seasonal = atm?.seasonal_variation_percent ?? 0
+  checkRequired(
+    seasonal,
+    push,
+    'atmosphere.seasonal_variation_percent',
+    Math.abs(seasonal) <= 100,
+    '大気密度の変動は-100〜100%の範囲で指定してください。',
+    'Air density variation must be between -100 and 100%.',
+  )
+  const dev = atm?.density_deviation
+  if (isRows(dev)) {
+    checkRows(dev, push, 'atmosphere.density_deviation', tr('密度変動テーブル', 'Density table'), (v) => v > -100, {
+      ja: '-100%より大きい値',
+      en: 'above -100%',
+    })
+  } else if (isFileTable(dev)) fileIssue(dev, push, 'atmosphere.density_deviation')
 
-  // Additional stages validation
-  stageList.slice(1).forEach((extraStage, idx) => {
-    const stageLabel = `stage[${idx + 2}]`
-    validateStage(extraStage, push, stageLabel, idx + 2, idx + 2 < stageList.length)
-  })
+  const wind = config.wind
+  const ws = wind?.speed_mps ?? 0
+  checkRequired(ws, push, 'wind.speed_mps', ws >= 0, '風速は0以上で指定してください。', 'Wind speed must be 0 or greater.')
+  const wd = wind?.direction_deg ?? 0
+  checkRequired(wd, push, 'wind.direction_deg', true, '風向は数値で指定してください。', 'Wind direction must be a number.')
+  if (isRows(wind?.profile)) {
+    checkRows(wind.profile as number[][], push, 'wind.profile', tr('高度別の風', 'Wind table'), (v) => v >= 0, {
+      ja: '0以上',
+      en: '0 or greater',
+    })
+  } else if (isFileTable(wind?.profile)) fileIssue(wind!.profile as FileTable, push, 'wind.profile')
 
-  // Aerodynamics validation
-  validateAerodynamics(aerodynamics, push)
+  const att = config.attitude ?? {}
+  checkCurve(att.azimuth_deg, push, 'attitude.azimuth_deg', tr('方位角', 'Azimuth'), ANY)
+  checkCurve(att.elevation_deg, push, 'attitude.elevation_deg', tr('仰角', 'Elevation'), [
+    (v) => Math.abs(v) <= 90,
+    { ja: '-90〜90度', en: 'between -90 and 90°' },
+  ])
+  checkCurve(att.roll_deg, push, 'attitude.roll_deg', tr('ロール角', 'Roll'), ANY)
+  for (const [key, limit] of [
+    ['pitch_offset_deg', 45],
+    ['yaw_offset_deg', 45],
+    ['roll_offset_deg', 180],
+  ] as const) {
+    const v = att[key] ?? 0
+    if (!isFiniteNumber(v) || Math.abs(v) > limit)
+      push(`attitude.${key}`, tr(`姿勢の誤差は±${limit}度以内にしてください。`, `Attitude errors must be within ±${limit}°.`))
+  }
+  if (!(att.gyro_bias_deg_h ?? [0, 0, 0]).every((b) => isFiniteNumber(b) && Math.abs(b) <= 100))
+    push('attitude.gyro_bias_deg_h', tr('ジャイロバイアスは±100 deg/h以内にしてください。', 'Gyro bias must be within ±100 deg/h.'))
 
-  // Attitude validation
-  validateAttitude(attitude, push)
-
-  // Wind validation
-  validateWind(wind, push)
-
+  if (config.stages.length === 0) push('stages', tr('少なくとも1段は設定してください。', 'Configure at least one stage.'))
+  config.stages.forEach((_, i) => validateStage(config, i, push))
   return issues
 }
 
-function validateStage(
-  stage: ClientStageConfig,
-  push: (field: string, message: string) => void,
-  prefix: string,
-  stageNum?: number,
-  hasNext = false,
-) {
-  const fieldPrefix = prefix ? `${prefix}.` : 'stage.'
-  // Prefix each message with the stage number for stages after the first.
-  const msg = (ja: string, en: string) => (stageNum ? tr(`第${stageNum}段の${ja}`, `Stage ${stageNum}: ${en}`) : tr(ja, en))
+function validateStage(config: Config, i: number, push: Push) {
+  const stage = config.stages[i]
+  const last = i === config.stages.length - 1
+  const p = (key: string) => `stages[${i}].${key}`
+  // Messages of later stages name the stage
+  const msg = (ja: string, en: string) => (i > 0 ? tr(`${i + 1}段の${ja}`, `Stage ${i + 1}: ${en}`) : tr(ja, en))
+  const name = (ja: string, en: string) => (i > 0 ? tr(`${i + 1}段の${ja}`, `Stage ${i + 1} ${en}`) : tr(ja, en))
 
-  if (!isFiniteNumber(stage.mass_initial_kg) || stage.mass_initial_kg <= 0) {
-    push(`${fieldPrefix}mass_initial_kg`, msg('初期質量は正の値にしてください。', 'Initial mass must be positive.'))
+  const mass = stage.mass_initial_kg
+  if (!isFiniteNumber(mass) || mass <= 0)
+    push(p('mass_initial_kg'), msg('初期質量は正の値にしてください。', 'Initial mass must be positive.'))
+  const dry = stage.mass_dry_kg
+  if (dry !== undefined && (!isFiniteNumber(dry) || dry < 0 || dry > mass))
+    push(p('mass_dry_kg'), msg('乾燥質量は0から初期質量の間にしてください。', 'Dry mass must be between 0 and the initial mass.'))
+
+  const sep = stage.separation_time_s
+  if (!last && (!isFiniteNumber(sep) || sep < 0))
+    push(p('separation_time_s'), msg('分離時刻は0秒以上にしてください。', 'Separation time must be 0 s or later.'))
+
+  const e = stage.engine
+  if (e) {
+    const start = e.burn_start_s ?? 0
+    if (!isFiniteNumber(start) || start < 0)
+      push(p('engine.burn_start_s'), msg('燃焼開始時刻は0秒以上にしてください。', 'Ignition time must be 0 s or later.'))
+    if (!isFiniteNumber(e.burn_end_s) || e.burn_end_s <= start)
+      push(p('engine.burn_end_s'), msg('燃焼終了時刻は燃焼開始より後にしてください。', 'Burnout time must be after ignition.'))
+    checkCurve(e.thrust_vac_n, push, p('engine.thrust_vac_n'), name('推力', 'thrust'), NON_NEGATIVE)
+    checkCurve(e.isp_vac_s, push, p('engine.isp_vac_s'), name('比推力', 'Isp'), POSITIVE)
+    const area = e.nozzle_exit_area_m2 ?? 0
+    if (!isFiniteNumber(area) || area < 0)
+      push(p('engine.nozzle_exit_area_m2'), msg('ノズル出口面積は0以上にしてください。', 'Nozzle exit area must be 0 or greater.'))
   }
 
-  if (!isFiniteNumber(stage.burn_start_s) || stage.burn_start_s < 0) {
-    push(`${fieldPrefix}burn_start_s`, msg('燃焼開始時刻は0秒以上にしてください。', 'Ignition time must be 0 s or later.'))
-  }
+  const a = stage.aero ?? {}
+  const d = a.diameter_m ?? 0.5
+  if (!isFiniteNumber(d) || d <= 0) push(p('aero.diameter_m'), msg('機体直径は正の値にしてください。', 'Body diameter must be positive.'))
+  const beta = a.ballistic_coefficient_kg_m2 ?? 100
+  if (!isFiniteNumber(beta) || beta <= 0)
+    push(p('aero.ballistic_coefficient_kg_m2'), msg('弾道係数は正の値にしてください。', 'Ballistic coefficient must be positive.'))
+  checkCurve(a.ca, push, p('aero.ca'), name('軸力係数 CA', 'CA'), NON_NEGATIVE)
+  checkCurve(a.ca_power_off, push, p('aero.ca_power_off'), name('燃焼していないときの CA', 'engine-off CA'), NON_NEGATIVE)
+  checkCurve(a.cn_alpha_per_rad, push, p('aero.cn_alpha_per_rad'), name('法線力係数 CNα', 'CNα'), ANY)
+  if (a.cn_table && isFileTable(a.cn_table)) fileIssue(a.cn_table, push, p('aero.cn_table'))
 
-  if (!isFiniteNumber(stage.burn_end_s) || stage.burn_end_s <= stage.burn_start_s) {
-    push(`${fieldPrefix}burn_end_s`, msg('燃焼終了時刻は燃焼開始より大きい値にしてください。', 'Burnout time must be after ignition.'))
-  }
-
-  // A cutoff or separation before the nominal burn end simply ends the burn
-  // early (the solver clamps it); only times before ignition are invalid.
-  if (!isFiniteNumber(stage.forced_cutoff_s) || stage.forced_cutoff_s <= stage.burn_start_s) {
-    push(`${fieldPrefix}forced_cutoff_s`, msg('強制停止は燃焼開始より後にしてください。', 'Forced cutoff must be after ignition.'))
-  }
-
-  if (!isFiniteNumber(stage.separation_time_s) || stage.separation_time_s <= stage.burn_start_s) {
-    push(`${fieldPrefix}separation_time_s`, msg('分離時刻は燃焼開始より後にしてください。', 'Separation time must be after ignition.'))
-  }
-
-  if (!isFiniteNumber(stage.throat_diameter_m) || stage.throat_diameter_m <= 0) {
-    push(`${fieldPrefix}throat_diameter_m`, msg('スロート径は正の値にしてください。', 'Throat diameter must be positive.'))
-  }
-
-  if (!isFiniteNumber(stage.nozzle_expansion_ratio) || stage.nozzle_expansion_ratio < 1) {
-    push(`${fieldPrefix}nozzle_expansion_ratio`, msg('ノズル膨張比は1以上にしてください。', 'Nozzle expansion ratio must be at least 1.'))
-  }
-
-  if (!isFiniteNumber(stage.nozzle_exit_pressure_pa) || stage.nozzle_exit_pressure_pa < 0) {
-    push(
-      `${fieldPrefix}nozzle_exit_pressure_pa`,
-      msg('ノズル出口圧力は0以上にしてください。', 'Nozzle exit pressure must be 0 or greater.'),
-    )
-  }
-
-  if (!isFiniteNumber(stage.thrust_constant) || stage.thrust_constant < 0) {
-    push(`${fieldPrefix}thrust_constant`, msg('推力定数は0以上にしてください。', 'Constant thrust must be 0 or greater.'))
-  }
-
-  if (!isFiniteNumber(stage.thrust_multiplier) || stage.thrust_multiplier <= 0) {
-    push(`${fieldPrefix}thrust_multiplier`, msg('推力倍率は正の値にしてください。', 'Thrust multiplier must be positive.'))
-  }
-
-  if (!isFiniteNumber(stage.isp_constant) || stage.isp_constant <= 0) {
-    push(`${fieldPrefix}isp_constant`, msg('比推力定数は正の値にしてください。', 'Constant Isp must be positive.'))
-  }
-
-  if (!isFiniteNumber(stage.isp_multiplier) || stage.isp_multiplier <= 0) {
-    push(`${fieldPrefix}isp_multiplier`, msg('比推力倍率は正の値にしてください。', 'Isp multiplier must be positive.'))
-  }
-
-  if (!POWER_MODE_OPTIONS.some((option) => option.value === stage.power_mode)) {
-    push(
-      `${fieldPrefix}power_mode`,
-      msg('Power flight mode は 0〜3 のプリセットから選択してください。', 'Power flight mode must be one of the presets 0–3.'),
-    )
-  }
-
-  if (!FREE_MODE_OPTIONS.some((option) => option.value === stage.free_mode)) {
-    push(
-      `${fieldPrefix}free_mode`,
-      msg('Free flight mode は 0〜2 のプリセットから選択してください。', 'Free flight mode must be one of the presets 0–2.'),
-    )
-  }
-
-  // Dumping product: released while this stage flies
-  const dump = stage.dumping_product
-  if (dump) {
-    const d = `${fieldPrefix}dumping_product.`
-    const t = dump.separation_time_s
-    if (!isFiniteNumber(t) || t <= 0) {
-      push(`${d}separation_time_s`, msg('投棄物の分離時刻は0秒より後にしてください。', 'Jettison time must be after 0 s.'))
-    } else if (hasNext && isFiniteNumber(stage.separation_time_s) && t >= stage.separation_time_s) {
+  const end = last ? Infinity : (sep ?? Infinity)
+  ;(stage.jettisons ?? []).forEach((j, k) => {
+    const q = (key: string) => p(`jettisons[${k}].${key}`)
+    if (!isFiniteNumber(j.time_s) || j.time_s <= 0 || j.time_s >= end)
       push(
-        `${d}separation_time_s`,
-        msg('投棄物の分離時刻は段の分離より前にしてください。', 'Jettison time must be before stage separation.'),
-      )
-    }
-    if (!isFiniteNumber(dump.mass_kg) || dump.mass_kg <= 0) {
-      push(`${d}mass_kg`, msg('投棄物の質量は正の値にしてください。', 'Jettisoned mass must be positive.'))
-    } else if (isFiniteNumber(stage.mass_initial_kg) && dump.mass_kg >= stage.mass_initial_kg) {
-      push(`${d}mass_kg`, msg('投棄物の質量は段の質量より小さくしてください。', 'Jettisoned mass must be less than the stage mass.'))
-    }
-    if (!isFiniteNumber(dump.ballistic_coefficient) || dump.ballistic_coefficient <= 0) {
-      push(
-        `${d}ballistic_coefficient`,
-        msg('投棄物の弾道係数は正の値にしてください。', 'Jettisoned part ballistic coefficient must be positive.'),
-      )
-    }
-    if (!dump.additional_velocity_ned_mps?.every(isFiniteNumber)) {
-      push(`${d}additional_velocity_ned_mps`, msg('投棄時の追加速度は数値にしてください。', 'Jettison velocity must be numbers.'))
-    }
-  }
-
-  // Profile validations
-  if (stage.thrust_profile?.length) {
-    validateTimeSeriesProfile(stage.thrust_profile, push, `${fieldPrefix}thrust_profile`, tr('推力プロファイル', 'Thrust table'), {
-      timeMin: 0,
-      valueMin: 0,
-      valueName: tr('推力', 'thrust'),
-    })
-  }
-
-  if (stage.isp_profile?.length) {
-    validateTimeSeriesProfile(stage.isp_profile, push, `${fieldPrefix}isp_profile`, tr('Ispプロファイル', 'Isp table'), {
-      timeMin: 0,
-      valueMin: 0.01,
-      valueName: 'Isp',
-      valuePositive: true,
-    })
-  }
-}
-
-function validateAerodynamics(aerodynamics: ClientConfig['aerodynamics'], push: (field: string, message: string) => void) {
-  if (!isFiniteNumber(aerodynamics.body_diameter_m) || aerodynamics.body_diameter_m <= 0) {
-    push('aerodynamics.body_diameter_m', tr('機体径は正の値にしてください。', 'Body diameter must be positive.'))
-  }
-
-  if (!isFiniteNumber(aerodynamics.ballistic_coefficient) || aerodynamics.ballistic_coefficient <= 0) {
-    push('aerodynamics.ballistic_coefficient', tr('弾道係数は正の値にしてください。', 'Ballistic coefficient must be positive.'))
-  }
-
-  if (!isFiniteNumber(aerodynamics.cn_constant)) {
-    push('aerodynamics.cn_constant', tr('CN定数は数値で指定してください。', 'Constant CN must be a number.'))
-  }
-
-  if (!isFiniteNumber(aerodynamics.cn_multiplier) || aerodynamics.cn_multiplier <= 0) {
-    push('aerodynamics.cn_multiplier', tr('CN倍率は正の値にしてください。', 'CN multiplier must be positive.'))
-  }
-
-  if (aerodynamics.cn_profile?.length > 0) {
-    validateMachProfile(aerodynamics.cn_profile, push, 'aerodynamics.cn_profile', 'CN')
-  }
-
-  if (!isFiniteNumber(aerodynamics.ca_constant) || aerodynamics.ca_constant < 0) {
-    push('aerodynamics.ca_constant', tr('CA定数は0以上で指定してください。', 'Constant CA must be 0 or greater.'))
-  }
-
-  if (!isFiniteNumber(aerodynamics.ca_multiplier) || aerodynamics.ca_multiplier <= 0) {
-    push('aerodynamics.ca_multiplier', tr('CA倍率は正の値にしてください。', 'CA multiplier must be positive.'))
-  }
-
-  if (aerodynamics.ca_profile?.length > 0) {
-    validateMachProfile(aerodynamics.ca_profile, push, 'aerodynamics.ca_profile', 'CA', { valueMin: 0 })
-  }
-
-  const caOff = aerodynamics.ca_power_off_constant
-  if (caOff !== undefined && (!isFiniteNumber(caOff) || caOff < 0)) {
-    push('aerodynamics.ca_power_off_constant', tr('燃焼後のCAは0以上で指定してください。', 'Engine-off CA must be 0 or greater.'))
-  }
-
-  if (aerodynamics.ca_power_off_profile?.length) {
-    validateMachProfile(aerodynamics.ca_power_off_profile, push, 'aerodynamics.ca_power_off_profile', tr('燃焼後のCA', 'Engine-off CA'), {
-      valueMin: 0,
-    })
-  }
-}
-
-function validateAttitude(attitude: ClientConfig['attitude'], push: (field: string, message: string) => void) {
-  if (!isFiniteNumber(attitude.azimuth_deg) || attitude.azimuth_deg < 0 || attitude.azimuth_deg >= 360) {
-    push('attitude.azimuth_deg', tr('方位角は0〜360度未満で指定してください。', 'Azimuth must be at least 0° and less than 360°.'))
-  }
-
-  if (!isFiniteNumber(attitude.elevation_deg) || attitude.elevation_deg < 0 || attitude.elevation_deg > 90) {
-    push('attitude.elevation_deg', tr('仰角は0〜90度の範囲で指定してください。', 'Elevation must be between 0 and 90°.'))
-  }
-
-  if (Math.abs(attitude.pitch_offset_deg) > 45) {
-    push('attitude.pitch_offset_deg', tr('ピッチオフセットは±45度以内にしてください。', 'Pitch offset must be within ±45°.'))
-  }
-  if (Math.abs(attitude.yaw_offset_deg) > 45) {
-    push('attitude.yaw_offset_deg', tr('ヨーオフセットは±45度以内にしてください。', 'Yaw offset must be within ±45°.'))
-  }
-  if (Math.abs(attitude.roll_offset_deg) > 180) {
-    push('attitude.roll_offset_deg', tr('ロールオフセットは±180度以内にしてください。', 'Roll offset must be within ±180°.'))
-  }
-
-  const gyroMax = 100
-  attitude.gyro_bias_deg_h?.forEach((bias, idx) => {
-    if (!isFiniteNumber(bias) || Math.abs(bias) > gyroMax) {
-      push(
-        `attitude.gyro_bias_deg_h[${idx}]`,
-        tr(`ジャイロバイアスは±${gyroMax} deg/h以内にしてください。`, `Gyro bias must be within ±${gyroMax} deg/h.`),
-      )
-    }
-  })
-
-  if (attitude.profile?.length > 0) {
-    let prevTime = -Infinity
-    for (const sample of attitude.profile) {
-      if (!isFiniteNumber(sample.time) || sample.time < 0) {
-        push('attitude.profile', tr('姿勢プロファイルの時刻は0以上で指定してください。', 'Attitude table times must be 0 or greater.'))
-        break
-      }
-      if (sample.time <= prevTime) {
-        push(
-          'attitude.profile',
-          tr('姿勢プロファイルは時刻昇順に並べてください。', 'Attitude table must be sorted by time in ascending order.'),
-        )
-        break
-      }
-      if (!isFiniteNumber(sample.azimuth_deg) || sample.azimuth_deg < 0 || sample.azimuth_deg >= 360) {
-        push(
-          'attitude.profile',
-          tr(
-            '姿勢プロファイルの方位角は0〜360度未満で指定してください。',
-            'Attitude table azimuths must be at least 0° and less than 360°.',
-          ),
-        )
-        break
-      }
-      if (!isFiniteNumber(sample.elevation_deg) || sample.elevation_deg < -90 || sample.elevation_deg > 90) {
-        push(
-          'attitude.profile',
-          tr('姿勢プロファイルの仰角は-90〜90度で指定してください。', 'Attitude table elevations must be between -90 and 90°.'),
-        )
-        break
-      }
-      prevTime = sample.time
-    }
-  }
-}
-
-function validateWind(wind: ClientConfig['wind'], push: (field: string, message: string) => void) {
-  if (!isFiniteNumber(wind.speed_mps) || wind.speed_mps < 0) {
-    push('wind.speed_mps', tr('風速は0以上で指定してください。', 'Wind speed must be 0 or greater.'))
-  }
-
-  if (!isFiniteNumber(wind.direction_deg) || wind.direction_deg < 0 || wind.direction_deg >= 360) {
-    push('wind.direction_deg', tr('風向は0〜360度未満で指定してください。', 'Wind direction must be at least 0° and less than 360°.'))
-  }
-
-  if (wind.profile?.length > 0) {
-    let prevAlt = -Infinity
-    for (const sample of wind.profile) {
-      if (!isFiniteNumber(sample.altitude_m) || sample.altitude_m < 0) {
-        push('wind.profile', tr('風プロファイルの高度は0以上で指定してください。', 'Wind table altitudes must be 0 or greater.'))
-        break
-      }
-      if (sample.altitude_m <= prevAlt) {
-        push('wind.profile', tr('風プロファイルの高度は昇順に並べてください。', 'Wind table altitudes must be in ascending order.'))
-        break
-      }
-      if (!isFiniteNumber(sample.speed_mps) || sample.speed_mps < 0) {
-        push('wind.profile', tr('風プロファイルの風速は0以上で指定してください。', 'Wind table speeds must be 0 or greater.'))
-        break
-      }
-      if (!isFiniteNumber(sample.direction_deg) || sample.direction_deg < 0 || sample.direction_deg >= 360) {
-        push(
-          'wind.profile',
-          tr('風プロファイルの風向は0〜360度未満で指定してください。', 'Wind table directions must be at least 0° and less than 360°.'),
-        )
-        break
-      }
-      prevAlt = sample.altitude_m
-    }
-  }
-}
-
-function validateTimeSeriesProfile(
-  profile: ClientTimeSample[],
-  push: (field: string, message: string) => void,
-  fieldName: string,
-  profileName: string,
-  options: {
-    timeMin: number
-    valueMin: number
-    valueName: string
-    valuePositive?: boolean
-  },
-) {
-  let prevTime = -Infinity
-  for (const sample of profile) {
-    if (!isFiniteNumber(sample.time) || sample.time < options.timeMin) {
-      push(
-        fieldName,
-        tr(
-          `${profileName}の時刻は${options.timeMin}以上の数値で指定してください。`,
-          `${profileName} times must be numbers ≥ ${options.timeMin}.`,
+        q('time_s'),
+        msg(
+          '投棄物の分離時刻は段の開始後、分離前にしてください。',
+          'Jettison time must be after the stage start and before its separation.',
         ),
       )
-      break
-    }
-    if (sample.time <= prevTime) {
-      push(fieldName, tr(`${profileName}の時刻は昇順に並べてください。`, `${profileName} times must be in ascending order.`))
-      break
-    }
-    if (options.valuePositive) {
-      if (!isFiniteNumber(sample.value) || sample.value <= options.valueMin) {
-        push(
-          fieldName,
-          tr(
-            `${profileName}の${options.valueName}は正の数値で指定してください。`,
-            `${profileName} ${options.valueName} values must be positive numbers.`,
-          ),
-        )
-        break
-      }
-    } else {
-      if (!isFiniteNumber(sample.value) || sample.value < options.valueMin) {
-        push(
-          fieldName,
-          tr(
-            `${profileName}の${options.valueName}は${options.valueMin}以上で指定してください。`,
-            `${profileName} ${options.valueName} values must be ≥ ${options.valueMin}.`,
-          ),
-        )
-        break
-      }
-    }
-    prevTime = sample.time
-  }
-}
-
-function validateMachProfile(
-  profile: ClientMachSample[],
-  push: (field: string, message: string) => void,
-  fieldName: string,
-  profileName: string,
-  options: { valueMin?: number } = {},
-) {
-  let prevMach = -Infinity
-  for (const sample of profile) {
-    if (!isFiniteNumber(sample.mach) || sample.mach < 0) {
+    if (!isFiniteNumber(j.mass_kg) || j.mass_kg <= 0 || j.mass_kg >= mass)
       push(
-        fieldName,
-        tr(`${profileName}プロファイルのMachは0以上で指定してください。`, `${profileName} table Mach numbers must be 0 or greater.`),
+        q('mass_kg'),
+        msg('投棄物の質量は正で、段の質量より小さくしてください。', 'Jettisoned mass must be positive and less than the stage mass.'),
       )
-      break
-    }
-    if (sample.mach <= prevMach) {
+    const jb = j.ballistic_coefficient_kg_m2 ?? 100
+    if (!isFiniteNumber(jb) || jb <= 0)
       push(
-        fieldName,
-        tr(`${profileName}プロファイルのMachは昇順に並べてください。`, `${profileName} table Mach numbers must be in ascending order.`),
+        q('ballistic_coefficient_kg_m2'),
+        msg('投棄物の弾道係数は正の値にしてください。', 'Jettisoned body ballistic coefficient must be positive.'),
       )
-      break
-    }
-    const minValue = options.valueMin ?? -Infinity
-    if (!isFiniteNumber(sample.value) || sample.value < minValue) {
-      const message =
-        minValue > -Infinity
-          ? tr(`${profileName}プロファイルの値は${minValue}以上で指定してください。`, `${profileName} table values must be ≥ ${minValue}.`)
-          : tr(`${profileName}プロファイルの値は数値で指定してください。`, `${profileName} table values must be numbers.`)
-      push(fieldName, message)
-      break
-    }
-    prevMach = sample.mach
-  }
+    if (!(j.delta_v_ned_mps ?? [0, 0, 0]).every(isFiniteNumber))
+      push(q('delta_v_ned_mps'), msg('投棄時の追加速度は数値にしてください。', 'Jettison velocity must be numbers.'))
+  })
 }

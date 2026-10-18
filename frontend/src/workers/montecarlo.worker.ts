@@ -14,7 +14,7 @@ self.onmessage = async (e: MessageEvent<McWorkerRequest>) => {
     const configJson = JSON.stringify(config)
     const dispersionJson = JSON.stringify(dispersion)
     for (const index of indices) {
-      post({ type: 'case', case: JSON.parse(mod.monte_carlo_case(configJson, dispersionJson, seed, index)) })
+      post({ type: 'case', case: JSON.parse(mod.monte_carlo_case_json(configJson, dispersionJson, seed, index)) })
     }
     post({ type: 'done' })
   } catch (err) {

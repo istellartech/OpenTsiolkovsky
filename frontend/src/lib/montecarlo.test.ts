@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vite-plus/test'
 import {
   DEFAULT_DISPERSION,
+  DISPERSION_KEYS,
   bodyStage,
   casesToCsv,
   ellipseAxes,
   ellipsePoints,
-  tidyDispersion,
   type CaseResult,
   type ImpactStatistics,
 } from './montecarlo'
@@ -32,50 +32,67 @@ describe('ellipsePoints', () => {
 })
 
 describe('casesToCsv', () => {
+  const perturbation = Object.fromEntries(DISPERSION_KEYS.map((k) => [k, 0])) as unknown as CaseResult['perturbation']
+  const c = (index: number, lat: number | null, stages = false): CaseResult => ({
+    index,
+    perturbation: stages
+      ? { ...perturbation, stages: [1, 2].map((v) => ({ ...perturbation, thrust_percent: v, normal_percent: 0, separation_time_s: 0 })) }
+      : perturbation,
+    max_altitude_m: 1000,
+    impacts: [{ body: 'vehicle', impact: lat === null ? null : { time_s: 50, latitude_deg: lat, longitude_deg: 2, speed_mps: 3 } }],
+  })
+
   it('writes one row per case in index order, blank when no impact', () => {
-    const c = (index: number, lat: number | null): CaseResult => ({
-      index,
-      perturbation: DEFAULT_DISPERSION,
-      max_altitude_m: 1000,
-      impacts: [{ body: 'vehicle', impact: lat === null ? null : { time_s: 50, latitude_deg: lat, longitude_deg: 2, speed_mps: 3 } }],
-    })
     const lines = casesToCsv([c(1, null), c(0, 1.5)], ['vehicle']).split('\n')
-    // As the CLI: the later dispersions come after the impact columns
-    expect(lines[0].split(',')).toHaveLength(11 + 3 + 3)
-    expect(lines[0]).toContain('vehicle_impact_lat[deg]')
-    expect(lines[0].endsWith(',normal[%],separation_time[s],wind_speed_scale[%]')).toBe(true)
+    // As the CLI's montecarlo_cases.csv
+    expect(lines[0]).toBe(
+      [
+        'case',
+        ...DISPERSION_KEYS,
+        'max_altitude_m',
+        'vehicle_impact_time_s',
+        'vehicle_impact_latitude_deg',
+        'vehicle_impact_longitude_deg',
+      ].join(','),
+    )
     expect(lines[1].startsWith('0,')).toBe(true)
-    expect(lines[1].endsWith(',50,1.5,2,0,0,0')).toBe(true)
-    expect(lines[2].endsWith(',,,,0,0,0')).toBe(true)
+    expect(lines[1].endsWith(',1000,50,1.5,2')).toBe(true)
+    expect(lines[2].endsWith(',1000,,,')).toBe(true)
+  })
+
+  it('adds per-stage columns for independent stage draws', () => {
+    const [header, row] = casesToCsv([c(0, 1, true)], ['vehicle']).split('\n')
+    expect(header).toContain('stage2_thrust_percent')
+    expect(row.split(',')[header.split(',').indexOf('stage2_thrust_percent')]).toBe('2')
   })
 })
 
 describe('bodyStage', () => {
-  it('reads the stage of a body key', () => {
+  it('reads the stage of a body id', () => {
     expect(bodyStage('vehicle')).toBeNull()
     expect(bodyStage('stage2')).toBe(2)
-    expect(bodyStage('stage3_dump')).toBe(3)
-  })
-})
-
-describe('tidyDispersion', () => {
-  it('drops the later keys at their defaults', () => {
-    const d = tidyDispersion({ ...DEFAULT_DISPERSION, normal_percent: 0, distribution: 'normal', independent_stages: false })
-    expect(d).toEqual(DEFAULT_DISPERSION)
-    const u = tidyDispersion({ ...DEFAULT_DISPERSION, separation_time_s: 0.1, distribution: 'uniform', independent_stages: true })
-    expect(u).toMatchObject({ separation_time_s: 0.1, distribution: 'uniform', independent_stages: true })
+    expect(bodyStage('stage3_fairing')).toBe(3)
   })
 })
 
 describe('ellipseAxes', () => {
-  const s = { ellipse_major_m: 100, ellipse_minor_m: 50 } as ImpactStatistics
-  it('uses the solver values when present', () => {
-    expect(ellipseAxes({ ...s, ellipse_95_major_m: 7, ellipse_95_minor_m: 3 }, 'p95')).toEqual({ major: 7, minor: 3 })
+  it('picks the ellipse of the level', () => {
+    const s = {
+      ellipse_major_m: 100,
+      ellipse_minor_m: 50,
+      ellipse_95_major_m: 7,
+      ellipse_95_minor_m: 3,
+      ellipse_99_major_m: 9,
+      ellipse_99_minor_m: 4,
+    } as ImpactStatistics
+    expect(ellipseAxes(s, 'p95')).toEqual({ major: 7, minor: 3 })
+    expect(ellipseAxes(s, 'p99')).toEqual({ major: 9, minor: 4 })
     expect(ellipseAxes(s, 'sigma1')).toEqual({ major: 100, minor: 50 })
   })
-  it('scales 1-sigma for older solver builds', () => {
-    const { major, minor } = ellipseAxes(s, 'p99')
-    expect(major).toBeCloseTo(303.5, 1)
-    expect(minor).toBeCloseTo(151.7, 1)
+})
+
+describe('DEFAULT_DISPERSION', () => {
+  it('has every key', () => {
+    for (const k of DISPERSION_KEYS) expect(typeof DEFAULT_DISPERSION[k]).toBe('number')
   })
 })

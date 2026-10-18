@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ClientConfig } from '../../lib/simulation'
+import type { Rows } from '../../lib/config'
 import { NumberField } from '../primitives'
 import { fmt } from '../../lib/format'
 import { tr } from '../../lib/i18n'
@@ -11,7 +11,8 @@ export function PitchProgramBuilder({
 }: {
   latitude: number
   azimuth: number
-  onApply: (profile: ClientConfig['attitude']['profile']) => void
+  /** Constant azimuth and the elevation table */
+  onApply: (azimuth: number, elevation: Rows) => void
 }) {
   const [v, setV] = useState({ azimuth, vertical: 10, pitchTime: 60, pitchEl: 65, finalTime: 300, finalEl: 0, inclination: NaN })
   const set = (patch: Partial<typeof v>) => setV((old) => ({ ...old, ...patch }))
@@ -83,16 +84,16 @@ export function PitchProgramBuilder({
           type="button"
           disabled={!valid}
           onClick={() =>
-            onApply([
-              { time: 0, azimuth_deg: v.azimuth, elevation_deg: 90 },
-              { time: v.vertical, azimuth_deg: v.azimuth, elevation_deg: 90 },
-              { time: v.pitchTime, azimuth_deg: v.azimuth, elevation_deg: v.pitchEl },
-              { time: v.finalTime, azimuth_deg: v.azimuth, elevation_deg: v.finalEl },
+            onApply(v.azimuth, [
+              [0, 90],
+              [v.vertical, 90],
+              [v.pitchTime, v.pitchEl],
+              [v.finalTime, v.finalEl],
             ])
           }
           className="h-8 rounded-[6px] bg-ink px-3 text-[12px] font-medium text-surface hover:opacity-90 disabled:opacity-40"
         >
-          {tr('姿勢テーブルに反映', 'Apply to attitude table')}
+          {tr('姿勢に反映', 'Apply to attitude')}
         </button>
       </div>
     </div>

@@ -1,12 +1,11 @@
 // Monte Carlo dispersion runs for the current configuration: settings
 // (remembered per browser), the run in progress and its statistics.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ClientConfig } from '../lib/simulation'
+import type { Config } from '../lib/config'
 import {
   DEFAULT_DISPERSION,
   DISPERSION_KEYS,
   ELLIPSE_LEVELS,
-  EXTRA_DISPERSION_KEYS,
   impactStatistics,
   startMonteCarlo,
   type CaseResult,
@@ -24,7 +23,7 @@ function loadSettings(): MonteCarloSettings {
     const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<MonteCarloSettings> | null
     if (!raw) return DEFAULT_SETTINGS
     const dispersion = { ...DEFAULT_DISPERSION }
-    for (const k of [...DISPERSION_KEYS, ...EXTRA_DISPERSION_KEYS]) {
+    for (const k of DISPERSION_KEYS) {
       const v = raw.dispersion?.[k]
       if (typeof v === 'number' && Number.isFinite(v) && v >= 0) dispersion[k] = v
     }
@@ -50,7 +49,7 @@ export interface McResult {
   settings: MonteCarloSettings
 }
 
-export function useMonteCarlo(config: ClientConfig) {
+export function useMonteCarlo(config: Config) {
   const [settings, setSettingsState] = useState<MonteCarloSettings>(loadSettings)
   const [status, setStatus] = useState<McStatus>('idle')
   const [error, setError] = useState<string | null>(null)

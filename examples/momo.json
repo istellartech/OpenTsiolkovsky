@@ -1,0 +1,38 @@
+{
+  "name": "MOMO",
+  "simulation": {
+    "end_time_s": 450,
+    "output_step_s": 0.5
+  },
+  "launch": {
+    "latitude_deg": 42.4925,
+    "longitude_deg": 143.4333,
+    "altitude_m": 20,
+    "time_utc": "2024-07-01T01:00:00Z"
+  },
+  "wind": {
+    "speed_mps": 0,
+    "direction_deg": 270
+  },
+  "attitude": {
+    "azimuth_deg": 113,
+    "elevation_deg": 88
+  },
+  "stages": [
+    {
+      "mass_initial_kg": 1150,
+      "engine": {
+        "thrust_vac_n": 30000,
+        "isp_vac_s": 250,
+        "burn_end_s": 62,
+        "nozzle_exit_area_m2": 0.0531
+      },
+      "aero": {
+        "diameter_m": 0.5,
+        "ca": 0.5,
+        "cn_alpha_per_rad": 0.2,
+        "ballistic_coefficient_kg_m2": 110
+      }
+    }
+  ]
+}
