@@ -23,11 +23,10 @@ Open [open-tsiolkovsky.vercel.app](https://open-tsiolkovsky.vercel.app/), pick a
 
 ### Command line
 
-Requires Rust (stable).
+Download the archive for your machine from [Releases](https://github.com/istellartech/OpenTsiolkovsky/releases) (Windows x64, macOS on Apple Silicon, Linux x64 / Ubuntu 22.04 or later), unpack it and run `openTsiolkovsky-cli` from that folder; the sample vehicles are included. On macOS, if the binary is blocked, run `xattr -d com.apple.quarantine openTsiolkovsky-cli` once. To build from source instead, install Rust (stable) and run `cargo build --release`.
 
 ```bash
-cargo build --release
-B=./target/release/openTsiolkovsky-cli
+B=./openTsiolkovsky-cli                          # or ./target/release/openTsiolkovsky-cli
 
 $B run examples/momo.json -o out/momo            # trajectory.csv, summary.json, bodies/*.csv
 $B monte-carlo examples/SS-520-4/ss520_4.json -n 500 -o out/ss520

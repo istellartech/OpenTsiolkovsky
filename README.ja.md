@@ -23,11 +23,10 @@ OpenTsiolkovsky は、多段ロケットの打ち上げから落下までを計�
 
 ### コマンドライン
 
-Rust（stable）が必要です。
+[Releases](https://github.com/istellartech/OpenTsiolkovsky/releases) から自分のマシン用のファイル（Windows x64、Apple Silicon の macOS、Linux x64 / Ubuntu 22.04 以降）をダウンロードして展開し、そのフォルダで `openTsiolkovsky-cli` を実行します。サンプル機体も入っています。macOS で実行がブロックされたら、一度だけ `xattr -d com.apple.quarantine openTsiolkovsky-cli` を実行してください。ソースからビルドする場合は Rust（stable）を入れて `cargo build --release` です。
 
 ```bash
-cargo build --release
-B=./target/release/openTsiolkovsky-cli
+B=./openTsiolkovsky-cli                          # またはソースからなら ./target/release/openTsiolkovsky-cli
 
 $B run examples/momo.json -o out/momo            # trajectory.csv・summary.json・bodies/*.csv を出力
 $B monte-carlo examples/SS-520-4/ss520_4.json -n 500 -o out/ss520
