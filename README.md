@@ -27,7 +27,7 @@ OpenTsiolkovsky is an open-source rocket flight simulator. The simulation core i
 - Output directory with `trajectory.csv` (one column set, also used by the web app's CSV export), `summary.json` (maxima, flight events with orbital elements, impact points) and `bodies/<id>.csv` for every released body — see [output files](docs/output.md)
 - `monte-carlo` runs a dispersion analysis on all CPU cores and writes `montecarlo_cases.csv` and `montecarlo_summary.json`
 
-### For AI agents ([details and current status](docs/ai.md#対応状況v060-時点))
+### For AI agents ([details and current status](docs/ai.md#対応状況v100-時点))
 - `run --json` / `validate --json`: one JSON document on stdout; problems are reported with their JSON path; stable error kinds and exit status (3 = invalid configuration)
 - `schema`: JSON Schema of the configuration (units, defaults) and of the dispersion file
 - `mcp`: a Model Context Protocol server on stdio with tools to validate, fly, run Monte Carlo, convert legacy files and create web app links — for Claude Code, Claude Desktop and other MCP clients
