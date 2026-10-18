@@ -85,8 +85,23 @@
       [5530, -3.53]
     ]
   },
+  "presentation": {
+    "stage_count": 3,
+    "booster_count": 4
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1・2段同時燃焼",
+          "en": "Stages 1 and 2 burning together"
+        },
+        "separation_name": {
+          "ja": "第1段ブースタ ×4",
+          "en": "Stage 1 boosters ×4"
+        },
+        "engine_continues": true
+      },
       "mass_initial_kg": 214595.4451,
       "mass_dry_kg": 21012,
       "engine": {
@@ -114,6 +129,16 @@
       "separation_time_s": 117.85
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段コア単独",
+          "en": "Stage 2 core alone"
+        },
+        "separation_name": {
+          "ja": "第2段コア",
+          "en": "Stage 2 core"
+        }
+      },
       "mass_initial_kg": 64521.55487,
       "mass_dry_kg": 11365,
       "engine": {
@@ -127,6 +152,7 @@
       "jettisons": [
         {
           "name": "fairing",
+          "display_name": { "ja": "フェアリング", "en": "Fairing" },
           "time_s": 65.23,
           "mass_kg": 1700,
           "ballistic_coefficient_kg_m2": 50
@@ -149,6 +175,12 @@
       "separation_time_s": 169.57
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第3段",
+          "en": "Stage 3"
+        }
+      },
       "mass_initial_kg": 32580,
       "mass_dry_kg": 10331.6318,
       "engine": {

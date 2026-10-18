@@ -12,7 +12,7 @@ self.onmessage = async (e: MessageEvent<SolverRequest>) => {
   const { id, config } = e.data
   let msg: SolverResponse
   try {
-    const track = trackFromOutput(await runSimulation(config as Config))
+    const track = trackFromOutput(await runSimulation(config as Config), config)
     msg = { id, ok: true, track }
   } catch (err) {
     msg = { id, ok: false, error: err instanceof Error ? err.message : String(err) }

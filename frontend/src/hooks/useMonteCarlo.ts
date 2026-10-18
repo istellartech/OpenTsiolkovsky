@@ -1,3 +1,4 @@
+import { presentationFromConfig, type FlightPresentation } from '../lib/presentation'
 // Monte Carlo dispersion runs for the current configuration: settings
 // (remembered per browser), the run in progress and its statistics.
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -41,6 +42,7 @@ function loadSettings(): MonteCarloSettings {
 export type McStatus = 'idle' | 'running' | 'done' | 'cancelled' | 'error'
 
 export interface McResult {
+  presentation: FlightPresentation
   cases: CaseResult[]
   statistics: ImpactStatistics[]
   total: number
@@ -80,7 +82,14 @@ export function useMonteCarlo(config: Config) {
     const frozen = settings
     setStatus('running')
     setError(null)
-    setResult({ cases: [], statistics: [], total: frozen.count, configJson, settings: frozen })
+    setResult({
+      cases: [],
+      statistics: [],
+      total: frozen.count,
+      configJson,
+      settings: frozen,
+      presentation: presentationFromConfig(config),
+    })
 
     // Statistics come from WASM; refresh them at most a few times a second.
     let pending: CaseResult[] | null = null

@@ -219,7 +219,7 @@ fn validate(config: &str, json: bool) -> Result<ExitCode, AgentError> {
         if valid {
             let stages = result["stages"].as_u64().unwrap_or(0);
             println!(
-                "{}: valid ({stages} stage{})",
+                "{}: valid ({stages} calculation interval{})",
                 result["name"].as_str().unwrap_or_default(),
                 if stages == 1 { "" } else { "s" }
             );

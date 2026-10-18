@@ -172,6 +172,7 @@ impl Converter<'_> {
         };
 
         Ok(Config {
+            presentation: None,
             schema: None,
             name,
             simulation: Simulation {
@@ -329,6 +330,7 @@ impl Converter<'_> {
         let d = &s.dumping;
         let jettisons = if d.exists {
             vec![Jettison {
+                display_name: None,
                 name: String::new(),
                 time_s: d.separation_time,
                 mass_kg: d.mass,
@@ -372,6 +374,7 @@ impl Converter<'_> {
         };
 
         Stage {
+            presentation: None,
             mass_initial_kg: s.mass_initial,
             mass_dry_kg: s.mass_dry,
             engine,

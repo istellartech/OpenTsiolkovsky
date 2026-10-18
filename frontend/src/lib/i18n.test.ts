@@ -10,7 +10,7 @@ describe('i18n', () => {
   it('switches strings, event names and number format', () => {
     setLang('ja')
     expect(tr('高度', 'Altitude')).toBe('高度')
-    expect(eventLabel({ kind: 'separation', t: 1, stage: 1, nextStage: 2 })).toBe('1/2段 分離')
+    expect(eventLabel({ kind: 'separation', t: 1, stage: 1, nextStage: 2 })).toBe('区間1の分離物 分離')
     setLang('en')
     expect(tr('高度', 'Altitude')).toBe('Altitude')
     expect(eventLabel({ kind: 'end', t: 1, landed: true })).toBe('Impact')

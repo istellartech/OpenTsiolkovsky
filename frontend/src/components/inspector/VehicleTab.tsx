@@ -1,3 +1,5 @@
+import { DisplayNameField } from './PresentationFields'
+import { phaseLabel } from '../../lib/presentation'
 import { useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { Config, Engine, Jettison, Stage } from '../../lib/config'
@@ -124,17 +126,55 @@ export function VehicleTab({
 
   return (
     <>
-      <StagePills count={stages.length} active={idx} onStage={onStage}>
+      <StagePills presentation={specs.presentation} count={stages.length} active={idx} onStage={onStage}>
         {stages.length < MAX_STAGE_COUNT && (
           <button
             type="button"
             onClick={addStage}
             className="flex h-8 items-center gap-1 rounded-[6px] px-2 text-[12px] text-ink-2 hover:bg-surface-2 hover:text-ink"
           >
-            <Plus className="h-3.5 w-3.5" /> {tr('段を追加', 'Add stage')}
+            <Plus className="h-3.5 w-3.5" /> {tr('区間を追加', 'Add interval')}
           </button>
         )}
       </StagePills>
+
+      <Group
+        title={tr('計算区間の表示', 'Calculation interval display')}
+        note={tr(
+          '表示名は計算結果に影響しません。翻訳付きの名前は現在の表示言語で編集します。',
+          'Names do not affect flight calculations. Translated names are edited in the current UI language.',
+        )}
+      >
+        <DisplayNameField
+          label={tr('区間名', 'Interval name')}
+          value={stage.presentation?.name}
+          path={p('presentation.name')}
+          placeholder={tr(`区間${idx + 1}`, `Interval ${idx + 1}`)}
+          onChange={(name) => setStage({ presentation: { ...stage.presentation, name } })}
+        />
+        {!isLast && (
+          <>
+            <DisplayNameField
+              label={tr('区間末に分離する物体名', 'Body released at interval end')}
+              path={p('presentation.separation_name')}
+              value={stage.presentation?.separation_name}
+              placeholder={tr(`区間${idx + 1}の分離物`, `Interval ${idx + 1} released body`)}
+              onChange={(separation_name) => setStage({ presentation: { ...stage.presentation, separation_name } })}
+            />
+            <Toggle
+              label={tr('分離後もエンジンの燃焼が継続する', 'Engine burn continues after separation')}
+              checked={stage.presentation?.engine_continues ?? false}
+              onChange={(engine_continues) => setStage({ presentation: { ...stage.presentation, engine_continues } })}
+            />
+            <p className="text-[11px] leading-relaxed text-ink-3">
+              {tr(
+                '区間境界の計算上の停止・点火表示だけを省略します。推力・燃焼時刻の設定は変わりません。',
+                'Hides only the synthetic stop/start at the interval boundary. Thrust and burn time settings are unchanged.',
+              )}
+            </p>
+          </>
+        )}
+      </Group>
 
       <Group
         title={tr('質量と推進剤', 'Mass & propellant')}
@@ -144,10 +184,10 @@ export function VehicleTab({
         )}
       >
         <NumberField
-          label={tr('段の質量', 'Stage mass')}
+          label={tr('区間の割当質量', 'Interval allocated mass')}
           hint={tr(
-            'この段単体の質量（推進剤込み）。上の段は含めません。',
-            'Mass of this stage alone, including propellant. Excludes upper stages.',
+            'この区間の割当質量（消費する推進剤・投棄物・残る機体部分を含む）。後続区間分は含みません。通常の直列段では段単体の初期質量です。',
+            'Mass allocated to this interval, including consumed propellant, jettisons and the remaining vehicle part. Excludes later intervals. For an ordinary serial stage, this is its initial mass.',
           )}
           unit="kg"
           path={p('mass_initial_kg')}
@@ -214,7 +254,7 @@ export function VehicleTab({
 
       <Group title={tr('エンジン', 'Engine')}>
         <Toggle
-          label={tr('この段はエンジンを持つ', 'This stage has an engine')}
+          label={tr('この区間に推力がある', 'Thrust in this interval')}
           checked={!!engine}
           onChange={(on) => setStage({ engine: on ? createDefaultStage().engine : undefined })}
         />
@@ -223,7 +263,10 @@ export function VehicleTab({
             <CurveField
               label={tr('推力（真空）', 'Thrust (vacuum)')}
               tableLabel={tr('推力を時刻テーブルで入力', 'Enter thrust as time table')}
-              title={tr(`${idx + 1}段の推力テーブル`, `Stage ${idx + 1} thrust table`)}
+              title={tr(
+                `${phaseLabel(specs.presentation, idx + 1)}の推力テーブル`,
+                `${phaseLabel(specs.presentation, idx + 1)} thrust table`,
+              )}
               unit="N"
               xLabel={tr('時刻 s', 'Time s')}
               yLabel={tr('推力 N', 'Thrust N')}
@@ -235,7 +278,10 @@ export function VehicleTab({
             <CurveField
               label={tr('比推力 Isp（真空）', 'Specific impulse Isp (vacuum)')}
               tableLabel={tr('Isp を時刻テーブルで入力', 'Enter Isp as time table')}
-              title={tr(`${idx + 1}段の比推力テーブル`, `Stage ${idx + 1} Isp table`)}
+              title={tr(
+                `${phaseLabel(specs.presentation, idx + 1)}の比推力テーブル`,
+                `${phaseLabel(specs.presentation, idx + 1)} Isp table`,
+              )}
               unit="s"
               xLabel={tr('時刻 s', 'Time s')}
               yLabel="Isp s"
@@ -273,15 +319,15 @@ export function VehicleTab({
           idx === 0
             ? tr('時刻は打上げからの秒です。', 'Times are seconds after launch.')
             : tr(
-                `この段は ${idx}段の分離（T+${fmt(spec.start)} s）から始まり、時刻はそこからの経過秒で入力します。テーブルの時刻も同じです。`,
-                `This stage starts at stage ${idx} separation (T+${fmt(spec.start)} s); enter times as seconds from then. Table times work the same way.`,
+                `この区間は前区間の分離（T+${fmt(spec.start)} s）から始まり、時刻はそこからの経過秒で入力します。テーブルの時刻も同じです。`,
+                `This interval starts at the previous interval’s separation (T+${fmt(spec.start)} s); enter times as seconds from then. Table times work the same way.`,
               )
         }
       >
         {engine && (
           <>
             <NumberField
-              label={tr('点火', 'Ignition')}
+              label={tr('区間内の推力開始', 'Thrust start in interval')}
               note={abs(engine.burn_start_s ?? 0)}
               unit="s"
               path={p('engine.burn_start_s')}
@@ -289,7 +335,7 @@ export function VehicleTab({
               onChange={(v) => setEngine({ burn_start_s: v })}
             />
             <NumberField
-              label={tr('燃焼終了', 'Burnout')}
+              label={tr('区間内の推力終了', 'Thrust end in interval')}
               note={abs(engine.burn_end_s)}
               unit="s"
               path={p('engine.burn_end_s')}
@@ -317,8 +363,8 @@ export function VehicleTab({
         badge={jettisons.length > 0 ? tr(`${jettisons.length}個`, `${jettisons.length}`) : tr('なし', 'None')}
         title={tr('投棄物', 'Jettisoned parts')}
         note={tr(
-          'フェアリングなど、この段の飛行中に切り離す物体です。切り離した質量は機体から減り、物体は弾道係数で落下点まで計算します。',
-          'Parts released while this stage flies, such as a fairing. Their mass leaves the vehicle, and they are flown to the ground with their ballistic coefficient.',
+          'フェアリングなど、この区間の飛行中に切り離す物体です。切り離した質量は機体から減り、物体は弾道係数で落下点まで計算します。',
+          'Parts released during this calculation interval, such as a fairing. Their mass leaves the vehicle, and they are flown to the ground with their ballistic coefficient.',
         )}
       >
         {jettisons.map((j, k) => {
@@ -327,7 +373,7 @@ export function VehicleTab({
             <div key={k} className="mb-2 border-b border-line pb-2 last:border-b-0">
               <div className="flex min-h-8 items-center justify-between gap-2">
                 <input
-                  aria-label={tr('名前', 'Name')}
+                  aria-label={tr('出力ID', 'Output ID')}
                   value={j.name ?? ''}
                   placeholder={`jettison${k + 1}`}
                   onChange={(e) => setJettison(k, { name: e.target.value.replace(/[^\w-]/g, '') })}
@@ -341,10 +387,17 @@ export function VehicleTab({
                   <Trash2 className="h-3.5 w-3.5" /> {tr('削除', 'Remove')}
                 </button>
               </div>
+              <DisplayNameField
+                label={tr('投棄物の表示名', 'Jettisoned body display name')}
+                path={q('display_name')}
+                value={j.display_name}
+                placeholder={j.name || `jettison${k + 1}`}
+                onChange={(display_name) => setJettison(k, { display_name })}
+              />
               <NumberField
                 label={tr('切り離し', 'Release')}
                 note={abs(j.time_s)}
-                hint={tr('この段の開始からの秒', 'Seconds from the start of this stage')}
+                hint={tr('この区間の開始からの秒', 'Seconds from the start of this interval')}
                 unit="s"
                 path={q('time_s')}
                 value={j.time_s}
@@ -395,8 +448,8 @@ export function VehicleTab({
         badge={freeLabel}
         title={tr('慣性飛行モード', 'Coast mode')}
         note={tr(
-          '燃焼後のこの段（上段が載っている間）の飛び方です。分離後に落ちていく使用済みの段は姿勢制御がないため、「指定姿勢」は「空力安定」として計算します。',
-          'How this stage flies after burnout while it still carries the upper stages. A spent stage falling after separation has no attitude control, so "commanded attitude" is flown as "aerodynamically stable".',
+          'この区間の燃焼後の機体の飛び方です。分離後の物体は姿勢制御がないため、「指定姿勢」は「空力安定」として計算します。',
+          'How the vehicle flies after burnout in this interval. Released bodies have no attitude control, so "commanded attitude" is flown as "aerodynamically stable".',
         )}
       >
         <SelectField
@@ -410,7 +463,8 @@ export function VehicleTab({
 
       {stages.length > 1 && (
         <button type="button" onClick={removeStage} className="flex h-8 items-center gap-1.5 text-[12px] text-ink-3 hover:text-danger">
-          <Trash2 className="h-3.5 w-3.5" /> {tr(`${idx + 1}段を削除`, `Delete stage ${idx + 1}`)}
+          <Trash2 className="h-3.5 w-3.5" />{' '}
+          {tr(`${phaseLabel(specs.presentation, idx + 1)}を削除`, `Delete ${phaseLabel(specs.presentation, idx + 1)}`)}
         </button>
       )}
     </>

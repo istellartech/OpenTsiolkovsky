@@ -91,8 +91,23 @@
       [5982, 6.81]
     ]
   },
+  "presentation": {
+    "stage_count": 2,
+    "booster_count": 2
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段・SRB-3装着中",
+          "en": "Stage 1 with SRB-3"
+        },
+        "separation_name": {
+          "ja": "SRB-3 ×2",
+          "en": "SRB-3 ×2"
+        },
+        "engine_continues": true
+      },
       "mass_initial_kg": 234282.4921,
       "mass_dry_kg": 18000,
       "engine": {
@@ -130,6 +145,16 @@
       "separation_time_s": 116
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段・SRB分離後",
+          "en": "Stage 1 after SRB separation"
+        },
+        "separation_name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        }
+      },
       "mass_initial_kg": 159917.5079,
       "mass_dry_kg": 32858.46843,
       "engine": {
@@ -143,6 +168,7 @@
       "jettisons": [
         {
           "name": "fairing",
+          "display_name": { "ja": "フェアリング", "en": "Fairing" },
           "time_s": 95,
           "mass_kg": 1800,
           "ballistic_coefficient_kg_m2": 50
@@ -165,6 +191,12 @@
       "separation_time_s": 187
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        }
+      },
       "mass_initial_kg": 31000,
       "mass_dry_kg": 10200.74825,
       "engine": {

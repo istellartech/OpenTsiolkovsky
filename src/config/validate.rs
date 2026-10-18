@@ -93,6 +93,12 @@ impl Report {
 pub fn validate(config: &Config) -> Report {
     let mut r = Report::default();
 
+    if let Some(p) = &config.presentation
+        && p.stage_count == Some(0)
+    {
+        r.error("presentation.stage_count", "must be positive");
+    }
+
     let sim = &config.simulation;
     r.positive("simulation.end_time_s", sim.end_time_s);
     r.positive("simulation.output_step_s", sim.output_step_s);

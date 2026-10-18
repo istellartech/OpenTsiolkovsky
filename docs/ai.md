@@ -39,10 +39,11 @@ OpenTsiolkovsky は、AI エージェントやスクリプトから次の 3 つ�
 
 ### 間違えやすい点
 
-- 各段の時刻（`burn_start_s`、`burn_end_s`、`separation_time_s`、表の時刻）は**その段の開始からの相対時刻**です。姿勢プログラム（`attitude`）の時刻だけは打ち上げからです。
-- `mass_initial_kg` は**その段単体**の質量です（上段を含みません）。
-- 最終段以外は `separation_time_s` が必要です。
-- 空力（`aero`）は段ごとです。2 段目以降は直径も小さくなるのが普通です。
+- 各計算区間の時刻（`burn_start_s`、`burn_end_s`、`separation_time_s`、表の時刻）は**その区間の開始からの相対時刻**です。姿勢プログラム（`attitude`）の時刻だけは打ち上げからです。
+- `mass_initial_kg` は**その区間の割当質量**です（後続区間分を含みません）。通常は段単体の初期質量ですが、ブースタ近似では同時にコアが消費する推進剤も含みます。
+- 最終区間以外は `separation_time_s` が必要です。
+- `stages[]` と出力の `stage` は計算区間です。ブースタの分離前後で同じ実機の段を分割する場合があります。実機の段数は任意の `presentation.stage_count`、ブースタ本数は `presentation.booster_count` で指定できます。各区間の `presentation.name` / `separation_name` / `engine_continues` と投棄物の `display_name` は表示専用です。旧設定・数値計算・JSON出力キー・ID・終了コードは変更しません。`validate` の人向け表示は計算区間数を `calculation intervals` と表記します（[詳細](configuration.md#表示専用の構成名前)）。
+- 空力（`aero`）は区間ごとです。その区間の機体全体と、区間末の分離物の落下計算に使います。
 - 知らないキーはエラーになります（`validate` が場所を示します）。
 
 最小構成（真上に向けて Isp 200 秒で 20 秒燃焼、無風・空力係数なし）:

@@ -1,3 +1,4 @@
+import type { FlightPresentation } from '../lib/presentation'
 import { useEffect, useRef, useState } from 'react'
 import {
   BoundingSphere,
@@ -61,6 +62,7 @@ const DEFAULT_LAYERS: Layers = { iip: true, falls: true, dispersion: true }
 
 /** Monte Carlo result to draw on the globe */
 export interface DispersionOverlay {
+  presentation?: FlightPresentation
   cases: CaseResult[]
   statistics: ImpactStatistics[]
   /** Stage number of the vehicle's last stage (colours the vehicle's points) */
@@ -355,7 +357,7 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null, layer
 
   // Spent stages and dumping products: fall path, moving point, impact point.
   if (layers.falls) {
-    for (const body of track.fallBodies) addFallBody(viewer, body, halo, ink)
+    for (const body of track.fallBodies) addFallBody(viewer, body, halo, ink, track.presentation)
   }
 
   // Monte Carlo: every case's impact and each body's error ellipse.
@@ -370,9 +372,9 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null, layer
   return { vehicle, sphere: BoundingSphere.fromPoints(positions), heading }
 }
 
-function addFallBody(viewer: Viewer, body: FallTrack, halo: Color, ink: Color) {
+function addFallBody(viewer: Viewer, body: FallTrack, halo: Color, ink: Color, presentation?: FlightPresentation) {
   const color = Color.fromCssColorString(readStageColor(body.stage))
-  const label = fallBodyLabel(body)
+  const label = fallBodyLabel(body, presentation)
   if (body.samples.length > 1) {
     viewer.entities.add({
       polyline: {
@@ -444,7 +446,7 @@ function addDispersion(viewer: Viewer, mc: DispersionOverlay, halo: Color, ink: 
     viewer.entities.add({
       position: Cartesian3.fromDegrees(s.mean_longitude_deg, s.mean_latitude_deg, 0),
       label: {
-        text: `${mcBodyLabel(s.body)} ${ellipseLabel(mc.ellipse)}`,
+        text: `${mcBodyLabel(s.body, mc.presentation)} ${ellipseLabel(mc.ellipse)}`,
         font: '500 11px "IBM Plex Sans JP", sans-serif',
         fillColor: ink,
         outlineColor: halo,

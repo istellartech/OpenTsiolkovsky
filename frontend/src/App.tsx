@@ -104,6 +104,7 @@ export default function App() {
     () =>
       mcResult && !mc.stale && mcResult.cases.length > 0
         ? {
+            presentation: mcResult.presentation,
             cases: mcResult.cases,
             statistics: mcResult.statistics,
             lastStage: config.stages.length,

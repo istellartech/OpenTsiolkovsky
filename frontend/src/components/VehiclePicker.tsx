@@ -1,3 +1,4 @@
+import { structureLabel } from '../lib/presentation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Plus, Search, X } from 'lucide-react'
 import { PRESET_CATEGORIES, PRESET_COUNTRIES, PRESET_OPTIONS, type PresetCountry, type PresetOption } from '../config/presets'
@@ -324,7 +325,7 @@ function PresetRow({
 function SpecFigures({ specs }: { specs: VehicleSpec }) {
   return (
     <>
-      <span>{tr(`${specs.stages.length}段`, `${specs.stages.length} stage${specs.stages.length === 1 ? '' : 's'}`)}</span>
+      <span>{structureLabel(specs.presentation?.vehicle, specs.stages.length)}</span>
       <span>{fmtMass(specs.liftoffMass)}</span>
       <span>
         {tr('推力', 'Thrust')} {fmtForce(specs.liftoffThrust)}
@@ -346,7 +347,7 @@ function PresetDetail({
   onPick: () => void
 }) {
   const figures: [string, string][] = [
-    [tr('段数', 'Stages'), String(specs.stages.length)],
+    [tr('段構成', 'Structure'), structureLabel(specs.presentation?.vehicle, specs.stages.length)],
     [tr('全備質量', 'Liftoff mass'), fmtMass(specs.liftoffMass)],
     [tr('離昇推力（真空）', 'Liftoff thrust (vac)'), fmtForce(specs.liftoffThrust)],
     [tr('理想 Δv', 'Ideal Δv'), `${(specs.dvTotal / 1000).toFixed(2)} km/s`],

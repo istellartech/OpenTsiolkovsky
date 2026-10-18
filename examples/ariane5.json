@@ -93,8 +93,23 @@
       [6500, -3.57]
     ]
   },
+  "presentation": {
+    "stage_count": 2,
+    "booster_count": 2
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段EPC・EAP装着中",
+          "en": "Stage 1 EPC with EAP"
+        },
+        "separation_name": {
+          "ja": "EAP ×2",
+          "en": "EAP ×2"
+        },
+        "engine_continues": true
+      },
       "mass_initial_kg": 599741.9231,
       "mass_dry_kg": 74000,
       "engine": {
@@ -122,6 +137,16 @@
       "separation_time_s": 136.7
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段EPC・EAP分離後",
+          "en": "Stage 1 EPC after EAP separation"
+        },
+        "separation_name": {
+          "ja": "第1段EPC",
+          "en": "Stage 1 EPC"
+        }
+      },
       "mass_initial_kg": 142550,
       "mass_dry_kg": 16400,
       "engine": {
@@ -149,6 +174,12 @@
       "separation_time_s": 383
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段ESC-A",
+          "en": "Stage 2 ESC-A"
+        }
+      },
       "mass_initial_kg": 30022,
       "mass_dry_kg": 15122,
       "engine": {

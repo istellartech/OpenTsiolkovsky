@@ -50,6 +50,7 @@ export interface Aero {
 }
 
 export interface Jettison {
+  display_name?: DisplayName | null
   name?: string
   /** Release time from the stage start [s] */
   time_s: number
@@ -67,8 +68,22 @@ export interface ThrustTrim {
   gimbal_offset_m?: [number, number, number]
 }
 
+/** Display-only metadata, accepted by Rust but never used in flight calculations. */
+export type DisplayName = string | { ja: string; en: string }
+export interface VehiclePresentation {
+  stage_count?: number | null
+  booster_count?: number | null
+}
+export interface PhasePresentation {
+  name?: DisplayName | null
+  separation_name?: DisplayName | null
+  /** Hide only the synthetic stop/start at this interval's separation boundary. */
+  engine_continues?: boolean
+}
+
 export interface Stage {
-  /** This stage alone, without the upper stages [kg] */
+  presentation?: PhasePresentation | null
+  /** Mass allocated to this calculation interval, excluding later intervals [kg] */
   mass_initial_kg: number
   /** Without propellant [kg]; unset: the whole stage may burn */
   mass_dry_kg?: number
@@ -119,6 +134,7 @@ export interface Config {
     roll_offset_deg?: number
     gyro_bias_deg_h?: [number, number, number]
   }
+  presentation?: VehiclePresentation | null
   stages: Stage[]
 }
 

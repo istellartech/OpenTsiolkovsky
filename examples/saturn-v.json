@@ -103,8 +103,22 @@
       [5700, -2.24]
     ]
   },
+  "presentation": {
+    "stage_count": 3,
+    "booster_count": 0
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        },
+        "separation_name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        }
+      },
       "mass_initial_kg": 2244937,
       "mass_dry_kg": 173571,
       "engine": {
@@ -137,6 +151,16 @@
       "separation_time_s": 162
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        },
+        "separation_name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        }
+      },
       "mass_initial_kg": 487500,
       "mass_dry_kg": 51358,
       "engine": {
@@ -169,6 +193,12 @@
       "separation_time_s": 386.7
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第3段",
+          "en": "Stage 3"
+        }
+      },
       "mass_initial_kg": 166571,
       "mass_dry_kg": 135182,
       "engine": {

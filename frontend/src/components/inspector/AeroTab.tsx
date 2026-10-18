@@ -1,3 +1,4 @@
+import { phaseLabel, presentationFromConfig } from '../../lib/presentation'
 import type { Aero, Config } from '../../lib/config'
 import { DEFAULTS, curveValue } from '../../lib/config'
 import { CurveField, NumberField, Toggle } from '../primitives'
@@ -20,17 +21,18 @@ export function AeroTab({
   const set = (v: Partial<Aero>) => patchStage(patch, idx, (st) => ({ ...st, aero: { ...st.aero, ...v } }))
   const p = (k: string) => stagePath(idx, `aero.${k}`)
   const powerOff = a.ca_power_off !== undefined
+  const presentation = presentationFromConfig(config)
   const many = config.stages.length > 1
   return (
     <>
-      {many && <StagePills count={config.stages.length} active={idx} onStage={onStage} />}
+      {many && <StagePills presentation={presentation} count={config.stages.length} active={idx} onStage={onStage} />}
       <Group
         title={tr('形状', 'Geometry')}
         note={
           many
             ? tr(
-                '空力は段ごとです。各段の値は、その段より上を載せて飛んでいる間（と分離後に落ちていくとき）に使います。',
-                'Aerodynamics are per stage: each stage’s values apply while it flies with the stages above it (and when it falls after separation).',
+                '空力は計算区間ごとです。その区間の機体全体と、区間末に分離した物体の落下計算に使います。',
+                'Aerodynamics are per calculation interval, for the attached vehicle and the body released at the interval end.',
               )
             : undefined
         }
@@ -148,9 +150,12 @@ export function AeroTab({
           type="button"
           onClick={() => patch((c) => ({ ...c, stages: c.stages.map((st) => ({ ...st, aero: { ...a } })) }))}
           className="h-8 rounded-[6px] border border-line px-3 text-[12px] text-ink-2 hover:border-ink hover:text-ink"
-          title={tr(`CA ${curveValue(a.ca)} などを全段にコピー`, `Copy CA ${curveValue(a.ca)} etc. to every stage`)}
+          title={tr(`CA ${curveValue(a.ca)} などを全区間にコピー`, `Copy CA ${curveValue(a.ca)} etc. to every interval`)}
         >
-          {tr(`${idx + 1}段の空力を全段に適用`, `Apply stage ${idx + 1} aerodynamics to all stages`)}
+          {tr(
+            `${phaseLabel(presentation, idx + 1)}の空力を全区間に適用`,
+            `Apply ${phaseLabel(presentation, idx + 1)} aerodynamics to all intervals`,
+          )}
         </button>
       )}
     </>

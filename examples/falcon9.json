@@ -95,8 +95,22 @@
       [5520, -15.19]
     ]
   },
+  "presentation": {
+    "stage_count": 2,
+    "booster_count": 0
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        },
+        "separation_name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        }
+      },
       "mass_initial_kg": 433100,
       "mass_dry_kg": 22200,
       "engine": {
@@ -124,6 +138,12 @@
       "separation_time_s": 143
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        }
+      },
       "mass_initial_kg": 115200,
       "mass_dry_kg": 7700,
       "engine": {
@@ -137,6 +157,7 @@
       "jettisons": [
         {
           "name": "fairing",
+          "display_name": { "ja": "フェアリング", "en": "Fairing" },
           "time_s": 112,
           "mass_kg": 2000,
           "ballistic_coefficient_kg_m2": 50

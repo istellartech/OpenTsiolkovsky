@@ -117,7 +117,7 @@ export const FieldContext = createContext<FieldContextValue>({
   register: () => () => {},
 })
 
-function useFieldState(path?: string) {
+export function useFieldState(path?: string) {
   const ctx = useContext(FieldContext)
   return {
     error: path ? ctx.issues.get(path) : undefined,

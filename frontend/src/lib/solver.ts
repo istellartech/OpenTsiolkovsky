@@ -38,7 +38,7 @@ class Solver {
 
   /** Solve `config`; a call made while another is running cancels the older one. */
   run(config: Config): Promise<Track | null> {
-    if (!this.useWorker) return runSimulation(config).then(trackFromOutput)
+    if (!this.useWorker) return runSimulation(config).then((output) => trackFromOutput(output, config))
     if (this.pending) {
       this.pending.reject(new SolverCancelled())
       this.pending = null

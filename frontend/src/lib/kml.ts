@@ -15,7 +15,7 @@ export function generateKML(track: Track, vehicleName: string): string {
     .map((e) => {
       const s = track.samples.reduce((best, cur) => (Math.abs(cur.t - e.t) < Math.abs(best.t - e.t) ? cur : best))
       return `    <Placemark>
-      <name>${escapeXML(eventLabel(e))}</name>
+      <name>${escapeXML(eventLabel(e, track.presentation))}</name>
       <description>${escapeXML(`T+${e.t.toFixed(1)} s, ${(s.alt / 1000).toFixed(2)} km`)}</description>
       <styleUrl>#eventPoint</styleUrl>
       <Point>
@@ -31,7 +31,7 @@ export function generateKML(track: Track, vehicleName: string): string {
   const falls = track.fallBodies
     .filter((b) => b.samples.length > 1)
     .map((b) => {
-      const label = escapeXML(fallBodyLabel(b))
+      const label = escapeXML(fallBodyLabel(b, track.presentation))
       const path = b.samples.map((s) => `          ${s.lon},${s.lat},${s.alt}`).join('\n')
       const impact = b.impact
         ? `    <Placemark>

@@ -1,3 +1,5 @@
+import type { Config } from './config'
+import { displayEvents, presentationFromConfig, type FlightPresentation } from './presentation'
 // Turns solver output into a flight "track": samples in display units,
 // flight events, released bodies and an interpolator for playback.
 import type { BodyJson, FlightEventJson, FlightMode, ImpactPointJson, Sample, SimulationOutput } from './simulation'
@@ -119,6 +121,8 @@ export interface TrackSummary {
 }
 
 export interface Track {
+  /** Snapshot of the names used by this run (also retained for pinned comparisons). */
+  presentation?: FlightPresentation
   samples: TrackSample[]
   /** The solver's samples as they came (for the CSV export) */
   raw: Sample[]
@@ -232,7 +236,7 @@ function toTrackSample(s: Sample): TrackSample {
 }
 
 /** Track of a solver run; null when it produced fewer than two usable samples. */
-export function trackFromOutput(output: Pick<SimulationOutput, 'trajectory' | 'events' | 'bodies'>): Track | null {
+export function trackFromOutput(output: Pick<SimulationOutput, 'trajectory' | 'events' | 'bodies'>, config?: Config): Track | null {
   const input = output.trajectory
   if (!input || input.length < 2) return null
   // Keep everything up to the first non-physical sample.
@@ -277,7 +281,8 @@ export function trackFromOutput(output: Pick<SimulationOutput, 'trajectory' | 'e
   return {
     samples,
     raw,
-    events: trackEvents(output.events ?? [], last.t, landed),
+    presentation: config ? presentationFromConfig(config) : undefined,
+    events: displayEvents(trackEvents(output.events ?? [], last.t, landed), config),
     stages,
     t0: first.t,
     t1: last.t,

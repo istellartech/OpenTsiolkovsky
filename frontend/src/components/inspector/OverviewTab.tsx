@@ -1,3 +1,5 @@
+import { phaseLabel, structureLabel } from '../../lib/presentation'
+import { StructureFields } from './PresentationFields'
 import type { InspectorNav } from '../Inspector'
 import { AlertTriangle } from 'lucide-react'
 import type { Config } from '../../lib/config'
@@ -45,12 +47,7 @@ export function Overview({
         className="-mx-1.5 w-[calc(100%+12px)] rounded-[6px] border border-transparent bg-transparent px-1.5 py-0.5 text-[17px] font-semibold tracking-tight outline-none hover:border-line focus:border-signal"
       />
       <p className="mt-0.5 text-[12px] text-ink-2">
-        {preset
-          ? `${preset.kind} · ${preset.site}`
-          : tr(
-              `${specs.stages.length}段 · カスタム設定`,
-              `${specs.stages.length} stage${specs.stages.length === 1 ? '' : 's'} · Custom configuration`,
-            )}
+        {structureLabel(config.presentation, config.stages.length)} · {preset ? preset.site : tr('カスタム設定', 'Custom configuration')}
       </p>
       {preset && <p className="mt-2 text-[12px] leading-relaxed text-ink-2">{preset.description}</p>}
 
@@ -77,14 +74,17 @@ export function Overview({
         </ul>
       )}
 
-      <h3 className="mb-1.5 mt-5 text-[12px] font-semibold">{tr('段構成', 'Stages')}</h3>
+      <div className="mt-5">
+        <StructureFields config={config} patch={patch} />
+      </div>
+      <h3 className="mb-1.5 mt-5 text-[12px] font-semibold">{tr('計算区間ごとの値', 'Figures by calculation interval')}</h3>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-[12px]">
           <thead>
             <tr className="text-[11px] text-ink-3">
-              <th className="py-1 pr-2 text-left font-normal">{tr('段', 'Stage')}</th>
-              <th className="py-1 pr-2 text-right font-normal">{tr('質量 t', 'Mass t')}</th>
-              <th className="py-1 pr-2 text-right font-normal">{tr('推進剤 t', 'Prop. t')}</th>
+              <th className="py-1 pr-2 text-left font-normal">{tr('区間', 'Interval')}</th>
+              <th className="py-1 pr-2 text-right font-normal">{tr('開始質量 t', 'Start mass t')}</th>
+              <th className="py-1 pr-2 text-right font-normal">{tr('消費量 t', 'Consumed t')}</th>
               <th className="py-1 pr-2 text-right font-normal">{tr('推力 kN', 'Thrust kN')}</th>
               <th className="py-1 pr-2 text-right font-normal">Isp s</th>
               <th className="whitespace-nowrap py-1 text-right font-normal">Δv km/s</th>
@@ -96,16 +96,19 @@ export function Overview({
                 key={s.index}
                 onClick={() => onNav({ tab: 'vehicle', stage: s.index })}
                 className="cursor-pointer border-t border-line hover:bg-surface-2"
-                title={tr(`${s.index + 1}段の設定を開く`, `Open stage ${s.index + 1} settings`)}
+                title={tr(
+                  `${phaseLabel(specs.presentation, s.index + 1)}の設定を開く`,
+                  `Open ${phaseLabel(specs.presentation, s.index + 1)} settings`,
+                )}
               >
                 <td className="py-1.5 pr-2">
                   <span
                     className="mr-1.5 inline-block h-2 w-2 rounded-full align-middle"
                     style={{ background: stageColorVar(s.index + 1) }}
                   />
-                  {s.index + 1}
+                  {phaseLabel(specs.presentation, s.index + 1)}
                 </td>
-                <td className="num py-1.5 pr-2 text-right">{fmt(s.ownMass / 1000, 1)}</td>
+                <td className="num py-1.5 pr-2 text-right">{fmt(s.stackMass / 1000, 1)}</td>
                 <td className="num py-1.5 pr-2 text-right">{fmt(s.propellant / 1000, 1)}</td>
                 <td className="num py-1.5 pr-2 text-right">{fmt(s.thrustMax / 1000, 0)}</td>
                 <td className="num py-1.5 pr-2 text-right">{fmt(s.isp, 0)}</td>
@@ -117,8 +120,8 @@ export function Overview({
       </div>
       <p className="mt-1 text-[11px] text-ink-3">
         {tr(
-          '質量は各段単体（推進剤込み）。推進剤は燃焼時間と推力・Ispから計算。',
-          'Mass is each stage alone, including propellant. Propellant is computed from burn time, thrust and Isp.',
+          '開始質量は上段を含む区間開始時の機体全体。消費量・推力・Isp・Δvは区間ごとの合成値で、実機の段別諸元ではありません。',
+          'Start mass is the whole vehicle at the interval start, including upper stages. Consumption, thrust, Isp and Δv are combined interval values, not physical stage specifications.',
         )}
       </p>
 
@@ -184,8 +187,10 @@ function SequenceChart({ specs }: { specs: VehicleSpec }) {
     <div className="rounded-[8px] border border-line px-3 pb-2 pt-3">
       <div className="space-y-2.5">
         {specs.stages.map((s) => (
-          <div key={s.index} className="grid grid-cols-[2.25rem_1fr] items-center gap-2">
-            <span className="text-[11px] text-ink-2">{tr(`${s.index + 1}段`, `S${s.index + 1}`)}</span>
+          <div key={s.index} className="grid grid-cols-[minmax(0,8rem)_1fr] items-center gap-2">
+            <span className="truncate text-[11px] text-ink-2" title={phaseLabel(specs.presentation, s.index + 1)}>
+              {phaseLabel(specs.presentation, s.index + 1)}
+            </span>
             <div className="relative h-4">
               {/* Stage lifetime */}
               <div
@@ -196,8 +201,8 @@ function SequenceChart({ specs }: { specs: VehicleSpec }) {
               <div
                 className="absolute top-0.5 h-3 rounded-[3px]"
                 title={tr(
-                  `点火 T+${fmt(s.ignition)} s / 燃焼終了 T+${fmt(s.burnout)} s`,
-                  `Ignition T+${fmt(s.ignition)} s / burnout T+${fmt(s.burnout)} s`,
+                  `区間内の動力飛行 T+${fmt(s.ignition)}〜${fmt(s.burnout)} s`,
+                  `Powered flight in interval T+${fmt(s.ignition)}–${fmt(s.burnout)} s`,
                 )}
                 style={{
                   left: pct(s.ignition),
@@ -216,7 +221,7 @@ function SequenceChart({ specs }: { specs: VehicleSpec }) {
           </div>
         ))}
       </div>
-      <div className="relative ml-[2.75rem] mt-1.5 h-3.5 border-t border-line">
+      <div className="relative ml-[8.5rem] mt-1.5 h-3.5 border-t border-line">
         {ticks.map((t) => (
           <span key={t} className="num absolute top-0.5 -translate-x-1/2 text-[10px] text-ink-3" style={{ left: pct(t) }}>
             {t}

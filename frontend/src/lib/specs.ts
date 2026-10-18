@@ -1,3 +1,4 @@
+import { phaseLabel, presentationFromConfig, type FlightPresentation } from './presentation'
 // Vehicle figures derived from the configuration alone (no simulation):
 // propellant used, ideal Δv, thrust-to-weight and the absolute sequence.
 //
@@ -34,6 +35,7 @@ export interface StageSpec {
 }
 
 export interface VehicleSpec {
+  presentation?: FlightPresentation
   stages: StageSpec[]
   liftoffMass: number
   liftoffThrust: number
@@ -101,6 +103,7 @@ function rate(stage: Stage, t: number): number {
 }
 
 export function computeSpecs(config: Config): VehicleSpec {
+  const presentation = presentationFromConfig(config)
   const list = config.stages
   const warnings: string[] = []
   const stages: StageSpec[] = []
@@ -132,8 +135,8 @@ export function computeSpecs(config: Config): VehicleSpec {
       const propKg = Math.round(prop).toLocaleString(locale())
       warnings.push(
         tr(
-          `${i + 1}段: 燃焼で消費する推進剤 ${propKg} kg が段の質量を超えています`,
-          `Stage ${i + 1}: propellant burned (${propKg} kg) exceeds the stage mass`,
+          `${phaseLabel(presentation, i + 1)}: 推進剤消費量 ${propKg} kg が割当質量を超えています`,
+          `${phaseLabel(presentation, i + 1)}: propellant burned (${propKg} kg) exceeds the allocated mass`,
         ),
       )
     } else if (burnout > 0) {
@@ -162,6 +165,7 @@ export function computeSpecs(config: Config): VehicleSpec {
   const liftoffMass = first?.stackMass ?? 0
   const liftoffThrust = first && first.ignition <= 0 ? first.thrustIgnition : 0
   return {
+    presentation,
     stages,
     liftoffMass,
     liftoffThrust,

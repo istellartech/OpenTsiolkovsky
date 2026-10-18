@@ -112,3 +112,7 @@ openTsiolkovsky-cli monte-carlo CONFIG -n 500 --dispersion examples/dispersion.j
 
 - `montecarlo_cases.csv`: 1 行 1 ケース。`case`、引いた値（上の数値キーと同じ列名。段ごとに引いたときは `stage<N>_thrust_percent` なども）、`max_altitude_m`、物体ごとの `<id>_impact_time_s` / `_impact_latitude_deg` / `_impact_longitude_deg`（着地しなければ空欄）
 - `montecarlo_summary.json`: `cases`、`failed_cases`、`seed`、`dispersion`、物体ごとの `statistics`（落下数、平均落下点、南北・東西の標準偏差、1σ 誤差楕円の長径・短径・長軸の方位、95 % と 99 % の楕円（2 次元正規分布でその確率を含む楕円。1σ の 2.448 倍と 3.035 倍）、平均点からの最大のずれ）
+
+## 表示名と計算区間番号
+
+CSV・イベントの `stage` と分離物ID（`stage1`、`stage2_fairing` など）は、従来どおり計算区間の1始まりの番号です。実機の段数・段名とは必ずしも一致しません。設定の `presentation` と投棄物の `display_name` はWebとKMLでの表示名に使い、ソルバーの数値・列名・列順・イベント・分離物IDを変更しません。Webでは燃焼継続を指定した区間境界に一致する計算上の停止・点火表示を省略することがありますが、CLI/WASMの生イベントは保持されます。

@@ -40,7 +40,7 @@ describe.skipIf(!existsSync(wasmPath))('WASM solver', () => {
 
   it.each(PRESET_OPTIONS.map((p) => [p.id, p] as const))('flies %s', async (id, preset) => {
     const config = preset.create()
-    const track = trackFromOutput(await runSimulation(config))
+    const track = trackFromOutput(await runSimulation(config), config)
     expect(track).not.toBeNull()
     if (!track) return
     expect(track.truncatedAt).toBeUndefined()
@@ -67,6 +67,28 @@ describe.skipIf(!existsSync(wasmPath))('WASM solver', () => {
       expect(apogeeKm).toBeGreaterThan(150)
       expect(track.summary.maxSpeed).toBeGreaterThan(7000)
     }
+  })
+
+  it('preserves raw WASM output and seeded Monte Carlo when only display metadata changes', async () => {
+    const config = PRESET_OPTIONS.find((p) => p.id === 'h3-22s')!.create()
+    const old = JSON.parse(JSON.stringify(config)) as typeof config
+    delete old.presentation
+    for (const phase of old.stages) {
+      delete phase.presentation
+      for (const j of phase.jettisons ?? []) delete j.display_name
+    }
+    const output = await runSimulation(config)
+    expect(output).toEqual(await runSimulation(old))
+    const track = trackFromOutput(output, config)!
+    expect(track.raw).toEqual(output.trajectory)
+    expect(track.fallBodies.map((b) => b.id)).toEqual(output.bodies.map((b) => b.id))
+    expect(track.events.filter((e) => e.stage === 1 && e.kind === 'burnout')).toEqual([])
+    expect(track.events.filter((e) => e.stage === 2 && e.kind === 'ignition')).toEqual([])
+    const mod = await initWasm()
+    const dispersion = JSON.stringify({ ...DEFAULT_DISPERSION, independent_stages: true })
+    expect(JSON.parse(mod.monte_carlo_case_json(JSON.stringify(config), dispersion, 17, 0))).toEqual(
+      JSON.parse(mod.monte_carlo_case_json(JSON.stringify(old), dispersion, 17, 0)),
+    )
   })
 
   it('rejects an invalid configuration with the JSON path', async () => {

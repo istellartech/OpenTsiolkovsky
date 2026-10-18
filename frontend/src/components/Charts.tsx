@@ -733,7 +733,7 @@ export function EventList({ track }: { track: Track }) {
               <span className={`mr-2 inline-block h-1.5 w-1.5 rounded-full align-middle ${i <= active ? 'bg-signal' : 'bg-line-strong'}`} />
               T+{fmt(e.t, 1)}
             </td>
-            <td className="py-1.5 pr-3">{eventLabel(e)}</td>
+            <td className="py-1.5 pr-3">{eventLabel(e, track.presentation)}</td>
             <td className="num py-1.5 pr-3 text-right">{fmt(s.alt / 1000, 1)} km</td>
             <td className="num py-1.5 pr-3 text-right">{fmt(s.groundSpeed, 0)} m/s</td>
             <td className="num hidden py-1.5 pr-3 text-right sm:table-cell">{fmt(s.mach, 2)}</td>

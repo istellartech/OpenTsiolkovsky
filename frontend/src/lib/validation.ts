@@ -1,3 +1,4 @@
+import { phaseLabel, presentationFromConfig } from './presentation'
 // Checks of the configuration for the editor, with localized messages. The
 // fields are the JSON paths the solver's validator reports
 // (src/config/validate.rs), e.g. `stages[1].engine.burn_end_s`, so an issue
@@ -71,9 +72,64 @@ function checkRequired(v: number | undefined, push: Push, field: string, ok: boo
   if (!isFiniteNumber(v) || !ok) push(field, tr(ja, en))
 }
 
+const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+
+function checkDisplayName(value: unknown, path: string, push: Push) {
+  if (value == null || typeof value === 'string') return
+  if (
+    !object(value) ||
+    typeof value.ja !== 'string' ||
+    typeof value.en !== 'string' ||
+    Object.keys(value).some((k) => k !== 'ja' && k !== 'en')
+  )
+    push(
+      path,
+      tr(
+        '表示名は文字列、または ja と en の文字列で指定してください。',
+        'Use a string or an object with ja and en strings for a display name.',
+      ),
+    )
+}
+
+function checkPresentation(value: unknown, path: string, vehicle: boolean, push: Push) {
+  if (value == null) return
+  if (!object(value)) {
+    push(path, tr('表示設定はオブジェクトで指定してください。', 'Presentation must be an object.'))
+    return
+  }
+  const allowed = vehicle ? ['stage_count', 'booster_count'] : ['name', 'separation_name', 'engine_continues']
+  for (const k of Object.keys(value)) {
+    if (!allowed.includes(k)) push(`${path}.${k}`, tr('不明な表示設定です。', 'Unknown presentation field.'))
+  }
+  if (vehicle) {
+    for (const k of allowed) {
+      const n = value[k]
+      if (n != null && (typeof n !== 'number' || !Number.isInteger(n) || n < (k === 'stage_count' ? 1 : 0) || n > 4294967295))
+        push(
+          `${path}.${k}`,
+          tr(
+            k === 'stage_count' ? '公称段数は1以上の整数にしてください。' : 'ブースタ本数は0以上の整数にしてください。',
+            k === 'stage_count' ? 'Published stage count must be a positive integer.' : 'Booster count must be a non-negative integer.',
+          ),
+        )
+    }
+  } else {
+    checkDisplayName(value.name, `${path}.name`, push)
+    checkDisplayName(value.separation_name, `${path}.separation_name`, push)
+    if (value.engine_continues !== undefined && typeof value.engine_continues !== 'boolean')
+      push(`${path}.engine_continues`, tr('燃焼継続は真偽値で指定してください。', 'Engine continuation must be a boolean.'))
+  }
+}
+
 export function validateConfig(config: Config): ValidationIssue[] {
   const issues: ValidationIssue[] = []
   const push: Push = (field, message) => issues.push({ field, message })
+
+  checkPresentation(config.presentation, 'presentation', true, push)
+  config.stages.forEach((s, i) => {
+    checkPresentation(s.presentation, `stages[${i}].presentation`, false, push)
+    s.jettisons?.forEach((j, k) => checkDisplayName(j.display_name, `stages[${i}].jettisons[${k}].display_name`, push))
+  })
 
   const sim = config.simulation
   checkRequired(
@@ -204,7 +260,8 @@ export function validateConfig(config: Config): ValidationIssue[] {
   if (!(att.gyro_bias_deg_h ?? [0, 0, 0]).every((b) => isFiniteNumber(b) && Math.abs(b) <= 100))
     push('attitude.gyro_bias_deg_h', tr('ジャイロバイアスは±100 deg/h以内にしてください。', 'Gyro bias must be within ±100 deg/h.'))
 
-  if (config.stages.length === 0) push('stages', tr('少なくとも1段は設定してください。', 'Configure at least one stage.'))
+  if (config.stages.length === 0)
+    push('stages', tr('少なくとも1計算区間は設定してください。', 'Configure at least one calculation interval.'))
   config.stages.forEach((_, i) => validateStage(config, i, push))
   return issues
 }
@@ -213,9 +270,9 @@ function validateStage(config: Config, i: number, push: Push) {
   const stage = config.stages[i]
   const last = i === config.stages.length - 1
   const p = (key: string) => `stages[${i}].${key}`
-  // Messages of later stages name the stage
-  const msg = (ja: string, en: string) => (i > 0 ? tr(`${i + 1}段の${ja}`, `Stage ${i + 1}: ${en}`) : tr(ja, en))
-  const name = (ja: string, en: string) => (i > 0 ? tr(`${i + 1}段の${ja}`, `Stage ${i + 1} ${en}`) : tr(ja, en))
+  const phase = phaseLabel(presentationFromConfig(config), i + 1)
+  const msg = (ja: string, en: string) => (i > 0 ? tr(`${phase}の${ja}`, `${phase}: ${en}`) : tr(ja, en))
+  const name = (ja: string, en: string) => (i > 0 ? tr(`${phase}の${ja}`, `${phase} ${en}`) : tr(ja, en))
 
   const mass = stage.mass_initial_kg
   if (!isFiniteNumber(mass) || mass <= 0)
@@ -260,14 +317,17 @@ function validateStage(config: Config, i: number, push: Push) {
       push(
         q('time_s'),
         msg(
-          '投棄物の分離時刻は段の開始後、分離前にしてください。',
-          'Jettison time must be after the stage start and before its separation.',
+          '投棄物の分離時刻は区間の開始後、区間末の分離前にしてください。',
+          'Jettison time must be after the interval start and before its separation.',
         ),
       )
     if (!isFiniteNumber(j.mass_kg) || j.mass_kg <= 0 || j.mass_kg >= mass)
       push(
         q('mass_kg'),
-        msg('投棄物の質量は正で、段の質量より小さくしてください。', 'Jettisoned mass must be positive and less than the stage mass.'),
+        msg(
+          '投棄物の質量は正で、区間の割当質量より小さくしてください。',
+          'Jettisoned mass must be positive and less than the interval allocated mass.',
+        ),
       )
     const jb = j.ballistic_coefficient_kg_m2 ?? 100
     if (!isFiniteNumber(jb) || jb <= 0)

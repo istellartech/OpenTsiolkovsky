@@ -1,3 +1,4 @@
+import { phaseLabel } from '../lib/presentation'
 import { useRef } from 'react'
 import { ChevronDown, ChevronUp, Pause, Play, RotateCcw } from 'lucide-react'
 import { SPEEDS, playback, usePlayback } from '../lib/playback'
@@ -74,7 +75,7 @@ function Scrubber({ track }: { track: Track }) {
       {track.events.map((e) => (
         <div
           key={`${e.kind}-${e.t}`}
-          title={`${eventLabel(e)}  T+${fmt(e.t)} s`}
+          title={`${eventLabel(e, track.presentation)}  T+${fmt(e.t)} s`}
           className="absolute top-0 flex h-3 w-2.5 -translate-x-1/2 justify-center"
           style={{ left: `${pct(e.t)}%` }}
         >
@@ -111,11 +112,11 @@ function Scrubber({ track }: { track: Track }) {
         {spacedLabels(track, pct).map((e) => (
           <span
             key={`l-${e.kind}-${e.t}`}
-            title={`${eventLabel(e)}  T+${fmt(e.t)} s`}
-            className="num pointer-events-auto absolute -translate-x-1/2 whitespace-nowrap text-[9px] leading-none"
+            title={`${eventLabel(e, track.presentation)}  T+${fmt(e.t)} s`}
+            className="num pointer-events-auto absolute max-w-24 -translate-x-1/2 truncate whitespace-nowrap text-[9px] leading-none"
             style={{ left: `${pct(e.t)}%`, color: eventColor(e) }}
           >
-            {eventShort(e)}
+            {eventShort(e, track.presentation)}
           </span>
         ))}
       </div>
@@ -213,7 +214,9 @@ export function Telemetry({
         </div>
         <div className="flex items-center gap-1.5 text-[11px] text-ink-2">
           <span className="h-2 w-2 rounded-full" style={{ background: stageColorVar(s.stage) }} />
-          {tr(`${s.stage}段`, `Stage ${s.stage}`)}
+          <span className="max-w-[16rem] truncate" title={phaseLabel(track.presentation, s.stage)}>
+            {phaseLabel(track.presentation, s.stage)}
+          </span>
           {onToggle && (
             <button
               type="button"
@@ -230,7 +233,7 @@ export function Telemetry({
       </div>
       {collapsed ? null : (
         <>
-          {!compact && <div className="h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last)}</div>}
+          {!compact && <div className="h-4 truncate text-[11px] text-ink-3">{last && eventLabel(last, track.presentation)}</div>}
           {!compact && (
             <div className="mb-1.5 flex h-4 items-center gap-1.5 truncate text-[11px] text-ink-2">
               <span

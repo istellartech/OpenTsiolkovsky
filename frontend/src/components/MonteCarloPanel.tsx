@@ -29,7 +29,7 @@ function dispersionFields(): [NumericDispersionKey, string, string][] {
   return [
     ['thrust_percent', tr('推力', 'Thrust'), '%'],
     ['isp_percent', tr('比推力', 'Isp'), '%'],
-    ['mass_percent', tr('各段の質量', 'Stage masses'), '%'],
+    ['mass_percent', tr('各区間の割当質量', 'Interval allocated masses'), '%'],
     ['drag_percent', tr('抗力（CA・弾道係数）', 'Drag (CA, ballistic coef.)'), '%'],
     ['elevation_deg', tr('姿勢 上下角', 'Attitude elevation'), '°'],
     ['azimuth_deg', tr('姿勢 方位角', 'Attitude azimuth'), '°'],
@@ -111,14 +111,14 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
             onChange={(distribution) => setDispersion({ distribution })}
           />
           <Toggle
-            label={tr('段ごとに独立に引く', 'Draw each stage independently')}
+            label={tr('計算区間ごとに独立に引く', 'Draw each interval independently')}
             checked={settings.dispersion.independent_stages}
             onChange={(independent_stages) => setDispersion({ independent_stages })}
           />
           <p className="mb-1 text-[11px] leading-relaxed text-ink-3">
             {tr(
-              'オンにすると推力・比推力・質量・抗力・CN・分離時刻を段ごとに別の値で引きます。オフでは同じ値を全段に使います。',
-              'When on, thrust, Isp, mass, drag, CN and separation time get a separate draw for each stage; when off, one draw applies to every stage.',
+              'オンにすると推力・比推力・質量・抗力・CN・分離時刻を計算区間ごとに別の値で引きます。オフでは同じ値を全区間に使います。',
+              'When on, thrust, Isp, mass, drag, CN and separation time get a separate draw for each calculation interval; when off, one draw applies to every interval.',
             )}
           </p>
           <button
@@ -237,7 +237,7 @@ export function MonteCarloPanel({ mc, lastStage, fileBase }: { mc: MonteCarloSta
                         className="mr-2 inline-block h-2 w-2 rounded-full align-middle"
                         style={{ background: stageColorVar(bodyStage(s.body) ?? lastStage) }}
                       />
-                      {mcBodyLabel(s.body)}
+                      {mcBodyLabel(s.body, result?.presentation)}
                     </td>
                     <td className="num py-1.5 pr-3 text-right">
                       {s.impacts} / {s.cases}

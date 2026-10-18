@@ -551,8 +551,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
     get modelNotes() {
       return [
         tr(
-          'SRB-A と第1段の同時燃焼は「SRB分離までの段」として近似し、SRB-A の燃焼終了（108 s、41号機計画書の値）までは両方、その後は第1段だけの推力・比推力にしています（推進薬質量と総力積は一致）。',
-          'The combined burn of the SRB-As and the first stage is approximated as a separate stage ending at SRB separation, with both burning until SRB-A burnout (108 s, from the F40 launch plan) and the first stage alone after that (propellant mass and total impulse are preserved).',
+          'SRB-A と第1段の同時燃焼は「SRB分離までの計算区間」として近似し、SRB-A の燃焼終了（108 s、41号機計画書の値）までは両方、その後は第1段だけの推力・比推力にしています（推進薬質量と総力積は一致）。',
+          'The combined burn of the SRB-As and the first stage is approximated as a separate calculation interval ending at SRB separation, with both burning until SRB-A burnout (108 s, from the F40 launch plan) and the first stage alone after that (propellant mass and total impulse are preserved).',
         ),
         tr(
           '第2段の推進薬はSELIからSECOまでの燃焼時間と推力・比推力から算出しています。',
@@ -602,8 +602,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
           'SRB-3 Isp is assumed to be similar to the SRB-A (283 s), as no published value was found.',
         ),
         tr(
-          'SRB-3 と第1段の同時燃焼は「SRB分離までの段」として近似し、SRB-3 の燃焼中（約110 s）は両方、その後は第1段だけの推力・比推力にしています。',
-          'The combined burn of the SRB-3s and the first stage is approximated as a separate stage ending at SRB separation, with both burning for the SRB-3 burn (about 110 s) and the first stage alone after that.',
+          'SRB-3 と第1段の同時燃焼は「SRB分離までの計算区間」として近似し、SRB-3 の燃焼中（約110 s）は両方、その後は第1段だけの推力・比推力にしています。',
+          'The combined burn of the SRB-3s and the first stage is approximated as a separate calculation interval ending at SRB separation, with both burning for the SRB-3 burn (about 110 s) and the first stage alone after that.',
         ),
         tr(
           'フェアリング（約1.8 t）は計画の分離時刻（211 s）に投棄物として切り離しています。',
@@ -693,8 +693,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
     get modelNotes() {
       return [
         tr(
-          '固体ブースタ EAP（各 277 t・推進薬 240 t・比推力 274.5 s・燃焼 130 s）と主段 EPC の同時燃焼は「EAP 分離（離昇後 136.7 s）までの段」として近似しています。',
-          'The combined burn of the EAP solid boosters (each 277 t, 240 t propellant, Isp 274.5 s, 130 s burn) and the EPC main stage is approximated as a separate stage ending at EAP separation (136.7 s after liftoff).',
+          '固体ブースタ EAP（各 277 t・推進薬 240 t・比推力 274.5 s・燃焼 130 s）と主段 EPC の同時燃焼は「EAP 分離（離昇後 136.7 s）までの計算区間」として近似しています。',
+          'The combined burn of the EAP solid boosters (each 277 t, 240 t propellant, Isp 274.5 s, 130 s burn) and the EPC main stage is approximated as a separate calculation interval ending at EAP separation (136.7 s after liftoff).',
         ),
         tr(
           '主段 EPC は打上げキットの推進薬 174 t を H0+1 s〜H0+521 s で燃やす扱いで、離昇前（6.3 s）の消費分を差し引いています。ノズル出口面積はマニュアルの真空／海面推力（1,390 / 960 kN）から求めています。',
@@ -804,8 +804,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
     get modelNotes() {
       return [
         tr(
-          '第1・2段（ブースタ 各44.4 t・推進薬 39.2 t／コア 99.8 t・推進薬 90.1 t、いずれも真空比推力 319 s）はクールー版ユーザーズマニュアルの値です。ブースタとコアの同時燃焼は「ブースタ分離（117.85 s）までの段」として近似し、ノズル出口面積は真空／海面推力の差から求めています。',
-          "Stages 1 and 2 (boosters 44.4 t each with 39.2 t propellant; core 99.8 t with 90.1 t; both 319 s vacuum Isp) are from the Kourou user's manual. The combined booster and core burn is approximated as a separate stage ending at booster separation (117.85 s); nozzle exit areas come from the vacuum / sea-level thrust difference.",
+          '第1・2段（ブースタ 各44.4 t・推進薬 39.2 t／コア 99.8 t・推進薬 90.1 t、いずれも真空比推力 319 s）はクールー版ユーザーズマニュアルの値です。ブースタとコアの同時燃焼は「ブースタ分離（117.85 s）までの計算区間」として近似し、ノズル出口面積は真空／海面推力の差から求めています。',
+          "Stages 1 and 2 (boosters 44.4 t each with 39.2 t propellant; core 99.8 t with 90.1 t; both 319 s vacuum Isp) are from the Kourou user's manual. The combined booster and core burn is approximated as a separate calculation interval ending at booster separation (117.85 s); nozzle exit areas come from the vacuum / sea-level thrust difference.",
         ),
         tr(
           '2.1a の第3段（RD-0110、297.9 kN・325 s、全備 25.3 t）は Starsem 版マニュアル（Soyuz/ST）の値で、推進薬はコア分離から第3段停止（287.4〜525.5 s）までの燃焼量としています。実機のホットステージング（コア停止の約2 s前に点火）と後部スカートの投棄は省略しています。',
@@ -852,8 +852,8 @@ export const PRESET_OPTIONS: PresetOption[] = [
           'Propellant masses, thrust, Isp and the flight sequence are from the manual. Stage gross masses (boosters 44.3 t, stage 1 198.8 t, stage 2 53.5 t, stage 3 20.9 t) and the 1.5 t fairing are not in the manual and come from a secondary source (Spaceflight101).',
         ),
         tr(
-          'ブースタと第1段のエンジンはマニュアルに地上推力・地上比推力しかないため、真空比推力を YF-20 系の 289 s と仮定し、真空推力とノズル出口面積を推進薬流量から求めています。ブースタと第1段の同時燃焼は「ブースタ分離（141.6 s）までの段」として近似しています。',
-          'For the booster and first-stage engines the manual gives only ground thrust and Isp, so vacuum Isp is assumed to be 289 s (YF-20 family) and vacuum thrust and nozzle exit area follow from the propellant flow. The combined booster and first-stage burn is approximated as a separate stage ending at booster separation (141.6 s).',
+          'ブースタと第1段のエンジンはマニュアルに地上推力・地上比推力しかないため、真空比推力を YF-20 系の 289 s と仮定し、真空推力とノズル出口面積を推進薬流量から求めています。ブースタと第1段の同時燃焼は「ブースタ分離（141.6 s）までの計算区間」として近似しています。',
+          'For the booster and first-stage engines the manual gives only ground thrust and Isp, so vacuum Isp is assumed to be 289 s (YF-20 family) and vacuum thrust and nozzle exit area follow from the propellant flow. The combined booster and first-stage burn is approximated as a separate calculation interval ending at booster separation (141.6 s).',
         ),
         tr(
           '第2段は主エンジン停止後に補助エンジン（47.1 kN）だけが5秒燃える推力履歴にしています。第3段は推力履歴に推力ゼロの区間を入れて、1回目の燃焼・慣性飛行・2回目の燃焼を表しています。推進薬 18.2 t をマニュアルの燃焼時間で使い切るため、平均推力は 163.6 kN（マニュアル 167.2 kN）になります。最後の20秒の速度調整は省略しています。',
@@ -887,6 +887,7 @@ export function createBlankConfig(launch?: Config['launch']): Config {
   const taiki = siteById('taiki')
   return {
     name: tr('新しいロケット', 'New rocket'),
+    presentation: { stage_count: 1, booster_count: 0 },
     simulation: { end_time_s: 600, output_step_s: 0.5, integrator: { method: 'rk45' } },
     launch: launch
       ? { latitude_deg: launch.latitude_deg, longitude_deg: launch.longitude_deg, altitude_m: launch.altitude_m, time_utc: launch.time_utc }

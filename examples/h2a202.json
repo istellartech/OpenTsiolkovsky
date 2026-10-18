@@ -93,8 +93,23 @@
       [5916, -22.42]
     ]
   },
+  "presentation": {
+    "stage_count": 2,
+    "booster_count": 2
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段・SRB-A装着中",
+          "en": "Stage 1 with SRB-A"
+        },
+        "separation_name": {
+          "ja": "SRB-A ×2",
+          "en": "SRB-A ×2"
+        },
+        "engine_continues": true
+      },
       "mass_initial_kg": 185000,
       "mass_dry_kg": 24000,
       "engine": {
@@ -132,6 +147,16 @@
       "separation_time_s": 124
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段・SRB分離後",
+          "en": "Stage 1 after SRB separation"
+        },
+        "separation_name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        }
+      },
       "mass_initial_kg": 83000,
       "mass_dry_kg": 14000,
       "engine": {
@@ -159,6 +184,12 @@
       "separation_time_s": 284
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        }
+      },
       "mass_initial_kg": 22600,
       "mass_dry_kg": 7039.540297,
       "engine": {

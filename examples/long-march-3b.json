@@ -101,8 +101,23 @@
       [6470, 6.31]
     ]
   },
+  "presentation": {
+    "stage_count": 3,
+    "booster_count": 4
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段・ブースタ装着中",
+          "en": "Stage 1 with boosters"
+        },
+        "separation_name": {
+          "ja": "ブースタ ×4",
+          "en": "Boosters ×4"
+        },
+        "engine_continues": true
+      },
       "mass_initial_kg": 344602.6667,
       "mass_dry_kg": 12800,
       "engine": {
@@ -130,6 +145,16 @@
       "separation_time_s": 141.6
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段・ブースタ分離後",
+          "en": "Stage 1 after booster separation"
+        },
+        "separation_name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        }
+      },
       "mass_initial_kg": 31397.33333,
       "mass_dry_kg": 12600,
       "engine": {
@@ -157,6 +182,16 @@
       "separation_time_s": 17.4
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        },
+        "separation_name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        }
+      },
       "mass_initial_kg": 54953,
       "mass_dry_kg": 6151.652733,
       "engine": {
@@ -189,6 +224,12 @@
       "separation_time_s": 186.4
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第3段",
+          "en": "Stage 3"
+        }
+      },
       "mass_initial_kg": 26433,
       "mass_dry_kg": 8233,
       "engine": {

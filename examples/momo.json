@@ -25,8 +25,18 @@
       [5116, 84.87]
     ]
   },
+  "presentation": {
+    "stage_count": 1,
+    "booster_count": 0
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        }
+      },
       "mass_initial_kg": 1150,
       "mass_dry_kg": 282.9638783,
       "engine": {

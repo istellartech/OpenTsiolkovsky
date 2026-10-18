@@ -14,8 +14,22 @@
     "azimuth_deg": 99,
     "elevation_deg": { "file": "SS520-4-1_attitude.csv", "columns": [0, 2] }
   },
+  "presentation": {
+    "stage_count": 3,
+    "booster_count": 0
+  },
   "stages": [
     {
+      "presentation": {
+        "name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        },
+        "separation_name": {
+          "ja": "第1段",
+          "en": "Stage 1"
+        }
+      },
       "mass_initial_kg": 2200,
       "engine": {
         "thrust_vac_n": { "file": "SS520-4-1_thrust.csv" },
@@ -31,6 +45,16 @@
       "separation_time_s": 31.7
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        },
+        "separation_name": {
+          "ja": "第2段",
+          "en": "Stage 2"
+        }
+      },
       "mass_initial_kg": 510,
       "engine": {
         "thrust_vac_n": { "file": "SS520-4-2_thrust.csv" },
@@ -47,6 +71,12 @@
       "separation_time_s": 228
     },
     {
+      "presentation": {
+        "name": {
+          "ja": "第3段",
+          "en": "Stage 3"
+        }
+      },
       "mass_initial_kg": 86,
       "engine": {
         "thrust_vac_n": { "file": "SS520-4-3_thrust.csv" },

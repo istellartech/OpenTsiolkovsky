@@ -1,3 +1,5 @@
+import type { FlightPresentation } from '../../lib/presentation'
+import { phaseLabel } from '../../lib/presentation'
 import { useId, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import type { Config, Stage } from '../../lib/config'
@@ -102,29 +104,32 @@ export function Group({ title, note, children, collapsible, defaultOpen = true, 
 /** Stage selector: one pill per stage, plus an optional trailing control */
 export function StagePills({
   count,
+  presentation,
   active,
   onStage,
   children,
 }: {
   count: number
+  presentation?: FlightPresentation
   active: number
   onStage: (i: number) => void
   children?: ReactNode
 }) {
   return (
-    <div className="mb-3 flex items-center gap-1">
+    <div className="mb-3 flex flex-wrap items-center gap-1">
       {Array.from({ length: count }, (_, i) => (
         <button
           key={i}
           type="button"
+          title={phaseLabel(presentation, i + 1)}
           onClick={() => onStage(i)}
           className={cn(
-            'flex h-8 items-center gap-1.5 rounded-[6px] border px-3 text-[12px] font-medium',
+            'flex h-8 max-w-full items-center gap-1.5 rounded-[6px] border px-3 text-[12px] font-medium',
             i === active ? 'border-ink bg-ink text-surface' : 'border-line text-ink-2 hover:border-line-strong',
           )}
         >
           <span className="h-2 w-2 rounded-full" style={{ background: stageColorVar(i + 1) }} />
-          {tr(`${i + 1}段`, `Stage ${i + 1}`)}
+          <span className="truncate">{phaseLabel(presentation, i + 1)}</span>
         </button>
       ))}
       {children}

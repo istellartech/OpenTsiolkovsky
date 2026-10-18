@@ -43,7 +43,10 @@ pub struct Config {
     pub wind: Wind,
     #[serde(default)]
     pub attitude: Attitude,
-    /// Stages in flight order (first stage first)
+    /// Display-only vehicle structure; never used by the solver
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<VehiclePresentation>,
+    /// Calculation intervals in flight order (ordinary serial stages are one interval each)
     pub stages: Vec<Stage>,
 }
 
@@ -187,11 +190,57 @@ impl Default for Attitude {
     }
 }
 
+/// A user name in every language, or a pair of Japanese / English names.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(untagged, deny_unknown_fields)]
+pub enum DisplayName {
+    Text(String),
+    Localized { ja: String, en: String },
+}
+
+/// Public vehicle terminology, independent of the number of calculation intervals.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VehiclePresentation {
+    /// Published stage count (uses the vehicle's own naming convention)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_count: Option<u32>,
+    /// Number of strap-on boosters, whether or not counted as a numbered stage
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub booster_count: Option<u32>,
+}
+
+/// Names for one calculation interval and the body released at its end.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct PhasePresentation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<DisplayName>,
+    /// Name of the separated body/group, e.g. "SRB-A ×2" (not an output ID)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub separation_name: Option<DisplayName>,
+    /// A core engine continues across this interval's separation boundary.
+    /// Only hides coincident synthetic burnout/ignition markers in the UI.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub engine_continues: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Stage {
-    /// Initial mass of this stage alone, without the upper stages [kg]
+    /// Display-only interval and released-body names; never used by the solver
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub presentation: Option<PhasePresentation>,
+    /// Mass allocated to this calculation interval, excluding later intervals [kg].
+    /// For ordinary serial stages, the initial mass of this stage alone.
     pub mass_initial_kg: f64,
     /// Mass without propellant [kg]; the burn ends when the propellant
     /// (initial minus dry mass) runs out. Unset: the whole stage may burn
@@ -298,6 +347,9 @@ pub enum FreeFlight {
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
 pub struct Jettison {
+    /// Display-only name; the output name/ID stays unchanged
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<DisplayName>,
     /// Name in the output (default `jettison<N>`)
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub name: String,

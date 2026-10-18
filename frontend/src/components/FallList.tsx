@@ -19,7 +19,7 @@ export function FallList({ track }: { track: Track }) {
     },
     ...track.fallBodies.map((b, i) => ({
       key: `${b.kind}-${b.stage}-${i}`,
-      label: fallBodyLabel(b),
+      label: fallBodyLabel(b, track.presentation),
       stage: b.stage,
       release: b.releaseTime,
       mass: b.mass,
