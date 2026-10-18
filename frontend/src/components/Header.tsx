@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Redo2, Undo2 } from 'lucide-react'
 import type { RunStatus } from '../hooks/useSimulation'
 import { useDismiss } from '../hooks/useDismiss'
@@ -65,23 +65,33 @@ function StatusIndicator({
   onIssue: (i: ValidationIssue) => void
   compact: boolean
 }) {
+  // Runs usually finish in a blink, so nothing is shown when the result is up to
+  // date, and "Computing" only appears once a run has taken a noticeable time.
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (status !== 'running') return
+    const id = setTimeout(() => setSlow(true), 400)
+    return () => {
+      clearTimeout(id)
+      setSlow(false)
+    }
+  }, [status])
+  if (status === 'ok' || (status === 'running' && !slow)) return null
+
   const dot = {
-    ok: 'bg-ok',
     running: 'bg-ink-3 animate-pulse',
     invalid: 'bg-danger',
     error: 'bg-danger',
   }[status]
 
   const text =
-    status === 'ok'
+    status === 'running'
       ? compact
         ? ''
-        : tr('計算済み', 'Up to date')
-      : status === 'running'
-        ? tr('計算中', 'Computing')
-        : status === 'invalid'
-          ? tr(`入力エラー ${issues.length}件`, `${issues.length} input error${issues.length === 1 ? '' : 's'}`)
-          : tr('計算エラー', 'Solver error')
+        : tr('計算中', 'Computing')
+      : status === 'invalid'
+        ? tr(`入力エラー ${issues.length}件`, `${issues.length} input error${issues.length === 1 ? '' : 's'}`)
+        : tr('計算エラー', 'Solver error')
 
   const body = (
     <span className="flex items-center gap-1.5 text-[12px] text-ink-2">

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { FolderOpen, Globe as GlobeIcon, Keyboard, LineChart, SlidersHorizontal } from 'lucide-react'
+import { CircleHelp, FolderOpen, Globe as GlobeIcon, LineChart, SlidersHorizontal } from 'lucide-react'
 import { useSimulation } from './hooks/useSimulation'
 import { useMonteCarlo } from './hooks/useMonteCarlo'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -19,7 +19,7 @@ import { GlobeStage } from './components/GlobeStage'
 import { Toast, useToast } from './components/Toast'
 import { ThemeToggle } from './components/ThemeToggle'
 import { LangToggle } from './components/LangToggle'
-import { ShortcutsDialog } from './components/ShortcutsDialog'
+import { HelpDialog } from './components/HelpDialog'
 import { trackToCsv } from './lib/trajectory'
 import { computeSpecs } from './lib/specs'
 import { generateKML } from './lib/kml'
@@ -188,11 +188,9 @@ export default function App() {
         history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
         actions={
           <>
-            {!isPhone && (
-              <IconButton label={tr('キーボードショートカット (?)', 'Keyboard shortcuts (?)')} onClick={() => setHelpOpen(true)}>
-                <Keyboard className="h-4 w-4" />
-              </IconButton>
-            )}
+            <IconButton label={tr('ヘルプ (?)', 'Help (?)')} onClick={() => setHelpOpen(true)}>
+              <CircleHelp className="h-4 w-4" />
+            </IconButton>
             <LangToggle />
             <ThemeToggle />
           </>
@@ -248,7 +246,7 @@ export default function App() {
       </div>
 
       <Toast toast={toast} onDismiss={dismissToast} />
-      {helpOpen && <ShortcutsDialog onClose={() => setHelpOpen(false)} />}
+      {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} showShortcuts={!isPhone} />}
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-6">
           <div className="rounded-[12px] border-2 border-dashed border-ink-3 bg-surface px-8 py-6 text-center">
