@@ -1,16 +1,21 @@
 import { useId, useState, type ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
-import type { ClientConfig, ClientStageConfig } from '../../lib/simulation'
+import type { Config, Stage } from '../../lib/config'
 import { cn } from '../../lib/cn'
 import { InfoButton } from '../primitives'
 import { tr } from '../../lib/i18n'
+import { stageColorVar } from '../../lib/theme'
 
-export type Patch = (fn: (c: ClientConfig) => ClientConfig) => void
+export type Patch = (fn: (c: Config) => Config) => void
 
 export const pad2 = (n: number) => String(n).padStart(2, '0')
 
-/** Validation keys: the first stage is `stage.*`, later ones `stage[n].*` (1-based). */
-export const stagePath = (i: number, key: keyof ClientStageConfig) => (i === 0 ? `stage.${key}` : `stage[${i + 1}].${key}`)
+/** JSON path of a stage value, as validation reports it: `stages[0].engine.burn_end_s` */
+export const stagePath = (i: number, key: string) => `stages[${i}].${key}`
+
+/** Edit stage `i` */
+export const patchStage = (patch: Patch, i: number, fn: (s: Stage) => Stage) =>
+  patch((c) => ({ ...c, stages: c.stages.map((st, k) => (k === i ? fn(st) : st)) }))
 
 export function Readout({ k, v, warn }: { k: string; v: string; warn?: boolean }) {
   return (
@@ -91,5 +96,38 @@ export function Group({ title, note, children, collapsible, defaultOpen = true, 
       {noteEl}
       {children}
     </details>
+  )
+}
+
+/** Stage selector: one pill per stage, plus an optional trailing control */
+export function StagePills({
+  count,
+  active,
+  onStage,
+  children,
+}: {
+  count: number
+  active: number
+  onStage: (i: number) => void
+  children?: ReactNode
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-1">
+      {Array.from({ length: count }, (_, i) => (
+        <button
+          key={i}
+          type="button"
+          onClick={() => onStage(i)}
+          className={cn(
+            'flex h-8 items-center gap-1.5 rounded-[6px] border px-3 text-[12px] font-medium',
+            i === active ? 'border-ink bg-ink text-surface' : 'border-line text-ink-2 hover:border-line-strong',
+          )}
+        >
+          <span className="h-2 w-2 rounded-full" style={{ background: stageColorVar(i + 1) }} />
+          {tr(`${i + 1}段`, `Stage ${i + 1}`)}
+        </button>
+      ))}
+      {children}
+    </div>
   )
 }

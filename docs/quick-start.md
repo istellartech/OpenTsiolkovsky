@@ -1,7 +1,5 @@
 # OpenTsiolkovsky クイックスタート
 
-OpenTsiolkovskyのRustコアとフロントエンドを素早く開始するためのガイドです。
-
 ## 必要環境
 
 - Rust (stable) + cargo
@@ -10,67 +8,78 @@ OpenTsiolkovskyのRustコアとフロントエンドを素早く開始するた�
   - Node.js 22.18 以上（ツールチェーンの Vite+ が使用）
   - wasm-pack
 
-## 基本的な使用方法
-
-### CLIでシミュレーション実行
+## CLI でシミュレーション
 
 ```bash
-# ビルドして実行
-cargo run --bin openTsiolkovsky-cli -- --config examples/param_sample_01.json --verbose
-
-# リリースビルド
 cargo build --release
-./target/release/openTsiolkovsky-cli --config examples/param_sample_01.json --output result
+B=./target/release/openTsiolkovsky-cli
+
+$B run examples/SS-520-4/ss520_4.json -o out/ss520
 ```
 
-`result_trajectory.csv`（時系列）、`result_summary.json`（概要）、`result_dynamics_cpp.csv`（旧C++版と同じ列構成）が出力されます。`examples/` には `param_momo.json` や、CSVテーブル付きの `SS-520-4/` もあります。
-
-#### 出力ファイル
+出力ディレクトリ（`-o`、既定 `output`）に次のファイルができます。各列とキーの意味は [出力ファイル](output.md) にあります。
 
 | ファイル | 内容 |
 | --- | --- |
-| `<出力名>_trajectory.csv` | 機体の時系列（位置・速度・質量・Mach・動圧・推力・加速度・飛行モード・IIP・緯度経度・ダウンレンジ・段） |
-| `<出力名>_dynamics_cpp.csv` | 旧C++版と同じ列構成の時系列 |
-| `<出力名>_dynamics_cpp_<N>_fall.csv` / `_<N>_dump.csv` | 分離後の N 段・N 段の投棄物が落ちていく時系列 |
-| `<出力名>_summary.json` | 最高高度・最大動圧などの概要、飛行イベント（着火・離昇・マッハ1・最大動圧・燃焼終了・分離・遠地点・着地）、燃焼終了時の軌道要素、落下点 |
+| `trajectory.csv` | 機体の時系列（位置・速度・質量・推力・Mach・動圧・姿勢・迎角・加速度・飛行モード・IIP など） |
+| `summary.json` | 最高高度・最大動圧などの最大値、飛行イベント（燃焼終了時の軌道要素つき）、落下点 |
+| `bodies/stage1.csv` など | 分離した段や投棄物が落ちていく時系列 |
 
-各列とキーの意味は [出力ファイル](output.md) にあります。`--verbose` を付けるとイベントの一覧と燃焼終了時の軌道も表示します。
-
-実行時には各物体の落下点も表示されます（旧C++版と同じ形式）。
+画面にはイベントの一覧、最大値、落下点が出ます。
 
 ```
-vehicle impact point [deg]:	28.441554	142.507390	(T+1882.8 s)
-1 stage impact point [deg]:	31.245380	131.125613	(T+330.8 s)
-2 stage impact point [deg]:	31.220407	131.303028	(T+620.4 s)
+Events:
+  T+    0.00 s  ignition   stage 1  alt     0.267 km  speed     0.0 m/s  Mach  0.00  q    0.00 kPa
+  T+    9.25 s  mach1      stage 1  alt     1.863 km  speed   333.1 m/s  Mach  1.00  q   56.61 kPa
+  ...
+Impact points:
+  vehicle                28.457884, 142.459587 deg at T+1880.0 s
+  stage1                 31.245393, 131.125517 deg at T+330.8 s
+  stage2                 31.221050, 131.298603 deg at T+619.7 s
 ```
 
-使用済みの段は姿勢制御がないため、慣性飛行モードが「1: 指定姿勢」の段も、分離後は「0: 空力安定」として落下を計算します。周回軌道に入るなど地表に落ちない物体は計算しません。
+使用済みの段は姿勢制御がないため、慣性飛行が「指定姿勢」の段も、分離後は「空力安定」として落下を計算します。周回軌道に入るなど地表に落ちない物体は計算しません。
 
-#### 分散解析（モンテカルロ）
+### 設定ファイル
+
+```json
+{
+  "name": "minimal",
+  "simulation": { "end_time_s": 300 },
+  "launch": { "latitude_deg": 35, "longitude_deg": 139 },
+  "stages": [{
+    "mass_initial_kg": 1000,
+    "engine": { "thrust_vac_n": 30000, "isp_vac_s": 200, "burn_end_s": 20 }
+  }]
+}
+```
+
+すべての項目は [設定ファイル](configuration.md) にあります。`$B validate FILE` で飛ばさずに確かめられます。旧C++版の `param_*.json` は `$B convert param.json -o config.json` で変換できます（CSV テーブルも読み込みます）。
+
+### 分散解析（モンテカルロ）
 
 ```bash
-./target/release/openTsiolkovsky-cli --config examples/SS-520-4/param_SS520-4.json \
-  --output ss520 --monte-carlo 500 --dispersion examples/dispersion_sample.json --seed 1
+$B monte-carlo examples/SS-520-4/ss520_4.json -n 500 --dispersion examples/dispersion.json --seed 1 -o out/ss520
 ```
 
-推力・比推力・各段の質量・抗力・姿勢（上下角・方位角）・風速・風向・大気密度（設定すれば CN・分離時刻・風速倍率も）をばらつかせて N 回飛ばし、機体と使用済みの段・投棄物の落下点を集計します。`--dispersion` の JSON には 1σ の値を書きます（省略したキーは `examples/dispersion_sample.json` と同じ既定値）。正規分布か一様分布か、段ごとに独立に引くかも選べます（[出力ファイル](output.md#モンテカルロ)）。全 CPU コアで並列に計算し、同じ `--seed` なら同じ結果になります。
+推力・比推力・各段の質量・抗力・姿勢・風・大気密度（設定すれば CN・分離時刻・風速倍率も）をばらつかせて N 回飛ばし、機体と使用済みの段・投棄物の落下点を集計します。`--dispersion` の JSON には 1σ の値を書きます（省略したキーは既定値。[出力ファイル](output.md#モンテカルロ)）。全 CPU コアで並列に計算し、同じ `--seed` なら同じ結果になります。
 
-- `<出力名>_montecarlo.csv`: 1 行 1 ケース。引いた乱数（各パラメータのずれ）、最高高度、物体ごとの落下時刻・緯度・経度
-- `<出力名>_montecarlo_summary.json`: 物体ごとの落下数、平均落下点、南北・東西の標準偏差、1σ・95 %・99 % の誤差楕円（長径・短径・長軸の方位）、平均点からの最大のずれ
+- `montecarlo_cases.csv`: 1 行 1 ケース。引いた値、最高高度、物体ごとの落下時刻・緯度・経度
+- `montecarlo_summary.json`: 物体ごとの落下数、平均落下点、標準偏差、1σ・95 %・99 % の誤差楕円
 
 ### AI エージェント・スクリプトから使う
 
 ```bash
-./target/release/openTsiolkovsky-cli validate -c examples/param_momo.json --json   # 飛ばさずに確認
-./target/release/openTsiolkovsky-cli run -c examples/param_momo.json --json        # 結果を JSON で標準出力
-./target/release/openTsiolkovsky-cli schema                                        # 設定ファイルの JSON Schema
-./target/release/openTsiolkovsky-cli share -c examples/param_momo.json             # Web アプリで開くリンク
-./target/release/openTsiolkovsky-cli mcp                                           # MCP サーバー
+$B validate examples/momo.json --json   # 飛ばさずに確認（無効なら終了ステータス 3）
+$B run examples/momo.json --json        # 結果を JSON で標準出力
+$B schema                               # 設定ファイルの JSON Schema
+$B share examples/momo.json             # Web アプリで開くリンク
+$B mcp                                  # MCP サーバー
 ```
 
 詳しくは [AI エージェントからの利用](ai.md) を参照してください。
 
-### Webフロントエンド
+## Webフロントエンド
 
 ```bash
 cd frontend
@@ -78,7 +87,7 @@ bun install
 bun run dev   # frontend/src/wasm が無ければ先に WASM をビルド
 ```
 
-ブラウザで http://localhost:5173 を開きます。ヘッダーからサンプル機体（MOMO、S-310、S-520、SS-520-5、イプシロン、H-IIA、H3、サターンV、アリアン5、ファルコン9、ソユーズ2.1a、長征3B/E。種別・国での絞り込みと検索ができます）を選ぶか、CLI 用の `param_*.json` を CSV と一緒にドロップして開けます。使用済みの段・投棄物の落下点や IIP は地図とイベント表に、分散解析は下のパネルの「分散解析」タブにあります。使い方の詳細は [frontend/README.md](../frontend/README.md) を参照してください。
+ブラウザで http://localhost:5173 を開きます。ヘッダーからサンプル機体（MOMO、S-310、S-520、SS-520-5、イプシロン、H-IIA、H3、サターンV、アリアン5、ファルコン9、ソユーズ2.1a、長征3B/E）を選ぶか、設定ファイルを開きます。旧C++版の `param_*.json` は CSV と一緒にドロップすれば変換して開けます。使い方の詳細は [frontend/README.md](../frontend/README.md) を参照してください。
 
 開発用コマンド:
 
@@ -87,21 +96,17 @@ bunx vp check     # フォーマット・Lint・型チェック
 bunx vp test run  # テスト（全サンプル機体の WASM 計算を含む）
 ```
 
-### WASM（ブラウザ実行用）
+## WASM（ブラウザ実行用）
 
 ```bash
-# wasm-packをインストール（未導入の場合）
-# cargo install wasm-pack
-
-# WASMビルド
-bash scripts/wasm_build.sh
+bash scripts/wasm_build.sh   # frontend/src/wasm に出力
 ```
 
 ## 詳細情報
 
 - [開発ガイド](development.md) - プロジェクト構成と開発方法
 - [WASM ガイド](wasm.md) - WASMビルドの詳細
-- [設定ファイル](configuration.md) - 設定ファイルフォーマット
+- [設定ファイル](configuration.md) - 設定ファイルの形式
 - [出力ファイル](output.md) - 出力 CSV・JSON の列とキー
 - [AI エージェントからの利用](ai.md) - JSON 出力・MCP サーバー・共有リンク
 - [物理モデルと数値計算](physics.md) - 運動方程式・モデル・積分とイベント・C++版との違い

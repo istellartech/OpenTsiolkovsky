@@ -1,8 +1,7 @@
-// Turns raw simulator output into a flight "track": geodetic positions,
-// derived quantities, flight events and an interpolator for playback.
-import type { FallBodyJson, FlightEventJson, FlightModeName, ImpactPointJson, SimulationOutput, SimulationState } from './simulation'
-import { vec3ToObject } from './simulation'
-import { G0, haversineDistanceKm, posEciToLlh } from './geo'
+// Turns solver output into a flight "track": samples in display units,
+// flight events, released bodies and an interpolator for playback.
+import type { BodyJson, FlightEventJson, FlightMode, ImpactPointJson, Sample, SimulationOutput } from './simulation'
+import { G0, haversineDistanceKm } from './geo'
 
 export interface TrackSample {
   t: number
@@ -22,11 +21,11 @@ export interface TrackSample {
   q: number
   /** [N] */
   thrust: number
-  /** [N] */
+  /** Axial aerodynamic force [N] */
   drag: number
   /** [kg] */
   mass: number
-  /** Inertial acceleration [G] */
+  /** Inertial acceleration (with gravity) [G] */
   accel: number
   /** Sensed axial acceleration [G] */
   accelAxial: number
@@ -34,7 +33,7 @@ export interface TrackSample {
   sideslip: number
   azimuth: number
   elevation: number
-  mode: FlightModeName
+  mode: FlightMode
   /** Instantaneous impact point [deg]; null when there is none (orbit, escape) */
   iipLat: number | null
   iipLon: number | null
@@ -59,9 +58,11 @@ export interface FlightEvent {
   stage?: number
   /** Stage that continues after a separation */
   nextStage?: number
+  /** Released body name (jettison) */
+  body?: string
   /** For 'end': the vehicle reached the ground */
   landed?: boolean
-  /** Vehicle state at the event, when the solver located it (otherwise read it from the samples) */
+  /** Vehicle state at the event (absent for an 'end' the solver did not locate) */
   at?: Pick<TrackSample, 'alt' | 'groundSpeed' | 'mach' | 'downrange'>
 }
 
@@ -75,7 +76,7 @@ export interface ImpactPoint {
   downrange: number
 }
 
-/** Where a body comes down, as a point on the ground */
+/** A point of a released body's path */
 export interface FallSample {
   t: number
   lat: number
@@ -83,9 +84,11 @@ export interface FallSample {
   alt: number
 }
 
-/** A spent stage or dumping product, from its release to the ground */
+/** A spent stage or jettisoned body, from its release to the ground */
 export interface FallTrack {
-  kind: 'stage' | 'dump'
+  /** `stage<N>` or `stage<N>_<name>` */
+  id: string
+  kind: 'stage' | 'jettison'
   stage: number
   releaseTime: number
   /** [kg] */
@@ -117,6 +120,8 @@ export interface TrackSummary {
 
 export interface Track {
   samples: TrackSample[]
+  /** The solver's samples as they came (for the CSV export) */
+  raw: Sample[]
   events: FlightEvent[]
   stages: StageSpan[]
   summary: TrackSummary
@@ -129,25 +134,15 @@ export interface Track {
   fallBodies: FallTrack[]
 }
 
-const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
-
 /** A sample the solver could not have produced physically (diverged run). */
-function isNonPhysical(s: SimulationState): boolean {
-  const p = vec3ToObject(s.position_eci || s.position)
-  const r = Math.hypot(p.x, p.y, p.z)
+function isNonPhysical(s: Sample): boolean {
   return (
-    !Number.isFinite(r) ||
-    !Number.isFinite(s.altitude) ||
-    !Number.isFinite(s.velocity_magnitude) ||
-    s.altitude > 1e9 || // beyond ~1,000,000 km
-    s.velocity_magnitude > 5e4 // faster than any rocket here
+    !Number.isFinite(s.altitude_m) ||
+    !Number.isFinite(s.speed_inertial_mps) ||
+    s.altitude_m > 1e9 || // beyond ~1,000,000 km
+    s.speed_inertial_mps > 5e4 // faster than any rocket here
   )
 }
-
-const MODES: FlightModeName[] = ['power_3DoF', 'free_aero_stable', 'free_3dof', 'free_ballistic']
-const modeOf = (s: SimulationState): FlightModeName =>
-  s.flight_mode && MODES.includes(s.flight_mode) ? s.flight_mode : s.thrust > 0 ? 'power_3DoF' : 'free_3dof'
-const nullableNum = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
 function toImpact(p: ImpactPointJson | null | undefined, baseLat: number, baseLon: number): ImpactPoint | null {
   if (!p) return null
@@ -160,111 +155,95 @@ function toImpact(p: ImpactPointJson | null | undefined, baseLat: number, baseLo
   }
 }
 
-function buildFallTrack(body: FallBodyJson, baseLat: number, baseLon: number): FallTrack {
-  const states = (body.trajectory ?? []).filter((s) => !isNonPhysical(s))
+function buildFallTrack(body: BodyJson, baseLat: number, baseLon: number): FallTrack {
   return {
+    id: body.id,
     kind: body.kind,
     stage: body.stage,
     releaseTime: body.release_time_s,
     mass: body.mass_kg,
     impact: toImpact(body.impact, baseLat, baseLon),
-    samples: states.map((s) => {
-      const t = num(s.time)
-      const llh = posEciToLlh(vec3ToObject(s.position_eci || s.position), t)
-      return { t, lat: llh.lat, lon: llh.lon, alt: num(s.altitude, llh.alt * 1000) }
-    }),
+    samples: body.trajectory
+      .filter((s) => !isNonPhysical(s))
+      .map((s) => ({ t: s.time_s, lat: s.latitude_deg, lon: s.longitude_deg, alt: s.altitude_m })),
   }
 }
 
-/** Track from the solver's full output (vehicle plus falling bodies). */
-export function trackFromOutput(output: SimulationOutput): Track | null {
-  return buildTrack(output.trajectory, output.fall_bodies, output.events)
-}
-
-const SOLVER_EVENT_KINDS = {
+const EVENT_KINDS = {
   ignition: 'ignition',
   liftoff: 'liftoff',
   rail_exit: 'railexit',
   burnout: 'burnout',
   separation: 'separation',
-  dump: 'jettison',
+  jettison: 'jettison',
   mach1: 'mach1',
   max_q: 'maxq',
   apogee: 'apogee',
   impact: 'end',
 } as const satisfies Record<FlightEventJson['kind'], FlightEventKind>
 
-/** Events located by the solver, up to `tEnd`; an 'end' is added when the vehicle did not come down. */
-function solverEvents(input: FlightEventJson[], tEnd: number, landed: boolean): FlightEvent[] {
+/** Solver events up to `tEnd`; an 'end' is added when the vehicle did not come down. */
+function trackEvents(input: FlightEventJson[], tEnd: number, landed: boolean): FlightEvent[] {
   const events: FlightEvent[] = []
   for (const e of input) {
     if (e.time_s > tEnd + 1e-9) continue
-    const kind = SOLVER_EVENT_KINDS[e.kind]
+    const kind = EVENT_KINDS[e.kind]
     if (!kind) continue
     const ev: FlightEvent = {
       kind,
       t: e.time_s,
-      at: { alt: e.altitude_m, groundSpeed: e.speed_mps, mach: e.mach, downrange: e.downrange_m / 1000 },
+      at: { alt: e.altitude_m, groundSpeed: e.speed_earth_mps, mach: e.mach, downrange: e.downrange_m / 1000 },
     }
     if (kind === 'end') ev.landed = true
     else if (kind === 'separation') Object.assign(ev, { stage: e.stage, nextStage: e.stage + 1 })
-    else if (kind === 'ignition' || kind === 'burnout' || kind === 'jettison') ev.stage = e.stage
+    else if (kind === 'ignition' || kind === 'burnout') ev.stage = e.stage
+    else if (kind === 'jettison') Object.assign(ev, { stage: e.stage, body: e.body })
     events.push(ev)
   }
   if (!events.some((e) => e.kind === 'end')) events.push({ kind: 'end', t: tEnd, landed })
   return events.sort((a, b) => a.t - b.t)
 }
 
-export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] = [], solverEventsJson?: FlightEventJson[]): Track | null {
+function toTrackSample(s: Sample): TrackSample {
+  return {
+    t: s.time_s,
+    lat: s.latitude_deg,
+    lon: s.longitude_deg,
+    alt: s.altitude_m,
+    downrange: s.downrange_m / 1000,
+    stage: s.stage,
+    speed: s.speed_inertial_mps,
+    groundSpeed: s.speed_earth_mps,
+    mach: s.mach,
+    q: s.dynamic_pressure_pa,
+    thrust: s.thrust_n,
+    drag: Math.abs(s.aero_body_x_n),
+    mass: s.mass_kg,
+    accel: Math.hypot(s.accel_eci_x_mps2, s.accel_eci_y_mps2, s.accel_eci_z_mps2) / G0,
+    accelAxial: s.accel_body_x_mps2 / G0,
+    aoa: s.alpha_deg,
+    sideslip: s.beta_deg,
+    azimuth: s.azimuth_deg,
+    elevation: s.elevation_deg,
+    mode: s.flight_mode,
+    iipLat: s.iip_latitude_deg ?? null,
+    iipLon: s.iip_longitude_deg ?? null,
+  }
+}
+
+/** Track of a solver run; null when it produced fewer than two usable samples. */
+export function trackFromOutput(output: Pick<SimulationOutput, 'trajectory' | 'events' | 'bodies'>): Track | null {
+  const input = output.trajectory
   if (!input || input.length < 2) return null
   // Keep everything up to the first non-physical sample.
   const cut = input.findIndex(isNonPhysical)
-  const states = cut === -1 ? input : input.slice(0, cut)
-  if (states.length < 2) return null
+  const raw = cut === -1 ? input : input.slice(0, cut)
+  if (raw.length < 2) return null
 
-  const samples: TrackSample[] = []
-  let baseLat = 0
-  let baseLon = 0
-
-  states.forEach((s, i) => {
-    const t = num(s.time)
-    const llh = posEciToLlh(vec3ToObject(s.position_eci || s.position), t)
-    if (i === 0) {
-      baseLat = llh.lat
-      baseLon = llh.lon
-    }
-    const vEcef = vec3ToObject(s.velocity_ecef_ned || s.velocity_ned || [0, 0, 0])
-    const accBody = vec3ToObject(s.acc_body || [0, 0, 0])
-    samples.push({
-      t,
-      lat: llh.lat,
-      lon: llh.lon,
-      alt: num(s.altitude, llh.alt * 1000),
-      downrange: haversineDistanceKm(baseLat, baseLon, llh.lat, llh.lon),
-      stage: num(s.stage, 1),
-      speed: num(s.velocity_magnitude),
-      groundSpeed: Math.hypot(vEcef.x, vEcef.y, vEcef.z),
-      mach: num(s.mach_number),
-      q: num(s.dynamic_pressure),
-      thrust: num(s.thrust),
-      drag: num(s.drag_force),
-      mass: num(s.mass),
-      accel: num(s.acceleration_magnitude) / G0,
-      accelAxial: accBody.x / G0,
-      aoa: num(s.angle_of_attack),
-      sideslip: num(s.sideslip_angle),
-      azimuth: num(s.attitude_azimuth),
-      elevation: num(s.attitude_elevation),
-      mode: modeOf(s),
-      iipLat: nullableNum(s.iip_lat_deg),
-      iipLon: nullableNum(s.iip_lon_deg),
-    })
-  })
-
+  const samples = raw.map(toTrackSample)
   const first = samples[0]
   const last = samples[samples.length - 1]
 
-  // Stage spans
   const stages: StageSpan[] = []
   for (const s of samples) {
     const cur = stages[stages.length - 1]
@@ -293,22 +272,18 @@ export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] 
     maxAccel = Math.max(maxAccel, Math.abs(s.accelAxial))
   }
 
-  const falls = fallBodies.map((b) => buildFallTrack(b, baseLat, baseLon))
   const landed = last.alt <= 1
   const apogee = samples[apogeeIdx]
-  const events = solverEventsJson
-    ? solverEvents(solverEventsJson, last.t, landed)
-    : sampleEvents(samples, maxQIdx, apogeeIdx, falls, landed)
-
   return {
     samples,
-    events,
+    raw,
+    events: trackEvents(output.events ?? [], last.t, landed),
     stages,
     t0: first.t,
     t1: last.t,
-    truncatedAt: cut === -1 ? undefined : num(input[cut].time),
+    truncatedAt: cut === -1 ? undefined : input[cut].time_s,
     impact: landed ? { t: last.t, lat: last.lat, lon: last.lon, speed: last.groundSpeed, downrange: last.downrange } : null,
-    fallBodies: falls,
+    fallBodies: (output.bodies ?? []).map((b) => buildFallTrack(b, first.lat, first.lon)),
     summary: {
       apogee: apogee.alt,
       apogeeTime: apogee.t,
@@ -322,47 +297,6 @@ export function buildTrack(input: SimulationState[], fallBodies: FallBodyJson[] 
       landed,
     },
   }
-}
-
-/** Events detected from the output samples, for outputs without solver events (old runs, CSV imports). */
-function sampleEvents(samples: TrackSample[], maxQIdx: number, apogeeIdx: number, falls: FallTrack[], landed: boolean): FlightEvent[] {
-  const first = samples[0]
-  const last = samples[samples.length - 1]
-  const events: FlightEvent[] = [{ kind: 'liftoff', t: first.t }]
-
-  // Max-Q only means something inside the atmosphere during powered ascent.
-  const maxQSample = samples[maxQIdx]
-  if (maxQSample.q > 0 && maxQIdx > 0) {
-    events.push({ kind: 'maxq', t: maxQSample.t })
-  }
-
-  for (let i = 1; i < samples.length; i++) {
-    const prev = samples[i - 1]
-    const cur = samples[i]
-    if (cur.stage !== prev.stage) {
-      // The spent stage's release time is exact; the sample after it can lag by an output interval.
-      const release = falls.find((f) => f.kind === 'stage' && f.stage === prev.stage)?.releaseTime
-      const t = release !== undefined && release > prev.t - 1e-9 && release <= cur.t + 1e-9 ? release : cur.t
-      // A stage still burning up to separation burns out there too.
-      if (prev.thrust > 0) events.push({ kind: 'burnout', t, stage: prev.stage })
-      events.push({ kind: 'separation', t, stage: prev.stage, nextStage: cur.stage })
-    } else if (prev.thrust > 0 && cur.thrust <= 0) {
-      events.push({ kind: 'burnout', t: cur.t, stage: cur.stage })
-    }
-  }
-
-  for (const f of falls) {
-    if (f.kind === 'dump' && f.releaseTime <= last.t) events.push({ kind: 'jettison', t: f.releaseTime, stage: f.stage })
-  }
-
-  const apogee = samples[apogeeIdx]
-  const descends = apogeeIdx < samples.length - 1 && last.alt < apogee.alt - 1
-  if (descends) {
-    events.push({ kind: 'apogee', t: apogee.t })
-  }
-
-  events.push({ kind: 'end', t: last.t, landed })
-  return events.sort((a, b) => a.t - b.t)
 }
 
 /** Index of the last sample with time <= t. */
@@ -421,56 +355,10 @@ export function sampleAt(track: Track, t: number): TrackSample {
   return out
 }
 
-export function trackToCsv(track: Track): string {
-  const header = [
-    'time_s',
-    'stage',
-    'latitude_deg',
-    'longitude_deg',
-    'altitude_m',
-    'downrange_km',
-    'speed_inertial_mps',
-    'speed_ground_mps',
-    'mach',
-    'dynamic_pressure_pa',
-    'thrust_n',
-    'drag_n',
-    'mass_kg',
-    'accel_g',
-    'accel_axial_g',
-    'aoa_deg',
-    'sideslip_deg',
-    'attitude_azimuth_deg',
-    'attitude_elevation_deg',
-    'flight_mode',
-    'iip_latitude_deg',
-    'iip_longitude_deg',
-  ]
-  const rows = track.samples.map((s) =>
-    [
-      s.t,
-      s.stage,
-      s.lat,
-      s.lon,
-      s.alt,
-      s.downrange,
-      s.speed,
-      s.groundSpeed,
-      s.mach,
-      s.q,
-      s.thrust,
-      s.drag,
-      s.mass,
-      s.accel,
-      s.accelAxial,
-      s.aoa,
-      s.sideslip,
-      s.azimuth,
-      s.elevation,
-      s.mode,
-      s.iipLat ?? '',
-      s.iipLon ?? '',
-    ].join(','),
-  )
+/** The solver samples as CSV, with the columns of the CLI's trajectory.csv. */
+export function samplesToCsv(samples: Sample[]): string {
+  if (samples.length === 0) return ''
+  const header = Object.keys(samples[0]) as (keyof Sample)[]
+  const rows = samples.map((s) => header.map((k) => s[k] ?? '').join(','))
   return [header.join(','), ...rows].join('\n')
 }

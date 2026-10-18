@@ -1,12 +1,13 @@
 // Vehicle figures derived from the configuration alone (no simulation):
 // propellant used, ideal Δv, thrust-to-weight and the absolute sequence.
 //
-// Conventions follow the solver (src/simulator.rs):
+// Conventions follow the solver (src/sim/):
 //  - mass_initial_kg is the stage's own fuelled mass; the stack at stage i is
 //    the sum of stage i and everything above it.
-//  - burn / cutoff / separation times and thrust/Isp tables are measured from
-//    the start of that stage, which is the previous stage's separation.
-import type { ClientConfig, ClientStageConfig, ClientTimeSample } from './simulation'
+//  - burn and separation times and thrust/Isp tables are measured from the
+//    start of that stage, which is the previous stage's separation.
+import type { Config, Stage } from './config'
+import { curveRows, evalCurve, isRows } from './config'
 import { G0 } from './geo'
 import { locale, tr } from './i18n'
 
@@ -42,63 +43,37 @@ export interface VehicleSpec {
   warnings: string[]
 }
 
-function interp(table: ClientTimeSample[], t: number): number {
-  if (table.length === 0) return 0
-  if (t < table[0].time || t > table[table.length - 1].time) return 0
-  for (let i = 0; i < table.length - 1; i++) {
-    const a = table[i]
-    const b = table[i + 1]
-    if (t >= a.time && t <= b.time) {
-      const span = b.time - a.time
-      return span <= 0 ? b.value : a.value + ((b.value - a.value) * (t - a.time)) / span
-    }
-  }
-  return table[table.length - 1].value
+function burnWindow(stage: Stage, hasNext: boolean): [number, number] {
+  const e = stage.engine
+  if (!e) return [0, 0]
+  const start = e.burn_start_s ?? 0
+  let end = e.burn_end_s
+  if (hasNext && stage.separation_time_s !== undefined) end = Math.min(end, stage.separation_time_s)
+  return [start, Math.max(end, start)]
 }
 
-function interpClamped(table: ClientTimeSample[], t: number): number {
-  if (table.length === 0) return 0
-  if (t <= table[0].time) return table[0].value
-  if (t >= table[table.length - 1].time) return table[table.length - 1].value
-  return interp(table, t)
-}
-
-function burnWindow(stage: ClientStageConfig, hasNext: boolean): [number, number] {
-  let end = Math.min(stage.burn_end_s, stage.forced_cutoff_s)
-  if (hasNext) end = Math.min(end, stage.separation_time_s)
-  return [stage.burn_start_s, Math.max(end, stage.burn_start_s)]
-}
-
-function thrustAt(stage: ClientStageConfig, t: number): number {
-  const table = stage.thrust_profile ?? []
-  const base = table.length > 0 ? interp(table, t) : stage.thrust_constant
-  return Math.max(base * stage.thrust_multiplier, 0)
-}
-
-function ispAt(stage: ClientStageConfig, t: number): number {
-  const table = stage.isp_profile ?? []
-  const base = table.length > 0 ? interpClamped(table, t) : stage.isp_constant
-  return base * stage.isp_multiplier
-}
+const thrustAt = (stage: Stage, t: number) => Math.max(evalCurve(stage.engine?.thrust_vac_n, t), 0)
+const ispAt = (stage: Stage, t: number) => evalCurve(stage.engine?.isp_vac_s, t)
 
 /**
  * Burnout time (stage-relative) at which `propellant` kg has been burned,
  * integrating thrust / (Isp g0) from ignition with the same tables the
  * solver uses. null when the thrust table ends before that much is burned.
  */
-export function burnEndForPropellant(stage: ClientStageConfig, propellant: number): number | null {
-  if (!(propellant > 0)) return null
-  const t0 = stage.burn_start_s
-  const table = stage.thrust_profile ?? []
-  if (table.length === 0 && (stage.isp_profile ?? []).length === 0) {
+export function burnEndForPropellant(stage: Stage, propellant: number): number | null {
+  if (!(propellant > 0) || !stage.engine) return null
+  const t0 = stage.engine.burn_start_s ?? 0
+  const table = curveRows(stage.engine.thrust_vac_n)
+  if (!isRows(stage.engine.thrust_vac_n) && !isRows(stage.engine.isp_vac_s)) {
     // Constant thrust and Isp: closed form
     const thrust = thrustAt(stage, t0)
     const isp = ispAt(stage, t0)
     return thrust > 0 && isp > 0 ? t0 + (propellant * isp * G0) / thrust : null
   }
-  // Thrust is zero past the end of its table; a constant thrust with an Isp
-  // table runs until the propellant is gone (bounded to a day).
-  const tEnd = table.length > 0 ? table[table.length - 1].time : t0 + 86400
+  // A thrust table ends where its last row is (the thrust is held after it,
+  // so burning past it is not what the table describes); a constant thrust
+  // with an Isp table runs until the propellant is gone (bounded to a day).
+  const tEnd = table.length > 0 ? table[table.length - 1][0] : t0 + 86400
   const steps = 20000
   const dt = (tEnd - t0) / steps
   if (!(dt > 0)) return null
@@ -120,12 +95,12 @@ export function burnEndForPropellant(stage: ClientStageConfig, propellant: numbe
 }
 
 /** Propellant flow rate [kg/s] at stage-relative time t (no burn window). */
-function rate(stage: ClientStageConfig, t: number): number {
+function rate(stage: Stage, t: number): number {
   const isp = ispAt(stage, t)
   return isp > 0 ? thrustAt(stage, t) / (isp * G0) : 0
 }
 
-export function computeSpecs(config: ClientConfig): VehicleSpec {
+export function computeSpecs(config: Config): VehicleSpec {
   const list = config.stages
   const warnings: string[] = []
   const stages: StageSpec[] = []
@@ -178,9 +153,9 @@ export function computeSpecs(config: ClientConfig): VehicleSpec {
       start,
       ignition: start + b0,
       burnout: start + b1,
-      separation: hasNext ? start + stage.separation_time_s : null,
+      separation: hasNext ? start + (stage.separation_time_s ?? 0) : null,
     })
-    if (hasNext) start += stage.separation_time_s
+    if (hasNext) start += stage.separation_time_s ?? 0
   })
 
   const first = stages[0]

@@ -7,8 +7,11 @@
 ```
 OpenTsiolkovsky/
 ├── src/              # メインRust実装
-│   ├── simulator.rs / physics.rs / rocket.rs / math.rs   # 計算コア・設定の型
-│   ├── io.rs          # 設定・CSV の読み込み、出力ファイル
+│   ├── config/        # 設定ファイルの型・表（定数/表/CSV）・検証・旧C++形式の変換
+│   ├── vehicle.rs     # 表を読み込んだ機体モデル
+│   ├── sim/           # シミュレータ（積分・力・イベント・落下物・出力サンプル）
+│   ├── physics/ math/ # 大気・座標・重力・軌道要素、積分器・補間
+│   ├── output.rs      # trajectory.csv・summary.json などの出力
 │   ├── montecarlo.rs  # 分散解析
 │   ├── main.rs        # CLI
 │   ├── agent.rs       # AI・スクリプト向けの共通処理（--json、Schema、共有リンク）
@@ -49,13 +52,13 @@ brew install boost
 cd legacy_cpp && make        # -> legacy_cpp/bin/OpenTsiolkovsky
 ```
 
-同じ設定ファイルを両方で計算し、時刻ごとの差の最大値を表示します（Rust版は `cargo build --release` が必要）。
+旧形式の設定ファイルを C++ 版で計算し、同じファイルを `convert` して Rust 版で計算して、時刻ごとの差の最大値を表示します（Rust版は `cargo build --release` が必要）。
 
 ```bash
-python3 tools/compare_cpp.py examples/param_momo.json
+python3 tools/compare_cpp.py legacy_cpp/bin/param_momo.json
 ```
 
-C++版はCSVのヘッダー名を照合するので、テーブルのヘッダーは [設定ファイル](configuration.md#csv-テーブルの形式) の名前にしてください。定数 CN が 0 でない設定や多段機の質量は、両者で意図的に扱いが異なります（[物理モデル](physics.md#旧c版との関係)）。回帰テストの基準データ（`tests/cpp_reference/*_cpp.csv`）の作り方は `tests/cpp_reference.rs` の冒頭にあります。
+C++版はCSVのヘッダー名を照合するので、テーブルのヘッダーは C++ 版の名前（`time[s]`, `thrust vac[N]` など）にしてください。定数 CN が 0 でない設定などは、両者で意図的に扱いが異なります（[物理モデル](physics.md#旧c版との関係)）。回帰テストの基準データ（`tests/cpp_reference/*_cpp.csv`）の作り方は `tests/cpp_reference.rs` の冒頭にあります。
 
 ### フロントエンド
 ```bash
@@ -79,12 +82,12 @@ bunx vp test run
 
 ### AI 向けインターフェース
 
-`run --json`・`validate`・`schema`・`share`・`mcp` の仕様は [AI エージェントからの利用](ai.md) にまとめています（対応状況と実装の場所も）。MCP サーバーは標準入出力に JSON を流して試せます。
+`run --json`・`validate`・`schema`・`convert`・`share`・`mcp` の仕様は [AI エージェントからの利用](ai.md) にまとめています（対応状況と実装の場所も）。MCP サーバーは標準入出力に JSON を流して試せます。
 
 ```bash
 cargo build --release
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_simulation","arguments":{"config_path":"examples/param_momo.json","trajectory_points":3}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"run_simulation","arguments":{"config_path":"examples/momo.json","trajectory_points":3}}}' \
   | ./target/release/openTsiolkovsky-cli mcp
 ```
 

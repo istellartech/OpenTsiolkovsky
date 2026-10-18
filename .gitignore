@@ -129,8 +129,8 @@ target/
 
 # Rust test artifacts
 test_config.json
-*_trajectory.csv
-*_summary.json
+/output/
+/out/
 test_result*
 sample_result*
 test_*.json

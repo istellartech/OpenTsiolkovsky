@@ -1,0 +1,40 @@
+{
+  "name": "sample_01",
+  "simulation": {
+    "end_time_s": 1000,
+    "output_step_s": 1
+  },
+  "launch": {
+    "latitude_deg": 42.506129,
+    "longitude_deg": 143.456482,
+    "altitude_m": 15,
+    "time_utc": "2019-05-04T05:45:00Z"
+  },
+  "wind": {
+    "speed_mps": 0,
+    "direction_deg": 270
+  },
+  "attitude": {
+    "azimuth_deg": 113,
+    "elevation_deg": 83
+  },
+  "stages": [
+    {
+      "mass_initial_kg": 1000,
+      "engine": {
+        "thrust_vac_n": 15000,
+        "isp_vac_s": 200,
+        "burn_start_s": 0,
+        "burn_end_s": 120,
+        "nozzle_exit_area_m2": 0.03927
+      },
+      "aero": {
+        "diameter_m": 0.5,
+        "ca": 0.2,
+        "cn_alpha_per_rad": 0.2,
+        "ballistic_coefficient_kg_m2": 100
+      },
+      "free_flight": "ballistic"
+    }
+  ]
+}

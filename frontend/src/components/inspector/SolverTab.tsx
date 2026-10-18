@@ -1,36 +1,40 @@
-import type { ClientConfig } from '../../lib/simulation'
-import { NumberField, ProfileTable, SelectField, Toggle } from '../primitives'
+import type { AtmosphereModel, Config } from '../../lib/config'
+import { DEFAULTS, integratorOf, isRows } from '../../lib/config'
+import { NumberField, RowsTable, SelectField, Toggle } from '../primitives'
 import { Group, type Patch } from './shared'
 import { tr } from '../../lib/i18n'
 
-/** Rust `default_rk45_tol` */
-const RK45_TOL = 1e-9
+type Atmosphere = NonNullable<Config['atmosphere']>
 
-export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patch }) {
+export function SolverTab({ config, patch }: { config: Config; patch: Patch }) {
   const s = config.simulation
-  const integrator = s.integrator ?? { method: 'rk45' as const, rk4_step_s: null }
-  const model = s.atmosphere_model ?? 'legacy'
-  const densityTable = (s.air_density_profile?.length ?? 0) > 0
-  const set = (v: Partial<ClientConfig['simulation']>) => patch((c) => ({ ...c, simulation: { ...c.simulation, ...v } }))
+  const step = s.output_step_s ?? DEFAULTS.outputStep
+  const integrator = integratorOf(config)
+  const atm = config.atmosphere ?? {}
+  const model = atm.model ?? 'ussa1976'
+  const seasonal = atm.seasonal_variation_percent ?? 0
+  const table = isRows(atm.density_deviation) ? atm.density_deviation : null
+  const setSim = (v: Partial<Config['simulation']>) => patch((c) => ({ ...c, simulation: { ...c.simulation, ...v } }))
+  const setAtm = (v: Partial<Atmosphere>) => patch((c) => ({ ...c, atmosphere: { ...c.atmosphere, ...v } }))
   return (
     <>
       <Group
         title={tr('計算時間', 'Run length')}
-        note={tr('着地するか計算時間に達すると終了します。', 'The run ends at impact or when the duration is reached.')}
+        note={tr('着地するか計算時間に達すると終了します。', 'The run ends at impact or when the end time is reached.')}
       >
         <NumberField
-          label={tr('計算時間', 'Duration')}
+          label={tr('計算時間', 'End time')}
           unit="s"
-          path="simulation.duration_s"
-          value={s.duration_s}
-          onChange={(v) => set({ duration_s: v })}
+          path="simulation.end_time_s"
+          value={s.end_time_s}
+          onChange={(v) => setSim({ end_time_s: v })}
         />
         <NumberField
           label={tr('出力間隔', 'Output interval')}
           unit="s"
           path="simulation.output_step_s"
-          value={s.output_step_s}
-          onChange={(v) => set({ output_step_s: v })}
+          value={step}
+          onChange={(v) => setSim({ output_step_s: v })}
         />
       </Group>
       <Group
@@ -47,23 +51,15 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
             { value: 'rk45', label: tr('RK45（可変刻み）', 'RK45 (adaptive step)') },
             { value: 'rk4', label: tr('RK4（固定刻み）', 'RK4 (fixed step)') },
           ]}
-          onChange={(method) =>
-            set({
-              integrator: {
-                ...integrator,
-                method,
-                rk4_step_s: method === 'rk4' ? (integrator.rk4_step_s ?? Math.max(s.output_step_s / 2, 0.001)) : integrator.rk4_step_s,
-              },
-            })
-          }
+          onChange={(method) => setSim({ integrator: method === 'rk4' ? { method, step_s: Math.max(step / 2, 0.001) } : { method } })}
         />
         {integrator.method === 'rk4' && (
           <NumberField
             label={tr('RK4 刻み', 'RK4 step size')}
             unit="s"
-            path="simulation.integrator.rk4_step_s"
-            value={integrator.rk4_step_s ?? Math.max(s.output_step_s / 2, 0.001)}
-            onChange={(v) => set({ integrator: { ...integrator, rk4_step_s: v } })}
+            path="simulation.integrator.step_s"
+            value={integrator.step_s}
+            onChange={(v) => setSim({ integrator: { method: 'rk4', step_s: v } })}
           />
         )}
         {integrator.method === 'rk45' && (
@@ -72,85 +68,79 @@ export function SolverTab({ config, patch }: { config: ClientConfig; patch: Patc
               label={tr('絶対許容誤差', 'Absolute tolerance')}
               unit="—"
               hint={tr('全成分共通（kg・m・m/s）。既定 1e-9', 'All components (kg, m, m/s). Default 1e-9')}
-              path="simulation.integrator.rk45_abs_tol"
-              value={integrator.rk45_abs_tol ?? RK45_TOL}
-              onChange={(v) => set({ integrator: { ...integrator, rk45_abs_tol: v } })}
+              path="simulation.integrator.abs_tol"
+              value={integrator.abs_tol}
+              onChange={(v) => setSim({ integrator: { ...integrator, abs_tol: v } })}
             />
             <NumberField
               label={tr('相対許容誤差', 'Relative tolerance')}
               unit="—"
               hint={tr('既定 1e-9', 'Default 1e-9')}
-              path="simulation.integrator.rk45_rel_tol"
-              value={integrator.rk45_rel_tol ?? RK45_TOL}
-              onChange={(v) => set({ integrator: { ...integrator, rk45_rel_tol: v } })}
+              path="simulation.integrator.rel_tol"
+              value={integrator.rel_tol}
+              onChange={(v) => setSim({ integrator: { ...integrator, rel_tol: v } })}
             />
           </>
         )}
       </Group>
       <Group
         collapsible
-        defaultOpen={s.air_density_percent !== 0 || densityTable || model !== 'legacy'}
+        defaultOpen={seasonal !== 0 || !!table || model !== 'ussa1976'}
         badge={[
           model === 'ussa1976' ? 'USSA1976' : tr('旧C++版', 'Legacy'),
-          densityTable
+          table
             ? tr('密度テーブル', 'density table')
-            : tr(
-                `密度 ${s.air_density_percent > 0 ? '+' : ''}${s.air_density_percent}%`,
-                `density ${s.air_density_percent > 0 ? '+' : ''}${s.air_density_percent}%`,
-              ),
+            : tr(`密度 ${seasonal > 0 ? '+' : ''}${seasonal}%`, `density ${seasonal > 0 ? '+' : ''}${seasonal}%`),
         ].join(' · ')}
         title={tr('大気', 'Atmosphere')}
         note={tr(
-          '「旧C++版」は1976年標準大気の各層を幾何高度で評価し、84.852 km 以上を等温で外挿します（C++版と同じ）。「USSA1976」は 86 km までジオポテンシャル高度で計算し、86〜1000 km は表値を使います。',
-          '"Legacy" evaluates the 1976 standard atmosphere layers at geometric altitude and extends it isothermally above 84.852 km, as the C++ simulator does. "USSA1976" uses geopotential altitude up to 86 km and the tabulated values from 86 to 1000 km.',
+          '「USSA1976」は 86 km までジオポテンシャル高度で計算し、86〜1000 km は表値を使います。「旧C++版」は1976年標準大気の各層を幾何高度で評価し、84.852 km 以上を等温で外挿します（C++版と同じ）。',
+          '"USSA1976" uses geopotential altitude up to 86 km and the tabulated values from 86 to 1000 km. "Legacy" evaluates the 1976 layers at geometric altitude and extends them isothermally above 84.852 km, as the C++ simulator does.',
         )}
       >
-        <SelectField
+        <SelectField<AtmosphereModel>
           label={tr('標準大気', 'Standard atmosphere')}
-          path="simulation.atmosphere_model"
+          path="atmosphere.model"
           value={model}
           options={[
-            { value: 'legacy', label: tr('旧C++版', 'Legacy (C++)') },
             { value: 'ussa1976', label: 'USSA1976' },
+            { value: 'legacy', label: tr('旧C++版', 'Legacy (C++)') },
           ]}
-          onChange={(m) => set({ atmosphere_model: m === 'legacy' ? undefined : m })}
+          onChange={(m) => setAtm({ model: m === 'ussa1976' ? undefined : m })}
         />
         <Toggle
-          label={tr('高度別に密度の変動を入力（テーブル）', 'Density variation by altitude (table)')}
-          checked={densityTable}
+          label={tr('高度別に密度の偏差を入力（テーブル）', 'Density deviation by altitude (table)')}
+          checked={!!table}
           onChange={(on) =>
-            set({
-              air_density_profile: on
+            setAtm({
+              density_deviation: on
                 ? [
-                    { altitude_m: 0, percent: s.air_density_percent },
-                    { altitude_m: 100000, percent: s.air_density_percent },
+                    [0, seasonal],
+                    [100000, seasonal],
                   ]
                 : undefined,
             })
           }
         />
-        {densityTable ? (
-          <ProfileTable
-            path="simulation.air_density_profile"
-            title={tr('高度別の密度変動', 'Density variation by altitude')}
-            columns={[
-              { key: 'altitude_m', label: tr('高度 m', 'Altitude m') },
-              { key: 'percent', label: tr('変動 %', 'Variation %') },
-            ]}
-            rows={s.air_density_profile ?? []}
-            onChange={(rows) => set({ air_density_profile: rows })}
+        {table ? (
+          <RowsTable
+            path="atmosphere.density_deviation"
+            title={tr('高度別の密度偏差', 'Density deviation by altitude')}
+            columns={[tr('高度 m', 'Altitude m'), tr('偏差 %', 'Deviation %')]}
+            rows={table}
+            onChange={(rows) => setAtm({ density_deviation: rows })}
           />
         ) : (
           <NumberField
-            label={tr('密度の変動', 'Density variation')}
+            label={tr('季節変動', 'Seasonal variation')}
             unit="%"
             hint={tr(
-              '標準大気の季節変動の高度分布に沿って密度を変えます',
-              'Scales density along the seasonal-variation profile of the standard atmosphere',
+              '標準大気の季節変動の高度分布に沿って密度を変えます（低高度と高高度で符号が逆）',
+              'Scales density along the seasonal-variation profile of the standard atmosphere (opposite signs at low and high altitude)',
             )}
-            path="simulation.air_density_percent"
-            value={s.air_density_percent}
-            onChange={(v) => set({ air_density_percent: v })}
+            path="atmosphere.seasonal_variation_percent"
+            value={seasonal}
+            onChange={(v) => setAtm({ seasonal_variation_percent: v })}
           />
         )}
       </Group>

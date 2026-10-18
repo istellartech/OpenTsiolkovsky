@@ -43,7 +43,7 @@ jobs:
       - name: Build legacy C++
         run: |
           make
-          ./bin/OpenTsiolkovsky ../examples/param_sample_01.json || true
+          cd bin && ./OpenTsiolkovsky param_sample_01.json || true
 
   frontend:
     runs-on: ubuntu-latest

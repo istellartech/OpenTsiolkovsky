@@ -1,5 +1,5 @@
 import type { VehicleSpec } from '../lib/specs'
-import type { ClientConfig } from '../lib/simulation'
+import type { Config } from '../lib/config'
 import { cn } from '../lib/cn'
 import { tr } from '../lib/i18n'
 import type { Patch } from './inspector/shared'
@@ -52,17 +52,15 @@ const TABS: { id: InspectorTab; label: string }[] = [
 
 /** Which tab (and stage) holds a validation field. */
 export function navForField(field: string): InspectorNav {
-  const m = field.match(/^stage(?:\[(\d+)\])?\./)
-  if (m) return { tab: 'vehicle', stage: m[1] ? Number(m[1]) - 1 : 0 }
-  if (field.startsWith('launch.')) return { tab: 'launch', stage: 0 }
-  if (field.startsWith('aerodynamics.')) return { tab: 'aero', stage: 0 }
+  const m = field.match(/^stages\[(\d+)\]\.(aero\.)?/)
+  if (m) return { tab: m[2] ? 'aero' : 'vehicle', stage: Number(m[1]) }
   if (field.startsWith('attitude.') || field.startsWith('wind.')) return { tab: 'flight', stage: 0 }
-  if (field.startsWith('simulation.')) return { tab: 'launch', stage: 0 }
+  if (field.startsWith('launch.') || field.startsWith('simulation.') || field.startsWith('atmosphere.')) return { tab: 'launch', stage: 0 }
   return { tab: 'overview', stage: 0 }
 }
 
 interface Props {
-  config: ClientConfig
+  config: Config
   patch: Patch
   presetId: string
   specs: VehicleSpec
@@ -110,7 +108,9 @@ export function Inspector({ config, patch, presetId, specs, nav, onNav, issueFie
         {nav.tab === 'vehicle' && (
           <VehicleTab config={config} patch={patch} specs={specs} stage={nav.stage} onStage={(stage) => onNav({ tab: 'vehicle', stage })} />
         )}
-        {nav.tab === 'aero' && <AeroTab config={config} patch={patch} />}
+        {nav.tab === 'aero' && (
+          <AeroTab config={config} patch={patch} stage={nav.stage} onStage={(stage) => onNav({ tab: 'aero', stage })} />
+        )}
         {nav.tab === 'flight' && <FlightTab config={config} patch={patch} />}
       </div>
     </div>

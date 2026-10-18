@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ClientConfig } from '../lib/simulation'
+import { inlineFileTables, isConfig, type Config } from '../lib/config'
+import { baseName, convertLegacy, isLegacyParamFile } from '../lib/simulation'
 import { SolverCancelled, solver } from '../lib/solver'
 import { PRESET_OPTIONS, createBlankConfig } from '../config/presets'
-import { isValidClientConfig, validateConfig } from '../lib/validation'
+import { validateConfig } from '../lib/validation'
 import type { Track } from '../lib/trajectory'
-import { baseName, fromLegacyParamFile, isLegacyParamFile } from '../lib/legacy'
 import { commit, initHistory, redo as redoHistory, undo as undoHistory, type History } from '../lib/history'
 import { tr, useLang } from '../lib/i18n'
 
@@ -13,7 +13,7 @@ const LOCALSTORAGE_PRESET_KEY = 'openTsiolkovsky_preset'
 const RUN_DEBOUNCE_MS = 250
 
 interface Entry {
-  config: ClientConfig
+  config: Config
   /** Preset the config came from unchanged, or 'custom' */
   presetId: string
 }
@@ -27,14 +27,14 @@ function loadStored(): Entry | null {
     const preset = PRESET_OPTIONS.find((p) => p.id === presetId)
     if (preset) return { config: preset.create(), presetId }
     const config = JSON.parse(stored)
-    if (!isValidClientConfig(config)) return null
+    if (!isConfig(config)) return null
     return { config, presetId: 'custom' }
   } catch {
     return null
   }
 }
 
-function store(config: ClientConfig, presetId: string) {
+function store(config: Config, presetId: string) {
   try {
     localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(config))
     localStorage.setItem(LOCALSTORAGE_PRESET_KEY, presetId)
@@ -73,7 +73,7 @@ export function useSimulation() {
   const issueMap = useMemo(() => new Map(issues.map((i) => [i.field, i.message])), [issues])
 
   /** Edit the config. Rapid successive edits become a single undo step. */
-  const patch = useCallback((fn: (c: ClientConfig) => ClientConfig) => {
+  const patch = useCallback((fn: (c: Config) => Config) => {
     setHistory((h) => {
       const next = fn(h.present.config)
       return next === h.present.config ? h : commit(h, { config: next, presetId: 'custom' }, { key: 'edit' })
@@ -81,7 +81,7 @@ export function useSimulation() {
   }, [])
 
   /** Replace the whole config (preset, file, shared link) as one undo step. */
-  const load = useCallback((config: ClientConfig, presetId = 'custom') => {
+  const load = useCallback((config: Config, presetId = 'custom') => {
     setHistory((h) => commit(h, { config, presetId }))
   }, [])
 
@@ -135,9 +135,10 @@ export function useSimulation() {
   )
 
   /**
-   * Open a settings file: either one saved from this app, or a CLI parameter
-   * file (param_*.json) together with the CSV tables it references.
-   * Resolves with a user-facing result message.
+   * Open a configuration file (as the CLI reads it), or a C++ simulator
+   * parameter file (param_*.json) together with the CSV tables it
+   * references, converted by the solver. Resolves with a user-facing result
+   * message.
    */
   const importFiles = useCallback(
     async (files: File[]): Promise<ImportResult> => {
@@ -168,9 +169,9 @@ export function useSimulation() {
       if (isLegacyParamFile(parsed)) {
         const csv = new Map<string, string>()
         for (const f of csvFiles) csv.set(baseName(f.name), await f.text())
-        let imported
+        let converted
         try {
-          imported = fromLegacyParamFile(parsed, csv)
+          converted = await convertLegacy(parsed, csv)
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err)
           return {
@@ -178,45 +179,57 @@ export function useSimulation() {
             message: tr(`「${file.name}」を変換できませんでした：${reason}`, `Could not convert "${file.name}": ${reason}`),
           }
         }
-        load(imported.config)
-        const notes: string[] = []
-        if (imported.missing.length) {
-          notes.push(
-            tr(
-              `参照しているCSVが見つからないため定数値を使っています（${imported.missing.join('、')}）。JSONと一緒に選ぶかドロップしてください。`,
-              `Referenced CSV files not found, so constant values are used (${imported.missing.join(', ')}). Select or drop them together with the JSON.`,
-            ),
-          )
-        }
-        if (imported.unsupported.length) {
-          notes.push(
-            tr(
-              `この画面では扱えない設定は無視しました：${imported.unsupported.join('、')}。`,
-              `Ignored settings not supported here: ${imported.unsupported.join(', ')}.`,
-            ),
-          )
-        }
+        load(converted.config)
         const n = csvFiles.length
         const loaded = n
           ? tr(
-              `CLI用の「${file.name}」（CSV ${n}件）を読み込みました。`,
-              `Loaded CLI file "${file.name}" (${n} CSV file${n === 1 ? '' : 's'}).`,
+              `旧C++版の設定「${file.name}」（CSV ${n}件）を変換して読み込みました。`,
+              `Converted and loaded the C++ simulator file "${file.name}" (${n} CSV file${n === 1 ? '' : 's'}).`,
             )
-          : tr(`CLI用の「${file.name}」を読み込みました。`, `Loaded CLI file "${file.name}".`)
-        return { ok: imported.missing.length === 0, message: [loaded, ...notes].join(' ') }
+          : tr(`旧C++版の設定「${file.name}」を変換して読み込みました。`, `Converted and loaded the C++ simulator file "${file.name}".`)
+        const notes = converted.warnings.length
+          ? [
+              tr(
+                `変換時の注意：${converted.warnings.join('／')}（CSVはJSONと一緒に選ぶかドロップしてください）`,
+                `Conversion notes: ${converted.warnings.join(' / ')} (select or drop CSV files together with the JSON).`,
+              ),
+            ]
+          : []
+        return { ok: converted.warnings.length === 0, message: [loaded, ...notes].join(' ') }
       }
 
-      if (!isValidClientConfig(parsed)) {
+      if (!isConfig(parsed)) {
         return {
           ok: false,
           message: tr(
-            `「${file.name}」は設定ファイルとして読めませんでした（このアプリで保存した設定か、CLI用の param_*.json を選んでください）。`,
-            `Could not read "${file.name}" as a configuration file. Select a configuration saved from this app or a CLI param_*.json file.`,
+            `「${file.name}」は設定ファイルとして読めませんでした（設定の .json か、旧C++版の param_*.json を選んでください）。`,
+            `Could not read "${file.name}" as a configuration file. Select a configuration .json or a C++ simulator param_*.json file.`,
           ),
         }
       }
-      load(parsed)
-      return { ok: true, message: tr(`「${file.name}」を読み込みました。`, `Loaded "${file.name}".`) }
+      // `{file}` tables are filled in from the CSV files opened with it.
+      const csv = new Map<string, string>()
+      for (const f of csvFiles) csv.set(baseName(f.name), await f.text())
+      const { config, missing, errors, inlined } = inlineFileTables(parsed, csv)
+      load(config)
+      const loaded = inlined
+        ? tr(
+            `「${file.name}」（CSVの表 ${inlined}件）を読み込みました。`,
+            `Loaded "${file.name}" (${inlined} CSV table${inlined === 1 ? '' : 's'}).`,
+          )
+        : tr(`「${file.name}」を読み込みました。`, `Loaded "${file.name}".`)
+      const notes = [
+        ...(missing.length
+          ? [
+              tr(
+                `見つからないCSV：${missing.join('、')}（JSONと一緒に選ぶかドロップしてください）`,
+                `Missing CSV files: ${missing.join(', ')} (select or drop them together with the JSON).`,
+              ),
+            ]
+          : []),
+        ...(errors.length ? [tr(`読めないCSV：${errors.join('／')}`, `Unreadable CSV files: ${errors.join(' / ')}.`)] : []),
+      ]
+      return { ok: notes.length === 0, message: [loaded, ...notes].join(' ') }
     },
     [load],
   )

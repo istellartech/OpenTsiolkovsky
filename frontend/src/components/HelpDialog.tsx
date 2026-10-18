@@ -141,7 +141,7 @@ export function HelpDialog({ onClose, showShortcuts }: { onClose: () => void; sh
           </p>
           <ul className="list-disc space-y-0.5 pl-4">
             <li>
-              <Code>openTsiolkovsky-cli run --json</Code> / <Code>validate --json</Code> / <Code>share</Code>
+              <Code>openTsiolkovsky-cli run CONFIG --json</Code> / <Code>validate --json</Code> / <Code>share</Code>
             </li>
             <li>
               {tr('MCP サーバー:', 'MCP server:')} <Code>openTsiolkovsky-cli mcp</Code>

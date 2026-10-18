@@ -1,210 +1,213 @@
-# 設定ファイルガイド
+# 設定ファイル
 
-CLI が読む `param_*.json`（旧C++版と同じ形式）の項目と、そこから参照する CSV テーブルの形式を説明します。サンプルは `examples/param_sample_01.json`、`examples/param_momo.json`、`examples/SS-520-4/` にあります。Webアプリが使う設定形式（`ClientConfig`）は最後にまとめます。
+CLI・Webアプリ・WASM・MCP サーバーは同じ JSON 設定を読みます。キーは snake_case で、末尾が単位です（`_s` 秒、`_m` メートル、`_kg`、`_n` ニュートン、`_deg` 度、`_mps` m/s、`_percent` % など）。サンプルは `examples/sample_01.json`、`examples/momo.json`、`examples/SS-520-4/ss520_4.json`（CSV テーブル付きの3段）です。
 
-キー名は単位や型を含めて一字一句そのまま書きます（例: `"burn end time(time of each stage)[s]"`）。表で既定値のある項目は省略できます。既定値が「—」の項目は必須です。
+- 機械可読な定義（JSON Schema）: `openTsiolkovsky-cli schema`
+- 飛ばさずに確認: `openTsiolkovsky-cli validate CONFIG`（問題のある値を JSON パスで示します）
+- 旧C++版の `param_*.json` からの変換: `openTsiolkovsky-cli convert param.json -o config.json`（[下記](#旧c版の設定ファイルからの変換)）
 
-機械可読な定義（JSON Schema）は `openTsiolkovsky-cli schema` で出力できます（分散ファイルは `schema dispersion`）。書いた設定は `openTsiolkovsky-cli validate -c FILE` で、飛ばさずに確かめられます（[AI エージェントからの利用](ai.md)）。
+知らないキー（綴りの誤りなど）はエラーになります。表で既定値のあるキーは省略できます。
 
-## 最小構成の例
+## 最小構成
 
 ```json
 {
-    "name(str)": "simple_test",
-    "calculate condition": {
-        "end time[s]": 300,
-        "time step for output[s]": 1
-    },
-    "launch": {
-        "position LLH[deg,deg,m]": [35.0, 139.0, 0.0]
-    },
-    "stage1": {
-        "mass initial[kg]": 1000,
-        "thrust": {
-            "const thrust vac[N]": 30000,
-            "burn end time(time of each stage)[s]": 20
-        }
-    }
+  "name": "minimal",
+  "simulation": { "end_time_s": 300 },
+  "launch": { "latitude_deg": 35, "longitude_deg": 139 },
+  "stages": [{
+    "mass_initial_kg": 1000,
+    "engine": { "thrust_vac_n": 30000, "isp_vac_s": 200, "burn_end_s": 20 }
+  }]
 }
 ```
 
-省略した項目は既定値になります。この例では、真上（仰角 90°）に向けて Isp 200 秒で 20 秒間燃焼し、無風・空力なし・ノズル背圧損失なしで飛びます。
+真上（仰角 90°）に向けて 20 秒燃焼し、無風・空力係数なし（弾道係数 100 kg/m²）で飛びます。
+
+## 定数・表・CSV（`Curve`）
+
+時刻や Mach 数で変わりうる量は、次の3つの書き方ができます。表は線形補間で、範囲外は端の値を使います。
+
+```jsonc
+"thrust_vac_n": 15000                          // 定数
+"thrust_vac_n": [[0, 16000], [10, 12000], [30, 5000]]   // 表 [x, y]（x は昇順）
+"thrust_vac_n": { "file": "thrust.csv" }        // CSV ファイル（1列目が x、2列目が y）
+"elevation_deg": { "file": "attitude.csv", "columns": [0, 2] }  // 使う列を指定（0 始まり）
+```
+
+CSV は数値でない行（ヘッダーなど）を読み飛ばし、設定ファイルのあるディレクトリから相対パスで探します。Webアプリはファイルを読めないため、表は設定の中に書きます（`openTsiolkovsky-cli share` はファイルを読み込んで埋め込みます）。
 
 ## 全体
 
 | キー | 既定値 | 内容 |
 | --- | --- | --- |
-| `name(str)` | — | 名前 |
-| `calculate condition` | — | 計算条件（下記） |
-| `launch` | — | 打ち上げ条件（下記） |
-| `stage1`, `stage2`, `stage3` | — | 各段（`stage1` は必須。`stages` 配列や単段の `stage` でも可） |
-| `wind` | 無風 | 風（下記） |
+| `name` | — | 名前 |
+| `simulation` | — | 計算条件 |
+| `launch` | — | 打ち上げ条件 |
+| `atmosphere` | USSA1976・変動なし | 大気 |
+| `wind` | 無風 | 風 |
+| `attitude` | 真上 | 姿勢プログラム（機体全体） |
+| `stages` | — | 段（1段目から順に） |
 
-## 計算条件 (`calculate condition`)
-
-| キー | 既定値 | 内容 |
-| --- | --- | --- |
-| `end time[s]` | — | 計算終了時刻 |
-| `time step for output[s]` | — | 出力の時間間隔。出力時刻は `k × 間隔` で、丸め誤差は積み重なりません |
-| `variation ratio of air density[%](-100to100, default=0)` | 0 | 大気密度の変動率。U.S. 標準大気の季節変動の高度分布に沿って密度を変えます（低高度と高高度で符号が逆になります） |
-| `air density variation file exist?(bool)` | false | 高度ごとの密度変動テーブルを使う（使うと上の変動率は無視） |
-| `air density variation file name(str)` | "" | 密度変動テーブル（下記 CSV） |
-| `atmosphere model(str)` | `"legacy"` | 標準大気モデル。`"legacy"`: 旧C++版と同じ（1976年標準大気の各層を幾何高度で評価し、84.852 km 以上は 186.95 K の等温層として外挿）。`"ussa1976"`: 86 km まではジオポテンシャル高度で計算し、86〜1000 km は U.S. 標準大気 1976 の表値（[物理モデル](physics.md#大気)） |
-| `integrator` | RK4 | 積分器（下記） |
-
-### 積分器 (`integrator`)
+## `simulation`
 
 | キー | 既定値 | 内容 |
 | --- | --- | --- |
-| `method(str)` | `"rk4"` | `"rk4"`（固定刻み）または `"rk45"`（Dormand–Prince 5(4)、刻み幅を自動調整） |
-| `rk4 step[s]` | 出力間隔の半分 | RK4 の刻み幅。区間は等分され、イベント時刻や出力時刻にぴったり止まります |
-| `rk45 absolute tolerance[-]` | 1e-9 | RK45 の絶対許容誤差（全成分共通。質量 kg、位置 m、速度 m/s） |
-| `rk45 relative tolerance[-]` | 1e-9 | RK45 の相対許容誤差 |
+| `end_time_s` | — | 計算終了時刻（打ち上げから）。着地でも終わります |
+| `output_step_s` | 1 | 出力間隔。出力時刻は `k × 間隔` で、丸め誤差は積み重なりません |
+| `integrator` | `{"method": "rk4"}` | 積分器（下記） |
 
-## 打ち上げ条件 (`launch`)
+`integrator` は `method` で種類を選びます。
 
-| キー | 既定値 | 内容 |
-| --- | --- | --- |
-| `position LLH[deg,deg,m]` | — | 緯度・経度・高度（WGS84 楕円体高） |
-| `velocity NED[m/s]` | [0, 0, 0] | 初速（地球に対する北・東・下）。0 のときは発射台で保持します。0 以外（空中発射や飛行途中からの再開）では保持もレール拘束もしません |
-| `time(UTC)[y,m,d,h,min,sec]` | [2000,1,1,0,0,0] | 打ち上げ時刻（UTC）。軌道要素の昇交点赤経を春分点基準にするのに使います |
-| `launcher rail length[m]` | 0 | ランチャのレール長。0 なら発射台での保持のみ（[ランチャ](physics.md#発射台とランチャ)） |
+| 書き方 | 内容 |
+| --- | --- |
+| `{"method": "rk4", "step_s": 0.1}` | 固定刻みの RK4。`step_s` の既定は出力間隔の半分。区間は等分され、イベントや出力時刻にぴったり止まります |
+| `{"method": "rk45", "abs_tol": 1e-9, "rel_tol": 1e-9}` | Dormand–Prince 5(4)、刻み幅を自動調整。許容誤差は全成分共通（kg・m・m/s）、既定 1e-9 |
 
-## 段 (`stage1` など)
+## `launch`
 
 | キー | 既定値 | 内容 |
 | --- | --- | --- |
-| `power flight mode(int)` | 0 | 動力飛行のモード。Rust版は `0`（3DoF）のみ。ほかの値は警告を出して 3DoF で計算します |
-| `free flight mode(int)` | 2 | 燃焼後のモード。`0`: 空力安定（機軸が気流に沿い、抗力 CA のみ）、`1`: 3DoF 指定姿勢（姿勢プログラムに従う）、`2`: 弾道飛行（弾道係数で減速） |
-| `mass initial[kg]` | — | この段単体の初期質量（上段を含まない。旧C++版はその段より上の総質量なので注意） |
-| `mass dry[kg]` | なし | 推進剤を除いた質量。推進剤（初期質量 − 乾燥質量）を使い切った時点で燃焼を終えます。省略時はこの段の質量すべてを燃やせます |
+| `latitude_deg`, `longitude_deg` | — | 発射地点 |
+| `altitude_m` | 0 | WGS84 楕円体高 |
+| `time_utc` | `"2000-01-01T00:00:00Z"` | 打ち上げ時刻（ISO 8601。`+09:00` などの時差付きは UTC に換算）。軌道要素の昇交点赤経に使います |
+| `velocity_ned_mps` | [0, 0, 0] | 初速（地球に対する北・東・下）。0 なら発射台で保持します。0 以外（空中発射・飛行途中からの再開）では保持もレールもありません |
+| `rail_length_m` | 0 | ランチャのレール長（打ち上げ時の機軸の向き）。0 なら保持のみ（[ランチャ](physics.md#発射台とランチャ)） |
 
-燃焼中かどうかは、燃焼開始から「燃焼終了」「強制停止」「推進剤切れ」の最も早い時刻までで決まります。各段の時刻はその段の開始（前段の分離）からの相対時刻です。
-
-### 推力 (`thrust`)
+## `atmosphere`
 
 | キー | 既定値 | 内容 |
 | --- | --- | --- |
-| `const thrust vac[N]` | 0 | 真空推力（テーブルを使わないとき） |
-| `thrust vac file exist?(bool)` / `thrust vac file name(str)` | false / "" | 真空推力テーブル（時刻 [s], 推力 [N]。段の開始からの時刻） |
-| `thrust coefficient[-]` | 1 | 推力係数 k。推力を k 倍し、燃焼時間を 1/k にします（全力積は同じ）。旧C++版と同じ定義で、定数にもテーブルにも効きます |
-| `const Isp vac[s]` | 200 | 真空比推力 |
-| `Isp vac file exist?(bool)` / `Isp vac file name(str)` | false / "" | 比推力テーブル（時刻 [s], Isp [s]） |
-| `Isp coefficient[-]` | 1 | 比推力係数 k。推力と Isp を共に k 倍します（質量流量は同じ） |
-| `burn start time(time of each stage)[s]` | 0 | 燃焼開始時刻 |
-| `burn end time(time of each stage)[s]` | 0 | 燃焼終了時刻 |
-| `forced cutoff time(time of each stage)[s]` | 1e9 | 強制停止時刻 |
-| `throat diameter[m]` | 0 | スロート直径 |
-| `nozzle expansion ratio[-]` | 1 | ノズル開口比。出口面積 = π/4 × スロート直径² × 開口比 |
-| `nozzle exhaust pressure[Pa]` | 0 | 読み込むだけで使いません（旧C++版も同じ） |
+| `model` | `"ussa1976"` | `"ussa1976"`: 86 km までジオポテンシャル高度で計算し、86〜1000 km は U.S. 標準大気 1976 の表値。`"legacy"`: 旧C++版と同じ（各層を幾何高度で評価し、84.852 km 以上は等温で外挿）（[大気](physics.md#大気)） |
+| `seasonal_variation_percent` | 0 | 季節変動（-100〜100）。U.S. 標準大気の季節変動の高度分布に沿って密度を変えます（低高度と高高度で符号が逆） |
+| `density_deviation` | なし | 高度ごとの密度の偏差の表 `[高度 m, 偏差 %]`。指定すると季節変動の代わりに使います |
+
+## `wind`
+
+| キー | 既定値 | 内容 |
+| --- | --- | --- |
+| `speed_mps`, `direction_deg` | 0, 0 | 一定の風。風向は風が吹いてくる方位（北から時計回り） |
+| `profile` | なし | 高度ごとの風の表 `[高度 m, 風速 m/s, 風向 deg]`。指定すると一定の風の代わりに使います |
+
+表は北・東成分に分けて補間するので、350° と 10° の中間は 0°（北）になります。
+
+## `attitude`
+
+姿勢プログラムは機体全体に共通で、時刻は打ち上げからの秒です。
+
+| キー | 既定値 | 内容 |
+| --- | --- | --- |
+| `azimuth_deg` | 0 | 機軸の方位角（北から時計回り）。定数か表 |
+| `elevation_deg` | 90 | 機軸の仰角（水平から上向き）。定数か表（ピッチプログラム） |
+| `roll_deg` | 0 | ロール角。定数か表 |
+| `yaw_offset_deg`, `pitch_offset_deg`, `roll_offset_deg` | 0 | 機体の取り付け誤差。姿勢プログラムから Z→Y→X 軸まわりに回します（旧C++版と同じ） |
+| `gyro_bias_deg_h` | [0, 0, 0] | 機体 X・Y・Z 軸のジャイロバイアス。打ち上げからの時間に比例して姿勢がずれます |
+
+## `stages[]`
+
+各段の時刻はその段の開始（前段の分離）からの秒です。
+
+| キー | 既定値 | 内容 |
+| --- | --- | --- |
+| `mass_initial_kg` | — | この段単体の初期質量（上段を含まない） |
+| `mass_dry_kg` | なし | 推進剤を除いた質量。推進剤（初期 − 乾燥）を使い切ると燃焼を終えます。省略時は段の質量すべてを燃やせます |
+| `engine` | なし | エンジン（下記）。省略するとこの段は推力なし |
+| `aero` | 下記の既定値 | 空力（下記） |
+| `free_flight` | `"ballistic"` | 燃焼していないときの飛び方。`"ballistic"`: 弾道係数で減速、`"aero_stable"`: 機軸が気流に沿う（軸力のみ）、`"attitude_program"`: 姿勢プログラムに従う（軸力と法線力） |
+| `separation_time_s` | — | 上段の分離時刻。最終段以外は必須 |
+| `jettisons` | [] | この段の飛行中に切り離す物体（下記） |
+| `thrust_trim` | なし | 推力トリム（下記） |
+
+### `engine`
 
 推力は `真空推力 − 出口面積 × 大気圧`（負にはしません）、質量流量は `真空推力 / (真空Isp × g0)` です。
 
-### 空力 (`aero`)
+| キー | 既定値 | 内容 |
+| --- | --- | --- |
+| `thrust_vac_n` | — | 真空推力。定数か段の時刻の表 |
+| `isp_vac_s` | — | 真空比推力。定数か段の時刻の表 |
+| `burn_start_s` | 0 | 点火 |
+| `burn_end_s` | — | 燃焼終了。分離が先ならそこで、推進剤が先に尽きればそこで終わります |
+| `nozzle_exit_area_m2` | 0 | ノズル出口面積（背圧損失）。スロート径 d と開口比 ε からは π/4·d²·ε |
+
+### `aero`
+
+空力は段ごとです。その段より上を載せて飛んでいる間と、分離後に落ちていくときに使います。
 
 | キー | 既定値 | 内容 |
 | --- | --- | --- |
-| `body diameter[m]` | 0.5 | 機体直径（基準面積 = π/4 × 直径²） |
-| `const axial coefficient[-]` | 0 | 軸力係数 CA |
-| `axial coefficient file exist?(bool)` / `axial coefficient file name(str)` | false / "" | CA テーブル（Mach, CA） |
-| `axial multiplier[-]` | 1 | CA テーブルの倍率 |
-| `const axial coefficient power off[-]` | なし | 燃焼していないときの CA（ベース抗力の違い）。省略時は燃焼中と同じ CA |
-| `axial coefficient power off file name(str)` | "" | 燃焼していないときの CA テーブル（Mach, CA。倍率が掛かります） |
-| `const normal coefficient[-]` | 0 | 法線力係数の傾き CNα [1/rad]。法線力 = CNα × 迎角 [rad] × 動圧 × 基準面積 |
-| `normal coefficient file exist?(bool)` / `normal coefficient file name(str)` | false / "" | CN テーブル。Mach × 迎角の 2 次元表（下記）か、1 次元の CNα(Mach) [1/rad] |
-| `normal multiplier[-]` | 1 | CN テーブルの倍率 |
-| `ballistic coefficient(ballistic flight mode)[kg/m2]` | 100 | 弾道飛行モードの弾道係数 β（抗力加速度 = 動圧 / β） |
+| `diameter_m` | 0.5 | 基準直径（基準面積 = π/4 × 直径²） |
+| `ca` | 0 | 軸力係数 CA。定数か Mach の表 |
+| `ca_power_off` | `ca` と同じ | 燃焼していないときの CA（ベース抗力の違い）。定数か Mach の表 |
+| `cn_alpha_per_rad` | 0 | 法線力傾斜 CNα [1/rad]。法線力 = CNα × 迎角 [rad] × 動圧 × 基準面積。定数か Mach の表 |
+| `cn_table` | なし | Mach × 迎角の CN の表（下記）。指定すると `cn_alpha_per_rad` の代わりに使います |
+| `ballistic_coefficient_kg_m2` | 100 | `free_flight: "ballistic"` の弾道係数 β（抗力加速度 = 動圧 / β） |
 
-CA・CN・姿勢のテーブルは機体全体で共通で、1段目の設定から読みます（定数と倍率、直径は段ごと）。
+迎角が両軸にあるときは、全迎角での CN を気流の横成分の向きにかけます（[空力](physics.md#空力)）。
 
-> 旧C++版では CN を定数で与えると、迎角によらず機体の Y・Z 軸に常に −CN × 動圧 × 面積の力がかかります。Rust版は定数 CN を CNα（迎角に比例）として扱うため、定数 CN が 0 でない設定では結果が C++ 版と異なります。
+### Mach × 迎角の表（`cn_table`、`thrust_trim.cp_sta_m`）
 
-### 姿勢 (`attitude`)
+```json
+"cn_table": {
+  "mach": [0, 0.5, 1.2, 3],
+  "alpha_deg": [0, 2, 5, 10, 20, 90],
+  "values": [[0, 0.12, 0.30, 0.6, 1.2, 1.8], ...]
+}
+```
 
-| キー | 既定値 | 内容 |
-| --- | --- | --- |
-| `const elevation[deg]` / `const azimuth[deg]` | 90 / 0 | 仰角・方位角（北から時計回り） |
-| `const roll[deg]` | 0 | ロール角 |
-| `attitude file exist?(bool)` / `attitude file name(str)` | false / "" | 姿勢プログラム（時刻 [s], 方位角 [deg], 仰角 [deg][, ロール角 [deg]]。打ち上げからの時刻） |
-| `yaw offset[deg]` / `pitch offset[deg]` / `roll offset[deg]` | 0 | 機体の取り付け誤差。姿勢プログラム（航法座標）から機体を Z→Y→X 軸まわりに回します（旧C++版と同じ） |
-| `gyro bias x[deg/h]` / `y` / `z` | 0 | ジャイロバイアス。打ち上げからの時間に比例して機体姿勢がずれます |
-
-### 投棄物 (`dumping product`)
-
-フェアリングなど、その段の飛行中に切り離す物体です。切り離すと質量が機体から減り、物体は弾道係数を使って落下点まで計算されます。
-
-| キー | 既定値 | 内容 |
-| --- | --- | --- |
-| `dumping product exist?(bool)` | false | 投棄物の有無 |
-| `dumping product separation time[s]` | 0 | 切り離し時刻（その段の開始からの秒。段の分離より前） |
-| `dumping product mass[kg]` | 0 | 質量（段の乾燥質量の一部として扱います） |
-| `dumping product ballistic coefficient[kg/m2]` | 100 | 弾道係数 |
-| `additional speed at dumping NED[m/s,m/s,m/s]` | [0,0,0] | 切り離し時に加わる速度（北・東・下） |
-
-### 推力トリム (`attitude neutrality(3DoF)`)
-
-重心・圧力中心・推力点の位置から、空力モーメントを打ち消すように推力の向き（ジンバル角）を決めます（旧C++版の neutrality と同じ計算）。CN は Mach × 迎角の 2 次元表が必要です。
-
-| キー | 既定値 | 内容 |
-| --- | --- | --- |
-| `considering neutrality?(bool)` | false | トリムを計算する |
-| `CG, Controller position file(str)` | "" | 時刻 [s], 重心 STA [m], 制御点（ジンバル）STA [m]。STA は機首からの後方距離。時刻は打ち上げから |
-| `CP file(str)` | "" | 圧力中心 STA [m] の Mach × 迎角の表（CN の 2 次元表と同じ形式） |
-| `Xcg offset[m]` など `X/Y/Z` × `cg/cp/t` | 0 | 重心・圧力中心・推力点のずれ（X は STA と逆向き） |
-
-求めたジンバル角は `dynamics_cpp.csv` の `gimbal_angle_pitch/yaw(deg)` に出ます。
-
-### 段の分離 (`stage`)
-
-| キー | 既定値 | 内容 |
-| --- | --- | --- |
-| `following stage exist?(bool)` | false | 次の段があるか |
-| `separation time[s]` | 1e6 | 分離時刻（その段の開始から） |
-
-`6DoF` の項目は読み込みますが使いません（ファイル名があると警告）。
-
-## 風 (`wind`)
-
-| キー | 既定値 | 内容 |
-| --- | --- | --- |
-| `const wind[m/s,deg]` | [0, 0] | 風速と風向（風が吹いてくる方位） |
-| `wind file exist?(bool)` / `wind file name(str)` | false / "" | 風のテーブル（高度 [m], 風速 [m/s], 風向 [deg]） |
-
-テーブルは北・東成分に分けて高度方向に線形補間します（旧C++版と同じ）。350° と 10° の中間は 0°（北）になります。範囲外の高度では端の値を使います。
-
-## CSV テーブルの形式
-
-1 行目はヘッダー（読み飛ばします）。Rust版は列の位置で読みますが、旧C++版はヘッダー名を照合するので、両方で使うなら次の名前にしてください。範囲外は端の値を使います（旧C++版は 2 次元表の範囲外でエラー終了）。
-
-| テーブル | 列（C++ 版のヘッダー名） |
-| --- | --- |
-| 推力 | `time[s]`, `thrust vac[N]`（3 列目以降は無視） |
-| 比推力 | `time[s]`, `Isp vac[s]` |
-| CA | `mach[-]`, `CA[-]` |
-| 姿勢 | `time[s]`, `azimuth[deg]`, `elevation[deg]`[, `roll[deg]`] |
-| 風 | `altitude[m]`, `wind_speed[m/s]`, `direction[deg]` |
-| 密度変動 | `altitude[m]`, `air density variation[percent]` |
-| 重心・制御点 | `time[s]`, `CG_pos_STA[m]`, `Controller_pos_STA[m]` |
-
-CN と CP の 2 次元表はヘッダーなしの 15 列です。1 行目は「任意の値, 迎角 [deg] × 14」、2 行目以降は「Mach, 各迎角での値 × 14」です。迎角は 0〜90°（後ろからの気流も考えるなら 180° まで）をカバーしてください。
+`values[i][j]` が `mach[i]`・`alpha_deg[j]` の値です。補間は旧C++版と同じ三角形分割、範囲外は端の値です。CSV で書くときは 1 行目が「任意の値, 迎角…」、2 行目以降が「Mach, 値…」です（旧C++版の CN・CP ファイルと同じ）。
 
 ```
 0,0,1,2,3,4,6,8,10,15,20,30,45,90,180
 0.0,0,0.06,0.12,...
-0.5,0,0.06,0.12,...
 ```
 
-## 設定の検証
+### `jettisons[]`
 
-読み込み時に、物理的に不正な値（負の質量、範囲外の緯度、燃焼終了が開始より前など）はエラーになります。珍しいが有効な値（高度 10 km 以上や初速 100 m/s 以上からの開始、Isp が 100〜500 秒の外、推進剤が足りない燃焼など）は警告を表示して計算します。
+フェアリングなど、その段の飛行中に切り離す物体です。質量は機体から減り、物体は弾道係数で落下点まで計算されます。
 
-## Webアプリの設定形式 (`ClientConfig`)
+| キー | 既定値 | 内容 |
+| --- | --- | --- |
+| `name` | `jettison<N>` | 出力での名前（`stage2_fairing` のように使います） |
+| `time_s` | — | 切り離し時刻（段の開始後、分離より前） |
+| `mass_kg` | — | 質量（段の乾燥質量の一部） |
+| `ballistic_coefficient_kg_m2` | 100 | 弾道係数 |
+| `delta_v_ned_mps` | [0, 0, 0] | 切り離し時に加わる速度（北・東・下） |
 
-Webアプリと WASM は、より簡潔な JSON（`ClientConfig`）も受け付けます。主な対応は次のとおりです（すべて省略可能で、既定値は `src/rocket.rs` の `default_*`）。
+### `thrust_trim`
 
-- `simulation`: `duration_s`, `output_step_s`, `air_density_percent`, `air_density_profile`（`[{ altitude_m, percent }]`）, `atmosphere_model`（`"legacy"` / `"ussa1976"`）, `integrator`（`method`, `rk4_step_s`, `rk45_abs_tol`, `rk45_rel_tol`）
-- `launch`: `latitude_deg`, `longitude_deg`, `altitude_m`, `velocity_ned_mps`, `datetime_utc`, `rail_length_m`
-- `stages[]`: `mass_initial_kg`, `mass_dry_kg`, `burn_start_s`, `burn_end_s`, `forced_cutoff_s`, `separation_time_s`, `thrust_constant`, `thrust_multiplier`, `thrust_profile`, `isp_constant`, `isp_multiplier`, `isp_profile`, `throat_diameter_m`, `nozzle_expansion_ratio`, `power_mode`, `free_mode`, `aero`（段ごとの直径・係数）, `dumping_product`（`separation_time_s`, `mass_kg`, `ballistic_coefficient`, `additional_velocity_ned_mps`）
-- `aerodynamics`: `body_diameter_m`, `cn_constant`, `cn_multiplier`, `cn_profile`, `ca_constant`, `ca_multiplier`, `ca_profile`, `ca_power_off_constant`, `ca_power_off_profile`, `ballistic_coefficient`（段ごとの `aero` でも `ca_power_off_constant` を指定可）
-- `attitude`: `elevation_deg`, `azimuth_deg`, `roll_deg`, `pitch_offset_deg`, `yaw_offset_deg`, `roll_offset_deg`, `gyro_bias_deg_h`, `profile`（`[{ time, azimuth_deg, elevation_deg, roll_deg? }]`）
-- `wind`: `speed_mps`, `direction_deg`, `profile`（`[{ altitude_m, speed_mps, direction_deg }]`）
+重心・圧力中心・推力点の位置から、空力モーメントを打ち消すように推力の向き（ジンバル角）を決めます（旧C++版の neutrality と同じ計算）。位置は機首から後方への距離 STA [m] です。
+
+| キー | 既定値 | 内容 |
+| --- | --- | --- |
+| `cg_sta_m` | — | 重心。定数か段の時刻の表 |
+| `gimbal_sta_m` | — | 推力点（ジンバル）。定数か段の時刻の表 |
+| `cp_sta_m` | — | 圧力中心の Mach × 迎角の表 |
+| `cg_offset_m`, `cp_offset_m`, `gimbal_offset_m` | [0, 0, 0] | 機体軸（X 前方）でのずれ |
+
+求めたジンバル角は出力の `gimbal_pitch_deg` / `gimbal_yaw_deg` に出ます。
+
+## 検証
+
+`validate` と読み込み時の検証は、物理的に不正な値（負の質量、範囲外の緯度、燃焼終了が開始より前、最終段以外の分離時刻なし、読めない表など）をエラーに、珍しいが有効な値（高度 10 km 以上や初速 100 m/s 以上からの開始、Isp が 100〜500 秒の外、分離が燃焼終了より前、推進剤が足りない燃焼など）を警告にします。どちらも JSON パス付きです。
+
+```
+Error: stages[1].engine.burn_end_s: 2 must not be earlier than burn_start_s (5)
+Warning: stages[0].engine.burn_end_s: the stage separates at 31.7 s, before the burn ends; the burn stops there
+```
+
+## 旧C++版の設定ファイルからの変換
+
+```bash
+openTsiolkovsky-cli convert param_sample_01.json -o sample_01.json
+```
+
+`"burn end time(time of each stage)[s]"` のようなキーの旧形式（`param_*.json`）を、旧C++版と同じ計算になるように変換します。CSV テーブルは読み込んで設定の中に書き込みます。
+
+- 推力係数・Isp 係数・CA/CN の倍率は値に掛け込みます（推力係数 k は推力を k 倍、時間を 1/k に）。強制停止は燃焼終了に反映します
+- 1段目から読んでいた CA・CN の表と姿勢プログラムは、各段・`attitude` に書き込みます
+- 推力トリムの CG ファイル（打ち上げからの時刻）は段の時刻に直します
+- 大気モデルは `"legacy"` になります
+- 見つからない CSV は（旧版と同じく）定数を使い、警告を出します。動力飛行モード（0 以外）と 6DoF の設定は使いません
+
+Webアプリにも旧形式の JSON を CSV と一緒にドロップすれば、同じ変換で開けます。

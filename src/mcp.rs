@@ -18,16 +18,17 @@ const PROTOCOL_VERSIONS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", 
 
 const INSTRUCTIONS: &str = "\
 OpenTsiolkovsky is a rocket flight simulator (3DoF, multi-stage, launch to impact).
-Workflow: get_config_schema (or get_example_config) -> write a parameter file \
+Workflow: get_config_schema (or get_example_config) -> write a configuration \
 -> validate_config -> run_simulation -> create_share_link to show the result to the user.
-Configurations are given as `config_path` (a param_*.json file; its CSV tables are resolved \
-next to it) or as an inline `config` object (CSV names resolved against `base_dir`). \
-The CLI parameter format uses literal key names that include units, e.g. \
-\"burn end time(time of each stage)[s]\". Stage times are relative to the stage start; \
-\"mass initial[kg]\" is the mass of that stage alone, without the upper stages. \
-The web app format (ClientConfig, snake_case keys with tables inline) is accepted too. \
-Results are SI units; latitude/longitude in degrees. run_monte_carlo gives impact \
-dispersion ellipses for the vehicle, spent stages and jettisoned products.";
+A configuration is given as `config_path` (a JSON file; `{\"file\": ...}` tables are \
+resolved next to it) or as an inline `config` object (files resolved against `base_dir`). \
+Keys are snake_case with the unit as suffix (end_time_s, thrust_vac_n, latitude_deg). \
+Any curve is a constant, rows `[[x, y], ...]` or `{\"file\": \"name.csv\"}`. \
+Stage times are relative to the stage start; mass_initial_kg is the mass of that stage \
+alone, without the upper stages. Results are SI units, angles in degrees. \
+run_monte_carlo gives impact dispersion ellipses for the vehicle, spent stages and \
+jettisoned bodies. Legacy C++ parameter files (param_*.json) must be converted first \
+with convert_legacy_config.";
 
 /// Serve until stdin closes
 pub fn serve_stdio() -> std::io::Result<()> {
@@ -130,6 +131,7 @@ impl Server {
             "run_simulation" => run_simulation(args),
             "run_monte_carlo" => run_monte_carlo(args),
             "create_share_link" => create_share_link(args),
+            "convert_legacy_config" => convert_legacy_config(args),
             _ => return Err((-32602, format!("Unknown tool: {name}"))),
         };
         let (value, is_error) = match outcome {
@@ -197,43 +199,41 @@ fn config_input(args: &Args) -> Result<ConfigInput, AgentError> {
             Ok(ConfigInput::from_json(value.to_string(), base_dir))
         }
         _ => Err(invalid(
-            "Missing configuration: give `config_path` (a param_*.json file) or `config` (an object)",
+            "Missing configuration: give `config_path` (a JSON file) or `config` (an object)",
         )),
     }
 }
 
 fn get_config_schema(args: &Args) -> Result<Value, AgentError> {
-    match opt_str(args, "format")?.unwrap_or("param") {
-        "param" => Ok(agent::param_schema()),
+    match opt_str(args, "format")?.unwrap_or("config") {
+        "config" => Ok(agent::config_schema()),
         "dispersion" => Ok(agent::dispersion_schema()),
         other => Err(invalid(format!(
-            "Unknown format `{other}` (expected `param` or `dispersion`)"
+            "Unknown format `{other}` (expected `config` or `dispersion`)"
         ))),
     }
 }
 
 fn example_config() -> Value {
     let full: Value =
-        serde_json::from_str(include_str!("../examples/param_sample_01.json")).unwrap_or_default();
+        serde_json::from_str(include_str!("../examples/sample_01.json")).unwrap_or_default();
     json!({
         "minimal": {
-            "name(str)": "simple_test",
-            "calculate condition": { "end time[s]": 300, "time step for output[s]": 1 },
-            "launch": { "position LLH[deg,deg,m]": [35.0, 139.0, 0.0] },
-            "stage1": {
-                "mass initial[kg]": 1000,
-                "thrust": {
-                    "const thrust vac[N]": 30000,
-                    "burn end time(time of each stage)[s]": 20
-                }
-            }
+            "name": "minimal",
+            "simulation": { "end_time_s": 300 },
+            "launch": { "latitude_deg": 35.0, "longitude_deg": 139.0 },
+            "stages": [{
+                "mass_initial_kg": 1000,
+                "engine": { "thrust_vac_n": 30000, "isp_vac_s": 200, "burn_end_s": 20 }
+            }]
         },
         "minimal_notes": "Omitted keys take their defaults: vertical attitude (elevation 90 deg), \
-            Isp 200 s, no wind, no aerodynamics. See get_config_schema for every key.",
+            output every 1 s, no wind, no aerodynamic coefficients (ballistic coefficient 100 kg/m2). \
+            See get_config_schema for every key.",
         "full": full,
-        "full_notes": "examples/param_sample_01.json: single stage with constant thrust, \
-            aerodynamics, attitude and wind. Multi-stage examples with CSV tables are in \
-            examples/SS-520-4/ of the repository.",
+        "full_notes": "examples/sample_01.json: single stage with constant thrust, aerodynamics, \
+            attitude and wind. examples/SS-520-4/ss520_4.json in the repository is a three-stage \
+            vehicle with CSV tables.",
         "default_dispersion": Dispersion::default(),
     })
 }
@@ -247,7 +247,7 @@ fn run_simulation(args: &Args) -> Result<Value, AgentError> {
     agent::run(
         &input,
         &RunOptions {
-            output_prefix: opt_str(args, "output_prefix")?.map(str::to_string),
+            output_dir: opt_str(args, "output_dir")?.map(PathBuf::from),
             trajectory_points: points as usize,
         },
     )
@@ -276,7 +276,7 @@ fn run_monte_carlo(args: &Args) -> Result<Value, AgentError> {
             cases: u32::try_from(cases).unwrap_or(u32::MAX),
             seed: opt_u64(args, "seed")?.unwrap_or(1),
             dispersion,
-            output_prefix: opt_str(args, "output_prefix")?.map(str::to_string),
+            output_dir: opt_str(args, "output_dir")?.map(PathBuf::from),
         },
     )
 }
@@ -286,20 +286,36 @@ fn create_share_link(args: &Args) -> Result<Value, AgentError> {
     agent::share_link(&input, opt_str(args, "base_url")?)
 }
 
+fn convert_legacy_config(args: &Args) -> Result<Value, AgentError> {
+    let input = match (opt_str(args, "config_path")?, args.get("config")) {
+        (Some(path), _) => ConfigInput::from_path(path)?,
+        (None, Some(value @ Value::Object(_))) => ConfigInput::from_json(
+            value.to_string(),
+            opt_str(args, "base_dir")?.map(PathBuf::from),
+        ),
+        _ => {
+            return Err(invalid(
+                "Give `config_path` (a param_*.json file) or `config`",
+            ));
+        }
+    };
+    agent::convert(&input.text, &input.source())
+}
+
 /// Input properties naming the configuration, shared by most tools
 fn config_properties() -> Map<String, Value> {
     let props = json!({
         "config_path": {
             "type": "string",
-            "description": "Path to a parameter file (param_*.json); its relative CSV file names are resolved next to it"
+            "description": "Path to a configuration JSON file; its `{\"file\": ...}` tables are resolved next to it"
         },
         "config": {
             "type": "object",
-            "description": "Inline configuration: a CLI parameter file object (see get_config_schema) or a web app ClientConfig"
+            "description": "Inline configuration object (see get_config_schema)"
         },
         "base_dir": {
             "type": "string",
-            "description": "Directory for relative CSV file names (default: next to config_path, or the server's working directory for an inline config)"
+            "description": "Directory for `{\"file\": ...}` tables (default: next to config_path, or the server's working directory for an inline config)"
         }
     });
     props.as_object().cloned().unwrap_or_default()
@@ -335,17 +351,17 @@ fn tool_definitions() -> Vec<Value> {
         }
         props
     };
-    let output_prefix = json!({
+    let output_dir = json!({
         "type": "string",
-        "description": "Also write the CLI output files with this path prefix (e.g. \"out/run1\" gives out/run1_trajectory.csv, out/run1_summary.json, ...). Omit to write nothing."
+        "description": "Also write the result files into this directory (trajectory.csv, summary.json, bodies/*.csv; Monte Carlo: montecarlo_cases.csv, montecarlo_summary.json). Omit to write nothing."
     });
     vec![
         tool(
             "get_config_schema",
             "Configuration schema",
-            "JSON Schema of the CLI parameter file (format \"param\", default) or of the Monte Carlo dispersion (format \"dispersion\"), with units and defaults.",
+            "JSON Schema of the configuration (format \"config\", default) or of the Monte Carlo dispersion (format \"dispersion\"), with units and defaults.",
             json!({
-                "format": { "type": "string", "enum": ["param", "dispersion"], "default": "param" }
+                "format": { "type": "string", "enum": ["config", "dispersion"], "default": "config" }
             })
             .as_object()
             .cloned()
@@ -355,27 +371,27 @@ fn tool_definitions() -> Vec<Value> {
         tool(
             "get_example_config",
             "Example configuration",
-            "A minimal and a complete example parameter file, and the default Monte Carlo dispersion. Start here to write a new vehicle.",
+            "A minimal and a complete example configuration, and the default Monte Carlo dispersion. Start here to write a new vehicle.",
             Map::new(),
             true,
         ),
         tool(
             "validate_config",
             "Validate configuration",
-            "Check a configuration without flying it: parse errors, invalid values, warnings about unusual settings, and referenced CSV files that are missing.",
+            "Check a configuration without flying it: parse errors, invalid values and unreadable tables (each with its JSON path), and warnings about unusual settings.",
             config_properties(),
             true,
         ),
         tool(
             "run_simulation",
             "Run simulation",
-            "Fly the vehicle from launch to impact (spent stages and jettisoned products too). Returns the summary (apogee, max Q, burnout orbit, impact points, flight events) and sampled trajectory points.",
+            "Fly the vehicle from launch to impact (spent stages and jettisoned bodies too). Returns the summary (maxima such as apogee and max Q, flight events with burnout orbits, impact points) and sampled trajectory points.",
             with(json!({
                 "trajectory_points": {
                     "type": "integer", "minimum": 0, "maximum": 5000, "default": 50,
                     "description": "Number of evenly spaced trajectory samples to return (0: none)"
                 },
-                "output_prefix": output_prefix,
+                "output_dir": output_dir,
             })),
             false,
         ),
@@ -394,20 +410,27 @@ fn tool_definitions() -> Vec<Value> {
                     "description": "1-sigma dispersions (see get_config_schema with format \"dispersion\"); keys left out keep their defaults"
                 },
                 "dispersion_path": { "type": "string", "description": "Dispersion JSON file (instead of `dispersion`)" },
-                "output_prefix": output_prefix,
+                "output_dir": output_dir,
             })),
             false,
         ),
         tool(
             "create_share_link",
             "Create web app link",
-            "URL that opens the configuration in the OpenTsiolkovsky web app (3D globe, charts, Monte Carlo) for the user to inspect. CSV tables are embedded in the link; nothing is uploaded.",
+            "URL that opens the configuration in the OpenTsiolkovsky web app (3D globe, charts, Monte Carlo) for the user to inspect. File tables are embedded in the link; nothing is uploaded.",
             with(json!({
                 "base_url": {
                     "type": "string",
                     "description": "Web app URL (default: the public site, or $OPENTSIOLKOVSKY_WEB_URL)"
                 }
             })),
+            true,
+        ),
+        tool(
+            "convert_legacy_config",
+            "Convert legacy parameter file",
+            "Convert a C++ simulator parameter file (param_*.json, keys such as \"burn end time(time of each stage)[s]\") to the current configuration format, with its CSV tables inlined.",
+            config_properties(),
             true,
         ),
     ]
@@ -468,7 +491,8 @@ mod tests {
                 "validate_config",
                 "run_simulation",
                 "run_monte_carlo",
-                "create_share_link"
+                "create_share_link",
+                "convert_legacy_config"
             ]
         );
         assert_eq!(call(&server, 4, "ping", json!({}))["result"], json!({}));
@@ -491,12 +515,12 @@ mod tests {
             1,
             "tools/call",
             json!({ "name": "run_simulation", "arguments": {
-                "config_path": example("param_sample_01.json"), "trajectory_points": 5 } }),
+                "config_path": example("sample_01.json"), "trajectory_points": 5 } }),
         );
         let result = &run["result"];
         assert_eq!(result["isError"], false, "{result}");
         assert!(
-            result["structuredContent"]["summary"]["max_altitude_m"]
+            result["structuredContent"]["summary"]["maxima"]["altitude_m"]["value"]
                 .as_f64()
                 .unwrap()
                 > 0.0
@@ -505,7 +529,7 @@ mod tests {
             result["content"][0]["text"]
                 .as_str()
                 .unwrap()
-                .contains("max_altitude_m")
+                .contains("dynamic_pressure_pa")
         );
 
         let missing = call(

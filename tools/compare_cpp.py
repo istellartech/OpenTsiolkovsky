@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Compare the Rust simulator against the legacy C++ simulator.
 
-Runs both on a parameter JSON and reports the largest differences of the
-vehicle trajectory (time-matched samples) plus apogee and impact point.
+Runs the C++ binary on a legacy parameter file, converts the same file
+(`openTsiolkovsky-cli convert`), runs the Rust CLI on the result and reports
+the largest differences of the vehicle trajectory (time-matched samples)
+plus apogee and impact point.
 
-    python3 tools/compare_cpp.py examples/param_sample_01.json
+    python3 tools/compare_cpp.py legacy_cpp/bin/param_momo.json
 
 Needs the release CLI (`cargo build --release`) and the C++ binary
 (`cd legacy_cpp && make`, Boost from Homebrew on macOS).
@@ -22,20 +24,37 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUST_BIN = ROOT / "target" / "release" / "openTsiolkovsky-cli"
 CPP_BIN = ROOT / "legacy_cpp" / "bin" / "OpenTsiolkovsky"
-COLUMNS = ["mass(kg)", "lat(deg)", "lon(deg)", "altitude(m)", "vel_NED_X(m/s)",
-           "vel_NED_Y(m/s)", "vel_NED_Z(m/s)", "Mach number", "dynamic pressure(Pa)"]
+# C++ column -> Rust trajectory.csv column
+COLUMNS = {
+    "mass(kg)": "mass_kg",
+    "lat(deg)": "latitude_deg",
+    "lon(deg)": "longitude_deg",
+    "altitude(m)": "altitude_m",
+    "vel_NED_X(m/s)": "vel_north_mps",
+    "vel_NED_Y(m/s)": "vel_east_mps",
+    "vel_NED_Z(m/s)": "vel_down_mps",
+    "Mach number": "mach",
+    "dynamic pressure(Pa)": "dynamic_pressure_pa",
+}
 
 
 def read_rows(path):
+    """Numeric columns of every row (text columns such as flight_mode are left out)."""
+    def num(v):
+        try:
+            return float(v)
+        except ValueError:
+            return None
+
     with open(path, newline="") as f:
         reader = csv.reader(f)
         header = [h.strip() for h in next(reader)]
         rows = []
         for r in reader:
-            try:
-                rows.append({h: float(v) for h, v in zip(header, r) if v.strip() != ""})
-            except ValueError:
-                continue
+            row = {h: num(v) for h, v in zip(header, r) if v.strip() != ""}
+            row = {h: v for h, v in row.items() if v is not None}
+            if "time(s)" in row or "time_s" in row:
+                rows.append(row)
         return rows
 
 
@@ -62,10 +81,13 @@ def main():
         (tmp / "output").mkdir()
         subprocess.run([str(CPP_BIN), config_path.name], cwd=tmp, check=True,
                        stdout=subprocess.DEVNULL)
-        subprocess.run([str(RUST_BIN), "-c", config_path.name, "-o", "rust"], cwd=tmp,
+        subprocess.run([str(RUST_BIN), "convert", config_path.name, "-o", "converted.json"],
+                       cwd=tmp, check=True, stderr=subprocess.DEVNULL)
+        subprocess.run([str(RUST_BIN), "run", "converted.json", "-o", "rust"], cwd=tmp,
                        check=True, stdout=subprocess.DEVNULL)
         cpp = cpp_vehicle(tmp / "output", name, config)
-        rust = read_rows(tmp / "rust_dynamics_cpp.csv")
+        rust = [{c: r[k] for c, k in COLUMNS.items() if k in r} | {"time(s)": r["time_s"]}
+                for r in read_rows(tmp / "rust" / "trajectory.csv")]
 
     by_time = {round(r["time(s)"], 6): r for r in rust}
     worst = {c: (0.0, None) for c in COLUMNS}
