@@ -859,6 +859,79 @@ impl MultiStage {
     }
 }
 impl NlpModel for MultiStage {
+    fn coordinates(&self) -> crate::optimization::scaling::PhysicalCoordinates {
+        use crate::optimization::scaling::{Coordinate, PhysicalCoordinates};
+        let mut map = PhysicalCoordinates::dimensionless(self.layout());
+        let units = ["kg", "m", "m", "m", "m/s", "m/s", "m/s"];
+        for node in 0..self.state_nodes() {
+            for (c, unit) in units.iter().enumerate() {
+                map.variables[7 * node + c] = Coordinate {
+                    offset: self.origin[c],
+                    scale: self.scale(c),
+                    unit: (*unit).into(),
+                };
+            }
+        }
+        for i in 0..self.intervals.len() {
+            for j in 0..self.input.degree {
+                for axis in 0..2 {
+                    map.variables[self.control_index(i, j, axis)] = Coordinate::new(1.0, "rad")
+                }
+            }
+        }
+        for p in 0..self.input.phases.len() {
+            map.variables[self.time_index(p)] = Coordinate::new(self.scaling.time_s, "s")
+        }
+        map.variables[self.payload_index()] =
+            Coordinate::new(self.scaling.payload_objective_kg, "kg");
+        for (i, row) in self.rows.iter().enumerate() {
+            map.constraints[i] = match *row {
+                Row::Dynamics(_, _, c) | Row::Initial(c) | Row::Link(_, c) => {
+                    Coordinate::new(self.scale(c), units[c])
+                }
+                Row::Orbit(c) => Coordinate::new(
+                    if c == 0 {
+                        self.scaling.position_m
+                    } else if c < 3 {
+                        self.scaling.velocity_m_s
+                    } else {
+                        1.0
+                    },
+                    if c == 0 {
+                        "m"
+                    } else if c < 3 {
+                        "m/s"
+                    } else {
+                        "1"
+                    },
+                ),
+                Row::Path(interval, _, c) => match c {
+                    0 => Coordinate::new(self.input.max_dynamic_pressure_pa, "Pa"),
+                    3 => Coordinate::new(
+                        self.input.phases[self.intervals[interval].phase].max_specific_force_m_s2,
+                        "m/s^2",
+                    ),
+                    4 => Coordinate::new(self.scaling.position_m, "m"),
+                    5 => Coordinate::new(self.scaling.mass_kg, "kg"),
+                    _ => Coordinate::new(1.0, "1"),
+                },
+                Row::Budget(_) => Coordinate::new(self.scaling.time_s, "s"),
+                Row::Rate(_, axis, _) => Coordinate::new(
+                    if axis == 0 {
+                        self.input.max_azimuth_rate_deg_s
+                    } else {
+                        self.input.max_elevation_rate_deg_s
+                    }
+                    .to_radians(),
+                    "rad/s",
+                ),
+                Row::FairingAltitude(_) => Coordinate::new(self.scaling.position_m, "m"),
+                _ => Coordinate::new(1.0, "rad"),
+            };
+        }
+        map.objective = Coordinate::new(self.scaling.payload_objective_kg, "kg");
+        map
+    }
     fn layout(&self) -> &Layout {
         &self.layout
     }

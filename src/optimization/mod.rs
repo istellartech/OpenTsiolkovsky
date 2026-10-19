@@ -6,6 +6,7 @@ pub mod flight_validation;
 pub mod lgr;
 pub mod multi_stage;
 pub mod problem;
+pub mod scaling;
 pub mod single_stage;
 pub mod tnlp;
 pub mod transcription;
@@ -22,7 +23,8 @@ use pounce_restoration::{
     resto_alg_builder::RestoAlgorithmBuilder,
     resto_inner_solver::make_default_restoration_factory_provider,
 };
-use problem::{OptimizationRequest, Problem, SCHEMA_VERSION};
+use problem::{HessianMethod, KktScaling, OptimizationRequest, Problem, SCHEMA_VERSION};
+use scaling::{ScaledModel, ScalingStrategy};
 use serde::{Deserialize, Serialize};
 use std::{cell::RefCell, rc::Rc};
 use tnlp::{Hs071, NlpModel, SolverNlp};
@@ -81,6 +83,35 @@ pub struct OptimizationResult {
     pub effective_options: String,
     pub flight_scaling: Option<single_stage::FlightScaling>,
     pub physical_scaling: Option<transcription::PhysicalScaling>,
+    pub scaling_report: Option<scaling::ScalingReport>,
+    /// Legacy solution/layout stay in the model's S0 coordinates. This is the
+    /// additional application-transformed TNLP actually passed to pounce.
+    pub solver_layout: Option<tnlp::Layout>,
+    pub solver_solution: Option<FullSolution>,
+    pub physical_solution: Option<scaling::PhysicalSolution>,
+    pub numerical_metrics: Option<NumericalMetrics>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NumericalMetrics {
+    pub setup_seconds: f64,
+    pub solve_seconds: f64,
+    pub validation_seconds: f64,
+    pub jacobian_seconds: f64,
+    pub hessian_seconds: f64,
+    pub factorization_seconds: f64,
+    pub backsolve_seconds: f64,
+    pub objective_evaluations: i32,
+    pub jacobian_evaluations: i32,
+    pub hessian_evaluations: i32,
+    pub final_kkt_error: Option<f64>,
+    pub final_unscaled_kkt_error: Option<f64>,
+    pub factors: u64,
+    pub min_abs_pivot: Option<f64>,
+    pub max_abs_pivot: Option<f64>,
+    pub kkt_scaling: KktScaling,
+    pub kkt_scaling_forced_on_factors: bool,
+    pub restoration_records: usize,
 }
 
 pub fn solve(request: OptimizationRequest) -> Result<OptimizationResult, String> {
@@ -91,6 +122,7 @@ pub fn solve_with_callback(
     request: OptimizationRequest,
     callback: impl FnMut(&IterationRecord) -> bool + 'static,
 ) -> Result<OptimizationResult, String> {
+    let setup_start = std::time::Instant::now();
     request.validate()?;
     let model: Box<dyn NlpModel> = match &request.problem {
         Problem::Hs071 {} => Box::<Hs071>::default(),
@@ -101,18 +133,60 @@ pub fn solve_with_callback(
         Problem::SingleStage(input) => Box::new(single_stage::SingleStage::new((**input).clone())?),
         Problem::Zero(mission) => return Err(mission.readiness_issues().join("\n")),
     };
+    if request.solver.hessian == HessianMethod::Exact && model.hessian_structure().is_empty() {
+        return Err(
+            "exact Hessian is currently supported for HS071 and double_integrator only".into(),
+        );
+    }
+    let base_layout = model.layout().clone();
+    let model = ScaledModel::new(model, request.solver.scaling.clone())?;
+    let scaling_report = model.report.clone();
+    let solver_layout = model.layout().clone();
+    let model: Box<dyn NlpModel> = Box::new(model);
     let mut app = IpoptApplication::new();
     // Explicit settings only: no ambient options file or driver-level cold retry.
-    let options = format!(
-        "hessian_approximation limited-memory\nnlp_scaling_method none\npresolve no\nl1_fallback_on_restoration_failure no\nmu_strategy_fallback no\ndual_divergence_retry no\nprint_level 0\nmax_iter {}\ntol {}\nacceptable_iter 0\nbound_relax_factor 0\nderivative_test {}\n",
+    let mut options = format!(
+        "hessian_approximation {}\nnlp_scaling_method {}\npresolve no\nl1_fallback_on_restoration_failure no\nmu_strategy_fallback no\ndual_divergence_retry no\nprint_level 0\nmax_iter {}\ntol {}\nacceptable_iter 0\nbound_relax_factor 0\nderivative_test {}\n",
+        if request.solver.hessian == HessianMethod::Exact {
+            "exact"
+        } else {
+            "limited-memory"
+        },
+        if request.solver.scaling.strategy == ScalingStrategy::S3 {
+            "gradient-based"
+        } else {
+            "none"
+        },
         request.solver.max_iterations,
         request.solver.tolerance,
         if request.solver.derivative_test {
-            "first-order"
+            if request.solver.hessian == HessianMethod::Exact {
+                "second-order"
+            } else {
+                "first-order"
+            }
         } else {
             "none"
         }
     );
+    if request.solver.scaling.strategy == ScalingStrategy::S3 {
+        options.push_str(&format!(
+            "nlp_scaling_max_gradient {}\nnlp_scaling_min_value {}\n",
+            request.solver.scaling.gradient_max, request.solver.scaling.gradient_min
+        ));
+    }
+    if request.solver.kkt_scaling != KktScaling::UpstreamDefault {
+        let mode = match request.solver.kkt_scaling {
+            KktScaling::None => "none",
+            KktScaling::Ruiz => "ruiz",
+            KktScaling::SlackBased => "slack-based",
+            _ => unreachable!(),
+        };
+        options.push_str(&format!(
+            "linear_system_scaling {mode}\nlinear_scaling_on_demand no\n"
+        ));
+    }
+    options.push_str("timing_statistics yes\n");
     app.initialize_with_options_str(&options)
         .map_err(|e| format!("solver options: {e}"))?;
     let feral = feral_config_from_options(app.options());
@@ -131,11 +205,15 @@ pub fn solve_with_callback(
         solution: None,
         history: vec![],
         hessian_calls: 0,
+        exact_hessian: request.solver.hessian == HessianMethod::Exact,
         stop_after: request.solver.stop_after_iteration,
         callback: Box::new(callback),
     }));
     let erased: Rc<RefCell<dyn TNLP>> = nlp.clone();
+    let setup_seconds = setup_start.elapsed().as_secs_f64();
+    let solve_start = std::time::Instant::now();
     let status = app.optimize_tnlp(erased);
+    let solve_seconds = solve_start.elapsed().as_secs_f64();
     let nlp = nlp.borrow();
     let converged = status == ApplicationReturnStatus::SolveSucceeded;
     let trajectory_model = match &request.problem {
@@ -150,15 +228,60 @@ pub fn solve_with_callback(
         Problem::MultiStage(p) => Some(multi_stage::MultiStage::new((**p).clone())?),
         _ => None,
     };
-    let validation = nlp.solution.as_ref().map(|s| {
+    let solution = nlp.solution.as_ref().map(|s| scaling_report.restore(s));
+    let validation_start = std::time::Instant::now();
+    let validation = solution.as_ref().map(|s| {
         if let Some(m) = &multi_model {
             multi_stage::validation::validate_solution(m, s)
         } else if let Some(m) = &flight_model {
             flight_validation::validate_solution(m, s)
         } else {
-            validation::validate_solution(nlp.model.as_ref(), s, trajectory_model.as_ref())
+            if let Some(m) = &trajectory_model {
+                validation::validate_solution(m, s, Some(m))
+            } else {
+                validation::validate_solution(&Hs071::default(), s, None)
+            }
         }
     });
+    let validation_seconds = validation_start.elapsed().as_secs_f64();
+    let stats = app.statistics();
+    let timing = app.timing_stats();
+    let linear = app.linear_solver_summary();
+    let finite = |v: f64| v.is_finite().then_some(v);
+    let factors = linear.as_ref().map_or(0, |v| v.n_factors);
+    let numerical_metrics = NumericalMetrics {
+        setup_seconds,
+        solve_seconds,
+        validation_seconds,
+        jacobian_seconds: timing.eval_constr_jac.total_wallclock_time(),
+        hessian_seconds: timing.eval_lag_hess.total_wallclock_time(),
+        factorization_seconds: timing.linear_system_factorization.total_wallclock_time(),
+        backsolve_seconds: timing.linear_system_back_solve.total_wallclock_time(),
+        objective_evaluations: stats.num_obj_evals,
+        jacobian_evaluations: stats.num_constr_jac_evals,
+        hessian_evaluations: stats.num_hess_evals,
+        final_kkt_error: finite(stats.final_kkt_error),
+        final_unscaled_kkt_error: finite(stats.final_unscaled_kkt_error),
+        factors,
+        min_abs_pivot: linear
+            .as_ref()
+            .and_then(|v| v.min_abs_pivot)
+            .and_then(finite),
+        max_abs_pivot: linear
+            .as_ref()
+            .and_then(|v| v.max_abs_pivot)
+            .and_then(finite),
+        kkt_scaling: request.solver.kkt_scaling,
+        kkt_scaling_forced_on_factors: factors > 0
+            && matches!(
+                request.solver.kkt_scaling,
+                KktScaling::Ruiz | KktScaling::SlackBased
+            ),
+        restoration_records: nlp.history.iter().filter(|i| i.restoration).count(),
+    };
+    let physical_solution = solution
+        .as_ref()
+        .map(|s| scaling_report.physical_coordinates.solution(s));
     let model_fidelity = if multi_model.is_some() {
         "assumed multi-stage numerical demonstrator; osculating orbit after payload deployment; thermal/range/6DoF not evaluated; not the ZERO baseline"
     } else if flight_model.is_some() {
@@ -168,8 +291,14 @@ pub fn solve_with_callback(
     };
     Ok(OptimizationResult {
         schema_version: SCHEMA_VERSION,
-        input: request,
-        solver_version: "pounce 0.12.0 (FERAL, L-BFGS)".into(),
+        solver_version: format!(
+            "pounce 0.12.0 (FERAL, {})",
+            if request.solver.hessian == HessianMethod::Exact {
+                "exact Hessian"
+            } else {
+                "L-BFGS"
+            }
+        ),
         code_revision: option_env!("OPENTSIOLKOVSKY_REVISION")
             .unwrap_or("unrecorded")
             .into(),
@@ -177,18 +306,24 @@ pub fn solve_with_callback(
         solver_status_code: status.as_int(),
         converged,
         model_fidelity: model_fidelity.into(),
-        variable_names: nlp.model.layout().variables.clone(),
-        constraint_names: nlp.model.layout().constraints.clone(),
-        nlp_layout: nlp.model.layout().clone(),
+        variable_names: base_layout.variables.clone(),
+        constraint_names: base_layout.constraints.clone(),
+        nlp_layout: base_layout,
         hessian_calls: nlp.hessian_calls,
         iterations: nlp.history.clone(),
-        solution: nlp.solution.clone(),
+        solution,
         validation,
         effective_options: options,
         flight_scaling: flight_model
             .map(|m| m.scaling)
             .or_else(|| multi_model.map(|m| m.scaling)),
         physical_scaling: trajectory_model.map(|m| m.scaling),
+        scaling_report: Some(scaling_report),
+        solver_layout: Some(solver_layout),
+        solver_solution: nlp.solution.clone(),
+        physical_solution,
+        numerical_metrics: Some(numerical_metrics),
+        input: request,
     })
 }
 

@@ -78,6 +78,44 @@ pub struct SolverSettings {
     pub derivative_test: bool,
     /// Deterministic callback cancellation, also used to test the WASI ABI.
     pub stop_after_iteration: Option<u32>,
+    #[serde(
+        default,
+        skip_serializing_if = "super::scaling::ScalingSettings::is_default"
+    )]
+    pub scaling: super::scaling::ScalingSettings,
+    #[serde(default, skip_serializing_if = "HessianMethod::is_default")]
+    pub hessian: HessianMethod,
+    #[serde(default, skip_serializing_if = "KktScaling::is_default")]
+    pub kkt_scaling: KktScaling,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum HessianMethod {
+    #[default]
+    LimitedMemory,
+    Exact,
+}
+impl HessianMethod {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum KktScaling {
+    #[default]
+    UpstreamDefault,
+    None,
+    Ruiz,
+    SlackBased,
+}
+impl KktScaling {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 impl Default for SolverSettings {
@@ -87,6 +125,9 @@ impl Default for SolverSettings {
             tolerance: 1e-8,
             derivative_test: false,
             stop_after_iteration: None,
+            scaling: Default::default(),
+            hessian: Default::default(),
+            kkt_scaling: Default::default(),
         }
     }
 }
@@ -252,6 +293,17 @@ pub struct ConstraintDefinition {
 
 impl OptimizationRequest {
     pub fn validate(&self) -> Result<(), String> {
+        self.solver.scaling.validate()?;
+        if self.solver.hessian == HessianMethod::Exact
+            && !matches!(
+                self.problem,
+                Problem::Hs071 {} | Problem::DoubleIntegrator(_)
+            )
+        {
+            return Err(
+                "exact Hessian is currently supported for HS071 and double_integrator only".into(),
+            );
+        }
         if self.schema_version != SCHEMA_VERSION {
             return Err(format!(
                 "unsupported schema_version: {}",

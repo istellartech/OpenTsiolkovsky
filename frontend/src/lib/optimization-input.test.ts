@@ -96,6 +96,17 @@ describe('optimization form input', () => {
     expect(() => editOptimizationInput(read(), 'problem.__proto__.x', 1)).toThrow()
     expect({}).not.toHaveProperty('x')
   })
+  it('accepts PR3 solver settings and directs unsupported exact flight Hessians to JSON', () => {
+    const exact = read('double_integrator_exact')
+    expect(inspectOptimizationInput(JSON.stringify(exact)).issues).toEqual([])
+    const input = read()
+    input.solver.hessian = 'exact'
+    expect(inspectOptimizationInput(JSON.stringify(input)).issues.map((i) => i.path)).toContain('solver.hessian')
+    expect(sectionForPath('solver.hessian')).toBe('json')
+    input.solver.hessian = 'limited_memory'
+    input.solver.scaling = { strategy: 's2', floor: 0 }
+    expect(inspectOptimizationInput(JSON.stringify(input)).issues.map((i) => i.path)).toContain('solver.scaling.floor')
+  })
   it('compares omitted schema defaults with recorded serde defaults without changing the draft', () => {
     const draft = read('momo_single_stage'),
       recorded = structuredClone(draft)

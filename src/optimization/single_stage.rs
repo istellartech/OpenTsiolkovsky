@@ -689,6 +689,53 @@ impl SingleStage {
 }
 
 impl NlpModel for SingleStage {
+    fn coordinates(&self) -> super::scaling::PhysicalCoordinates {
+        use super::scaling::{Coordinate, PhysicalCoordinates};
+        let mut map = PhysicalCoordinates::dimensionless(self.layout());
+        let units = ["kg", "m", "m", "m", "m/s", "m/s", "m/s"];
+        for node in 0..=self.count() {
+            for (c, unit) in units.iter().enumerate() {
+                map.variables[7 * node + c] = Coordinate {
+                    offset: self.origin[c],
+                    scale: self.state_scale(c),
+                    unit: (*unit).into(),
+                };
+            }
+        }
+        for k in 0..self.burn_intervals * self.input.degree {
+            map.variables[self.control_index(k)] = Coordinate::new(1.0, "rad");
+        }
+        map.variables[self.payload_index()] =
+            Coordinate::new(self.scaling.payload_objective_kg, "kg");
+        map.variables[self.time_index()] = Coordinate::new(self.scaling.time_s, "s");
+        for (i, name) in self.layout.constraints.iter().enumerate() {
+            map.constraints[i] = if name.starts_with("DYN[") || name.starts_with("INIT.") {
+                let c = name.rsplit('.').next().unwrap().parse::<usize>().unwrap();
+                Coordinate::new(self.state_scale(c), units[c])
+            } else if name == "APOGEE.altitude"
+                || name.starts_with("RANGE.")
+                || name.starts_with("CLEARANCE[")
+            {
+                Coordinate::new(self.scaling.position_m, "m")
+            } else if name == "APOGEE.velocity_down" {
+                Coordinate::new(self.scaling.velocity_m_s, "m/s")
+            } else if name.starts_with("Q[") {
+                Coordinate::new(self.input.max_dynamic_pressure_pa, "Pa")
+            } else if name.starts_with("ACCEL[") {
+                Coordinate::new(self.input.max_specific_force_m_s2, "m/s^2")
+            } else if name.starts_with("MASS.") {
+                Coordinate::new(self.scaling.mass_kg, "kg")
+            } else if name.starts_with("CONTROL.rate") {
+                Coordinate::new(self.input.max_pitch_rate_deg_s.to_radians(), "rad/s")
+            } else if name.starts_with("CONTROL.") {
+                Coordinate::new(1.0, "rad")
+            } else {
+                Coordinate::new(1.0, "1")
+            };
+        }
+        map.objective = Coordinate::new(self.scaling.payload_objective_kg, "kg");
+        map
+    }
     fn layout(&self) -> &Layout {
         &self.layout
     }

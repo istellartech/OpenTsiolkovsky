@@ -240,6 +240,65 @@ impl NlpModel for DoubleIntegrator {
             *value = v;
         }
     }
+    fn hessian_structure(&self) -> Vec<(i32, i32)> {
+        let t = self.time_index();
+        let mut pairs = std::collections::BTreeSet::new();
+        for k in 0..self.count() {
+            let u = self.control_index(k);
+            pairs.insert((u as i32, u as i32));
+            pairs.insert((t as i32, u as i32));
+            pairs.insert((t as i32, (2 * (k + 1) + 1) as i32));
+        }
+        pairs.into_iter().collect()
+    }
+    fn hessian(&self, x: &[f64], factor: f64, lambda: &[f64], out: &mut [f64]) {
+        let t = self.time_index();
+        let mut entries = BTreeMap::new();
+        let denominator = (2 * self.input.intervals) as f64;
+        for k in 0..self.count() {
+            let u = self.control_index(k);
+            let w = self.grid.weights[k % self.input.degree] / denominator;
+            entries.insert((u as i32, u as i32), factor * 2.0 * w * x[t]);
+            entries.insert(
+                (t as i32, u as i32),
+                factor * 2.0 * w * x[u] - lambda[2 * k + 1] / denominator,
+            );
+            entries.insert(
+                (t as i32, (2 * (k + 1) + 1) as i32),
+                -lambda[2 * k] / denominator,
+            );
+        }
+        for (v, pair) in out.iter_mut().zip(self.hessian_structure()) {
+            *v = entries[&pair]
+        }
+    }
+    fn coordinates(&self) -> super::scaling::PhysicalCoordinates {
+        use super::scaling::{Coordinate, PhysicalCoordinates};
+        let mut map = PhysicalCoordinates::dimensionless(self.layout());
+        for node in 0..=self.count() {
+            map.variables[2 * node] = Coordinate::new(self.scaling.position_m, "m");
+            map.variables[2 * node + 1] = Coordinate::new(self.scaling.velocity_m_s, "m/s");
+        }
+        for k in 0..self.count() {
+            map.variables[self.control_index(k)] =
+                Coordinate::new(self.scaling.acceleration_m_s2, "m/s^2");
+            map.constraints[2 * k] = Coordinate::new(self.scaling.position_m, "m");
+            map.constraints[2 * k + 1] = Coordinate::new(self.scaling.velocity_m_s, "m/s");
+        }
+        map.variables[self.time_index()] = Coordinate::new(self.scaling.time_s, "s");
+        for j in 0..4 {
+            map.constraints[2 * self.count() + j] = Coordinate::new(
+                if j % 2 == 0 {
+                    self.scaling.position_m
+                } else {
+                    self.scaling.velocity_m_s
+                },
+                if j % 2 == 0 { "m" } else { "m/s" },
+            );
+        }
+        map.objective = Coordinate::new(self.scaling.objective_m2_s3, "m^2/s^3");
+        map
+    }
 }
 
 #[cfg(test)]

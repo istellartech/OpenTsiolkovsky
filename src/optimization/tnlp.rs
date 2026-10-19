@@ -21,6 +21,16 @@ pub trait NlpModel {
     fn gradient(&self, x: &[f64], out: &mut [f64]);
     fn constraints(&self, x: &[f64], out: &mut [f64]);
     fn jacobian(&self, x: &[f64], out: &mut [f64]);
+    /// Lower triangular Lagrangian Hessian. An empty pattern means unsupported.
+    fn hessian_structure(&self) -> Vec<(i32, i32)> {
+        vec![]
+    }
+    fn hessian(&self, _: &[f64], _: f64, _: &[f64], _: &mut [f64]) {
+        unreachable!("exact Hessian unavailable")
+    }
+    fn coordinates(&self) -> super::scaling::PhysicalCoordinates {
+        super::scaling::PhysicalCoordinates::dimensionless(self.layout())
+    }
 }
 
 pub struct SolverNlp {
@@ -28,6 +38,7 @@ pub struct SolverNlp {
     pub solution: Option<FullSolution>,
     pub history: Vec<IterationRecord>,
     pub hessian_calls: usize,
+    pub exact_hessian: bool,
     pub stop_after: Option<u32>,
     pub callback: Box<dyn FnMut(&IterationRecord) -> bool>,
 }
@@ -39,7 +50,11 @@ impl TNLP for SolverNlp {
             n: l.initial.len().try_into().ok()?,
             m: l.g_lower.len().try_into().ok()?,
             nnz_jac_g: l.jacobian.len().try_into().ok()?,
-            nnz_h_lag: 0,
+            nnz_h_lag: if self.exact_hessian {
+                self.model.hessian_structure().len().try_into().ok()?
+            } else {
+                0
+            },
             index_style: IndexStyle::C,
         })
     }
@@ -92,15 +107,30 @@ impl TNLP for SolverNlp {
     }
     fn eval_h(
         &mut self,
-        _: Option<&[f64]>,
+        x: Option<&[f64]>,
         _: bool,
-        _: f64,
-        _: Option<&[f64]>,
+        obj_factor: f64,
+        lambda: Option<&[f64]>,
         _: bool,
-        _: SparsityRequest<'_>,
+        mode: SparsityRequest<'_>,
     ) -> bool {
         self.hessian_calls += 1;
-        false
+        match mode {
+            SparsityRequest::Structure { irow, jcol } => {
+                for (i, (r, c)) in self.model.hessian_structure().into_iter().enumerate() {
+                    irow[i] = r;
+                    jcol[i] = c;
+                }
+                !irow.is_empty()
+            }
+            SparsityRequest::Values { values } => {
+                let (Some(x), Some(lambda)) = (x, lambda) else {
+                    return false;
+                };
+                self.model.hessian(x, obj_factor, lambda, values);
+                values.iter().all(|v| v.is_finite())
+            }
+        }
     }
     fn get_var_con_metadata(&mut self, var: &mut MetaData, con: &mut MetaData) -> bool {
         var.strings
@@ -179,6 +209,32 @@ impl NlpModel for Hs071 {
         for j in 0..4 {
             g[j] = (0..4).filter(|&k| k != j).map(|k| x[k]).product();
             g[4 + j] = 2.0 * x[j];
+        }
+    }
+    fn hessian_structure(&self) -> Vec<(i32, i32)> {
+        (0..4).flat_map(|r| (0..=r).map(move |c| (r, c))).collect()
+    }
+    fn hessian(&self, x: &[f64], factor: f64, lambda: &[f64], out: &mut [f64]) {
+        let mut k = 0;
+        for r in 0..4 {
+            for c in 0..=r {
+                let objective = match (r, c) {
+                    (0, 0) => 2.0 * x[3],
+                    (1, 0) | (2, 0) => x[3],
+                    (3, 0) => 2.0 * x[0] + x[1] + x[2],
+                    (3, 1) | (3, 2) => x[0],
+                    _ => 0.0,
+                };
+                let product = if r == c {
+                    0.0
+                } else {
+                    (0..4).filter(|&i| i != r && i != c).map(|i| x[i]).product()
+                };
+                out[k] = factor * objective
+                    + lambda[0] * product
+                    + if r == c { 2.0 * lambda[1] } else { 0.0 };
+                k += 1;
+            }
         }
     }
 }

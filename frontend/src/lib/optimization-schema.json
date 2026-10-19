@@ -1541,9 +1541,60 @@
           "format": "uint32",
           "minimum": 0,
           "default": null
+        },
+        "scaling": {
+          "$ref": "#/$defs/ScalingSettings"
+        },
+        "hessian": {
+          "$ref": "#/$defs/HessianMethod"
+        },
+        "kkt_scaling": {
+          "$ref": "#/$defs/KktScaling"
         }
       },
       "additionalProperties": false
+    },
+    "ScalingSettings": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "$ref": "#/$defs/ScalingStrategy",
+          "default": "s0"
+        },
+        "floor": {
+          "type": "number",
+          "format": "double",
+          "default": 1e-6
+        },
+        "cap": {
+          "type": "number",
+          "format": "double",
+          "default": 1000000.0
+        },
+        "gradient_max": {
+          "type": "number",
+          "format": "double",
+          "default": 100.0
+        },
+        "gradient_min": {
+          "type": "number",
+          "format": "double",
+          "default": 1e-8
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScalingStrategy": {
+      "type": "string",
+      "enum": ["s0", "s1_bounds", "s1_guess", "s2", "s3"]
+    },
+    "HessianMethod": {
+      "type": "string",
+      "enum": ["limited_memory", "exact"]
+    },
+    "KktScaling": {
+      "type": "string",
+      "enum": ["upstream_default", "none", "ruiz", "slack_based"]
     }
   }
 }

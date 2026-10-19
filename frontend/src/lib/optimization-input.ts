@@ -28,6 +28,15 @@ export interface SolverSettings {
   tolerance?: number
   derivative_test?: boolean
   stop_after_iteration?: number | null
+  hessian?: 'limited_memory' | 'exact'
+  kkt_scaling?: 'upstream_default' | 'none' | 'ruiz' | 'slack_based'
+  scaling?: {
+    strategy?: 's0' | 's1_bounds' | 's1_guess' | 's2' | 's3'
+    floor?: number
+    cap?: number
+    gradient_max?: number
+    gradient_min?: number
+  }
 }
 export interface FlightTolerances {
   position_m: number
@@ -253,6 +262,18 @@ export function optimizationInputIssues(input: OptimizationInput): InputIssue[] 
     add('run_id', tr('実行IDは1〜128バイトで指定してください。', 'Run ID must contain 1–128 bytes.'))
   range('solver.max_iterations', input.solver?.max_iterations ?? 300, 1, 100000, true)
   range('solver.tolerance', input.solver?.tolerance ?? 1e-8, 1e-12, 1e-3)
+  const scale = input.solver?.scaling
+  if (scale) {
+    range('solver.scaling.floor', scale.floor ?? 1e-6, Number.MIN_VALUE, 1)
+    range('solver.scaling.cap', scale.cap ?? 1e6, 1, Number.MAX_VALUE)
+    range('solver.scaling.gradient_max', scale.gradient_max ?? 100, Number.MIN_VALUE, Number.MAX_VALUE)
+    range('solver.scaling.gradient_min', scale.gradient_min ?? 1e-8, Number.MIN_VALUE, 1)
+  }
+  if (input.solver?.hessian === 'exact' && !['hs071', 'double_integrator'].includes(input.problem.kind))
+    add(
+      'solver.hessian',
+      tr('厳密Hessianは現在HS071と二重積分器に対応しています。', 'Exact Hessians currently support HS071 and the double integrator.'),
+    )
   const p = input.problem
   if (p.kind === 'zero') {
     add(
@@ -553,6 +574,7 @@ export function inputTitle(input: OptimizationInput): string {
         : 'HS071'
 }
 export function sectionForPath(path: string): EditorSection {
+  if (/^solver\.(scaling|hessian|kkt_scaling)/.test(path)) return 'json'
   if (path.startsWith('solver') || /degree|intervals|validation\.|simulation\.|initial_azimuth|initial_pitch|initial_attitude/.test(path))
     return 'numerics'
   if (/stages|dry_mass|propellant_mass|fairing_kg|adapter/.test(path)) return 'vehicle'
