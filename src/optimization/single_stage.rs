@@ -178,59 +178,8 @@ pub struct SingleStage {
     bernstein: Vec<Vec<f64>>,
 }
 
-/// Lagrange interpolation and derivative weights, including initial extrapolation.
-pub fn basis(nodes: &[f64], tau: f64) -> (Vec<f64>, Vec<f64>) {
-    let n = nodes.len();
-    let mut b = vec![0.0; n];
-    let mut d = vec![0.0; n];
-    for i in 0..n {
-        b[i] = (0..n)
-            .filter(|&j| j != i)
-            .map(|j| (tau - nodes[j]) / (nodes[i] - nodes[j]))
-            .product();
-        d[i] = (0..n)
-            .filter(|&k| k != i)
-            .map(|k| {
-                (0..n)
-                    .filter(|&j| j != i && j != k)
-                    .map(|j| (tau - nodes[j]) / (nodes[i] - nodes[j]))
-                    .product::<f64>()
-                    / (nodes[i] - nodes[k])
-            })
-            .sum();
-    }
-    (b, d)
-}
-
-/// Convert nodal values to Bernstein coefficients on s=(tau+1)/2 in [0,1].
-/// Their convex hull bounds the complete polynomial, and differences of
-/// adjacent coefficients bound its time derivative throughout the interval.
-fn bernstein_weights(nodes: &[f64]) -> Vec<Vec<f64>> {
-    let n = nodes.len() - 1;
-    let choose = |n: usize, k: usize| (0..k).fold(1.0, |v, i| v * (n - i) as f64 / (i + 1) as f64);
-    let mut weights = vec![vec![0.0; n + 1]; n + 1];
-    for j in 0..=n {
-        let sj = (nodes[j] + 1.0) * 0.5;
-        let mut power = vec![1.0];
-        for (k, node) in nodes.iter().enumerate() {
-            if k != j {
-                let sk = (node + 1.0) * 0.5;
-                let mut next = vec![0.0; power.len() + 1];
-                for (i, a) in power.iter().enumerate() {
-                    next[i] -= a * sk / (sj - sk);
-                    next[i + 1] += a / (sj - sk);
-                }
-                power = next;
-            }
-        }
-        for (i, row) in weights.iter_mut().enumerate() {
-            row[j] = (0..=i)
-                .map(|k| power[k] * choose(i, k) / choose(n, k))
-                .sum();
-        }
-    }
-    weights
-}
+pub use super::control::basis;
+use super::control::bernstein_weights;
 
 impl SingleStage {
     pub fn new(input: SingleStageProblem) -> Result<Self, String> {
@@ -519,10 +468,7 @@ impl SingleStage {
         let tau = 2.0 * (t - start) / dt - 1.0;
         flight::evaluate(
             &self.vehicle,
-            PhaseContext {
-                stage: 0,
-                powered: interval < self.burn_intervals,
-            },
+            PhaseContext::new(0, interval < self.burn_intervals),
             t,
             0.0,
             y,
@@ -540,7 +486,7 @@ impl SingleStage {
         let y = std::array::from_fn(|c| T::from(self.origin[c]) + z[c] * self.state_scale(c));
         let eval = flight::evaluate(
             &self.vehicle,
-            PhaseContext { stage: 0, powered },
+            PhaseContext::new(0, powered),
             z[8],
             T::from(0.0),
             &y,

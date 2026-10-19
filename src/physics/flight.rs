@@ -132,6 +132,16 @@ pub fn aerodynamics<T: Scalar>(
 pub struct PhaseContext {
     pub stage: usize,
     pub powered: bool,
+    pub aero_area_scale: f64,
+}
+impl PhaseContext {
+    pub fn new(stage: usize, powered: bool) -> Self {
+        Self {
+            stage,
+            powered,
+            aero_area_scale: 1.0,
+        }
+    }
 }
 
 pub struct Evaluation<T: Scalar> {
@@ -158,6 +168,8 @@ pub fn evaluate<T: Scalar>(
         || !y.iter().chain(attitude.iter()).all(|v| v.re().is_finite())
         || y[0].re() <= 0.0
         || phase.stage >= vehicle.stages.len()
+        || !phase.aero_area_scale.is_finite()
+        || phase.aero_area_scale <= 0.0
     {
         return Err("non-finite flight input or non-positive mass");
     }
@@ -178,7 +190,8 @@ pub fn evaluate<T: Scalar>(
     } else {
         Vector3::new(e.air_speed, T::from(0.0), T::from(0.0))
     };
-    let aero = aerodynamics(stage, mode, e.mach, &air_body, e.q, y[0]);
+    let aero =
+        aerodynamics(stage, mode, e.mach, &air_body, e.q, y[0]) * T::from(phase.aero_area_scale);
     let (thrust, mass_flow) =
         propulsion(stage, phase.powered, t - stage_start, e.atmosphere.pressure);
     let force = aero + Vector3::new(thrust, T::from(0.0), T::from(0.0));
@@ -238,10 +251,7 @@ mod tests {
             ];
             let e = evaluate(
                 &vehicle,
-                PhaseContext {
-                    stage: 0,
-                    powered: s.flight_mode == FlightMode::Powered,
-                },
+                PhaseContext::new(0, s.flight_mode == FlightMode::Powered),
                 s.time_s,
                 0.0,
                 &y,
@@ -285,10 +295,7 @@ mod tests {
             let y = [z[2], z[3], z[4], z[5], z[6], z[7], z[8]];
             let e = evaluate(
                 &vehicle,
-                PhaseContext {
-                    stage: 0,
-                    powered: true,
-                },
+                PhaseContext::new(0, true),
                 z[0],
                 z[1],
                 &y,
@@ -314,10 +321,7 @@ mod tests {
         let f = |z: SVector<f64, 10>| {
             let e = evaluate(
                 &vehicle,
-                PhaseContext {
-                    stage: 0,
-                    powered: true,
-                },
+                PhaseContext::new(0, true),
                 z[0],
                 z[1],
                 &[z[2], z[3], z[4], z[5], z[6], z[7], z[8]],
@@ -366,5 +370,82 @@ mod tests {
         assert!((j[(1, 1)] - expected).abs() < 1e-12);
         assert!((j[(2, 2)] - expected).abs() < 1e-12);
         assert!(j.iter().all(|v| v.is_finite()));
+    }
+}
+
+/// Actual inertial body-axis derivative, including the motion of the local NED
+/// basis. An inner directional dual propagates dr/dt=v and dt/dt=1; an outer
+/// local AD evaluation can differentiate this observable without finite differences.
+pub fn direction_rate<T: Scalar>(
+    t: T,
+    y: &[T; 7],
+    azimuth: T,
+    elevation: T,
+    azimuth_rate: T,
+    elevation_rate: T,
+) -> Vector3<T> {
+    use num_dual::Dual;
+    let r = Vector3::new(
+        Dual::new(y[1], y[4]),
+        Dual::new(y[2], y[5]),
+        Dual::new(y[3], y[6]),
+    );
+    let time = Dual::new(t, T::from(1.0));
+    let llh = C::pos_ecef_to_llh_scalar(&C::pos_eci_to_ecef_scalar(&r, time));
+    let eci_to_ned = C::dcm_eci_to_ned_scalar(&llh, time);
+    let body = C::dcm_ned_to_body_scalar(
+        Dual::new(azimuth, azimuth_rate),
+        Dual::new(elevation, elevation_rate),
+        None,
+    );
+    let axis = (body * eci_to_ned).transpose()
+        * Vector3::new(
+            Dual::from_re(T::from(1.0)),
+            Dual::from_re(T::from(0.0)),
+            Dual::from_re(T::from(0.0)),
+        );
+    axis.map(|v| v.eps)
+}
+
+#[cfg(test)]
+mod rate_tests {
+    use super::*;
+    use num_dual::jacobian;
+    #[test]
+    fn inertial_direction_rate_matches_motion_of_position_time_and_command() {
+        let r = C::pos_llh_to_ecef(&Vector3::new(42.5, 143.4, 80000.0));
+        let y = [1000.0, r.x, r.y, r.z, -100.0, 2000.0, 500.0];
+        let (t, az, el, azd, eld) = (150.0, 1.7, 0.5, 0.002, -0.004);
+        let actual = direction_rate(t, &y, az, el, azd, eld);
+        let axis = |h: f64| {
+            let p = Vector3::new(y[1] + h * y[4], y[2] + h * y[5], y[3] + h * y[6]);
+            let llh = C::pos_ecef_to_llh(&C::pos_eci_to_ecef(&p, t + h));
+            let m = C::dcm_ned_to_body(az + azd * h, el + eld * h, None)
+                * C::dcm_eci_to_ned(&llh, t + h);
+            m.transpose() * Vector3::x()
+        };
+        for h in [1e-2, 1e-3, 1e-4] {
+            assert!(((axis(h) - axis(-h)) / (2.0 * h) - actual).norm() < 1e-10);
+        }
+        let x = nalgebra::SVector::<f64, 3>::new(az, el, azd);
+        let (_, j) = jacobian(
+            |z| {
+                direction_rate(
+                    num_dual::DualSVec64::<3>::from_re(t),
+                    &y.map(num_dual::DualSVec64::<3>::from_re),
+                    z[0],
+                    z[1],
+                    z[2],
+                    num_dual::DualSVec64::<3>::from_re(eld),
+                )
+            },
+            &x,
+        );
+        assert!(j.iter().all(|v| v.is_finite()));
+        let h = 1e-5;
+        let fd = (direction_rate(t, &y, az + h, el, azd, eld)
+            - direction_rate(t, &y, az - h, el, azd, eld))
+            / (2.0 * h);
+        assert!((fd - j.column(0)).norm() < 1e-10);
     }
 }

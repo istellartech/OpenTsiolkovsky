@@ -120,7 +120,7 @@ fn reintegrate(m: &SingleStage, x: &[f64], factor: f64) -> Result<Vec<FlightSamp
             let powered = interval < m.burn_intervals;
             let e = flight::evaluate(
                 &m.vehicle,
-                PhaseContext { stage: 0, powered },
+                PhaseContext::new(0, powered),
                 t,
                 0.0,
                 &y,

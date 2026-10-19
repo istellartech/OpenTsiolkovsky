@@ -1,5 +1,7 @@
 //! Solver connection, analytic benchmarks and single-stage flight optimization.
 //! Multi-stage ZERO optimization remains gated on its model/data milestones.
+pub mod control;
+pub mod events;
 pub mod flight_validation;
 pub mod lgr;
 pub mod problem;
