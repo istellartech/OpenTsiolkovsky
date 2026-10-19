@@ -57,11 +57,75 @@ export interface FlightValidation {
   samples: FlightSample[]
 }
 
+export interface MultiStageValidation {
+  net_payload_kg: number
+  final_time_s: number
+  initial_total_mass_kg: number
+  payload_adapter_kg: number
+  fairing_kg: number
+  deployed_state_eci: number[]
+  max_position_error_m: number
+  max_velocity_error_m_s: number
+  max_mass_error_kg: number
+  position_tolerance_m: number
+  velocity_tolerance_m_s: number
+  tighter_rk_position_difference_m: number
+  orbit: { perigee_altitude_m: number; apogee_altitude_m: number | null; inclination_deg: number; eccentricity: number }
+  stage_ledgers: {
+    stage: number
+    dry_kg: number
+    propellant_loaded_kg: number
+    propellant_consumed_kg: number
+    residual_kg: number
+    required_reserve_kg: number
+    total_burn_s: number
+    ignition_count: number
+  }[]
+  events: {
+    kind: 'separate_stage' | 'jettison_fairing' | 'deploy_payload'
+    phase: number
+    stage: number
+    time_s: number
+    before_eci: number[]
+    after_eci: number[]
+    dry_removed_kg: number
+    propellant_removed_kg: number
+    fairing_removed_kg: number
+    adapter_removed_kg: number
+    removed_mass_kg: number
+    position_jump_m: number
+    velocity_jump_m_s: number
+  }[]
+  samples: {
+    time_s: number
+    altitude_m: number
+    state_eci: number[]
+    phase: number
+    stage: number
+    powered: boolean
+    azimuth_deg: number
+    elevation_deg: number
+    dynamic_pressure_pa: number
+    angle_of_attack_deg: number
+    specific_force_m_s2: number
+    inertial_direction_rate_deg_s: number
+  }[]
+  checks: PhysicalCheck[]
+  unevaluated_constraints: string[]
+}
+
 export interface OptimizationResult {
   schema_version: number
   input: {
     run_id: string
-    problem: { kind: string; burn_intervals?: number; coast_intervals?: number; intervals?: number; degree?: number }
+    problem: {
+      kind: string
+      burn_intervals?: number
+      coast_intervals?: number
+      intervals?: number
+      degree?: number
+      phases?: { name: string; intervals: number }[]
+    }
   }
   solver_status: string
   converged: boolean
@@ -79,6 +143,7 @@ export interface OptimizationResult {
     reference_objective_error: number
     error: string | null
     flight?: FlightValidation | null
+    multi_stage?: MultiStageValidation | null
     trajectory: {
       duration_s: number
       reference_duration_s: number
@@ -121,6 +186,31 @@ export function optimizationSnapshot(raw: string, runId: string): Record<string,
 export function refineFlightMesh(raw: string): string {
   const input = optimizationSnapshot(raw, 'refined-mesh')
   const problem = input.problem as Record<string, unknown> | undefined
+  if (problem?.kind === 'multi_stage') {
+    const { degree, phases } = problem
+    if (typeof degree !== 'number' || !Number.isInteger(degree) || degree < 3 || degree > 8 || !Array.isArray(phases)) {
+      throw new Error('Invalid multistage mesh')
+    }
+    const nextPhases = phases.map((p: unknown) => {
+      if (
+        !p ||
+        typeof p !== 'object' ||
+        !('intervals' in p) ||
+        typeof p.intervals !== 'number' ||
+        !Number.isInteger(p.intervals) ||
+        p.intervals < 1 ||
+        p.intervals > 16
+      )
+        throw new Error('Invalid phase mesh')
+      return { ...p, intervals: Math.min(16, p.intervals * 2) }
+    })
+    const nextDegree = Math.min(8, Math.max(6, degree + 1))
+    if (nextPhases.reduce((sum, p) => sum + p.intervals, 0) > 64) throw new Error('Refined mesh exceeds 64 intervals')
+    if (nextDegree === degree && nextPhases.every((p, i) => p.intervals === phases[i].intervals)) {
+      throw new Error('The mesh is already at the supported limit')
+    }
+    return JSON.stringify({ ...input, problem: { ...problem, phases: nextPhases, degree: nextDegree } }, null, 2)
+  }
   if (problem?.kind !== 'single_stage') throw new Error('Mesh refinement requires a single-stage problem')
   const { burn_intervals: burn, coast_intervals: coast, degree } = problem
   if (![burn, coast, degree].every((v) => typeof v === 'number' && Number.isInteger(v) && v > 0)) {

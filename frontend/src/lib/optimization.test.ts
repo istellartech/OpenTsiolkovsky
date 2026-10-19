@@ -39,4 +39,30 @@ describe('flight mesh refinement', () => {
     expect(() => refineFlightMesh('{"problem":{"kind":"hs071"}}')).toThrow()
     expect(() => refineFlightMesh('{"problem":{"kind":"single_stage","burn_intervals":16,"coast_intervals":12,"degree":8}}')).toThrow()
   })
+  it('refines every multistage phase without changing event maps, inventory or tolerances', () => {
+    const input = {
+      problem: {
+        kind: 'multi_stage',
+        degree: 6,
+        stages: [{ reserve_kg: 500 }],
+        validation: { mass_kg: 0.005 },
+        phases: [
+          { name: 'burn', intervals: 10, end_event: 'separate_stage' },
+          { name: 'coast', intervals: 2, duration_s: { lower: 5, upper: 20 } },
+        ],
+      },
+    }
+    const result = JSON.parse(refineFlightMesh(JSON.stringify(input)))
+    expect(result.problem).toEqual({
+      ...input.problem,
+      degree: 7,
+      phases: input.problem.phases.map((p) => ({ ...p, intervals: Math.min(16, 2 * p.intervals) })),
+    })
+    expect(input.problem.phases[0].intervals).toBe(10)
+    expect(() =>
+      refineFlightMesh(
+        JSON.stringify({ problem: { kind: 'multi_stage', degree: 8, phases: Array.from({ length: 5 }, () => ({ intervals: 8 })) } }),
+      ),
+    ).toThrow(/64/)
+  })
 })
