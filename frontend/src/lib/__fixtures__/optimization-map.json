@@ -1,0 +1,726 @@
+{
+  "input": {
+    "schema_version": 1,
+    "run_id": "multi-stage-verification-baseline",
+    "problem": {
+      "kind": "multi_stage",
+      "vehicle": {
+        "name": "Assumed two-stage orbital demonstrator",
+        "simulation": {
+          "end_time_s": 1500.0,
+          "output_step_s": 1.0,
+          "integrator": {
+            "method": "rk45",
+            "abs_tol": 1e-9,
+            "rel_tol": 1e-9
+          }
+        },
+        "launch": {
+          "latitude_deg": 42.5,
+          "longitude_deg": 143.44,
+          "altitude_m": 15.0,
+          "time_utc": "2026-10-19T00:00:00Z"
+        },
+        "attitude": {
+          "azimuth_deg": 99.0,
+          "elevation_deg": 90.0
+        },
+        "stages": [
+          {
+            "mass_initial_kg": 178000.0,
+            "mass_dry_kg": 13000.0,
+            "engine": {
+              "thrust_vac_n": 3200000.0,
+              "isp_vac_s": 300.0,
+              "burn_start_s": 0.0,
+              "burn_end_s": 145.0,
+              "nozzle_exit_area_m2": 4.0
+            },
+            "aero": {
+              "diameter_m": 3.0,
+              "ca": [
+                [0.0, 0.35],
+                [0.8, 0.38],
+                [1.1, 0.55],
+                [1.5, 0.5],
+                [2.5, 0.4],
+                [4.0, 0.32],
+                [8.0, 0.26]
+              ],
+              "cn_alpha_per_rad": 0.2,
+              "ballistic_coefficient_kg_m2": 100.0
+            },
+            "free_flight": "attitude_program",
+            "separation_time_s": 148.0
+          },
+          {
+            "mass_initial_kg": 44000.0,
+            "mass_dry_kg": 4000.0,
+            "engine": {
+              "thrust_vac_n": 450000.0,
+              "isp_vac_s": 350.0,
+              "burn_start_s": 0.0,
+              "burn_end_s": 300.0,
+              "nozzle_exit_area_m2": 0.5
+            },
+            "aero": {
+              "diameter_m": 2.0,
+              "ca": [
+                [0.0, 0.35],
+                [0.8, 0.38],
+                [1.1, 0.55],
+                [1.5, 0.5],
+                [2.5, 0.4],
+                [4.0, 0.32],
+                [8.0, 0.26]
+              ],
+              "cn_alpha_per_rad": 0.2,
+              "ballistic_coefficient_kg_m2": 100.0
+            },
+            "free_flight": "attitude_program"
+          }
+        ]
+      },
+      "data_source": "All stage masses, engine characteristics, operating limits and launch coordinates are numerical demonstration assumptions. This is not a ZERO vehicle data set or LC-1 survey. The target 500 km / 43 deg follows the project plan.",
+      "stages": [
+        {
+          "dry_kg": 13000.0,
+          "propellant_kg": 165000.0,
+          "reserve_kg": 1000.0,
+          "max_total_burn_s": 145.0,
+          "max_ignitions": 1,
+          "source": "Numerical demonstrator assumption"
+        },
+        {
+          "dry_kg": 4000.0,
+          "propellant_kg": 40000.0,
+          "reserve_kg": 500.0,
+          "max_total_burn_s": 300.0,
+          "max_ignitions": 2,
+          "source": "Numerical demonstrator assumption"
+        }
+      ],
+      "net_payload_kg": {
+        "initial": 2000.0,
+        "lower": 100.0,
+        "upper": 8000.0
+      },
+      "payload_adapter_kg": 150.0,
+      "fairing_kg": 1000.0,
+      "fairing_off_area_scale": 0.8,
+      "fairing_release_min_altitude_m": 100000.0,
+      "phases": [
+        {
+          "name": "vertical",
+          "stage": 0,
+          "mode": "burn",
+          "duration_s": {
+            "initial": 10.0,
+            "lower": 10.0,
+            "upper": 10.0
+          },
+          "intervals": 1,
+          "vertical": true,
+          "end_event": "none",
+          "max_angle_of_attack_deg": 8.0,
+          "max_specific_force_m_s2": 60.0,
+          "min_altitude_m": 15.0,
+          "initial_attitude_end_deg": [99.0, 90.0]
+        },
+        {
+          "name": "booster_burn",
+          "stage": 0,
+          "mode": "burn",
+          "duration_s": {
+            "initial": 135.0,
+            "lower": 135.0,
+            "upper": 135.0
+          },
+          "intervals": 16,
+          "vertical": false,
+          "end_event": "none",
+          "max_angle_of_attack_deg": 8.0,
+          "max_specific_force_m_s2": 60.0,
+          "min_altitude_m": 15.0,
+          "initial_attitude_end_deg": [99.0, 35.0]
+        },
+        {
+          "name": "booster_cutoff_to_separation",
+          "stage": 0,
+          "mode": "coast",
+          "duration_s": {
+            "initial": 3.0,
+            "lower": 3.0,
+            "upper": 3.0
+          },
+          "intervals": 1,
+          "vertical": false,
+          "end_event": "separate_stage",
+          "max_angle_of_attack_deg": 15.0,
+          "max_specific_force_m_s2": 60.0,
+          "min_altitude_m": 15.0,
+          "initial_attitude_end_deg": [99.0, 35.0]
+        },
+        {
+          "name": "upper_separation_to_ignition",
+          "stage": 1,
+          "mode": "coast",
+          "duration_s": {
+            "initial": 5.0,
+            "lower": 5.0,
+            "upper": 5.0
+          },
+          "intervals": 1,
+          "vertical": false,
+          "end_event": "none",
+          "max_angle_of_attack_deg": 85.0,
+          "max_specific_force_m_s2": 80.0,
+          "min_altitude_m": 50000.0,
+          "initial_attitude_end_deg": [99.0, 35.0]
+        },
+        {
+          "name": "upper_first_burn",
+          "stage": 1,
+          "mode": "burn",
+          "duration_s": {
+            "initial": 210.0,
+            "lower": 150.0,
+            "upper": 240.0
+          },
+          "intervals": 10,
+          "vertical": false,
+          "end_event": "jettison_fairing",
+          "max_angle_of_attack_deg": 85.0,
+          "max_specific_force_m_s2": 80.0,
+          "min_altitude_m": 50000.0,
+          "initial_attitude_end_deg": [99.0, 20.0]
+        },
+        {
+          "name": "upper_restart_coast",
+          "stage": 1,
+          "mode": "coast",
+          "duration_s": {
+            "initial": 180.0,
+            "lower": 10.0,
+            "upper": 300.0
+          },
+          "intervals": 4,
+          "vertical": false,
+          "end_event": "none",
+          "max_angle_of_attack_deg": 85.0,
+          "max_specific_force_m_s2": 80.0,
+          "min_altitude_m": 50000.0,
+          "initial_attitude_end_deg": [99.0, 12.0]
+        },
+        {
+          "name": "upper_second_burn",
+          "stage": 1,
+          "mode": "burn",
+          "duration_s": {
+            "initial": 80.0,
+            "lower": 10.0,
+            "upper": 110.0
+          },
+          "intervals": 6,
+          "vertical": false,
+          "end_event": "deploy_payload",
+          "max_angle_of_attack_deg": 85.0,
+          "max_specific_force_m_s2": 80.0,
+          "min_altitude_m": 50000.0,
+          "initial_attitude_end_deg": [99.0, 5.0]
+        }
+      ],
+      "orbit": {
+        "reference_radius_m": 6378137.0,
+        "altitude_m": 500000.0,
+        "inclination_deg": 43.0,
+        "radius_tolerance_m": 10.0,
+        "speed_tolerance_m_s": 0.05,
+        "radial_velocity_tolerance_m_s": 0.05,
+        "inclination_tolerance_deg": 0.0005,
+        "apsis_tolerance_m": 100.0
+      },
+      "degree": 8,
+      "initial_azimuth_deg": 99.0,
+      "azimuth_bounds_deg": [80.0, 130.0],
+      "elevation_bounds_deg": [-25.0, 90.0],
+      "max_dynamic_pressure_pa": 60000.0,
+      "max_azimuth_rate_deg_s": 1.0,
+      "max_elevation_rate_deg_s": 1.0,
+      "max_inertial_direction_rate_deg_s": 1.5,
+      "validation": {
+        "position_m": 10.0,
+        "velocity_m_s": 0.05,
+        "mass_kg": 0.005,
+        "dynamic_pressure_pa": 10.0,
+        "angle_of_attack_deg": 0.02,
+        "specific_force_m_s2": 0.02,
+        "pitch_rate_deg_s": 0.002
+      }
+    },
+    "solver": {
+      "max_iterations": 500,
+      "tolerance": 1e-7,
+      "derivative_test": false,
+      "stop_after_iteration": null
+    }
+  },
+  "validation": {
+    "multi_stage": {
+      "final_time_s": 704.4246849787037,
+      "samples": [
+        {
+          "time_s": 0.0,
+          "interval": 0,
+          "phase": 0,
+          "stage": 0,
+          "powered": true,
+          "state_eci": [
+            225707.50406756028, -3782962.8308322164, 2805380.603294037, 4286724.863969117, -204.5716050283204, -275.8580340782062, 0.0
+          ],
+          "consumed_propellant_kg": [0.0, 0.0, 0.0, 0.0],
+          "altitude_m": 14.999999999068677,
+          "azimuth_deg": 98.99999999999999,
+          "elevation_deg": 89.99999999999997,
+          "azimuth_rate_deg_s": 3.81666561775622e-13,
+          "elevation_rate_deg_s": 3.9438878050147607e-13,
+          "inertial_direction_rate_deg_s": 0.0030803997490098586,
+          "dynamic_pressure_pa": 0.0,
+          "angle_of_attack_deg": 0.0,
+          "specific_force_m_s2": 12.385145455588178,
+          "thrust_n": 2795420.2682944946,
+          "mass_balance_error_kg": 0.0
+        },
+        {
+          "time_s": 10.0,
+          "interval": 0,
+          "phase": 0,
+          "stage": 0,
+          "powered": true,
+          "state_eci": [
+            214830.53112912882, -3785090.145484534, 2802682.503145154, 4286819.081528901, -221.53675067526888, -263.28692539938675,
+            19.57786778499675
+          ],
+          "consumed_propellant_kg": [10876.972938431245, 0.0, 0.0, 0.0],
+          "altitude_m": 154.459902305156,
+          "azimuth_deg": 99.0,
+          "elevation_deg": 90.0,
+          "azimuth_rate_deg_s": 0.0,
+          "elevation_rate_deg_s": 0.0,
+          "inertial_direction_rate_deg_s": 0.0030802652892524054,
+          "dynamic_pressure_pa": 506.78162747635724,
+          "angle_of_attack_deg": 0.029640277059024875,
+          "specific_force_m_s2": 13.03726217632395,
+          "thrust_n": 2802067.1973337573,
+          "mass_balance_error_kg": 2.0372681319713593e-10
+        },
+        {
+          "time_s": 10.0,
+          "interval": 1,
+          "phase": 1,
+          "stage": 0,
+          "powered": true,
+          "state_eci": [
+            214830.53112912882, -3785090.145484534, 2802682.503145154, 4286819.081528901, -221.53675067526888, -263.28692539938675,
+            19.57786778499675
+          ],
+          "consumed_propellant_kg": [10876.972938431245, 0.0, 0.0, 0.0],
+          "altitude_m": 154.459902305156,
+          "azimuth_deg": 98.99999999999999,
+          "elevation_deg": 90.00000000000001,
+          "azimuth_rate_deg_s": -0.9999734252194329,
+          "elevation_rate_deg_s": -0.9999999906980749,
+          "inertial_direction_rate_deg_s": 1.0030424486219145,
+          "dynamic_pressure_pa": 506.78162747635724,
+          "angle_of_attack_deg": 0.029640277059012315,
+          "specific_force_m_s2": 13.03726217632395,
+          "thrust_n": 2802067.1973337573,
+          "mass_balance_error_kg": 2.0372681319713593e-10
+        },
+        {
+          "time_s": 145.0,
+          "interval": 16,
+          "phase": 1,
+          "stage": 0,
+          "powered": true,
+          "state_eci": [
+            67991.39646031165, -3899822.474010155, 2730633.6631964706, 4320750.867048314, -2157.835584965008, -1265.4256477081524,
+            617.5032627603925
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 0.0, 0.0, 0.0],
+          "altitude_m": 60689.72268025577,
+          "azimuth_deg": 97.27379097106099,
+          "elevation_deg": 39.394098357490975,
+          "azimuth_rate_deg_s": 0.021546034151528927,
+          "elevation_rate_deg_s": -0.018454646819449326,
+          "inertial_direction_rate_deg_s": 0.038836829413219184,
+          "dynamic_pressure_pa": 735.8243842784736,
+          "angle_of_attack_deg": 7.999973499291279,
+          "specific_force_m_s2": 47.042854160218965,
+          "thrust_n": 3199920.042698872,
+          "mass_balance_error_kg": 2.9831426218152046e-9
+        },
+        {
+          "time_s": 145.0,
+          "interval": 17,
+          "phase": 2,
+          "stage": 0,
+          "powered": false,
+          "state_eci": [
+            67991.39646031165, -3899822.474010155, 2730633.6631964706, 4320750.867048314, -2157.835584965008, -1265.4256477081524,
+            617.5032627603925
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 0.0, 0.0, 0.0],
+          "altitude_m": 60689.72268025577,
+          "azimuth_deg": 97.27379097106096,
+          "elevation_deg": 39.394098357490975,
+          "azimuth_rate_deg_s": 0.16190243190861808,
+          "elevation_rate_deg_s": -0.9999047490521057,
+          "inertial_direction_rate_deg_s": 1.0262064095787227,
+          "dynamic_pressure_pa": 735.8243842784736,
+          "angle_of_attack_deg": 7.999973499291279,
+          "specific_force_m_s2": 0.02085786965382134,
+          "thrust_n": 0.0,
+          "mass_balance_error_kg": 2.9831426218152046e-9
+        },
+        {
+          "time_s": 148.0,
+          "interval": 17,
+          "phase": 2,
+          "stage": 0,
+          "powered": false,
+          "state_eci": [
+            67991.39646031165, -3906269.640682861, 2726819.0436395737, 4322574.166583546, -2140.2788974462865, -1277.6493272013288,
+            598.0349650625118
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 0.0, 0.0, 0.0],
+          "altitude_m": 64206.883280023,
+          "azimuth_deg": 97.75949826678387,
+          "elevation_deg": 36.394384110333455,
+          "azimuth_rate_deg_s": 0.1619024319075494,
+          "elevation_rate_deg_s": -0.9999047490525002,
+          "inertial_direction_rate_deg_s": 1.026681990556391,
+          "dynamic_pressure_pa": 462.9317801790687,
+          "angle_of_attack_deg": 5.563548846830363,
+          "specific_force_m_s2": 0.01301582930419902,
+          "thrust_n": 0.0,
+          "mass_balance_error_kg": 2.9831426218152046e-9
+        },
+        {
+          "time_s": 148.0,
+          "interval": 18,
+          "phase": 3,
+          "stage": 1,
+          "powered": false,
+          "state_eci": [
+            47707.50406756326, -3906269.640682861, 2726819.0436395737, 4322574.166583546, -2140.2788974462865, -1277.6493272013288,
+            598.0349650625118
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 0.0, 0.0, 0.0],
+          "altitude_m": 64206.883280023,
+          "azimuth_deg": 97.7594982667839,
+          "elevation_deg": 36.39438411033346,
+          "azimuth_rate_deg_s": -0.06544974663512533,
+          "elevation_rate_deg_s": 0.9773188625469348,
+          "inertial_direction_rate_deg_s": 0.9594231257676272,
+          "dynamic_pressure_pa": 462.9317801790687,
+          "angle_of_attack_deg": 5.563548846830375,
+          "specific_force_m_s2": 0.008244353240793251,
+          "thrust_n": 0.0,
+          "mass_balance_error_kg": 2.9831426218152046e-9
+        },
+        {
+          "time_s": 153.0,
+          "interval": 18,
+          "phase": 3,
+          "stage": 1,
+          "powered": false,
+          "state_eci": [
+            47707.50406756326, -3916897.990699044, 2720379.9759115996, 4325483.363797136, -2111.0639784026384, -1297.962361878022,
+            565.6556240193095
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 0.0, 0.0, 0.0],
+          "altitude_m": 69892.40709533449,
+          "azimuth_deg": 97.43224953360263,
+          "elevation_deg": 41.280978423067026,
+          "azimuth_rate_deg_s": -0.06544974663632122,
+          "elevation_rate_deg_s": 0.9773188625467567,
+          "inertial_direction_rate_deg_s": 0.9591427477938761,
+          "dynamic_pressure_pa": 210.34013068396817,
+          "angle_of_attack_deg": 11.378867420373728,
+          "specific_force_m_s2": 0.0037407078992293705,
+          "thrust_n": 0.0,
+          "mass_balance_error_kg": 2.9831426218152046e-9
+        },
+        {
+          "time_s": 153.0,
+          "interval": 19,
+          "phase": 4,
+          "stage": 1,
+          "powered": true,
+          "state_eci": [
+            47707.50406756326, -3916897.990699044, 2720379.9759115996, 4325483.363797136, -2111.0639784026384, -1297.962361878022,
+            565.6556240193095
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 0.0, 0.0, 0.0],
+          "altitude_m": 69892.40709533449,
+          "azimuth_deg": 97.43224953360266,
+          "elevation_deg": 41.28097842306705,
+          "azimuth_rate_deg_s": 0.020790782385707512,
+          "elevation_rate_deg_s": -0.02729241007991465,
+          "inertial_direction_rate_deg_s": 0.047581996637949514,
+          "dynamic_pressure_pa": 210.34013068396817,
+          "angle_of_attack_deg": 11.378867420373746,
+          "specific_force_m_s2": 9.42872273195821,
+          "thrust_n": 449997.34647731134,
+          "mass_balance_error_kg": 2.9831426218152046e-9
+        },
+        {
+          "time_s": 392.99999999871045,
+          "interval": 28,
+          "phase": 4,
+          "stage": 1,
+          "powered": true,
+          "state_eci": [
+            16241.975210127077, -4569247.045322024, 2153078.625025927, 4384366.632787193, -3817.0734864903206, -3863.8542721331796,
+            -57.62035891283513
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 31465.528857435525, 0.0, 0.0],
+          "altitude_m": 319606.6995519204,
+          "azimuth_deg": 104.408829537758,
+          "elevation_deg": 25.65449224666328,
+          "azimuth_rate_deg_s": 0.04044425358475707,
+          "elevation_rate_deg_s": -0.0678331780352144,
+          "inertial_direction_rate_deg_s": 0.11285538581405488,
+          "dynamic_pressure_pa": 0.0001670854695904984,
+          "angle_of_attack_deg": 10.586604162889284,
+          "specific_force_m_s2": 27.705989821970686,
+          "thrust_n": 449999.99999695783,
+          "mass_balance_error_kg": 2.333763404749334e-9
+        },
+        {
+          "time_s": 392.99999999871045,
+          "interval": 29,
+          "phase": 5,
+          "stage": 1,
+          "powered": false,
+          "state_eci": [
+            15241.975210127077, -4569247.045322024, 2153078.625025927, 4384366.632787193, -3817.0734864903206, -3863.8542721331796,
+            -57.62035891283513
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 31465.528857435525, 0.0, 0.0],
+          "altitude_m": 319606.6995519204,
+          "azimuth_deg": 104.408829537758,
+          "elevation_deg": 25.65449224666329,
+          "azimuth_rate_deg_s": 0.03659123572089984,
+          "elevation_rate_deg_s": -0.08832284929615976,
+          "inertial_direction_rate_deg_s": 0.13334367312387208,
+          "dynamic_pressure_pa": 0.0001670854695904984,
+          "angle_of_attack_deg": 10.586604162889293,
+          "specific_force_m_s2": 7.23520138972787e-9,
+          "thrust_n": 0.0,
+          "mass_balance_error_kg": 2.333763404749334e-9
+        },
+        {
+          "time_s": 644.4246849774929,
+          "interval": 32,
+          "phase": 5,
+          "stage": 1,
+          "powered": false,
+          "state_eci": [
+            15241.975210127077, -5332584.4263965385, 1107906.9918716613, 4193321.2577074547, -2235.858366615197, -4387.411255182328,
+            -1433.1809044052663
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 31465.528857435525, 0.0, 0.0],
+          "altitude_m": 503552.0463533448,
+          "azimuth_deg": 113.60876945184795,
+          "elevation_deg": 3.44794768594511,
+          "azimuth_rate_deg_s": 0.03659123572081556,
+          "elevation_rate_deg_s": -0.08832284929616989,
+          "inertial_direction_rate_deg_s": 0.131098450947008,
+          "dynamic_pressure_pa": 5.6040256054843585e-6,
+          "angle_of_attack_deg": 1.6972749791947037,
+          "specific_force_m_s2": 2.470205236819736e-10,
+          "thrust_n": 0.0,
+          "mass_balance_error_kg": 2.333763404749334e-9
+        },
+        {
+          "time_s": 644.4246849774929,
+          "interval": 33,
+          "phase": 6,
+          "stage": 1,
+          "powered": true,
+          "state_eci": [
+            15241.975210127077, -5332584.4263965385, 1107906.9918716613, 4193321.2577074547, -2235.858366615197, -4387.411255182328,
+            -1433.1809044052663
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 31465.528857435525, 0.0, 0.0],
+          "altitude_m": 503552.0463533448,
+          "azimuth_deg": 113.6087694518479,
+          "elevation_deg": 3.4479476859451093,
+          "azimuth_rate_deg_s": 0.03210806435066177,
+          "elevation_rate_deg_s": -0.1021747996038323,
+          "inertial_direction_rate_deg_s": 0.1448242505910106,
+          "dynamic_pressure_pa": 5.6040256054843585e-6,
+          "angle_of_attack_deg": 1.6972749791947102,
+          "specific_force_m_s2": 29.52373257352514,
+          "thrust_n": 449999.99999985565,
+          "mass_balance_error_kg": 2.333763404749334e-9
+        },
+        {
+          "time_s": 704.4246849787037,
+          "interval": 38,
+          "phase": 6,
+          "stage": 1,
+          "powered": true,
+          "state_eci": [
+            7375.59299556735, -5483101.566129235, 786800.4318364057, 4077418.0079072462, -2852.301952838796, -6574.729960467677,
+            -2566.9262911786773
+          ],
+          "consumed_propellant_kg": [157716.10760725162, 39331.91107199644, 0.0, 0.0],
+          "altitude_m": 507539.1384645533,
+          "azimuth_deg": 115.87730031733132,
+          "elevation_deg": -2.2188349359288217,
+          "azimuth_rate_deg_s": 0.04428176652034872,
+          "elevation_rate_deg_s": -0.08261724270280457,
+          "inertial_direction_rate_deg_s": 0.14593722225440708,
+          "dynamic_pressure_pa": 1.2211284601263682e-5,
+          "angle_of_attack_deg": 2.154418128696653,
+          "specific_force_m_s2": 61.01204340618152,
+          "thrust_n": 449999.999999863,
+          "mass_balance_error_kg": 3.5079210647381842e-9
+        }
+      ],
+      "events": [
+        {
+          "kind": "separate_stage",
+          "phase": 2,
+          "stage": 0,
+          "time_s": 148.0,
+          "before_eci": [
+            67991.39646031165, -3906269.640682861, 2726819.0436395737, 4322574.166583546, -2140.2788974462865, -1277.6493272013288,
+            598.0349650625118
+          ],
+          "after_eci": [
+            47707.50406756326, -3906269.640682861, 2726819.0436395737, 4322574.166583546, -2140.2788974462865, -1277.6493272013288,
+            598.0349650625118
+          ],
+          "dry_removed_kg": 13000.0,
+          "propellant_removed_kg": 7283.892392748385,
+          "fairing_removed_kg": 0.0,
+          "adapter_removed_kg": 0.0,
+          "removed_mass_kg": 20283.892392748385,
+          "program_mass_difference_kg": 1.3096723705530167e-9,
+          "position_jump_m": 0.0,
+          "velocity_jump_m_s": 0.0
+        },
+        {
+          "kind": "jettison_fairing",
+          "phase": 4,
+          "stage": 1,
+          "time_s": 392.99999999871045,
+          "before_eci": [
+            16241.975210127077, -4569247.045322024, 2153078.625025927, 4384366.632787193, -3817.0734864903206, -3863.8542721331796,
+            -57.62035891283513
+          ],
+          "after_eci": [
+            15241.975210127077, -4569247.045322024, 2153078.625025927, 4384366.632787193, -3817.0734864903206, -3863.8542721331796,
+            -57.62035891283513
+          ],
+          "dry_removed_kg": 0.0,
+          "propellant_removed_kg": 0.0,
+          "fairing_removed_kg": 1000.0,
+          "adapter_removed_kg": 0.0,
+          "removed_mass_kg": 1000.0,
+          "program_mass_difference_kg": 0.0,
+          "position_jump_m": 0.0,
+          "velocity_jump_m_s": 0.0
+        },
+        {
+          "kind": "deploy_payload",
+          "phase": 6,
+          "stage": 1,
+          "time_s": 704.4246849787037,
+          "before_eci": [
+            7375.59299556735, -5483101.566129235, 786800.4318364057, 4077418.0079072462, -2852.301952838796, -6574.729960467677,
+            -2566.9262911786773
+          ],
+          "after_eci": [
+            2557.5040675637874, -5483101.566129235, 786800.4318364057, 4077418.0079072462, -2852.301952838796, -6574.729960467677,
+            -2566.9262911786773
+          ],
+          "dry_removed_kg": 4000.0,
+          "propellant_removed_kg": 668.0889280035626,
+          "fairing_removed_kg": 0.0,
+          "adapter_removed_kg": 150.0,
+          "removed_mass_kg": 4818.088928003563,
+          "program_mass_difference_kg": 9.604264050722122e-10,
+          "position_jump_m": 0.0,
+          "velocity_jump_m_s": 0.0
+        }
+      ],
+      "checks": [
+        {
+          "id": "ORBIT.radius",
+          "unit": "m",
+          "value": 6878138.942710674,
+          "lower": 6878137.0,
+          "upper": 6878137.0,
+          "tolerance": 10.0,
+          "violation": 1.942710674367845,
+          "passed": true
+        },
+        {
+          "id": "ORBIT.speed",
+          "unit": "m/s",
+          "value": 7612.608690034162,
+          "lower": 7612.608173223869,
+          "upper": 7612.608173223869,
+          "tolerance": 0.05,
+          "violation": 0.000516810292538139,
+          "passed": true
+        },
+        {
+          "id": "ORBIT.radial_velocity",
+          "unit": "m/s",
+          "value": 0.004281384528887535,
+          "lower": 0.0,
+          "upper": 0.0,
+          "tolerance": 0.05,
+          "violation": 0.004281384528887535,
+          "passed": true
+        },
+        {
+          "id": "ORBIT.inclination",
+          "unit": "deg",
+          "value": 42.99999945470948,
+          "lower": 43.0,
+          "upper": 43.0,
+          "tolerance": 0.0005,
+          "violation": 5.452905185165946e-7,
+          "passed": true
+        },
+        {
+          "id": "ORBIT.perigee_radius",
+          "unit": "m",
+          "value": 6878136.998661823,
+          "lower": 6878137.0,
+          "upper": 6878137.0,
+          "tolerance": 100.0,
+          "violation": 0.0013381773605942726,
+          "passed": true
+        },
+        {
+          "id": "ORBIT.apogee_radius",
+          "unit": "m",
+          "value": 6878146.6399774095,
+          "lower": 6878137.0,
+          "upper": 6878137.0,
+          "tolerance": 100.0,
+          "violation": 9.639977409504354,
+          "passed": true
+        }
+      ]
+    }
+  }
+}

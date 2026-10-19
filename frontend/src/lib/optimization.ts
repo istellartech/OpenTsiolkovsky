@@ -1,3 +1,5 @@
+import type { OptimizationInput } from './optimization-input'
+
 export interface IterationRecord {
   iteration: number
   objective: number
@@ -116,17 +118,17 @@ export interface MultiStageValidation {
 
 export interface OptimizationResult {
   schema_version: number
-  input: {
-    run_id: string
-    problem: {
-      kind: string
-      burn_intervals?: number
-      coast_intervals?: number
-      intervals?: number
-      degree?: number
-      phases?: { name: string; intervals: number }[]
-    }
-  }
+  input: OptimizationInput
+  effective_options?: string
+  flight_scaling?: {
+    strategy: string
+    mass_kg: number
+    position_m: number
+    velocity_m_s: number
+    time_s: number
+    payload_objective_kg: number
+  } | null
+  nlp_layout?: { variables: string[]; constraints: string[]; jacobian: [number, number][] }
   solver_status: string
   converged: boolean
   solver_version: string
