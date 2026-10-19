@@ -1,9 +1,10 @@
-//! Solver connection, analytic benchmarks and single-stage flight optimization.
-//! Multi-stage ZERO optimization remains gated on its model/data milestones.
+//! Solver connection, analytic benchmarks and single/multi-stage optimization.
+//! Assumed multi-stage demonstrations are distinct from the gated ZERO baseline.
 pub mod control;
 pub mod events;
 pub mod flight_validation;
 pub mod lgr;
+pub mod multi_stage;
 pub mod problem;
 pub mod single_stage;
 pub mod tnlp;
@@ -57,6 +58,7 @@ pub struct ValidationReport {
     pub trajectory: Option<validation::TrajectoryValidation>,
     pub error: Option<String>,
     pub flight: Option<flight_validation::FlightValidation>,
+    pub multi_stage: Option<multi_stage::validation::MultiStageValidation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +97,7 @@ pub fn solve_with_callback(
         Problem::DoubleIntegrator(input) => {
             Box::new(transcription::DoubleIntegrator::new(input.clone())?)
         }
+        Problem::MultiStage(input) => Box::new(multi_stage::MultiStage::new((**input).clone())?),
         Problem::SingleStage(input) => Box::new(single_stage::SingleStage::new((**input).clone())?),
         Problem::Zero(mission) => return Err(mission.readiness_issues().join("\n")),
     };
@@ -143,14 +146,22 @@ pub fn solve_with_callback(
         Problem::SingleStage(p) => Some(single_stage::SingleStage::new((**p).clone())?),
         _ => None,
     };
+    let multi_model = match &request.problem {
+        Problem::MultiStage(p) => Some(multi_stage::MultiStage::new((**p).clone())?),
+        _ => None,
+    };
     let validation = nlp.solution.as_ref().map(|s| {
-        if let Some(m) = &flight_model {
+        if let Some(m) = &multi_model {
+            multi_stage::validation::validate_solution(m, s)
+        } else if let Some(m) = &flight_model {
             flight_validation::validate_solution(m, s)
         } else {
             validation::validate_solution(nlp.model.as_ref(), s, trajectory_model.as_ref())
         }
     });
-    let model_fidelity = if flight_model.is_some() {
+    let model_fidelity = if multi_model.is_some() {
+        "assumed multi-stage numerical demonstrator; osculating orbit after payload deployment; thermal/range/6DoF not evaluated; not the ZERO baseline"
+    } else if flight_model.is_some() {
         "single-stage 3DoF sounding-rocket model; additional payload above the supplied base dry mass; no flight certification"
     } else {
         "analytic_numerical_benchmark; no rocket performance claim"
@@ -174,7 +185,9 @@ pub fn solve_with_callback(
         solution: nlp.solution.clone(),
         validation,
         effective_options: options,
-        flight_scaling: flight_model.map(|m| m.scaling),
+        flight_scaling: flight_model
+            .map(|m| m.scaling)
+            .or_else(|| multi_model.map(|m| m.scaling)),
         physical_scaling: trajectory_model.map(|m| m.scaling),
     })
 }

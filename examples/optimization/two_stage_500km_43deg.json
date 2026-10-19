@@ -1,0 +1,332 @@
+{
+  "schema_version": 1,
+  "run_id": "two-stage-500km-43deg",
+  "problem": {
+    "kind": "multi_stage",
+    "vehicle": {
+      "name": "Assumed two-stage orbital demonstrator",
+      "simulation": {
+        "end_time_s": 1500,
+        "output_step_s": 1,
+        "integrator": {
+          "method": "rk45"
+        }
+      },
+      "launch": {
+        "latitude_deg": 42.5,
+        "longitude_deg": 143.44,
+        "altitude_m": 15,
+        "time_utc": "2026-10-19T00:00:00Z"
+      },
+      "attitude": {
+        "azimuth_deg": 99,
+        "elevation_deg": 90
+      },
+      "stages": [
+        {
+          "mass_initial_kg": 178000,
+          "mass_dry_kg": 13000,
+          "engine": {
+            "thrust_vac_n": 3200000,
+            "isp_vac_s": 300,
+            "burn_start_s": 0,
+            "burn_end_s": 145,
+            "nozzle_exit_area_m2": 4
+          },
+          "free_flight": "attitude_program",
+          "aero": {
+            "diameter_m": 3,
+            "ca": [
+              [
+                0,
+                0.35
+              ],
+              [
+                0.8,
+                0.38
+              ],
+              [
+                1.1,
+                0.55
+              ],
+              [
+                1.5,
+                0.5
+              ],
+              [
+                2.5,
+                0.4
+              ],
+              [
+                4,
+                0.32
+              ],
+              [
+                8,
+                0.26
+              ]
+            ],
+            "cn_alpha_per_rad": 0.2,
+            "ballistic_coefficient_kg_m2": 100
+          },
+          "separation_time_s": 148
+        },
+        {
+          "mass_initial_kg": 44000,
+          "mass_dry_kg": 4000,
+          "engine": {
+            "thrust_vac_n": 450000,
+            "isp_vac_s": 350,
+            "burn_start_s": 0,
+            "burn_end_s": 300,
+            "nozzle_exit_area_m2": 0.5
+          },
+          "free_flight": "attitude_program",
+          "aero": {
+            "diameter_m": 2,
+            "ca": [
+              [
+                0,
+                0.35
+              ],
+              [
+                0.8,
+                0.38
+              ],
+              [
+                1.1,
+                0.55
+              ],
+              [
+                1.5,
+                0.5
+              ],
+              [
+                2.5,
+                0.4
+              ],
+              [
+                4,
+                0.32
+              ],
+              [
+                8,
+                0.26
+              ]
+            ],
+            "cn_alpha_per_rad": 0.2,
+            "ballistic_coefficient_kg_m2": 100
+          }
+        }
+      ]
+    },
+    "data_source": "All stage masses, engine characteristics, operating limits and launch coordinates are numerical demonstration assumptions. This is not a ZERO vehicle data set or LC-1 survey. The target 500 km / 43 deg follows the project plan.",
+    "stages": [
+      {
+        "dry_kg": 13000,
+        "propellant_kg": 165000,
+        "reserve_kg": 1000,
+        "max_total_burn_s": 145,
+        "max_ignitions": 1,
+        "source": "Numerical demonstrator assumption"
+      },
+      {
+        "dry_kg": 4000,
+        "propellant_kg": 40000,
+        "reserve_kg": 500,
+        "max_total_burn_s": 300,
+        "max_ignitions": 2,
+        "source": "Numerical demonstrator assumption"
+      }
+    ],
+    "net_payload_kg": {
+      "initial": 2000,
+      "lower": 100,
+      "upper": 8000
+    },
+    "payload_adapter_kg": 150,
+    "fairing_kg": 1000,
+    "fairing_off_area_scale": 0.8,
+    "fairing_release_min_altitude_m": 100000,
+    "phases": [
+      {
+        "name": "vertical",
+        "stage": 0,
+        "mode": "burn",
+        "duration_s": {
+          "initial": 10,
+          "lower": 10,
+          "upper": 10
+        },
+        "intervals": 1,
+        "vertical": true,
+        "end_event": "none",
+        "max_angle_of_attack_deg": 8,
+        "max_specific_force_m_s2": 60,
+        "min_altitude_m": 15,
+        "initial_attitude_end_deg": [
+          99,
+          90
+        ]
+      },
+      {
+        "name": "booster_burn",
+        "stage": 0,
+        "mode": "burn",
+        "duration_s": {
+          "initial": 135,
+          "lower": 135,
+          "upper": 135
+        },
+        "intervals": 16,
+        "vertical": false,
+        "end_event": "none",
+        "max_angle_of_attack_deg": 8,
+        "max_specific_force_m_s2": 60,
+        "min_altitude_m": 15,
+        "initial_attitude_end_deg": [
+          99,
+          35
+        ]
+      },
+      {
+        "name": "booster_cutoff_to_separation",
+        "stage": 0,
+        "mode": "coast",
+        "duration_s": {
+          "initial": 3,
+          "lower": 3,
+          "upper": 3
+        },
+        "intervals": 1,
+        "vertical": false,
+        "end_event": "separate_stage",
+        "max_angle_of_attack_deg": 15,
+        "max_specific_force_m_s2": 60,
+        "min_altitude_m": 15,
+        "initial_attitude_end_deg": [
+          99,
+          35
+        ]
+      },
+      {
+        "name": "upper_separation_to_ignition",
+        "stage": 1,
+        "mode": "coast",
+        "duration_s": {
+          "initial": 5,
+          "lower": 5,
+          "upper": 5
+        },
+        "intervals": 1,
+        "vertical": false,
+        "end_event": "none",
+        "max_angle_of_attack_deg": 85,
+        "max_specific_force_m_s2": 80,
+        "min_altitude_m": 50000,
+        "initial_attitude_end_deg": [
+          99,
+          35
+        ]
+      },
+      {
+        "name": "upper_first_burn",
+        "stage": 1,
+        "mode": "burn",
+        "duration_s": {
+          "initial": 210,
+          "lower": 150,
+          "upper": 240
+        },
+        "intervals": 10,
+        "vertical": false,
+        "end_event": "jettison_fairing",
+        "max_angle_of_attack_deg": 85,
+        "max_specific_force_m_s2": 80,
+        "min_altitude_m": 50000,
+        "initial_attitude_end_deg": [
+          99,
+          20
+        ]
+      },
+      {
+        "name": "upper_restart_coast",
+        "stage": 1,
+        "mode": "coast",
+        "duration_s": {
+          "initial": 180,
+          "lower": 10,
+          "upper": 300
+        },
+        "intervals": 4,
+        "vertical": false,
+        "end_event": "none",
+        "max_angle_of_attack_deg": 85,
+        "max_specific_force_m_s2": 80,
+        "min_altitude_m": 50000,
+        "initial_attitude_end_deg": [
+          99,
+          12
+        ]
+      },
+      {
+        "name": "upper_second_burn",
+        "stage": 1,
+        "mode": "burn",
+        "duration_s": {
+          "initial": 80,
+          "lower": 10,
+          "upper": 110
+        },
+        "intervals": 6,
+        "vertical": false,
+        "end_event": "deploy_payload",
+        "max_angle_of_attack_deg": 85,
+        "max_specific_force_m_s2": 80,
+        "min_altitude_m": 50000,
+        "initial_attitude_end_deg": [
+          99,
+          5
+        ]
+      }
+    ],
+    "orbit": {
+      "reference_radius_m": 6378137,
+      "altitude_m": 500000,
+      "inclination_deg": 43,
+      "radius_tolerance_m": 10,
+      "speed_tolerance_m_s": 0.05,
+      "radial_velocity_tolerance_m_s": 0.05,
+      "inclination_tolerance_deg": 0.0005,
+      "apsis_tolerance_m": 100
+    },
+    "degree": 8,
+    "initial_azimuth_deg": 99,
+    "azimuth_bounds_deg": [
+      80,
+      130
+    ],
+    "elevation_bounds_deg": [
+      -25,
+      90
+    ],
+    "max_dynamic_pressure_pa": 60000,
+    "max_azimuth_rate_deg_s": 1,
+    "max_elevation_rate_deg_s": 1,
+    "max_inertial_direction_rate_deg_s": 1.5,
+    "validation": {
+      "position_m": 10,
+      "velocity_m_s": 0.05,
+      "mass_kg": 0.005,
+      "dynamic_pressure_pa": 10,
+      "angle_of_attack_deg": 0.02,
+      "specific_force_m_s2": 0.02,
+      "pitch_rate_deg_s": 0.002
+    }
+  },
+  "solver": {
+    "max_iterations": 500,
+    "tolerance": 1e-07,
+    "derivative_test": false
+  }
+}

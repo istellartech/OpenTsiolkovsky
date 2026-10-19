@@ -426,7 +426,7 @@ pub fn validate_solution(m: &SingleStage, s: &FullSolution) -> ValidationReport 
     let mut g = vec![0.0; m.layout().constraints.len()];
     m.constraints(&s.x, &mut g);
     let violation = max_violation(m, &s.x, &g);
-    let mut report=ValidationReport{status:"failed".into(),method:"independent continuous IVP from launch; no node resets; 60 dense points per interval plus LGR nodes and both event sides; 10x tighter RK45; SI constraint ledger".into(),max_bound_violation:violation,reference_objective_error:0.0,reference_objective_tolerance:0.0,tolerance:1e-6,trajectory:None,error:None,flight:None};
+    let mut report=ValidationReport{status:"failed".into(),method:"independent continuous IVP from launch; no node resets; 60 dense points per interval plus LGR nodes and both event sides; 10x tighter RK45; SI constraint ledger".into(),max_bound_violation:violation,reference_objective_error:0.0,reference_objective_tolerance:0.0,tolerance:1e-6,trajectory:None,error:None,flight:None,multi_stage:None};
     match validate_trajectory(m, &s.x) {
         Ok(f) => {
             if violation <= report.tolerance && f.checks.iter().all(|c| c.passed) {

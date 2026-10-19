@@ -184,6 +184,7 @@ pub fn validate_solution(
         trajectory: None,
         error: None,
         flight: None,
+        multi_stage: None,
     };
     if let Some(trajectory_model) = trajectory_model {
         report.method =
