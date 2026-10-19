@@ -1,102 +1,101 @@
-# PR 3: 軌道最適化の尺度・双対・Hessian
+# 軌道最適化の数値仕様と比較
 
-この文書は[導入計画](trajectory-optimization-plan.md)第5.4〜5.5節、PR 3の数値基盤を扱う。既存のLGR転写とS0物理モデルの外側に座標変換を置き、同じSI入力と再積分検証を維持する。熱や推進系等の新しい物理は追加しない。
+PR 3の尺度・SI変換・Hessianを記録する。[操作方法](optimization.md)、[進捗](trajectory-optimization-status.md)、[設計要件](trajectory-optimization-plan.md#5-微分とスケーリング)は別文書を参照。
 
-## 設定と互換性
+## 設定
 
-入力JSONの`solver`に次の設定を追加した。省略時は従来のS0・L-BFGS・上流既定KKT設定であり、成功判定も変更しない。未知の項目・方式名、不正なfloor/capは拒否する。
+`solver`に追加する設定例。全入力は[double_integrator_exact.json](../examples/optimization/double_integrator_exact.json)にある。ブラウザでは「JSON・詳細」から指定する。
 
 ```json
-{
-  "hessian": "exact",
-  "scaling": {
-    "strategy": "s3",
-    "floor": 0.000001,
-    "cap": 1000000,
-    "gradient_max": 1.0,
-    "gradient_min": 0.00000001
-  },
-  "kkt_scaling": "ruiz"
-}
+{"hessian":"exact","scaling":{"strategy":"s3","gradient_max":1},"kkt_scaling":"ruiz"}
 ```
 
-上記は`solver`の追加部分。実行可能な全入力は[double_integrator_exact.json](../examples/optimization/double_integrator_exact.json)を参照する。入力の`*_m`、`*_kg`、`*_pa`等の意味はSIのままであり、スケーリング設定で物理上限や数値検証許容値を変更しない。ブラウザでは「JSON・詳細」から設定できる。
-
-| 設定 | 意味 |
+| 設定 | 動作 |
 | --- | --- |
-| `scaling.strategy: s0` | 既存転写の物理尺度をそのまま使用 |
-| `s1_bounds` | 有限な上下限の中点・半幅で変数を変換。固定変数は差分0、gain=1。無限境界には初期推定の種別ごとの範囲を使う |
-| `s1_guess` | 変数種別ごとの初期軌道範囲・代表絶対値を使用。一定/ゼロの初期推定に有限なfallbackを持つ。フェーズ別質量尺度の方式ではない |
-| `s2` | S0変数を保ち、初期点と上下方向の微小摂動点の3点で局所ADヤコビアンを評価。制約種別ごとの最大値で行を補正。ゼロ近傍は増幅せず、floor/capを適用 |
-| `s3` | S0にpounceの`nlp_scaling_method=gradient-based`を追加。`gradient_max`/`gradient_min`を明示して記録 |
-| `hessian: limited_memory` / `exact` | 既定はL-BFGS。厳密HessianはHS071と二重積分器で使用可能。ロケットを指定した場合は入力検査で拒否し、暗黙にL-BFGSへ戻さない |
-| `kkt_scaling: upstream_default` / `none` / `ruiz` / `slack_based` | アプリ/NLPの尺度と独立したKKT線形系の方式。明示方式では`linear_scaling_on_demand=no`とし、設定が発動待ちのままになることを避ける |
+| `scaling.strategy: s0`（既定） | 既存の物理尺度を維持 |
+| `s1_bounds` | 有限boundsの中点・半幅。固定幅0はgain=1、無限境界はguess方式へ |
+| `s1_guess` | 変数種別の初期範囲の中点をoffset、半幅・各初期絶対値・1の最大をgainに使用 |
+| `s2` | S0変数を保ち、代表3点の局所ADヤコビアンを使い、制約種別内の最大絶対微分の逆数で行補正 |
+| `s3` | S0にpounceのgradient-based補正を追加 |
+| `hessian` | `limited_memory`（既定）/ `exact`。exactはHS071・二重積分器のみ。ロケット指定は拒否 |
+| `kkt_scaling` | `upstream_default`（既定）/ `none` / `ruiz` / `slack_based`。明示方式ではon-demandを無効化 |
 
-S1/S2の係数はS0座標上で生成し、`floor`/`cap`でgainを制限する。S2の摂動は各非固定変数へ`±0.001 max(1, abs(x_initial))`を加えてbounds内へ収める。制約種別は名前からノード/区間添字を除いたものとし、異なる状態成分は別種別に保つ。係数と参照点は1求解中に固定する。
+S1/S2のgainは`floor=1e-6`、`cap=1e6`で制限する。S2は初期点と`±0.001 max(1,abs(x))`のbounds内摂動点を使い、ゼロ近傍行を増幅しない。種別は名前の区間/ノード添字を除いて集約する。フェーズ別質量尺度は未実装。
 
-S3の係数は、採用pounce 0.12.0の公開`gradient_obj_scale`/`gradient_row_scale`を、同じ固定変数の補正後の初期点とヤコビアンへ適用して記録する。目的は非固定変数の勾配、制約は上流と同じ全列の行最大値を使う。上流既定の閾値100では係数がすべて1になる問題もあり、方式名だけで有効な補正が発生したとは判断しない。
+S3の既定は`gradient_max=100`、`gradient_min=1e-8`。固定変数を補正した初期点に、pounce 0.12.0の公開gradient scaling関数を適用して係数を記録する。係数設定は正・有限、floor≤1≤cap、gradient_min≤1を要求する。係数は1求解中固定し、SI入力・物理上限・検証許容値は変更しない。
 
 ## 変換と結果JSON
 
-既存転写のS0座標を`x0, g0, f0`、新しくソルバーへ渡すアプリ座標を`z, gA, fA`とする。`D`は正の対角gain、`R`は正の行gain、`a`は正の目的gain。
+S0座標を`x0,g0,f0`、アプリ変換後を`z,gA,fA`とする。D/Rは正の対角係数、aは正の目的係数。SI写像は`xSI=o+S x0, gSI=T g0, fSI=F f0`。
 
 ```text
-x0 = b + D z
-gA = R g0
-fA = a f0
+x0 = b + D z,  gA = R g0,  fA = a f0
 JA = R J0 D
 HA = D [a obj_factor Hf0 + Σ_j R_j lambdaA_j Hg0_j] D
+lambda0 = R lambdaA/a,        z0 = D^-1 zA/a
+lambdaSI = F T^-1 lambda0,    zSI = F S^-1 z0
 ```
 
-意味上の無限境界（±1e19）は乗除せず保持する。有限境界が変換後に無限境界の閾値を越える設定はエラーにする。固定変数や幅0で除算しない。疎構造は変換で変えず、同じ要素への寄与を加算する。
+±1e19の無限境界は倍率変換しない。有限境界が変換後にこの閾値を越える設定は拒否する。pounce内部のS3補正はpounceが戻すため、二重適用しない。
 
-| 結果フィールド | 座標・内容 |
+| 結果フィールド | 内容 |
 | --- | --- |
-| `solution`, `nlp_layout`, 名前配列 | 従来のS0座標。新方式の解を戻してから既存の独立検証・フロントエンドへ渡す |
-| `solver_solution`, `solver_layout` | アプリ変換後にpounceへ渡したTNLP座標。pounce内部のgradient-based補正はpounce自身が戻している |
-| `scaling_report` | 方式、floor/cap、参照点、アプリのoffset/gain/行/目的係数、pounce補正係数、SI変換のoffset/scale/unit |
-| `physical_solution` | SIの状態・制御・時間・ペイロードと、対応する物理残差・目的・上下限/制約乗数 |
-| `numerical_metrics` | setup/solve/validation時間、微分・因子分解・backsolve時間、評価数、復元記録数、scaled/unscaled KKT誤差、factor数・pivotの利用可能な統計、KKT方式 |
+| `solution`, `nlp_layout`, 名前配列 | 従来のS0座標。独立検証・既存UIもこれを使う |
+| `solver_solution`, `solver_layout` | アプリ変換後のTNLP座標。pounce内部補正は復元済み |
+| `scaling_report` | 方式・参照点・全係数・floor/cap・SI写像と単位 |
+| `physical_solution` | SI主変数・物理残差・目的・上下限/制約乗数 |
+| `numerical_metrics` | setup/solve/validation・微分・factor/backsolve時間、評価/復元数、KKT誤差、factor/pivot統計 |
 
-新フィールドは追加項目で、Rust側も欠落した古い結果JSONを読み込める。旧版の結果に後から数値情報を補完したとは扱わない。
+追加フィールドのない旧結果も読める。SI乗数の単位は目的単位/残差または変数の単位。負のペイロードを最小化する符号に注意する。円錐/cos残差は無次元のままであり、kg/deg等の実パラメータ感度には残差定義の微分が必要。
 
-SIへの変換を`xSI = o + S x0`, `gSI = T g0`, `fSI = F f0`とすると、乗数を次の順に戻す。
+厳密Hessianは疎な下三角を解析組立し、自由時間×制御/速度と制約乗数を含む。全NLPの有限差分を実装には使わない。方向差分・`second-order`検査で監査し、L-BFGSは`eval_h`呼出し0を保つ。
 
-```text
-lambda0 = R lambdaA / a
-z0      = D^-1 zA / a
-lambdaSI = F T^-1 lambda0
-zSI      = F S^-1 z0
-```
+`kkt_scaling_forced_on_factors`は方式接続・on-demand無効化・factor数に基づく記録。反復ごとの非単位係数や線形系残差はバックエンド非公開で未計測。pivot範囲だけで良条件とは判断しない。
 
-pounceが戻した内部補正を二重適用しない。乗数は最小化目的（ロケットでは負のペイロード）のLagrangianに対するもの。境界を変えたときの最適値変化は符号も含めて確認する。二重積分器では到達距離1,000 mで`dJ*/dd=24`を解析式・SI乗数・距離を±0.1 m動かした再求解の三者で照合する。
+## 2026-10-19の比較結果
 
-`physical_solution`の制約は物理残差の定義に対応する。迎角円錐の正規化残差や傾斜角のcos残差等は無次元のままであり、それらの乗数を直接「kg/deg」の設計感度と解釈しない。実パラメータへの感度には、その残差定義・上限パラメータの微分も必要になる。
+固定実行物`2c6bfea57424`でnative 184条件・WASI 67条件を比較した。同じSI物理・初期推定・メッシュ・予算で、失敗も保存した。`e50bcae`の定数行S2処理は比較問題の係数を変えない。
 
-## Hessianと検証
+全条件：[native CSV](verification/pr3-native.csv)、[WASI CSV](verification/pr3-wasi.csv)、[実行物ハッシュ・環境・WASI対象一覧](verification/pr3-environment.json)。
 
-- HS071は目的と2制約の厳密解析Hessianを疎な下三角で返す。
-- 二重積分器は制御エネルギーの二階項と、自由時間×制御・自由時間×速度の交差項を組み立てる。`obj_factor`と制約乗数の両方を含む。
-- 座標変換後もHessianとLagrangian勾配の方向差分を照合し、pounceの`derivative_test=second-order`でも検査する。全NLPの有限差分をHessianの実装には使わない。
-- L-BFGSではHessian構造を公開せず、`eval_h`呼出し0の既存契約を保つ。
-- 単位不変性はm↔km、kg↔t、Pa↔kPa等の座標で同じ物理関数を評価し、SIへ戻した値・微分を比較する。入力ファイルの単位ラベルを書き換えるだけの試験にはしない。
-- 各方式の求解後は、従来と同じSI上限・許容値で独立再積分する。収束、検証合否、残差、性能値を別々に保存する。
+| 問題群 | nativeの収束かつ検証合格 | WASIの収束かつ検証合格 |
+| --- | ---: | ---: |
+| HS071・二重積分器 | 106 / 106 | 46 / 46 |
+| MOMO基準メッシュ | 24 / 24 | 9 / 9 |
+| 多段基準メッシュ | 20 / 24 | 11 / 12 |
+| 単段/多段の粗メッシュ | 0 / 30 | 対象外 |
 
-ロケットの局所二階ADと自由時間を含む厳密Hessianの疎組立は、この小問題版からの後続段階である。多段で厳密Hessianを比較済み、または最適なHessian既定値を確定したとは扱わない。
+二重積分器は3初期時間×3メッシュ×5尺度の各45件で両Hessian方式が合格した。反復中央値はL-BFGS 26、厳密Hessian 11。m/kmでの実求解、距離±0.1 mの再求解、解析式から同じSI解と感度`dJ*/dd=24`を確認した。二階微分検査2,055成分と多段ヤコビアン146,995成分の監査も合格した。
 
-KKTの`kkt_scaling_forced_on_factors`は、採用版の方式接続・on-demand無効化と実行factor数に基づく記録で、個々の反復の係数が非単位であったことを示す計測値ではない。pivot範囲だけで良条件とは判断しない。バックエンドが公開していない線形系残差等は値を捏造せず、未取得の診断として区別する。
+次表は多段の上流既定KKT・L-BFGS、初期射向98/99/100°。全ケースとも再積分は合格したが、反復上限を収束へ読み替えない。
 
-## 再現と比較
+| 尺度 | native合格 | native反復数 | WASI合格 |
+| --- | ---: | --- | ---: |
+| S0 | 3 / 3 | 219 / 156 / 330 | 3 / 3 |
+| S1 bounds | 0 / 3 | 500 / 500 / 500 | 対象外 |
+| S1 guess | 3 / 3 | 274 / 250 / 240 | 2 / 3 |
+| S2 | 2 / 3 | 272 / 244 / 500 | 3 / 3 |
+| S3 | 3 / 3 | 201 / 494 / 237 | 対象外 |
+
+S1 boundsの最終双対残差は1.25e-5〜9.27e-5で、許容値1e-7へ届かない。S2の100°もnativeで停滞した。WASIと終了理由が違ったのはS1 guessの99°とS2の100°。多段ペイロードの方式間幅は0.001 kg未満、native/WASI差は最大0.000408 kgだった。
+
+独立したKKT none/Ruiz/slack-based比較は、nativeの単段/多段で各3初期推定とも合格。WASI多段99°も3方式とも合格。上流既定はnoneで、明示noneの対照試験は同じ反復・SI結果を返した。
+
+S3閾値100では小問題の係数は1だったため、別の回帰試験では閾値1も使う。MOMO/多段基準の非単位補正は85/552行。粗メッシュでは単段約36.34 m、多段30.91〜45.80 mの再積分差と投入/荷重違反が残った。尺度変更ではメッシュ誤差を解消できない。
+
+既定はS0・L-BFGS・KKT上流既定を維持する。ロケットの厳密Hessian・拘束独立性・線形系診断は後続。WASIは5,258,735 bytes、ケースごとの線形メモリ容量は最大107 MiB。時間は単発・一部並行負荷を含むため、速度順位の確定には使わない。
+
+## 再現
 
 ```sh
-cargo test --locked --features optimization
 cargo build --locked --release --features optimization --bin openTsiolkovsky-optimize
-target/release/openTsiolkovsky-optimize --config examples/optimization/double_integrator_exact.json --output /tmp/exact.json
-python3 scripts/study_optimization_numerics.py
-# 一部を確認する場合
-python3 scripts/study_optimization_numerics.py --filter 'multi_base_99_*' --output out/optimization/pr3-smoke
+bash scripts/optimization_wasm_build.sh
+python3 scripts/study_optimization_numerics.py --output out/optimization/study-new
+# manifestの全条件。任意の正規表現引数で対象を絞れる
+bun scripts/study_optimization_numerics_wasm.ts out/optimization/study-new/manifest.json
+python3 scripts/summarize_optimization_numerics.py out/optimization/study-new out/optimization/study-new/records
 ```
 
-比較スクリプトはHS071、二重積分器、MOMO単段、仮定した多段機を対象に、方式ごとに同一の物理・初期推定・メッシュ・予算を使う。3初期推定、粗/細メッシュ、S0〜S3、小問題のL-BFGS/厳密Hessian、独立したKKT軸を含む。全組合せの総当たりではない。実行物をコピーしてハッシュを保存し、入力・全結果・stderr・逐次summaryを`out/optimization/pr3-numerics/`へ保存する。失敗・反復上限も残し、自動再試行や物理上限の緩和は行わない。
+入力・全結果・stderrと逐次集計を保存し、既存保存先は上書き拒否する。WASIの任意引数は`NAME_REGEX, WASM_PATH, OUTPUT_DIR`。公開CSVは全予定条件の記録完了を検査して出力する。反復数は履歴の最大iteration、復元数はrestoration記録数。process時間はモデル再構築・入出力も含み、個別timerの和とは異なる。
 
-時間は単発の実行記録であり、環境負荷を含む。方式の優劣は最速例だけで決めず、合格率・SI最悪値・性能・初期値/メッシュ依存と併せて評価する。生データはローカル生成物であり、再現スクリプトと結果の要約を区別して管理する。
+回帰はRust単体141件・統合10件、通常構成109件・統合7件、native/WASM/WASIのclippy、フロント130件・本番ビルドが合格。主双対・中断/再実行、旧結果互換、新しい全結果のIndexedDB再読込も確認した。
