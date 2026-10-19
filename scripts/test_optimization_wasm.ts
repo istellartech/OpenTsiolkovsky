@@ -18,7 +18,7 @@ function near(actual: number, expected: number, tolerance = 2e-5) {
   assert(Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`)
 }
 
-for (const name of ['hs071', 'double_integrator']) {
+for (const name of ['hs071', 'double_integrator', 'momo_single_stage']) {
   const path = resolve(root, `examples/optimization/${name}.json`)
   const input = await Bun.file(path).json()
   const run = Bun.spawnSync([native, '--config', path], { stdout: 'pipe', stderr: 'pipe' })
@@ -38,6 +38,13 @@ for (const name of ['hs071', 'double_integrator']) {
     result.solution[key].forEach((v: number, i: number) => near(v, reference.solution[key][i]))
   }
   near(result.solution.objective, reference.solution.objective)
+  if (name === 'momo_single_stage') {
+    const f = result.validation.flight
+    const ref = reference.validation.flight
+    near(f.mass_ledger.additional_payload_kg, ref.mass_ledger.additional_payload_kg, 1e-7)
+    assert.deepEqual(f.checks.map((c: {id: string, passed: boolean}) => [c.id, c.passed]), ref.checks.map((c: {id: string, passed: boolean}) => [c.id, c.passed]))
+    console.log(`Single stage: payload=${f.mass_ledger.additional_payload_kg} kg, position error=${f.max_position_error_m} m, velocity error=${f.max_velocity_error_m_s} m/s`)
+  }
   console.log(`${name}: ${result.solver_status}, validation=${result.validation.status}, objective=${result.solution.objective}`)
   const cancelled = optimizer.solve({ ...input, solver: { ...input.solver, stop_after_iteration: 0 } }) as typeof reference
   assert.equal(cancelled.solver_status, 'User_Requested_Stop')
@@ -50,6 +57,10 @@ for (const name of ['hs071', 'double_integrator']) {
   const restarted = optimizer.solve(input) as typeof reference
   assert.equal(restarted.converged, true)
 }
+const coarse = await Bun.file(resolve(root, 'examples/optimization/momo_single_stage_coarse.json')).json()
+const coarseResult = optimizer.solve(coarse) as { converged: boolean, validation: { status: string } }
+assert.equal(coarseResult.converged, true)
+assert.equal(coarseResult.validation.status, 'failed')
 assert(progress > 0, 'callback progress must cross the custom WASM import')
 const zero = await Bun.file(resolve(root, 'examples/optimization/zero_500km_43deg.json')).json()
 assert.match((optimizer.solve(zero) as { error: string }).error, /LC-1/)

@@ -191,10 +191,7 @@ export default function App() {
         history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
         actions={
           <>
-            <IconButton
-              label={tr('軌道最適化（数値試験）', 'Trajectory optimization (benchmarks)')}
-              onClick={() => setOptimizationOpen(true)}
-            >
+            <IconButton label={tr('軌道最適化', 'Trajectory optimization')} onClick={() => setOptimizationOpen(true)}>
               <Target className="h-4 w-4" />
             </IconButton>
             <IconButton label={tr('ヘルプ (?)', 'Help (?)')} onClick={() => setHelpOpen(true)}>
