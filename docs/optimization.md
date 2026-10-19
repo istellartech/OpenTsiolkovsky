@@ -1,7 +1,7 @@
 # 軌道最適化の実装と検証
 
-実装計画は [trajectory-optimization-plan.md](trajectory-optimization-plan.md)。完了範囲・残作業・次の順序は[trajectory-optimization-status.md](trajectory-optimization-status.md)に整理する（2026-10-19、対象実装`97ff48a`）。現在は
-PR 0のソルバー接続、共有物理の局所AD、二重積分器、MOMO単段モデルの追加ペイロード最適化、仮定した2段機の軌道投入最適化と、基本UI・永続化を実装した。
+実装計画は [trajectory-optimization-plan.md](trajectory-optimization-plan.md)。完了範囲・残作業・次の順序は[trajectory-optimization-status.md](trajectory-optimization-status.md)に整理する（2026-10-19）。PR 3の方式・SI変換・比較手順は[optimization-numerics.md](optimization-numerics.md)を参照する。現在は
+PR 0のソルバー接続、共有物理の局所AD、二重積分器、MOMO単段モデルの追加ペイロード最適化、仮定した2段機の軌道投入最適化、S0〜S3の尺度・SI逆変換、小問題の厳密Hessianと、基本UI・永続化を実装した。
 既存シミュレーションの入力・CSV・summaryは変更していない。
 
 | 計画の段階 | この実装の範囲 |
@@ -9,7 +9,7 @@ PR 0のソルバー接続、共有物理の局所AD、二重積分器、MOMO単�
 | PR 0 | pounce版固定、native/WASI TNLP、全解・終了理由・微分検査・中断/再実行、ZERO入力の不足検出 |
 | PR 1 | 共有の座標・J2重力・大気・風・補間・推進・空力をジェネリック化。num-dual 0.15.0、nalgebra 0.35。外部制御と既存シミュレータを照合 |
 | PR 2 | 検証用の厳密RK45 API、成分別許容値・失敗返却、イベントでの停止・質量写像。既存シミュレータの積分APIは互換仕様を維持 |
-| PR 3 | flipped LGR、複数区間、疎解析微分、S0物理尺度、固定/自由時間、解析解との比較を先行実装。単段で局所ADを接続。厳密Hessian、S1〜S3・双対のSI逆変換は後続 |
+| PR 3 | flipped LGR、複数区間、疎解析/局所AD微分、固定/自由時間、S0〜S3、SI主双対の復元・単位不変性、小問題の厳密Hessian/L-BFGS比較、独立したKKT尺度の実験。ロケットの厳密Hessianは後続 |
 | PR 4 | 単段の固定燃焼・自由惰行、追加ペイロードと仰角の求解、荷重・連続制御、独立再積分、明示的なメッシュ細分化。自由射向・スロットル・燃焼時間は後続 |
 | PR 5a（一部） | 仮定した2段機の500 km / 43°投入、上段再着火、保存的な段分離・残量・フェアリング/PAF/正味衛星の分離、独立再積分。熱・落下域・詳細始動条件は未評価 |
 | PR 5b | ZERO基準ケースの機体・運用データと転写の接続、適用制約、6DoF等の外部検証の記録は未完了 |
@@ -350,3 +350,9 @@ WASIのメモリはブラウザ90,701,824 bytes、Bunでの全試験終了後90,
 制約乗数1.52e-4。非有効なレートBernstein包絡の値の差は最大0.0401であり、
 その一致を物理軌道の一致条件にはしていない。
 未評価の熱・落下域・相対分離・6DoF・再着火資源は画面にも表示する。
+
+## PR 3の追加設定・結果
+
+`solver.scaling`、`solver.hessian`、`solver.kkt_scaling`をJSONで指定できる。省略時は従来のS0・L-BFGS・KKT上流既定を保つ。exact HessianはHS071と二重積分器で対応する。設定例・対応範囲・比較結果は[数値基盤の記録](optimization-numerics.md)を参照する。
+
+結果には`scaling_report`、`solver_layout`/`solver_solution`、`physical_solution`、`numerical_metrics`が加わる。既存の`solution`/`nlp_layout`はS0座標で維持し、独立再積分と既存UIもこの座標を使う。SIの制約乗数は残差定義に対するもので、角度の正規化残差を直接kg/deg等の感度として扱わない。古い結果JSONは引き続き読め、新しい数値情報がないことを区別する。

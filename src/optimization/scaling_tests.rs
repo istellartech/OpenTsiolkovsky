@@ -322,3 +322,99 @@ fn metre_kilometre_tonne_and_kpa_representations_preserve_values_and_derivatives
         }
     }
 }
+
+#[test]
+fn si_and_kilometre_formulations_solve_to_the_same_si_optimum_and_sensitivity() {
+    use crate::optimization::tnlp::SolverNlp;
+    use pounce_algorithm::IpoptApplication;
+    use pounce_nlp::{ApplicationReturnStatus, tnlp::TNLP};
+    use std::{cell::RefCell, rc::Rc};
+
+    for length_unit in [1.0, 1000.0] {
+        let mut model = ScaledModel::new(Box::new(double()), Default::default()).unwrap();
+        let coordinates = model.report.physical_coordinates.clone();
+        for (i, c) in coordinates.variables.iter().enumerate() {
+            let unit = if c.unit == "s" { 1.0 } else { length_unit };
+            model.report.variable_offset[i] = -c.offset / c.scale;
+            model.report.variable_gain[i] = unit / c.scale;
+        }
+        for (i, c) in coordinates.constraints.iter().enumerate() {
+            model.report.row_gain[i] = c.scale / length_unit;
+        }
+        model.report.objective_gain = coordinates.objective.scale / length_unit.powi(2);
+        model.apply_map().unwrap();
+        let report = model.report.clone();
+        let nlp = Rc::new(RefCell::new(SolverNlp {
+            model: Box::new(model),
+            solution: None,
+            history: vec![],
+            hessian_calls: 0,
+            exact_hessian: true,
+            stop_after: None,
+            callback: Box::new(|_| true),
+        }));
+        let mut app = IpoptApplication::new();
+        app.initialize_with_options_str("hessian_approximation exact\nnlp_scaling_method none\npresolve no\nprint_level 0\ntol 1e-10\nmax_iter 300\nacceptable_iter 0\nbound_relax_factor 0\n").unwrap();
+        let erased: Rc<RefCell<dyn TNLP>> = nlp.clone();
+        assert_eq!(
+            app.optimize_tnlp(erased),
+            ApplicationReturnStatus::SolveSucceeded
+        );
+        let nlp = nlp.borrow();
+        let restored = report.restore(nlp.solution.as_ref().unwrap());
+        let physical = coordinates.solution(&restored);
+        let base = double();
+        let row = base
+            .layout()
+            .constraints
+            .iter()
+            .position(|n| n == "FINAL.position")
+            .unwrap();
+        assert!((physical.objective - 48000.0).abs() < 0.02);
+        assert!((physical.x.last().unwrap() - 10.0).abs() < 1e-4);
+        assert!((physical.lambda[row] + 24.0).abs() < 0.01);
+        let validation =
+            crate::optimization::validation::validate_solution(&base, &restored, Some(&base));
+        assert_eq!(validation.status, "passed");
+    }
+}
+
+#[test]
+fn constant_constraint_rows_are_not_amplified_or_assumed_to_have_jacobian_entries() {
+    struct ConstantRow {
+        base: Hs071,
+        layout: Layout,
+    }
+    impl NlpModel for ConstantRow {
+        fn layout(&self) -> &Layout {
+            &self.layout
+        }
+        fn objective(&self, x: &[f64]) -> f64 {
+            self.base.objective(x)
+        }
+        fn gradient(&self, x: &[f64], out: &mut [f64]) {
+            self.base.gradient(x, out)
+        }
+        fn constraints(&self, x: &[f64], out: &mut [f64]) {
+            self.base.constraints(x, &mut out[..2]);
+            out[2] = 0.0;
+        }
+        fn jacobian(&self, x: &[f64], out: &mut [f64]) {
+            self.base.jacobian(x, out)
+        }
+    }
+    let base = Hs071::default();
+    let mut layout = base.layout().clone();
+    layout.constraints.push("constant".into());
+    layout.g_lower.push(0.0);
+    layout.g_upper.push(0.0);
+    let model = ScaledModel::new(
+        Box::new(ConstantRow { base, layout }),
+        ScalingSettings {
+            strategy: ScalingStrategy::S2,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(model.report.row_gain[2], 1.0);
+}

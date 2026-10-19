@@ -30,6 +30,10 @@ for (const name of ['hs071', 'double_integrator', 'momo_single_stage', 'two_stag
   assert.equal(result.converged, true)
   assert.equal(result.validation.status, 'passed')
   assert.equal(result.hessian_calls, 0)
+  assert(result.numerical_metrics.factors > 0)
+  assert(result.numerical_metrics.factorization_seconds > 0)
+  assert(result.physical_solution.x.every(Number.isFinite))
+  near(result.physical_solution.objective, reference.physical_solution.objective)
   assert.equal(result.effective_options, reference.effective_options)
   assert.equal(result.schema_version, reference.schema_version)
   assert.deepEqual(result.variable_names, reference.variable_names)
@@ -120,6 +124,38 @@ for (const name of ['hs071', 'double_integrator', 'momo_single_stage', 'two_stag
   const restarted = optimizer.solve(input) as typeof reference
   assert.equal(restarted.converged, true)
 }
+// Exercise each application scaling layer, including nonidentity pounce
+// gradient scaling, exact second derivatives and forced KKT strategies.
+const pr3Directory = resolve(root, 'out/optimization/wasm-parity/pr3')
+await mkdir(pr3Directory, { recursive: true })
+const double = await Bun.file(resolve(root, 'examples/optimization/double_integrator_exact.json')).json()
+for (const strategy of ['s0', 's1_bounds', 's1_guess', 's2', 's3']) {
+  for (const kkt of ['none', 'ruiz', 'slack_based']) {
+    const input = { ...double, solver: { ...double.solver, derivative_test: false, scaling: { strategy, gradient_max: 1 }, kkt_scaling: kkt } }
+    const path = resolve(pr3Directory, `${strategy}_${kkt}.json`)
+    await Bun.write(path, JSON.stringify(input))
+    const nativeRun = Bun.spawnSync([native, '--config', path], { stdout: 'pipe', stderr: 'pipe' })
+    assert.equal(nativeRun.exitCode, 0, new TextDecoder().decode(nativeRun.stderr))
+    const reference = JSON.parse(new TextDecoder().decode(nativeRun.stdout))
+    const result = optimizer.solve(input) as typeof reference
+    assert.equal(result.converged, true)
+    assert.equal(result.validation.status, 'passed')
+    assert(result.hessian_calls > 0)
+    assert.equal(result.numerical_metrics.kkt_scaling_forced_on_factors, kkt !== 'none')
+    assert.equal(result.effective_options, reference.effective_options)
+    for (const key of ['x', 'constraints', 'lambda', 'z_lower', 'z_upper']) {
+      result.physical_solution[key].forEach((v: number, i: number) => near(v, reference.physical_solution[key][i], 2e-6))
+    }
+    near(result.physical_solution.objective, 48000, 2e-7)
+    const row = result.constraint_names.indexOf('FINAL.position')
+    near(result.physical_solution.lambda[row], -24, 2e-5)
+    if (strategy === 's3') assert(result.scaling_report.pounce_row_gain.some((v: number) => v < 1))
+    console.log(`PR3 ${strategy}/${kkt}: exact Hessian, full SI primal/duals passed`)
+  }
+}
+const rocket = await Bun.file(resolve(root, 'examples/optimization/momo_single_stage.json')).json()
+const unsupported = optimizer.solve({ ...rocket, solver: { ...rocket.solver, hessian: 'exact' } }) as { error: string }
+assert.match(unsupported.error, /exact Hessian/)
 const coarse = await Bun.file(resolve(root, 'examples/optimization/momo_single_stage_coarse.json')).json()
 const coarseResult = optimizer.solve(coarse) as { converged: boolean, validation: { status: string } }
 assert.equal(coarseResult.converged, true)

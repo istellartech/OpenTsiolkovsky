@@ -318,7 +318,7 @@ impl ScaledModel {
                 }
             }
             for (r, name) in l.constraints.iter().enumerate() {
-                let norm = norms[&family(name)];
+                let norm = norms.get(&family(name)).copied().unwrap_or(0.0);
                 rows[r] = if norm <= settings.floor {
                     1.0
                 } else {
