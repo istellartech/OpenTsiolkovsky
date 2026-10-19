@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Archive, ArrowDownToLine, Copy, RefreshCw, RotateCcw, SplitSquareHorizontal } from 'lucide-react'
 import type { SavedRunInfo } from '../../lib/optimization-storage'
 import { tr } from '../../lib/i18n'
-import { optButton, optInput } from './controls'
+import { optButton, optInput } from './styles'
 
 export function OptimizationHistory({
   runs,

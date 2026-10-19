@@ -28,10 +28,13 @@ import {
 } from '../lib/optimization-storage'
 import type { OptimizationDraft, SavedRunInfo } from '../lib/optimization-storage'
 import { optimizationPresetOptions, optimizationPresets } from '../lib/optimization-presets'
-import { editorSections, MassInventory, OptimizationEditor } from './optimization/OptimizationEditor'
+import { MassInventory, OptimizationEditor } from './optimization/OptimizationEditor'
 import { OptimizationHistory } from './optimization/OptimizationHistory'
 import { OptimizationResults } from './optimization/OptimizationResults'
-import { OptimizationEditorContext, OptTabs, optButton, optInput, optPrimary } from './optimization/controls'
+import { OptTabs } from './optimization/controls'
+import { OptimizationEditorContext } from './optimization/editor-context'
+import { editorSections } from './optimization/editor-sections'
+import { optButton, optInput, optPrimary } from './optimization/styles'
 import { cn } from '../lib/cn'
 
 type View = 'setup' | 'results' | 'history'
@@ -716,9 +719,15 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
                 {tr('中断', 'Cancel')}
               </button>
             ) : (
-              <button type="button" className={optPrimary} disabled={!ready || importing} onClick={() => run()}>
+              <button
+                type="button"
+                className={optPrimary}
+                disabled={!ready || importing}
+                title={input ? tr(`設定タブの入力を実行: ${inputTitle(input)}`, `Run the settings input: ${inputTitle(input)}`) : undefined}
+                onClick={() => run()}
+              >
                 <Play className="h-3.5 w-3.5" />
-                {tr('最適化を実行', 'Run optimization')}
+                {view === 'setup' ? tr('最適化を実行', 'Run optimization') : tr('設定を実行', 'Run settings')}
               </button>
             )}
           </div>

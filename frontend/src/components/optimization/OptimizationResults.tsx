@@ -10,7 +10,8 @@ import { checkTime, optimizationMapPath, resultPhaseViews } from '../../lib/opti
 import { pointOnPath } from '../../lib/globe-path'
 import { MultiStageReport, PhysicalChecks, TrajectoryChart } from '../OptimizationReport'
 import { SequenceTimeline } from './SequenceTimeline'
-import { OptGroup, OptTabs, optButton, optInput } from './controls'
+import { OptGroup, OptTabs } from './controls'
+import { optButton, optInput } from './styles'
 
 const Globe = lazy(() => import('../Globe'))
 const number = (v: number | null | undefined, digits = 3) =>
