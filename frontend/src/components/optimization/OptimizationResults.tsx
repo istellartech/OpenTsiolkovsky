@@ -291,8 +291,13 @@ export function OptimizationResults({
               )}
             >
               <div
-                className="h-[320px] overflow-hidden rounded-[8px] border border-line sm:h-[440px]"
+                className="h-[clamp(240px,42dvh,440px)] overflow-hidden rounded-[8px] border border-line"
                 aria-label={tr('最適化軌道の3D地図', '3D map of the optimized trajectory')}
+                onWheelCapture={(event) => {
+                  // Let the enclosing results page scroll. Cesium may consume
+                  // wheel events only when map zoom is explicitly requested.
+                  if (!event.ctrlKey && !event.metaKey) event.stopPropagation()
+                }}
               >
                 <Suspense
                   fallback={
@@ -304,6 +309,12 @@ export function OptimizationResults({
                   <Globe track={null} recordedPath={mapPath} recordedReference={mapReference} recordedTime={time} />
                 </Suspense>
               </div>
+              <p className="mt-2 text-[11px] text-ink-2">
+                {tr(
+                  'スクロールでページ移動 · Ctrl/⌘＋ホイールで地図を拡大縮小 · ドラッグで地図を操作',
+                  'Scroll the page · Ctrl/⌘ + wheel to zoom the map · drag to navigate',
+                )}
+              </p>
               <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-2">
                 <span>
                   {tr('実線：燃焼 · 破線：惰行 · 細線：地上軌跡', 'Solid: burn · dashed: coast · thin: ground track')}
