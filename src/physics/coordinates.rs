@@ -20,18 +20,37 @@ impl CoordinateTransform {
     /// # Returns
     /// 3x3 DCM matrix for ECI to ECEF transformation
     pub fn dcm_eci_to_ecef(time_seconds: f64) -> Matrix3<f64> {
-        let theta = OMEGA_EARTH * time_seconds;
+        Self::dcm_eci_to_ecef_scalar(time_seconds)
+    }
+
+    pub fn dcm_eci_to_ecef_scalar<T: super::Scalar>(time_seconds: T) -> Matrix3<T> {
+        let theta = time_seconds * OMEGA_EARTH;
         let cos_theta = theta.cos();
         let sin_theta = theta.sin();
 
         Matrix3::new(
-            cos_theta, sin_theta, 0.0, -sin_theta, cos_theta, 0.0, 0.0, 0.0, 1.0,
+            cos_theta,
+            sin_theta,
+            T::from(0.0),
+            -sin_theta,
+            cos_theta,
+            T::from(0.0),
+            T::from(0.0),
+            T::from(0.0),
+            T::from(1.0),
         )
     }
 
     /// Convert ECI position to ECEF
     pub fn pos_eci_to_ecef(pos_eci: &Vector3<f64>, time_seconds: f64) -> Vector3<f64> {
-        let dcm = Self::dcm_eci_to_ecef(time_seconds);
+        Self::pos_eci_to_ecef_scalar(pos_eci, time_seconds)
+    }
+
+    pub fn pos_eci_to_ecef_scalar<T: super::Scalar>(
+        pos_eci: &Vector3<T>,
+        time_seconds: T,
+    ) -> Vector3<T> {
+        let dcm = Self::dcm_eci_to_ecef_scalar(time_seconds);
         dcm * pos_eci
     }
 
@@ -46,13 +65,17 @@ impl CoordinateTransform {
     /// # Returns
     /// LLH position [deg, deg, m] (latitude, longitude, height)
     pub fn pos_ecef_to_llh(pos_ecef: &Vector3<f64>) -> Vector3<f64> {
+        Self::pos_ecef_to_llh_scalar(pos_ecef)
+    }
+
+    pub fn pos_ecef_to_llh_scalar<T: super::Scalar>(pos_ecef: &Vector3<T>) -> Vector3<T> {
         let x = pos_ecef.x;
         let y = pos_ecef.y;
         let z = pos_ecef.z;
 
-        let a = WGS84_A;
+        let a = T::from(WGS84_A);
         let b = a * (1.0 - WGS84_F);
-        let e2 = WGS84_E2;
+        let e2 = T::from(WGS84_E2);
         let ed2 = e2 * a * a / (b * b); // Second eccentricity squared
 
         let p = (x * x + y * y).sqrt();
@@ -63,9 +86,13 @@ impl CoordinateTransform {
 
         // h = p cos(lat) + z sin(lat) - a sqrt(1 - e² sin²(lat))
         let (sin_lat, cos_lat) = lat_rad.sin_cos();
-        let height = p * cos_lat + z * sin_lat - a * (1.0 - e2 * sin_lat * sin_lat).sqrt();
+        let height = p * cos_lat + z * sin_lat - a * (T::from(1.0) - e2 * sin_lat * sin_lat).sqrt();
 
-        Vector3::new(rad2deg(lat_rad), rad2deg(lon_rad), height)
+        Vector3::new(
+            lat_rad * (180.0 / std::f64::consts::PI),
+            lon_rad * (180.0 / std::f64::consts::PI),
+            height,
+        )
     }
 
     /// Convert LLH to ECEF position
@@ -94,8 +121,12 @@ impl CoordinateTransform {
     /// # Returns
     /// 3x3 DCM matrix for ECEF to NED transformation
     pub fn dcm_ecef_to_ned(pos_llh: &Vector3<f64>) -> Matrix3<f64> {
-        let lat = deg2rad(pos_llh.x);
-        let lon = deg2rad(pos_llh.y);
+        Self::dcm_ecef_to_ned_scalar(pos_llh)
+    }
+
+    pub fn dcm_ecef_to_ned_scalar<T: super::Scalar>(pos_llh: &Vector3<T>) -> Matrix3<T> {
+        let lat = pos_llh.x * (std::f64::consts::PI / 180.0);
+        let lon = pos_llh.y * (std::f64::consts::PI / 180.0);
 
         let sin_lat = lat.sin();
         let cos_lat = lat.cos();
@@ -108,7 +139,7 @@ impl CoordinateTransform {
             cos_lat,
             -sin_lon,
             cos_lon,
-            0.0,
+            T::from(0.0),
             -cos_lat * cos_lon,
             -cos_lat * sin_lon,
             -sin_lat,
@@ -117,8 +148,15 @@ impl CoordinateTransform {
 
     /// ECI to NED Direction Cosine Matrix
     pub fn dcm_eci_to_ned(pos_llh: &Vector3<f64>, time_seconds: f64) -> Matrix3<f64> {
-        let dcm_ecef_to_ned = Self::dcm_ecef_to_ned(pos_llh);
-        let dcm_eci_to_ecef = Self::dcm_eci_to_ecef(time_seconds);
+        Self::dcm_eci_to_ned_scalar(pos_llh, time_seconds)
+    }
+
+    pub fn dcm_eci_to_ned_scalar<T: super::Scalar>(
+        pos_llh: &Vector3<T>,
+        time_seconds: T,
+    ) -> Matrix3<T> {
+        let dcm_ecef_to_ned = Self::dcm_ecef_to_ned_scalar(pos_llh);
+        let dcm_eci_to_ecef = Self::dcm_eci_to_ecef_scalar(time_seconds);
         dcm_ecef_to_ned * dcm_eci_to_ecef
     }
 
@@ -130,9 +168,26 @@ impl CoordinateTransform {
         vel_eci: &Vector3<f64>,
         dcm_eci_to_ned: &Matrix3<f64>,
     ) -> Vector3<f64> {
+        Self::vel_eci_to_ecef_ned_frame_scalar(pos_eci, vel_eci, dcm_eci_to_ned)
+    }
+
+    pub fn vel_eci_to_ecef_ned_frame_scalar<T: super::Scalar>(
+        pos_eci: &Vector3<T>,
+        vel_eci: &Vector3<T>,
+        dcm_eci_to_ned: &Matrix3<T>,
+    ) -> Vector3<T> {
         // Earth rotation angular velocity tensor
-        let omega_tensor =
-            Matrix3::new(0.0, -OMEGA_EARTH, 0.0, OMEGA_EARTH, 0.0, 0.0, 0.0, 0.0, 0.0);
+        let omega_tensor = Matrix3::new(
+            T::from(0.0),
+            T::from(-OMEGA_EARTH),
+            T::from(0.0),
+            T::from(OMEGA_EARTH),
+            T::from(0.0),
+            T::from(0.0),
+            T::from(0.0),
+            T::from(0.0),
+            T::from(0.0),
+        );
 
         // Transform to NED frame accounting for Earth rotation
         dcm_eci_to_ned * (vel_eci - omega_tensor * pos_eci)
@@ -149,7 +204,15 @@ impl CoordinateTransform {
         elevation_rad: f64,
         roll_rad: Option<f64>,
     ) -> Matrix3<f64> {
-        let roll = roll_rad.unwrap_or(0.0);
+        Self::dcm_ned_to_body_scalar(azimuth_rad, elevation_rad, roll_rad)
+    }
+
+    pub fn dcm_ned_to_body_scalar<T: super::Scalar>(
+        azimuth_rad: T,
+        elevation_rad: T,
+        roll_rad: Option<T>,
+    ) -> Matrix3<T> {
+        let roll = roll_rad.unwrap_or(T::from(0.0));
 
         let ca = azimuth_rad.cos();
         let sa = azimuth_rad.sin();
@@ -213,11 +276,16 @@ impl CoordinateTransform {
     /// - beta: sideslip in the body X-Y plane, `atan2(v, u)`
     /// - gamma: total angle between the body axis and the airflow
     pub fn angle_of_attack(vel_air_body: &Vector3<f64>) -> Vector3<f64> {
+        Self::angle_of_attack_scalar(vel_air_body)
+    }
+
+    pub fn angle_of_attack_scalar<T: super::Scalar>(vel_air_body: &Vector3<T>) -> Vector3<T> {
         let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
-        if vel_air_body.magnitude() < 0.01 || u.abs() < 0.001 {
+        if super::norm(vel_air_body) < 0.01 || u.abs() < 0.001 {
             return Vector3::zeros();
         }
-        Vector3::new(w.atan2(u), v.atan2(u), v.hypot(w).atan2(u))
+        let cross = super::norm(&Vector3::new(T::from(0.0), v, w));
+        Vector3::new(w.atan2(u), v.atan2(u), cross.atan2(u))
     }
 
     /// Initialize ECI position from LLH at launch

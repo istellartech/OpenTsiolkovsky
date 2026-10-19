@@ -48,10 +48,14 @@ pub struct Atmosphere {
 
 impl Atmosphere {
     pub fn at(&self, altitude: f64) -> AtmosphericConditions {
+        self.at_scalar(altitude)
+    }
+
+    pub fn at_scalar<T: crate::physics::Scalar>(&self, altitude: T) -> AtmosphericConditions<T> {
         match &self.density_deviation {
             Some(table) => self
                 .model
-                .conditions_with_percent(altitude, table.eval(altitude)),
+                .conditions_with_percent(altitude, table.eval_scalar(altitude)),
             None => self
                 .model
                 .conditions_with_variation(altitude, self.seasonal_variation),
@@ -66,6 +70,30 @@ pub struct WindProfile {
 }
 
 impl WindProfile {
+    pub fn ned_scalar<T: crate::physics::Scalar>(&self, altitude: T) -> Vector3<T> {
+        let uv = |row: &[f64; 3]| {
+            Vector3::new(
+                -row[1] * row[2].to_radians().cos(),
+                -row[1] * row[2].to_radians().sin(),
+                0.0,
+            )
+        };
+        if self.rows.is_empty() {
+            return Vector3::zeros();
+        }
+        let i = self
+            .rows
+            .partition_point(|r| r[0] <= altitude.re())
+            .saturating_sub(1);
+        let a = uv(&self.rows[i]);
+        if i + 1 == self.rows.len() || altitude.re() <= self.rows[0][0] {
+            return a.map(T::from);
+        }
+        let b = uv(&self.rows[i + 1]);
+        let f = (altitude - self.rows[i][0]) / (self.rows[i + 1][0] - self.rows[i][0]);
+        a.map(T::from) + (b - a).map(|v| f * v)
+    }
+
     /// Speed [m/s] and direction it blows from [deg] at an altitude [m].
     /// Interpolated in north/east components, so directions across north
     /// (350 deg -> 10 deg) blend correctly.

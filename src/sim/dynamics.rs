@@ -5,6 +5,7 @@ use super::{Simulator, StateVector};
 use crate::math::constants::{G0, OMEGA_EARTH};
 use crate::physics::atmosphere::AtmosphericConditions;
 use crate::physics::coordinates::CoordinateTransform;
+use crate::physics::flight;
 use nalgebra::{Matrix3, Vector3};
 
 /// Everything the dynamics evaluates at one instant; shared by the
@@ -73,22 +74,16 @@ impl Simulator {
             FlightMode::free(stage.free_flight)
         };
 
-        let pos_ecef = CoordinateTransform::pos_eci_to_ecef(&position, t);
-        let pos_llh = CoordinateTransform::pos_ecef_to_llh(&pos_ecef);
-        let atm = self.vehicle.atmosphere.at(pos_llh.z);
-        let dcm_eci_to_ned = CoordinateTransform::dcm_eci_to_ned(&pos_llh, t);
-        let vel_ned =
-            CoordinateTransform::vel_eci_to_ecef_ned_frame(&position, &velocity, &dcm_eci_to_ned);
+        let env = flight::environment(&self.vehicle, t, y);
+        let pos_llh = env.llh;
+        let atm = env.atmosphere;
+        let dcm_eci_to_ned = env.eci_to_ned;
+        let vel_ned = env.velocity_ned;
         let (wind_speed, wind_dir_deg) = self.vehicle.wind.at(pos_llh.z);
-        let wind_ned = CoordinateTransform::vel_wind_ned_frame(wind_speed, wind_dir_deg);
-        let vel_air_ned = vel_ned - wind_ned;
-        let air_speed = vel_air_ned.magnitude();
-        let mach = if atm.speed_of_sound > 0.0 {
-            air_speed / atm.speed_of_sound
-        } else {
-            0.0
-        };
-        let q = 0.5 * atm.density * air_speed * air_speed;
+        let vel_air_ned = env.air_ned;
+        let air_speed = env.air_speed;
+        let mach = env.mach;
+        let q = env.q;
 
         // Attitude: the program, or along the airflow for a free body
         let (dcm_ned_to_body, attitude_deg) = if flight_mode.follows_attitude_program()
@@ -109,37 +104,13 @@ impl Simulator {
         let vel_air_body = dcm_ned_to_body * vel_air_ned;
         let aoa = CoordinateTransform::angle_of_attack(&vel_air_body);
 
-        // Thrust along body +X, reduced by the ambient pressure at the exit
-        let (mut thrust, mut mass_flow) = (0.0, 0.0);
-        if is_powered && let Some(engine) = &stage.engine {
-            let local_time = self.stage_local_time(stage_idx, t);
-            let thrust_vac = engine.thrust.eval(local_time);
-            let isp_vac = engine.isp.eval(local_time);
-            if thrust_vac > 0.0 && isp_vac > 0.0 {
-                mass_flow = thrust_vac / (isp_vac * G0);
-                // Over-expanded at low altitude: no negative thrust
-                thrust = (thrust_vac - engine.exit_area * atm.pressure).max(0.0);
-            }
-        }
-
-        // Aerodynamics in body axes
-        let area = stage.aero.area;
-        let aero_body = if air_speed < 0.1 {
-            Vector3::zeros()
-        } else {
-            match flight_mode {
-                // Ballistic coefficient model (body along the airflow)
-                FlightMode::Ballistic => Vector3::new(
-                    -q / stage.aero.ballistic_coefficient.max(1e-9) * mass.max(0.0),
-                    0.0,
-                    0.0,
-                ),
-                // Body aligned with the airflow (zero angle of attack)
-                FlightMode::AeroStable => Vector3::new(-stage.ca(mach, false) * q * area, 0.0, 0.0),
-                // Axial and normal force from the coefficients
-                _ => self.aero_force_body(stage_idx, mach, is_powered, &vel_air_body, q * area),
-            }
-        };
+        let (thrust, mass_flow) = flight::propulsion(
+            stage,
+            is_powered,
+            self.stage_local_time(stage_idx, t),
+            atm.pressure,
+        );
+        let aero_body = flight::aerodynamics(stage, flight_mode, mach, &vel_air_body, q, mass);
 
         let (thrust_body, gimbal_rad) = if is_powered {
             self.trimmed_thrust(stage_idx, t, thrust, mach, &aoa, &aero_body)
@@ -368,6 +339,7 @@ impl Simulator {
     /// re-entry with a fixed commanded attitude) the body is treated as
     /// symmetric, so the force still opposes the air-relative velocity and
     /// never adds energy.
+    #[cfg(test)]
     pub(super) fn aero_force_body(
         &self,
         stage_idx: usize,
@@ -377,30 +349,17 @@ impl Simulator {
         q_area: f64,
     ) -> Vector3<f64> {
         let stage = &self.vehicle.stages[stage_idx];
-        let (u, v, w) = (vel_air_body.x, vel_air_body.y, vel_air_body.z);
-        // The axial force flips with the flow when it crosses broadside
-        // (u = 0). A hard sign there makes the dynamics chatter around the
-        // crossing (a commanded attitude held through re-entry) and stalls the
-        // adaptive integrator, so blend it over about +-1 deg of flow angle.
-        // Normalised to exactly 1 for flow along the axis; below 80 deg angle
-        // of attack the axial force changes by < 0.7 %.
-        let speed = vel_air_body.magnitude();
-        let blend = 0.02 * speed;
-        let axial_sign = if blend > 0.0 {
-            u / u.hypot(blend) * speed.hypot(blend) / speed
-        } else if u == 0.0 {
-            0.0
-        } else {
-            u.signum()
-        };
-        let axial = -axial_sign * stage.ca(mach, powered) * q_area;
-
-        let cross = v.hypot(w);
-        if cross == 0.0 {
-            return Vector3::new(axial, 0.0, 0.0);
-        }
-        let angle_deg = cross.atan2(u.abs()).to_degrees();
-        let normal = stage.cn(mach, angle_deg) * q_area;
-        Vector3::new(axial, -normal * v / cross, -normal * w / cross)
+        flight::aerodynamics(
+            stage,
+            if powered {
+                FlightMode::Powered
+            } else {
+                FlightMode::AttitudeProgram
+            },
+            mach,
+            vel_air_body,
+            q_area / stage.aero.area,
+            1.0,
+        )
     }
 }
