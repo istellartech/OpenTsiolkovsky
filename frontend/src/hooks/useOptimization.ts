@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { optimizationSnapshot, type IterationRecord, type OptimizationResult, type OptimizationWorkerMessage } from '../lib/optimization'
+import { createOptimizationRun, type OptimizationRun } from '../lib/optimization-storage'
+import { optimizationSnapshot, type IterationRecord, type OptimizationWorkerMessage } from '../lib/optimization'
 
 export function useOptimization() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'solving' | 'done' | 'cancelled' | 'error'>('idle')
   const [progress, setProgress] = useState<IterationRecord | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<OptimizationResult[]>([])
+  const [runs, setRuns] = useState<OptimizationRun[]>([])
   const [memoryBytes, setMemoryBytes] = useState<number | null>(null)
   const workerRef = useRef<Worker | null>(null)
   const activeRun = useRef<string | null>(null)
@@ -24,8 +25,8 @@ export function useOptimization() {
     setStatus('cancelled')
   }
 
-  function run(raw: string) {
-    if (workerRef.current) return
+  function run(raw: string): boolean {
+    if (workerRef.current) return false
     setError(null)
     setProgress(null)
     try {
@@ -55,7 +56,7 @@ export function useOptimization() {
             setStatus('error')
           } else {
             const result = message.result
-            setResults((old) => [result, ...old].slice(0, 2))
+            setRuns((old) => [createOptimizationRun(result, 'solver'), ...old].slice(0, 2))
             setProgress(result.iterations[result.iterations.length - 1] ?? null)
             setMemoryBytes(message.memoryBytes)
             setStatus('done')
@@ -71,13 +72,37 @@ export function useOptimization() {
       }
       const wasmUrl = new URL('optimization/optimizer.wasm', new URL(import.meta.env.BASE_URL, window.location.href)).href
       worker.postMessage({ runId, input, wasmUrl })
+      return true
     } catch (e) {
       activeRun.current = null
       workerRef.current?.terminate()
       workerRef.current = null
       setError(e instanceof Error ? e.message : String(e))
       setStatus('error')
+      return false
     }
   }
-  return { status, running: status === 'loading' || status === 'solving', progress, error, results, memoryBytes, run, cancel }
+  function adopt(run: OptimizationRun, asComparison = false) {
+    setRuns((old) =>
+      asComparison && old[0] && old[0].id !== run.id ? [old[0], run] : [run, ...old.filter((r) => r.id !== run.id)].slice(0, 2),
+    )
+    if (!workerRef.current) {
+      setError(null)
+      setStatus('done')
+      setProgress(run.result.iterations[run.result.iterations.length - 1] ?? null)
+      setMemoryBytes(null)
+    }
+  }
+  return {
+    status,
+    running: status === 'loading' || status === 'solving',
+    progress,
+    error,
+    runs,
+    memoryBytes,
+    run,
+    cancel,
+    adopt,
+    clearComparison: () => setRuns((old) => old.slice(0, 1)),
+  }
 }

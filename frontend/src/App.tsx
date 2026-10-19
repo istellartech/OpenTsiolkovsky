@@ -140,7 +140,7 @@ export default function App() {
     saveCsv: () => track && saveFile(`${base}_trajectory.csv`, samplesToCsv(track.raw), 'text/csv'),
     saveKml: () => track && saveFile(`${base}_trajectory.kml`, generateKML(track, config.name), 'application/vnd.google-earth.kml+xml'),
   }
-  const dragging = useFileDrop(openFiles)
+  const dragging = useFileDrop(openFiles, !optimizationOpen)
 
   const inspector = (
     <FieldContext.Provider value={fieldCtx}>
@@ -255,7 +255,7 @@ export default function App() {
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} showShortcuts={!isPhone} />}
       {optimizationOpen && (
         <Suspense fallback={null}>
-          <OptimizationDialog onClose={() => setOptimizationOpen(false)} />
+          <OptimizationDialog onClose={() => setOptimizationOpen(false)} onNotice={(message) => showToast(message, 'error')} />
         </Suspense>
       )}
       {dragging && (

@@ -11,7 +11,9 @@ export interface NumericDraft {
   integer?: boolean
 }
 export function numericDraftValue(draft: NumericDraft): number | null {
-  const text = draft.text.replace(/,/g, '').trim()
+  const raw = draft.text.trim()
+  if (raw.includes(',') && !/^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d*)?(?:e[+-]?\d+)?$/i.test(raw)) return null
+  const text = raw.replace(/,/g, '')
   if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text)) return null
   const n = Number(text) * draft.scale
   return Number.isFinite(n) && (!draft.integer || Number.isInteger(n)) ? n : null

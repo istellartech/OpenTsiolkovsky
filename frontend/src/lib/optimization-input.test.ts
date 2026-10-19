@@ -109,7 +109,8 @@ describe('optimization form input', () => {
     expect(requestFingerprint(draft)).not.toBe(requestFingerprint(recorded))
   })
   it('keeps numeric range errors editable and never interprets partial input as zero', () => {
-    for (const text of ['', '-', '1e', 'Infinity', '1e309']) expect(numericDraftValue({ text, scale: 1000 })).toBeNull()
+    for (const text of ['', '-', '1e', 'Infinity', '1e309', '1,2']) expect(numericDraftValue({ text, scale: 1000 })).toBeNull()
+    expect(numericDraftValue({ text: '1,200.5', scale: 1 })).toBe(1200.5)
     expect(numericDraftValue({ text: '1.25', scale: 1000 })).toBe(1250)
     expect(numericDraftValue({ text: '1.25', scale: 1, integer: true })).toBeNull()
     const draft = read()
