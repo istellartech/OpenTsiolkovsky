@@ -1,6 +1,6 @@
 # Rust軌道最適化の導入計画
 
-最終更新: 2026-10-19。外部レビュー後の版を基に、ZERO向け拘束条件・基準ミッション・スケーリングの実験計画を拡充した。API名・数値手法は設計案。実装状況と検証結果は [optimization.md](optimization.md) に記録する。 現在は仮定した2段機の分離・上段再着火・500 km / 43°投入をnative/WASIで求解し、独立再積分まで確認した。PR 5aの熱、PR 5bのZERO機体データ・運用条件等は未完了。公開仕様、ユーザー指定、設計上の仮定、要提供データを区別する。
+最終更新: 2026-10-19。外部レビュー後の版を基に、ZERO向け拘束条件・基準ミッション・スケーリングの実験計画を拡充した。API名・数値手法には設計案を含む。**完了範囲・残作業・次の順序は[trajectory-optimization-status.md](trajectory-optimization-status.md)**、実行方法と検証結果は [optimization.md](optimization.md) に記録する。現在は単段と仮定した2段機のnative/WASI求解・独立再積分、基本UIと永続化まで実装した。PR 3の尺度/Hessian比較、PR 5aの熱、PR 5bのZERO機体データ・運用条件、PR 6の追加UI要件等は未完了。公開仕様、ユーザー指定、設計上の仮定、要提供データを区別する。
 
 ## 1. 概要
 
@@ -397,6 +397,8 @@ React (設定編集) → JSON + 実行ID → Web Worker [最適化WASM]
 
 ## 8. 実装順序
 
+以下は計画上の作業と完了条件であり、全行の実装完了を示す表ではない。PR 6の基本UIはPR 3/5の残作業と並行して実装している。[現状との対応表](trajectory-optimization-status.md)で、物理・数値計算とUIそれぞれの完了範囲を確認する。
+
 | PR | 作業 | 完了条件 |
 | --- | --- | --- |
 | 0 | ZERO / 500 km / 43°のミッション定義・制約台帳と必要入力をschema化。pounceを版固定で導入し、解析微分の小さな制約付きNLP（例: HS071）をRust TNLPで解く。同じ問題を `wasm32-wasip1` でビルドしWorkerで実行。中断方式を決める。 | native/WASMで解・終了理由・全解取得が一致。L-BFGSで `eval_h` 未呼出し、`derivative_test` 合格、中断・再実行可能。スケーリングと物理許容値が別項目で、未設定の必須制約を検出できる。WASMサイズを記録。 |
@@ -414,8 +416,8 @@ React (設定編集) → JSON + 実行ID → Web Worker [最適化WASM]
 ### 未決事項
 
 1. **ZEROの機体・運用データ。** 機体と目標はZERO / 500 km円軌道 / 43°に確定。第1.1節・制約台帳に列挙した段別データ、荷重/熱包絡、回廊・落下域、LC-1座標、始動/分離条件が必要。公開情報で代替する項目は仮定として区別する。
-2. **中断方式。** 配信環境でCOOP/COEPを設定できるか、できない場合に分割求解で十分か（第7.2節）。
-3. **WASM実行性能と数値方針。** FERAL、スケーリング各層、L-BFGS/厳密Hessian、メッシュの比較は未測定。PR 3〜5で再積分合格率・時間・メモリから既定を選ぶ。最良スケールや性能改善倍率は事前に確約しない。
+2. **中断方式の追加比較。** 現行は`worker.terminate()`を採用し、中断・再実行を確認済み。途中解は失われる。COOP/COEP不要であり、分割求解/warm startや協調停止の比較は将来の改善項目とする（第7.2節）。
+3. **WASM実行性能と数値方針。** S0＋L-BFGSによるnative/WASI照合、複数初期推定・メッシュ比較とメモリ記録は実施済み。FERAL/KKT設定、S1〜S3、厳密Hessianを横断する比較は未完了。PR 3〜5で再積分合格率・時間・メモリから既定を選ぶ。最良スケールや性能改善倍率は事前に確約しない。
 
 ## 9. 参照
 
@@ -433,6 +435,6 @@ React (設定編集) → JSON + 実行ID → Web Worker [最適化WASM]
 - [pounce Scalingガイド](https://github.com/jkitchin/pounce/blob/main/docs/src/scaling.md) と [Ipopt NLP Scaling / termination options](https://coin-or.github.io/Ipopt/OPTIONS.html): NLPとKKTの層分け、尺度と終了判定。pounceの実対応は採用revisionで再確認する。
 - [Ruiz (2001), A Scaling Algorithm to Equilibrate Both Rows and Columns Norms in Matrices](https://cerfacs.fr/wp-content/uploads/2017/06/14_DanielRuiz.pdf): 線形系の平衡化。NLPの物理尺度と区別する。
 
-公開資料は2026-10-19に確認。ZEROガイドの荷重包絡・熱環境・ミッション図はPDFを描画して確認した。GPOPS-IIは公式PDFの検索可能な記述からスケーリング方式を確認した。最適化・数値比較の実行結果は今回含まない。Web/mainの更新を追従する前に、実装で使う依存revisionと機体データ版を固定する。
+公開資料は計画立案時の2026-10-19に確認。ZEROガイドの荷重包絡・熱環境・ミッション図はPDFを描画して確認した。GPOPS-IIは公式PDFの検索可能な記述からスケーリング方式を確認した。本節は資料調査の記録であり、その後の最適化・数値比較の実行結果は[optimization.md](optimization.md)に記録する。Web/mainの更新を追従する前に、実装で使う依存revisionと機体データ版を固定する。
 
 GELATO・OpenGoddardからソースを移植する場合はMITライセンス表示を保持する。比較データには外部参照のcommit SHAを残す。
