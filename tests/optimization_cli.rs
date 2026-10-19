@@ -49,3 +49,27 @@ fn solver_limit_preserves_diagnostic_json_and_is_a_failure() {
     assert_eq!(json["converged"], false);
     assert_eq!(json["solution"]["z_lower"].as_array().unwrap().len(), 4);
 }
+
+#[test]
+fn converged_rocket_with_failed_reintegration_saves_diagnostics_and_exits_one() {
+    let output_file = tempfile::NamedTempFile::new().unwrap();
+    let output = command()
+        .args([
+            "--config",
+            "examples/optimization/momo_single_stage_coarse.json",
+            "--output",
+        ])
+        .arg(output_file.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let json: Value = serde_json::from_slice(&std::fs::read(output_file.path()).unwrap()).unwrap();
+    assert_eq!(json["converged"], true);
+    assert_eq!(json["validation"]["status"], "failed");
+    assert!(
+        json["validation"]["flight"]["max_position_error_m"]
+            .as_f64()
+            .unwrap()
+            > 5.0
+    );
+}

@@ -183,6 +183,7 @@ pub fn validate_solution(
         tolerance: 1e-6,
         trajectory: None,
         error: None,
+        flight: None,
     };
     if let Some(trajectory_model) = trajectory_model {
         report.method =

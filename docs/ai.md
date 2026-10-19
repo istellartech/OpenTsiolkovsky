@@ -1,6 +1,6 @@
 # AI エージェントからの利用
 
-軌道最適化の開発用ベンチマークは、独立した`openTsiolkovsky-optimize`バイナリで実行します。
+単段ロケットの軌道最適化と開発用ベンチマークは、独立した`openTsiolkovsky-optimize`バイナリで実行します。
 そのschema・終了コード・例は[最適化の実装と検証](optimization.md)を参照してください。
 以下の既存シミュレータ/MCPの入出力は変更していません。
 

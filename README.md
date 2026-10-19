@@ -69,7 +69,7 @@ The documents below are in Japanese.
 - [Configuration](docs/configuration.md): every key, units and defaults
 - [Output files](docs/output.md): `trajectory.csv`, `summary.json`, Monte Carlo files
 - [Physics models and numerics](docs/physics.md)
-- [Optimization development benchmarks](docs/optimization.md): native/WASI solver and LGR verification (rocket optimization is in development)
+- [Trajectory optimization](docs/optimization.md): single-stage MOMO payload optimization, native/WASI solver and independent integration checks
 - [AI agents](docs/ai.md): JSON output, MCP server, share links
 - [Development](docs/development.md): building, testing, WASM, project layout
 - [Web app internals](frontend/README.md)

@@ -13,3 +13,8 @@ Exact published sources, including their dependency manifests:
 
 All transitive POUNCE crates are locked to 0.12.0 in Cargo.lock.
 Rebuild: rustup target add wasm32-wasip1; bash scripts/optimization_wasm_build.sh
+
+The flight physics also uses unmodified num-dual 0.15.0 (Gernot Bauer,
+Philipp Rehner and contributors), licensed MIT OR Apache-2.0:
+https://crates.io/crates/num-dual/0.15.0
+https://github.com/itt-ustutt/num-dual

@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "run_id": "momo-single-stage-coarse",
+  "problem": {
+    "kind": "single_stage",
+    "vehicle": {
+      "name": "MOMO (Flight 3 record)",
+      "simulation": {
+        "end_time_s": 700,
+        "output_step_s": 0.5,
+        "integrator": {
+          "method": "rk45"
+        }
+      },
+      "launch": {
+        "latitude_deg": 42.5,
+        "longitude_deg": 143.44,
+        "altitude_m": 15,
+        "time_utc": "2019-05-03T20:45:00Z"
+      },
+      "attitude": {
+        "azimuth_deg": 112.5,
+        "elevation_deg": [
+          [
+            0,
+            89.66
+          ],
+          [
+            20,
+            89.51
+          ],
+          [
+            40,
+            89.19
+          ],
+          [
+            60,
+            87.69
+          ],
+          [
+            80,
+            85.8
+          ],
+          [
+            116,
+            84.87
+          ],
+          [
+            5116,
+            84.87
+          ]
+        ]
+      },
+      "presentation": {
+        "stage_count": 1,
+        "booster_count": 0
+      },
+      "stages": [
+        {
+          "presentation": {
+            "name": {
+              "ja": "\u7b2c1\u6bb5",
+              "en": "Stage 1"
+            }
+          },
+          "mass_initial_kg": 1150,
+          "mass_dry_kg": 282.9638783,
+          "engine": {
+            "thrust_vac_n": 15183,
+            "isp_vac_s": 207.14,
+            "burn_start_s": 0,
+            "burn_end_s": 116,
+            "nozzle_exit_area_m2": 0.03142
+          },
+          "free_flight": "aero_stable",
+          "aero": {
+            "diameter_m": 0.5,
+            "ca": [
+              [
+                0,
+                0.35
+              ],
+              [
+                0.8,
+                0.38
+              ],
+              [
+                1.1,
+                0.55
+              ],
+              [
+                1.5,
+                0.5
+              ],
+              [
+                2.5,
+                0.4
+              ],
+              [
+                4,
+                0.32
+              ],
+              [
+                8,
+                0.26
+              ]
+            ],
+            "cn_alpha_per_rad": 0.2,
+            "ballistic_coefficient_kg_m2": 100
+          }
+        }
+      ]
+    },
+    "data_source": "Repository examples/momo.json (Flight 3 record model); added payload and constraints are numerical demonstration assumptions, not certified MOMO performance.",
+    "dry_mass_kg": 282.9638783,
+    "propellant_mass_kg": 867.0361217,
+    "reserve_propellant_kg": 0.01,
+    "additional_payload_kg": {
+      "initial": 10.0,
+      "lower": 0.0,
+      "upper": 100.0
+    },
+    "coast_duration_s": {
+      "initial": 125.0,
+      "lower": 60.0,
+      "upper": 180.0
+    },
+    "vertical_ascent_s": 5.0,
+    "azimuth_deg": 112.5,
+    "target_apogee_altitude_m": 100000.0,
+    "minimum_downrange_m": 10000.0,
+    "minimum_pitch_deg": 30.0,
+    "max_dynamic_pressure_pa": 50000.0,
+    "max_angle_of_attack_deg": 5.0,
+    "max_specific_force_m_s2": 60.0,
+    "max_pitch_rate_deg_s": 0.5,
+    "burn_intervals": 8,
+    "coast_intervals": 4,
+    "degree": 4,
+    "validation": {
+      "position_m": 5.0,
+      "velocity_m_s": 0.05,
+      "mass_kg": 0.001,
+      "dynamic_pressure_pa": 5.0,
+      "angle_of_attack_deg": 0.01,
+      "specific_force_m_s2": 0.01,
+      "pitch_rate_deg_s": 0.001
+    },
+    "initial_pitch_end_deg": 85.0
+  },
+  "solver": {
+    "max_iterations": 800,
+    "tolerance": 1e-08,
+    "derivative_test": false
+  }
+}

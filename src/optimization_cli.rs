@@ -7,9 +7,7 @@ use openTsiolkovsky::optimization::{
 use std::process::ExitCode;
 
 #[derive(Parser)]
-#[command(
-    about = "Optimization numerical benchmarks and ZERO input readiness (not flight performance)"
-)]
+#[command(about = "Trajectory optimization, numerical benchmarks and ZERO input readiness")]
 struct Args {
     #[arg(long, required_unless_present = "schema", conflicts_with = "schema")]
     config: Option<std::path::PathBuf>,

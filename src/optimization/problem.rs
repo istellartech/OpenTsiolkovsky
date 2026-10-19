@@ -21,6 +21,7 @@ pub enum Problem {
     Hs071 {},
     DoubleIntegrator(DoubleIntegratorProblem),
     Zero(Box<ZeroMission>),
+    SingleStage(Box<super::single_stage::SingleStageProblem>),
 }
 
 /// Analytic optimal-control benchmark: min integral a^2 dt + time_cost*T,
@@ -264,6 +265,9 @@ impl OptimizationRequest {
             || !(1e-12..=1e-3).contains(&self.solver.tolerance)
         {
             return Err("invalid solver budget or tolerance (allowed: 1e-12..1e-3)".into());
+        }
+        if let Problem::SingleStage(p) = &self.problem {
+            p.load_vehicle()?;
         }
         if let Problem::DoubleIntegrator(p) = &self.problem {
             p.validate()?;

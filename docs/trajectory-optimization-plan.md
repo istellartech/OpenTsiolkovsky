@@ -55,8 +55,8 @@ OpenTsiolkovskyの物理モデルを使い、多段ロケットのペイロー�
 ### 3.1 共通評価関数
 
 ```rust
-// 提案API（未実装）
-fn evaluate<T: DualNum<f64>>(
+// 概念API。現行の単段用実装は src/physics/flight.rs を参照。
+fn evaluate<T: DualNum<Primitive = f64> + Copy>(
     model: &FlightModel,       // 読込済みの不変データ（f64）
     phase: &PhaseContext,      // 使用段、燃焼/惰行、テーブル時刻の基準
     t: T, t_phase_start: T,    // 別入力にする（第5.2節）

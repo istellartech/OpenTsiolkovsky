@@ -1,7 +1,9 @@
-//! Solver connection and numerical benchmarks. ZERO flight optimization follows
-//! only after the common physics and event validation milestones are complete.
+//! Solver connection, analytic benchmarks and single-stage flight optimization.
+//! Multi-stage ZERO optimization remains gated on its model/data milestones.
+pub mod flight_validation;
 pub mod lgr;
 pub mod problem;
+pub mod single_stage;
 pub mod tnlp;
 pub mod transcription;
 pub mod validation;
@@ -52,6 +54,7 @@ pub struct ValidationReport {
     pub tolerance: f64,
     pub trajectory: Option<validation::TrajectoryValidation>,
     pub error: Option<String>,
+    pub flight: Option<flight_validation::FlightValidation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +75,7 @@ pub struct OptimizationResult {
     pub solution: Option<FullSolution>,
     pub validation: Option<ValidationReport>,
     pub effective_options: String,
+    pub flight_scaling: Option<single_stage::FlightScaling>,
     pub physical_scaling: Option<transcription::PhysicalScaling>,
 }
 
@@ -89,6 +93,7 @@ pub fn solve_with_callback(
         Problem::DoubleIntegrator(input) => {
             Box::new(transcription::DoubleIntegrator::new(input.clone())?)
         }
+        Problem::SingleStage(input) => Box::new(single_stage::SingleStage::new((**input).clone())?),
         Problem::Zero(mission) => return Err(mission.readiness_issues().join("\n")),
     };
     let mut app = IpoptApplication::new();
@@ -132,10 +137,22 @@ pub fn solve_with_callback(
         Problem::DoubleIntegrator(p) => Some(transcription::DoubleIntegrator::new(p.clone())?),
         _ => None,
     };
-    let validation = nlp
-        .solution
-        .as_ref()
-        .map(|s| validation::validate_solution(nlp.model.as_ref(), s, trajectory_model.as_ref()));
+    let flight_model = match &request.problem {
+        Problem::SingleStage(p) => Some(single_stage::SingleStage::new((**p).clone())?),
+        _ => None,
+    };
+    let validation = nlp.solution.as_ref().map(|s| {
+        if let Some(m) = &flight_model {
+            flight_validation::validate_solution(m, s)
+        } else {
+            validation::validate_solution(nlp.model.as_ref(), s, trajectory_model.as_ref())
+        }
+    });
+    let model_fidelity = if flight_model.is_some() {
+        "single-stage 3DoF sounding-rocket model; additional payload above the supplied base dry mass; no flight certification"
+    } else {
+        "analytic_numerical_benchmark; no rocket performance claim"
+    };
     Ok(OptimizationResult {
         schema_version: SCHEMA_VERSION,
         input: request,
@@ -146,7 +163,7 @@ pub fn solve_with_callback(
         solver_status: status.upstream_name().into(),
         solver_status_code: status.as_int(),
         converged,
-        model_fidelity: "analytic_numerical_benchmark; no rocket performance claim".into(),
+        model_fidelity: model_fidelity.into(),
         variable_names: nlp.model.layout().variables.clone(),
         constraint_names: nlp.model.layout().constraints.clone(),
         nlp_layout: nlp.model.layout().clone(),
@@ -155,6 +172,7 @@ pub fn solve_with_callback(
         solution: nlp.solution.clone(),
         validation,
         effective_options: options,
+        flight_scaling: flight_model.map(|m| m.scaling),
         physical_scaling: trajectory_model.map(|m| m.scaling),
     })
 }

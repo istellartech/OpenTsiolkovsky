@@ -67,7 +67,7 @@ JSON の形式・終了ステータス・MCP のツールは [docs/ai.md](docs/a
 - [設定ファイル](docs/configuration.md)：全項目・単位・既定値
 - [出力ファイル](docs/output.md)：`trajectory.csv`・`summary.json`・分散解析の出力
 - [物理モデルと数値計算](docs/physics.md)
-- [最適化の実装と検証](docs/optimization.md)：native/WASIのソルバー接続・LGRの数値試験（ロケット飛行の最適化は開発中）
+- [最適化の実装と検証](docs/optimization.md)：MOMO単段モデルの追加ペイロード最適化、native/WASI・LGR・独立再積分の検証
 - [AI エージェントからの利用](docs/ai.md)：JSON 出力・MCP サーバー・共有リンク
 - [開発ガイド](docs/development.md)：ビルド・テスト・WASM・構成
 - [Web アプリの構成](frontend/README.md)
