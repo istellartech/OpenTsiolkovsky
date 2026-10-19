@@ -1022,6 +1022,59 @@ mod tests {
         }
     }
     #[test]
+    #[ignore = "full component audit; run explicitly in release mode"]
+    fn central_jacobian_audit() {
+        let m = model();
+        let x = &m.layout.initial;
+        let (_, analytic) = m.assemble(x, true);
+        let mut columns = vec![vec![]; x.len()];
+        for (&(row, col), &value) in &analytic {
+            columns[col].push((row, value));
+        }
+        let mut worst = (0.0_f64, String::new());
+        for (col, entries) in columns.iter().enumerate() {
+            let mut best = vec![f64::INFINITY; entries.len()];
+            for step in [1e-4, 1e-5, 1e-6, 1e-7, 1e-8] {
+                let h = step * x[col].abs().max(1.0);
+                let mut xp = x.clone();
+                let mut xm = x.clone();
+                xp[col] += h;
+                xm[col] -= h;
+                let gp = m.assemble(&xp, false).0;
+                let gm = m.assemble(&xm, false).0;
+                for (k, &(row, value)) in entries.iter().enumerate() {
+                    best[k] = best[k].min(
+                        ((gp[row] - gm[row]) / (2.0 * h) - value).abs() / value.abs().max(1.0),
+                    );
+                }
+            }
+            for (k, &(row, _)) in entries.iter().enumerate() {
+                if best[k] > worst.0 {
+                    worst = (
+                        best[k],
+                        format!(
+                            "{} / {}",
+                            m.layout.constraints[row], m.layout.variables[col]
+                        ),
+                    );
+                }
+                assert!(
+                    best[k] < 1e-7,
+                    "{} / {}: {}",
+                    m.layout.constraints[row],
+                    m.layout.variables[col],
+                    best[k]
+                );
+            }
+        }
+        eprintln!(
+            "Full central audit: {} entries, worst normalized error {} at {}",
+            analytic.len(),
+            worst.0,
+            worst.1
+        );
+    }
+    #[test]
     #[ignore = "numerical flight study; run explicitly in release mode"]
     fn orbital_solve() {
         let r = crate::optimization::solve(request()).unwrap();

@@ -3,9 +3,10 @@
 import { instantiateOptimizer } from '../frontend/src/lib/optimization-wasm'
 import { strict as assert } from 'node:assert'
 import { resolve } from 'node:path'
+import { mkdir } from 'node:fs/promises'
 
 const root = resolve(import.meta.dir, '..')
-const native = resolve(root, process.argv[2] ?? 'target/debug/openTsiolkovsky-optimize')
+const native = resolve(root, process.argv[2] ?? 'target/release/openTsiolkovsky-optimize')
 const wasmPath = resolve(root, 'frontend/public/optimization/optimizer.wasm')
 const bytes = await Bun.file(wasmPath).arrayBuffer()
 const module = await WebAssembly.compile(bytes)
@@ -18,7 +19,7 @@ function near(actual: number, expected: number, tolerance = 2e-5) {
   assert(Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`)
 }
 
-for (const name of ['hs071', 'double_integrator', 'momo_single_stage']) {
+for (const name of ['hs071', 'double_integrator', 'momo_single_stage', 'two_stage_500km_43deg']) {
   const path = resolve(root, `examples/optimization/${name}.json`)
   const input = await Bun.file(path).json()
   const run = Bun.spawnSync([native, '--config', path], { stdout: 'pipe', stderr: 'pipe' })
@@ -33,9 +34,56 @@ for (const name of ['hs071', 'double_integrator', 'momo_single_stage']) {
   assert.equal(result.schema_version, reference.schema_version)
   assert.deepEqual(result.variable_names, reference.variable_names)
   assert.deepEqual(result.constraint_names, reference.constraint_names)
+  const multi = name === 'two_stage_500km_43deg'
+  const maxima: Record<string, number> = {}
+  if (multi) {
+    const directory = resolve(root, 'out/optimization/wasm-parity')
+    await mkdir(directory, { recursive: true })
+    await Bun.write(resolve(directory, 'native-multi-stage.json'), JSON.stringify(reference))
+    await Bun.write(resolve(directory, 'wasi-multi-stage.json'), JSON.stringify(result))
+  }
   for (const key of ['x', 'z_lower', 'z_upper', 'constraints', 'lambda']) {
     assert.equal(result.solution[key].length, reference.solution[key].length)
-    result.solution[key].forEach((v: number, i: number) => near(v, reference.solution[key][i]))
+    result.solution[key].forEach((v: number, i: number) => {
+      const expected = reference.solution[key][i]
+      assert(Number.isFinite(v) && Number.isFinite(expected))
+      if (multi && key === 'x') {
+        // The orbital phase/RAAN are free. Equal objectives and KKT accuracy
+        // need not select bitwise-identical high-order guidance coefficients.
+        // Compare every primal in physical units, below the IVP tolerances.
+        const label: string = reference.variable_names[i]
+        let group = 'angle_deg', scale = 180 / Math.PI, tolerance = .01
+        if (label.startsWith('state[')) {
+          const component = Number(label.split('.')[1].split('_')[0])
+          group = component === 0 ? 'mass_kg' : component <= 3 ? 'position_m' : 'velocity_m_s'
+          scale = component === 0 ? reference.flight_scaling.mass_kg : component <= 3 ? 1e6 : 8000
+          tolerance = component === 0 ? .001 : component <= 3 ? 2 : .005
+        } else if (label.startsWith('phase[')) { group = 'duration_s'; scale = 100; tolerance = .001 }
+        else if (label === 'net_payload_scaled') { group = 'payload_kg'; scale = 1000; tolerance = .001 }
+        const difference = Math.abs(v - expected) * scale
+        maxima[group] = Math.max(maxima[group] ?? 0, difference)
+        assert(difference <= tolerance, `${label}: ${difference} ${group} exceeds ${tolerance}`)
+      } else if (multi && key === 'constraints') {
+        const equality = reference.nlp_layout.g_lower[i] === reference.nlp_layout.g_upper[i]
+        const active = Math.max(Math.abs(reference.solution.lambda[i]), Math.abs(result.solution.lambda[i])) > 1e-3
+        const group = equality ? 'equality' : active ? 'active_inequality' : 'inactive_inequality'
+        maxima[group] = Math.max(maxima[group] ?? 0, Math.abs(v - expected) / Math.max(1, Math.abs(expected)))
+        // Inactive Bernstein envelopes can differ without changing the feasible
+        // flight. Their bounds are still checked, as are every dense SI check.
+        assert(v >= result.nlp_layout.g_lower[i] - 1e-6 && v <= result.nlp_layout.g_upper[i] + 1e-6)
+        if (equality || active) near(v, expected)
+      } else {
+        const tolerance = multi && key === 'lambda' ? 3e-4 : 2e-5
+        near(v, expected, tolerance)
+        maxima[key] = Math.max(maxima[key] ?? 0, Math.abs(v - expected) / Math.max(1, Math.abs(expected)))
+      }
+    })
+  }
+  if (multi) {
+    const last = result.iterations[result.iterations.length - 1]
+    assert(last.dual_infeasibility <= input.solver.tolerance)
+    await Bun.write(resolve(root, 'out/optimization/wasm-parity/differences.json'), JSON.stringify(maxima, null, 2))
+    console.log('Multi-stage maximum native/WASI differences:', maxima)
   }
   near(result.solution.objective, reference.solution.objective)
   if (name === 'momo_single_stage') {
@@ -44,6 +92,21 @@ for (const name of ['hs071', 'double_integrator', 'momo_single_stage']) {
     near(f.mass_ledger.additional_payload_kg, ref.mass_ledger.additional_payload_kg, 1e-7)
     assert.deepEqual(f.checks.map((c: {id: string, passed: boolean}) => [c.id, c.passed]), ref.checks.map((c: {id: string, passed: boolean}) => [c.id, c.passed]))
     console.log(`Single stage: payload=${f.mass_ledger.additional_payload_kg} kg, position error=${f.max_position_error_m} m, velocity error=${f.max_velocity_error_m_s} m/s`)
+  }
+  if (name === 'two_stage_500km_43deg') {
+    const f = result.validation.multi_stage
+    const ref = reference.validation.multi_stage
+    near(f.net_payload_kg, ref.net_payload_kg, 1e-7)
+    near(f.orbit.perigee_altitude_m, ref.orbit.perigee_altitude_m, 1e-7)
+    near(f.orbit.apogee_altitude_m, ref.orbit.apogee_altitude_m, 1e-7)
+    assert.deepEqual(f.checks.map((c: {id: string, passed: boolean}) => [c.id, c.passed]), ref.checks.map((c: {id: string, passed: boolean}) => [c.id, c.passed]))
+    assert.deepEqual(f.stage_ledgers.map((s: {ignition_count: number}) => s.ignition_count), [1, 2])
+    for (const [i, e] of f.events.entries()) {
+      near(e.removed_mass_kg, ref.events[i].removed_mass_kg, 1e-9)
+      assert.deepEqual(e.before_eci.slice(1), e.after_eci.slice(1))
+    }
+    assert.deepEqual(f.unevaluated_constraints, ref.unevaluated_constraints)
+    console.log(`Multi stage: payload=${f.net_payload_kg} kg, orbit=${f.orbit.perigee_altitude_m} / ${f.orbit.apogee_altitude_m} m, inclination=${f.orbit.inclination_deg} deg`)
   }
   console.log(`${name}: ${result.solver_status}, validation=${result.validation.status}, objective=${result.solution.objective}`)
   const cancelled = optimizer.solve({ ...input, solver: { ...input.solver, stop_after_iteration: 0 } }) as typeof reference
