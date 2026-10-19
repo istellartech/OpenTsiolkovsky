@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { CircleHelp, FolderOpen, Globe as GlobeIcon, LineChart, SlidersHorizontal } from 'lucide-react'
+import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
+import { CircleHelp, FolderOpen, Globe as GlobeIcon, LineChart, SlidersHorizontal, Target } from 'lucide-react'
 import { useSimulation } from './hooks/useSimulation'
 import { useMonteCarlo } from './hooks/useMonteCarlo'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -31,6 +31,7 @@ import type { ValidationIssue } from './lib/validation'
 import { tr, useLang } from './lib/i18n'
 
 type MobileView = 'params' | 'globe' | 'charts'
+const OptimizationDialog = lazy(() => import('./components/OptimizationDialog').then((m) => ({ default: m.OptimizationDialog })))
 
 export default function App() {
   // Every string is picked at render time, so re-render the tree on a language switch.
@@ -50,6 +51,7 @@ export default function App() {
 
   usePlayerTrack(track)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [optimizationOpen, setOptimizationOpen] = useState(false)
   usePlayerKeys(() => setHelpOpen((v) => !v))
   useUndoKeys(sim.undo, sim.redo)
   useOpenSharedLink(sim.load, showToast)
@@ -189,6 +191,12 @@ export default function App() {
         history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
         actions={
           <>
+            <IconButton
+              label={tr('軌道最適化（数値試験）', 'Trajectory optimization (benchmarks)')}
+              onClick={() => setOptimizationOpen(true)}
+            >
+              <Target className="h-4 w-4" />
+            </IconButton>
             <IconButton label={tr('ヘルプ (?)', 'Help (?)')} onClick={() => setHelpOpen(true)}>
               <CircleHelp className="h-4 w-4" />
             </IconButton>
@@ -248,6 +256,11 @@ export default function App() {
 
       <Toast toast={toast} onDismiss={dismissToast} />
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} showShortcuts={!isPhone} />}
+      {optimizationOpen && (
+        <Suspense fallback={null}>
+          <OptimizationDialog onClose={() => setOptimizationOpen(false)} />
+        </Suspense>
+      )}
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-6">
           <div className="rounded-[12px] border-2 border-dashed border-ink-3 bg-surface px-8 py-6 text-center">

@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "(test -f src/wasm/openTsiolkovsky.js || vp run build:wasm) && vp dev",
     "build:wasm": "bash ../scripts/wasm_build.sh",
-    "build": "vp run build:wasm && vp check && vp build",
+    "build:optimization": "bash ../scripts/optimization_wasm_build.sh",
+    "dev:optimization": "vp run build:optimization && vp run dev",
+    "build": "vp run build:wasm && vp run build:optimization && vp check && vp build",
     "vercel-build": "vp run build",
     "preview": "vp preview"
   },
