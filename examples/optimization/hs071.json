@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "run_id": "hs071-reference",
+  "problem": { "kind": "hs071" },
+  "solver": { "max_iterations": 300, "tolerance": 1e-8, "derivative_test": true }
+}

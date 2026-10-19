@@ -1,6 +1,6 @@
 # Rust軌道最適化の導入計画
 
-最終更新: 2026-10-19。外部レビュー後の版を基に、ZERO向け拘束条件・基準ミッション・スケーリングの実験計画を拡充した。API名・ファイル構成・数値手法は設計案であり、最適化機能は未実装。公開仕様、ユーザー指定、設計上の仮定、要提供データを区別する。
+最終更新: 2026-10-19。外部レビュー後の版を基に、ZERO向け拘束条件・基準ミッション・スケーリングの実験計画を拡充した。API名・数値手法は設計案。実装状況と検証結果は [optimization.md](optimization.md) に記録する。公開仕様、ユーザー指定、設計上の仮定、要提供データを区別する。
 
 ## 1. 概要
 
@@ -42,14 +42,13 @@ OpenTsiolkovskyの物理モデルを使い、多段ロケットのペイロー�
 
 | 対象 | 現状と方針 |
 | --- | --- |
-| [simulator.rs](../src/simulator.rs) `dynamics` | 状態 `[m, r_ECI(3), v_ECI(3)]` の並進3DoF。private。そのまま最初の最適化モデルに使える。 |
-| 同 `compute_thrust_force` / `compute_aerodynamic_forces` | 内部で `Rocket::attitude_at_time(t)` から姿勢を取るため、`dynamics` を公開するだけでは制御を最適化できない。外部姿勢を受け取る形に分離し、推力と空気力に同じ姿勢を渡す。 |
-| 同 `build_stage_runtime` / `stage_index_for_time` / `update_stage_index` | 段と燃焼時刻を設定から事前構築し、段切替で質量を `stack_mass` に置換する。最適化では使わず、段はフェーズに持たせ、質量ジャンプを明示する。 |
-| [math.rs](../src/math.rs) `DormandPrince54` | 初期値生成・再積分に使うが、検証器として使う前に修正が必要（下記）。 |
-| [physics.rs](../src/physics.rs) / [rocket.rs](../src/rocket.rs) | 大気・座標変換・重力・推力/Isp/空力/風テーブルを共有する。`mass_initial` しかなく乾燥質量・推進剤の内訳はない。 |
-| [wasm.rs](../src/wasm.rs) | wasm-bindgen（`wasm32-unknown-unknown`）の既存シミュレータ。最適化用WASMとは別モジュールのまま維持する（第7節）。 |
+| [sim/dynamics.rs](../src/sim/dynamics.rs) `dynamics` / `forces` | 状態 `[m, r_ECI(3), v_ECI(3)]` の並進3DoF。姿勢、段/燃焼モード、ランチャ拘束と推力トリムに依存する。公開するだけでは最適制御に使えず、外部姿勢と不変のフェーズ文脈を受け取る共通評価へ分離する。 |
+| [sim/mod.rs](../src/sim/mod.rs) / [sim/events.rs](../src/sim/events.rs) | 着火・停止・分離・投棄・推進剤切れ・離床・レール離脱を処理し、イベント間では段/燃焼モードを固定する。最適化もこの意味を保ち、フェーズと明示したイベント写像へ対応させる。 |
+| [math/integrator.rs](../src/math/integrator.rs) `DormandPrince54` | 固定長配列・FSALの既存カーネルを共有し、状態別許容値と精度未達/非有限値/反復上限を返す検証経路を追加する。 |
+| [vehicle.rs](../src/vehicle.rs) / [config/](../src/config/) / [physics/](../src/physics/) | 段の単体質量と乾燥質量、エンジン・空力・大気・風・姿勢テーブルがある。推進剤内訳を復元できないという旧版の前提は適用しない。最適化には予備量・PAF・ペイロード・投棄物・出典の明示を追加する。 |
+| [wasm.rs](../src/wasm.rs) / frontendの既存Worker | wasm-bindgen（`wasm32-unknown-unknown`）シミュレータと分散解析を維持する。最適化は別のWASIモジュール・Workerへ分離し、現在のUIの翻訳と見た目に合わせて入口を追加する。 |
 
-**RK45の既知の問題。** `advance_to` の棄却分岐（[math.rs:366-370](../src/math.rs:366)）は、刻みが `h_min` に達すると縮小後の `h` で時刻を進めつつ、縮小前の刻みで計算した `y5` を採用する。時刻と状態が食い違う。`integrate_with_outputs` は刻みの整合は取れているが、誤差超過のまま受理して継続する。また誤差尺度が全状態共通の `abs_tol + rel_tol·|y|` であり、位置（~6.4e6 m）と質量・速度で桁が合わない。検証用には、受理刻みと状態の整合、状態別許容値（または無次元状態での積分）、精度未達・非有限値・反復上限のエラー返却、イベント時刻での厳密停止を備える。
+**2026-10-19の再確認。** 最新master `3f31ff4` に合わせて再評価した。旧`src/math.rs`で指摘した「縮小後の時刻に縮小前の状態を採用する」問題は現行にはない。現行の`advance_to`は最小刻みで精度未達でも受理し回数を警告する仕様であり、独立検証には不十分。NaNが最大誤差計算に隠れることも避ける必要がある。既存の出力を保つ経路と、成分別許容値・失敗返却・有限値検査・反復上限を持つ厳密検証経路を、同じDP54カーネルで用意する。
 
 ## 3. 物理評価と問題定義
 
@@ -70,7 +69,7 @@ fn evaluate<T: DualNum<f64>>(
 - 評価はシミュレータの可変状態やI/Oに依存させない。テーブル時刻は「打上げから」「段開始から」「着火から」を区別する。
 - 評価失敗（非有限値、定義域外）は `Err` とし、TNLPでは `false` を返す。Ipopt系ソルバーは評価失敗時にステップを縮めて再試行する。
 
-**nalgebraの更新。** num-dual 0.15のnalgebra連携は `nalgebra ^0.35` / `simba ^0.10` を要求する。現行は0.32で、この版のままでは双対数の `Vector3<T>` に `norm` 等が使えず、物理を配列で書き直すことになる（共通評価経路の目的に反する）。0.35へ上げても、現行コードは無修正で `cargo check --all-targets` と `--features wasm`（`wasm32-unknown-unknown`）が通ることを確認済み（2026-10-19）なので、PR 1で更新する（num-dualは既定featureの `nalgebra` を使う）。
+**nalgebraの更新。** num-dual 0.15のnalgebra連携は `nalgebra ^0.35` / `simba ^0.10` を要求する。現行は0.32で、この版のままでは双対数の `Vector3<T>` に `norm` 等が使えず、物理を配列で書き直すことになる（共通評価経路の目的に反する）。旧構成での0.35への更新確認を最新構成へ引き継がず、PR 1でnative/WASM・C++参照・保存則の回帰を実行して更新する（num-dualは既定featureの `nalgebra` を使う）。
 
 ### 3.2 状態・制御・設計変数
 
@@ -345,7 +344,7 @@ src/optimization/
   validation.rs              制御復元、本体/分離物の再積分、検証報告
 ```
 
-既存CLI・CSV・summary JSONは変えない。最適化の設定と結果は独立したschema versionを持ち、結果から既存グラフ用の `SimulationState[]` を生成する変換を用意する。結果には入力、コードrevision、ソルバー版、機体/制約データの版・出典・未確定値、メッシュ、スケーリング全層の実効係数、変数配置、全解、終了理由、台帳の適用・検査状況、検証報告を含め、次回の初期値として読み込めるようにする。
+既存CLI・CSV・summary JSONは変えない。最適化の設定と結果は独立したschema versionを持ち、結果から既存グラフ用の `Sample[]`（`Flight`のsamples） を生成する変換を用意する。結果には入力、コードrevision、ソルバー版、機体/制約データの版・出典・未確定値、メッシュ、スケーリング全層の実効係数、変数配置、全解、終了理由、台帳の適用・検査状況、検証報告を含め、次回の初期値として読み込めるようにする。
 
 ### 7.2 WASMとWorker
 

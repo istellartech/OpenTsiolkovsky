@@ -1,0 +1,51 @@
+#![cfg(all(feature = "cli", feature = "optimization"))]
+
+use serde_json::Value;
+use std::process::Command;
+
+fn command() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_openTsiolkovsky-optimize"));
+    command.current_dir(env!("CARGO_MANIFEST_DIR"));
+    command
+}
+
+#[test]
+fn independent_schema_and_zero_readiness_use_documented_exit_codes() {
+    let schema = command().arg("--schema").output().unwrap();
+    assert!(schema.status.success());
+    let json: Value = serde_json::from_slice(&schema.stdout).unwrap();
+    assert_eq!(json["title"], "OptimizationRequest");
+    let check = command()
+        .args([
+            "--check",
+            "--config",
+            "examples/optimization/zero_500km_43deg.json",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(check.status.code(), Some(3));
+    let json: Value = serde_json::from_slice(&check.stdout).unwrap();
+    assert_eq!(json["ready"], false);
+    assert!(
+        json["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s.as_str().unwrap().contains("LC-1"))
+    );
+}
+
+#[test]
+fn solver_limit_preserves_diagnostic_json_and_is_a_failure() {
+    let mut request: Value =
+        serde_json::from_str(include_str!("../examples/optimization/hs071.json")).unwrap();
+    request["solver"]["max_iterations"] = 1.into();
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), serde_json::to_vec(&request).unwrap()).unwrap();
+    let output = command().arg("--config").arg(file.path()).output().unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["solver_status"], "Maximum_Iterations_Exceeded");
+    assert_eq!(json["converged"], false);
+    assert_eq!(json["solution"]["z_lower"].as_array().unwrap().len(), 4);
+}

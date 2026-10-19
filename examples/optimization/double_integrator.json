@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "run_id": "double-integrator-free-time",
+  "problem": {
+    "kind": "double_integrator",
+    "distance_m": 1000.0,
+    "duration_s": { "initial": 12.0, "lower": 5.0, "upper": 30.0 },
+    "time_cost": 3600.0,
+    "intervals": 4,
+    "degree": 4,
+    "position_tolerance_m": 0.001,
+    "velocity_tolerance_m_s": 0.0001
+  },
+  "solver": { "max_iterations": 500, "tolerance": 1e-8, "derivative_test": true }
+}

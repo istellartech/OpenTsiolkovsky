@@ -25,11 +25,15 @@ jobs:
       - name: Build
         run: cargo build --locked
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --features optimization -- -D warnings
+      - name: WASM Clippy
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo clippy --all-targets --target wasm32-unknown-unknown --no-default-features --features wasm -- -D warnings
       - name: fmt
         run: cargo fmt --all -- --check
       - name: Test
-        run: cargo test --locked
+        run: cargo test --locked --features optimization
 
   frontend:
     runs-on: ubuntu-latest
@@ -40,11 +44,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32-unknown-unknown, wasm32-wasip1
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Build WASM
-        run: bash ../scripts/wasm_build.sh
+        run: |
+          bash ../scripts/wasm_build.sh
+          bash ../scripts/optimization_wasm_build.sh
       # Vite+ (vp): Node, the package manager (bun, from bun.lock) and deps.
       - uses: voidzero-dev/setup-vp@v1.21.2
         with:
@@ -55,5 +61,10 @@ jobs:
         run: vp check
       - name: Test
         run: vp test run
+      - name: Native and browser-WASI optimization parity
+        run: |
+          cargo build --locked --features optimization --bin openTsiolkovsky-optimize
+          bun scripts/test_optimization_wasm.ts
+        working-directory: .
       - name: Build
         run: vp build
