@@ -385,22 +385,36 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
       }}
       className="m-auto flex h-[min(94dvh,72rem)] max-h-none w-[min(94rem,97vw)] max-w-none flex-col overflow-hidden rounded-[12px] border border-line bg-bg text-ink shadow-xl backdrop:bg-black/45 max-sm:h-[100dvh] max-sm:w-screen max-sm:rounded-none"
     >
-      <header className="shrink-0 border-b border-line bg-surface px-4 py-3 sm:px-5">
-        <div className="flex items-start justify-between gap-3">
+      <header className="shrink-0 border-b border-line bg-surface px-3 py-2 sm:px-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <div className="flex min-w-0 items-center gap-2.5">
-            <span className="rounded-[8px] bg-signal/10 p-2 text-signal">
+            <span className="rounded-[7px] bg-signal/10 p-1.5 text-signal">
               <Target className="h-4 w-4" />
             </span>
             <div>
               <h2 id="optimization-title" className="text-[15px] font-semibold">
                 {tr('軌道最適化', 'Trajectory optimization')}
               </h2>
-              <p className="mt-0.5 text-[11px] text-ink-3">
-                {tr(
-                  '機体と目標を設定 → 最適な飛び方を計算 → 独立に検証',
-                  'Set the vehicle and target → compute the best flight → check it independently',
-                )}
+              <p className="hidden text-[10px] text-ink-3 xl:block">
+                {tr('計算例のための仮定した機体です', 'Assumed vehicles for demonstration')}
               </p>
+            </div>
+          </div>
+          <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
+            <div className="inline-flex max-w-full rounded-[8px] bg-surface-2 p-0.5">
+              <OptTabs
+                value={view}
+                onChange={setView}
+                label={tr('最適化ワークスペース', 'Optimization workspace')}
+                options={[
+                  { value: 'setup', label: tr('設定', 'Settings') },
+                  { value: 'results', label: opt.running ? tr('実行中…', 'Running…') : tr('実行・結果', 'Run and results') },
+                  {
+                    value: 'history',
+                    label: `${tr('保存した実行', 'Saved runs')}${history.length ? ` · ${history.filter((r) => !r.archived).length}` : ''}`,
+                  },
+                ]}
+              />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -424,29 +438,11 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
             <IconButton
               label={tr('閉じる（実行中は中断）', 'Close (cancels any running solve)')}
               onClick={() => void close()}
-              className="h-10 w-10"
+              className="h-9 w-9"
             >
               <X className="h-4 w-4" />
             </IconButton>
           </div>
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <OptTabs
-            value={view}
-            onChange={setView}
-            label={tr('最適化ワークスペース', 'Optimization workspace')}
-            options={[
-              { value: 'setup', label: tr('設定', 'Settings') },
-              { value: 'results', label: opt.running ? tr('実行中…', 'Running…') : tr('実行・結果', 'Run and results') },
-              {
-                value: 'history',
-                label: `${tr('保存した実行', 'Saved runs')}${history.length ? ` · ${history.filter((r) => !r.archived).length}` : ''}`,
-              },
-            ]}
-          />
-          <span className="hidden text-[10px] text-ink-3 sm:block">
-            {tr('計算例のための仮定した機体です', 'Assumed vehicles for demonstration')}
-          </span>
         </div>
       </header>
       {notice || storageError ? (
@@ -473,8 +469,8 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
       ) : null}
       <main className="scroll-quiet min-h-0 flex-1 overflow-y-auto" ref={editor}>
         <div hidden={view !== 'setup'} className="h-full">
-          <div className="mx-auto grid min-w-0 max-w-[88rem] grid-cols-[minmax(0,1fr)] content-start gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="min-w-0 space-y-4">
+          <div className="mx-auto grid min-w-0 max-w-[88rem] grid-cols-[minmax(0,1fr)] content-start gap-3 p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="min-w-0 space-y-3">
               <CasePicker value={draft.preset} disabled={opt.running} onPick={(key) => loadInput(optimizationPresets[key], key)} />
               {issues.length ? (
                 <section className="rounded-[8px] border border-danger/25 bg-danger/5 p-3" aria-label={tr('入力の問題', 'Input issues')}>
@@ -553,8 +549,8 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
                 </section>
               )}
             </div>
-            <aside className="min-w-0 space-y-3 xl:sticky xl:top-5 xl:self-start">
-              <section className="rounded-[9px] border border-line bg-surface p-4">
+            <aside className="min-w-0 space-y-2 xl:sticky xl:top-4 xl:self-start">
+              <section className="rounded-[9px] border border-line bg-surface p-3">
                 <h3 className="text-[12px] font-semibold text-ink-2">{tr('実行する問題', 'Problem to solve')}</h3>
                 <p className="mt-1 break-words text-[14px] font-medium">
                   {rocketPresetOptions().find((r) => r.id === draft.preset)?.label ?? (input ? inputTitle(input) : '—')}
@@ -573,7 +569,7 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
                   </div>
                 ) : null}
                 {warmAvailable ? (
-                  <label className="mt-3 flex items-start gap-2 rounded-[7px] border border-line bg-surface-2 p-2 text-[11px] leading-relaxed text-ink-2">
+                  <label className="mt-2 flex items-start gap-2 rounded-[7px] border border-line bg-surface-2 p-2 text-[11px] leading-snug text-ink-2">
                     <input
                       type="checkbox"
                       className="mt-0.5 accent-[var(--signal)]"
@@ -594,7 +590,7 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
                 ) : null}
                 <button
                   type="button"
-                  className={cn(optPrimary, 'mt-3 w-full')}
+                  className={cn(optPrimary, 'mt-2 w-full')}
                   disabled={!ready || importing || opt.running}
                   onClick={() => run()}
                 >
@@ -628,7 +624,7 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
           </div>
         </div>
         {view === 'results' ? (
-          <div className="mx-auto max-w-[88rem] p-4 sm:p-5">
+          <div className="mx-auto max-w-[96rem] p-3 sm:p-4">
             {opt.running && opt.live ? (
               <ProgressView
                 live={opt.live}
@@ -653,7 +649,7 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
           </div>
         ) : null}
         {view === 'history' ? (
-          <div className="mx-auto max-w-[76rem] p-4 sm:p-5">
+          <div className="mx-auto max-w-[76rem] p-3 sm:p-4">
             <OptimizationHistory
               runs={history}
               loading={historyLoading}
@@ -701,7 +697,7 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
           </div>
         ) : null}
       </main>
-      <footer className="shrink-0 border-t border-line bg-surface px-4 py-3 sm:px-5">
+      <footer className="shrink-0 border-t border-line bg-surface px-3 py-1.5 sm:px-4">
         {opt.error ? (
           <p role="alert" className="mb-2 max-h-24 overflow-auto break-words text-[11px] text-danger">
             {opt.error}
@@ -769,12 +765,22 @@ function CasePicker({ value, disabled, onPick }: { value: string; disabled: bool
     dev = developerPresetOptions()
   const devValue = dev.some((d) => d.id === value) ? value : ''
   return (
-    <section className="rounded-[9px] border border-line bg-surface p-4 sm:p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-[14px] font-semibold">{tr('出発点にする機体', 'Starting vehicle')}</h3>
-        {value === 'custom' ? <span className="text-[11px] text-ink-3">{tr('編集中の入力', 'Edited input')}</span> : null}
-      </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={tr('出発点にする機体', 'Starting vehicle')}>
+    <section
+      className="rounded-[9px] border border-line bg-surface px-3 py-2.5 sm:px-4"
+      title={tr(
+        '選ぶと下の設定が置き換わります。値を変更すると「編集中の入力」になります。',
+        'Picking replaces the settings below; editing a value makes it an “edited input”.',
+      )}
+    >
+      <div
+        className="grid items-center gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_14rem]"
+        role="radiogroup"
+        aria-label={tr('出発点にする機体', 'Starting vehicle')}
+      >
+        <h3 className="text-[13px] font-semibold">
+          {tr('出発点の機体', 'Starting vehicle')}
+          {value === 'custom' ? <span className="ml-2 text-[10px] font-normal text-ink-3">{tr('（編集中）', '(edited)')}</span> : null}
+        </h3>
         {rockets.map((r) => (
           <button
             key={r.id}
@@ -784,38 +790,29 @@ function CasePicker({ value, disabled, onPick }: { value: string; disabled: bool
             disabled={disabled}
             onClick={() => onPick(r.id)}
             className={cn(
-              'rounded-[8px] border p-3 text-left transition-colors disabled:opacity-50',
+              'min-w-0 rounded-[7px] border px-2.5 py-1.5 text-left transition-colors disabled:opacity-50',
               value === r.id ? 'border-signal bg-signal/5' : 'border-line hover:bg-surface-2',
             )}
           >
-            <span className="block text-[13px] font-medium">{r.label}</span>
-            <span className="mt-0.5 block text-[11px] text-ink-3">{r.description}</span>
+            <span className="block truncate text-[12px] font-medium">{r.label}</span>
+            <span className="block truncate text-[10px] text-ink-3">{r.description}</span>
           </button>
         ))}
-      </div>
-      <p className="mt-2 text-[11px] text-ink-3">
-        {tr(
-          '選ぶと下の設定が置き換わります。値を変更すると「編集中の入力」になります。',
-          'Picking replaces the settings below. Editing a value makes it an “edited input”.',
-        )}
-      </p>
-      <details className="mt-2 text-[12px]" open={!!devValue}>
-        <summary className="cursor-pointer text-[11px] text-ink-3">{tr('開発・検証用のケース', 'Development and test cases')}</summary>
         <select
-          className={`${optInput} mt-2`}
+          className={optInput}
           value={devValue}
           disabled={disabled}
           aria-label={tr('開発・検証用のケース', 'Development and test cases')}
           onChange={(event) => event.target.value && onPick(event.target.value as OptimizationPresetId)}
         >
-          <option value="">{tr('選択してください', 'Choose…')}</option>
+          <option value="">{tr('開発・検証用のケース…', 'Development and test cases…')}</option>
           {dev.map((d) => (
             <option key={d.id} value={d.id}>
               {d.label}
             </option>
           ))}
         </select>
-      </details>
+      </div>
     </section>
   )
 }

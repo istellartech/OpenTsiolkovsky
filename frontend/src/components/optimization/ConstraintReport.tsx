@@ -21,17 +21,17 @@ export function LimitingConstraints({ views, onLocate }: { views: ConstraintView
   const active = views.filter((v) => v.active)
   if (!active.length) return null
   return (
-    <section className="rounded-[9px] border border-line bg-surface p-4 sm:p-5">
-      <h3 className="text-[14px] font-semibold">{tr('ペイロードを制限している条件', 'Limits that cap the payload')}</h3>
-      <p className="mt-1 text-[12px] leading-relaxed text-ink-2">
+    <section className="rounded-[9px] border border-line bg-surface px-3 py-3 sm:px-4">
+      <h3 className="text-[13px] font-semibold">{tr('ペイロードを制限している条件', 'Limits that cap the payload')}</h3>
+      <p className="mt-0.5 text-[11px] leading-snug text-ink-3">
         {tr(
           '最適解はこれらの上限・下限ぎりぎりで飛んでいます。これらを緩めればペイロードは増え、厳しくすれば減ります。',
           'The optimal flight runs right at these limits. Relaxing them would raise the payload; tightening them would lower it.',
         )}
       </p>
-      <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
+      <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
         {active.map((v) => (
-          <li key={v.check.id} className="flex items-center gap-2 rounded-[7px] border border-line bg-surface-2 px-3 py-2 text-[12px]">
+          <li key={v.check.id} className="flex items-center gap-2 rounded-[7px] border border-line bg-surface-2 px-2.5 py-1 text-[12px]">
             <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
             <span className="min-w-0 flex-1">
               <span className="block">{v.label}</span>
@@ -44,7 +44,7 @@ export function LimitingConstraints({ views, onLocate }: { views: ConstraintView
             {onLocate ? (
               <button
                 type="button"
-                className="flex h-8 w-8 items-center justify-center rounded hover:bg-surface"
+                className="flex h-7 w-7 items-center justify-center rounded hover:bg-surface"
                 aria-label={tr('グラフでその時刻を見る', 'Show that time in the charts')}
                 title={tr('グラフでその時刻を見る', 'Show that time in the charts')}
                 onClick={() => onLocate(v)}
@@ -93,7 +93,7 @@ export function ConstraintReport({ views, onLocate }: { views: ConstraintView[];
         const numerical = family === 'numerical' || family === 'payload'
         return (
           <details key={family} open={!numerical || bad > 0} className="rounded-[9px] border border-line bg-surface">
-            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3">
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2">
               {bad ? <X className="h-4 w-4 text-danger" /> : <Check className="h-4 w-4 text-[var(--ok)]" />}
               <span className="text-[13px] font-semibold">{familyLabel(family)}</span>
               <span className="text-[11px] text-ink-3">
@@ -106,7 +106,7 @@ export function ConstraintReport({ views, onLocate }: { views: ConstraintView[];
                   : ''}
               </span>
             </summary>
-            <div className="border-t border-line px-4 pb-3 pt-2">
+            <div className="border-t border-line px-3 pb-2 pt-1.5">
               <p className="mb-2 text-[11px] leading-relaxed text-ink-3">{familyHelp(family)}</p>
               <ul className="divide-y divide-line">
                 {rows.map((v) => (
@@ -133,10 +133,10 @@ function ConstraintRow({ v, onLocate }: { v: ConstraintView; onLocate?: (v: Cons
           : ''
   const usage = v.usage === null ? null : Math.max(0, Math.min(1, v.usage))
   return (
-    <li className="grid items-center gap-x-3 gap-y-1 py-1.5 text-[12px] sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,11rem)_auto]">
+    <li className="grid items-center gap-x-3 gap-y-1 py-1 text-[12px] sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,11rem)_auto]">
       <span className="min-w-0">
-        <span className={cn('block', !v.check.passed && 'font-medium text-danger')}>{v.label}</span>
-        <span className="text-[10px] text-ink-3">{v.check.id}</span>
+        <span className={cn(!v.check.passed && 'font-medium text-danger')}>{v.label}</span>
+        <span className="ml-2 text-[10px] text-ink-3">{v.check.id}</span>
       </span>
       <span className="num text-ink">{num(v.value, v.unit)}</span>
       <span className="min-w-0">

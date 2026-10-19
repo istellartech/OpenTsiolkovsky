@@ -93,7 +93,7 @@ export function OptChart({
   xMin,
   xMax,
   digits = 1,
-  height = 200,
+  height = 180,
   note,
   value,
 }: {
@@ -225,13 +225,17 @@ export function OptChart({
     ch.update('none')
   }, [series, bands, markers, cursor, logY, yMin, yMax, xMin, xMax, xLabel, unit, digits, theme, lang])
   return (
-    <figure className="flex min-w-0 flex-col rounded-[8px] border border-line bg-surface p-3 pb-2" style={{ height }}>
+    <figure className="flex min-w-0 flex-col rounded-[8px] border border-line bg-surface px-2.5 pb-1.5 pt-2" style={{ height }}>
       <figcaption className="flex shrink-0 items-baseline gap-2 pb-1">
         <span className="text-[12px] font-semibold">{title}</span>
         {unit ? <span className="text-[11px] text-ink-3">[{unit}]</span> : null}
         {value ? <span className="num ml-auto whitespace-nowrap text-[12px] text-ink">{value}</span> : null}
       </figcaption>
-      {note ? <p className="-mt-0.5 mb-1 text-[10px] leading-snug text-ink-3">{note}</p> : null}
+      {note ? (
+        <p className="-mt-0.5 mb-0.5 truncate text-[10px] leading-snug text-ink-3" title={note}>
+          {note}
+        </p>
+      ) : null}
       <div className="relative min-h-0 flex-1 cursor-crosshair">
         <canvas ref={canvas} aria-label={title} role="img" />
       </div>

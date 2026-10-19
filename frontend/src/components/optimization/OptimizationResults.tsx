@@ -116,7 +116,7 @@ export function OptimizationResults({
     setTab('charts')
   }
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {running ? (
         <p role="status" className="rounded-[8px] border border-signal/25 bg-signal/5 p-3 text-[12px]">
           {tr(
@@ -323,7 +323,10 @@ function Verdict({
   }
   return (
     <section
-      className={cn('rounded-[10px] border p-4 sm:p-5', ok ? 'border-[var(--ok)]/35 bg-[var(--ok)]/5' : 'border-danger/30 bg-danger/5')}
+      className={cn(
+        'rounded-[10px] border px-3 py-3 sm:px-4',
+        ok ? 'border-[var(--ok)]/35 bg-[var(--ok)]/5' : 'border-danger/30 bg-danger/5',
+      )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
@@ -344,7 +347,7 @@ function Verdict({
                   ? tr(' · 保存失敗（JSONを保存してください）', ' · storage failed')
                   : ''}
             </p>
-            <h3 className="mt-1 break-words text-[17px] font-semibold leading-snug">{headline}</h3>
+            <h3 className="mt-0.5 break-words text-[15px] font-semibold leading-snug">{headline}</h3>
             <p className="mt-1.5 flex flex-wrap gap-2 text-[11px]">
               <Badge
                 ok={result.converged}
@@ -387,9 +390,9 @@ function Verdict({
         </div>
       </div>
       {kpis.length ? (
-        <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <dl className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {kpis.map((k) => (
-            <div key={k.label} className="min-w-0 rounded-[8px] border border-line bg-surface px-3 py-2">
+            <div key={k.label} className="min-w-0 rounded-[8px] border border-line bg-surface px-3 py-1.5">
               <dt className="text-[11px] text-ink-3">{k.label}</dt>
               <dd className="num mt-0.5 break-words text-[16px] font-medium">
                 {k.value} <span className="text-[10px] font-normal text-ink-3">{k.unit}</span>
@@ -634,7 +637,7 @@ function Diagnostics({ result, memoryBytes }: { result: OptimizationResult; memo
     [showVectors, setShowVectors] = useState(false)
   const scaling = result.flight_scaling
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <OptGroup title={tr('実行の記録', 'Run record')}>
         <dl className="grid gap-2 break-all text-[12px] sm:grid-cols-2">
           {Object.entries({

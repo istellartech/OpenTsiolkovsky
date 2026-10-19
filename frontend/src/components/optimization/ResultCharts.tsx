@@ -107,7 +107,7 @@ function MultiCharts({
   const targetKm = multi ? multi.orbit.altitude_m / 1000 : null
   const vCirc = multi ? Math.sqrt(MU / (multi.orbit.reference_radius_m + multi.orbit.altitude_m)) / 1000 : null
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {ascentEnd !== null ? (
         <div className="flex flex-wrap items-center gap-2 text-[12px]">
           <span className="text-ink-3">{tr('表示範囲', 'Time range')}</span>
@@ -129,7 +129,7 @@ function MultiCharts({
           ))}
         </div>
       ) : null}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2">
         <OptChart
           title={tr('飛行経路（高度 × 地表距離）', 'Flight path (altitude vs. ground distance)')}
           unit="km"
@@ -151,7 +151,7 @@ function MultiCharts({
           cursor={null}
           xMax={downrangeMax}
           value={`${fmt(at.downrangeKm, 0)} km · ${fmt(at.altKm, 1)} km`}
-          height={260}
+          height={230}
           note={tr('色は段（実線：燃焼中、細線：慣性飛行）。', 'Color shows the stage (thick: burning, thin: coasting).')}
         />
         <OptChart
@@ -174,10 +174,10 @@ function MultiCharts({
               : []),
           ]}
           value={value(at.altKm, 1, 'km')}
-          height={260}
+          height={230}
         />
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <OptChart
           {...common}
           title={tr('速度', 'Speed')}

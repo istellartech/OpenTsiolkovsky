@@ -160,8 +160,8 @@ export function ProgressView({
     incl = snapshot?.inclination_deg ?? null
   const maxAlt = snapshot ? Math.max(...snapshot.altitude_m) / 1000 : null
   return (
-    <div className="space-y-4">
-      <section className="rounded-[10px] border border-signal/30 bg-signal/5 p-4 sm:p-5" role="status" aria-live="polite">
+    <div className="space-y-3">
+      <section className="rounded-[10px] border border-signal/30 bg-signal/5 px-3 py-3 sm:px-4" role="status" aria-live="polite">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="flex items-center gap-2 text-[11px] text-ink-2">
@@ -174,8 +174,10 @@ export function ProgressView({
                 </span>
               ) : null}
             </p>
-            <h3 className="mt-1 text-[17px] font-semibold">{stage?.title ?? tr('初期軌道を作成中', 'Building the initial trajectory')}</h3>
-            <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-ink-2">
+            <h3 className="mt-0.5 text-[15px] font-semibold">
+              {stage?.title ?? tr('初期軌道を作成中', 'Building the initial trajectory')}
+            </h3>
+            <p className="mt-0.5 max-w-3xl text-[11px] leading-snug text-ink-2">
               {stage?.text ??
                 tr(
                   '入力した姿勢の初期値から軌道を積分し、最適化の出発点を作っています。',
@@ -188,8 +190,8 @@ export function ProgressView({
             {tr('中断', 'Cancel')}
           </button>
         </div>
-        <div className="mt-4">
-          <div className="flex justify-between text-[11px] text-ink-3">
+        <div className="mt-2">
+          <div className="flex justify-between text-[10px] text-ink-3">
             <span className="num">
               {tr('反復', 'Iteration')} {last?.iteration ?? 0} / {maxIter}
             </span>
@@ -202,7 +204,7 @@ export function ProgressView({
             />
           </div>
         </div>
-        <dl className="mt-4 grid gap-2 sm:grid-cols-4">
+        <dl className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
           <Kpi
             label={isRocketInput(p ?? { kind: 'hs071' }) ? tr('現在のペイロード', 'Current payload') : tr('目的値', 'Objective')}
             value={snapshot ? fmt(snapshot.payload_kg, 1) : last ? last.objective.toPrecision(6) : '—'}
@@ -251,13 +253,13 @@ export function ProgressView({
           />
         </dl>
       </section>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid gap-2 lg:grid-cols-2 2xl:grid-cols-4">
         <OptChart
           title={tr('軌道の変化（高度 × 地表距離）', 'Trajectory evolution (altitude vs. ground distance)')}
           unit="km"
           xLabel={tr('地表距離 [km]', 'Ground distance [km]')}
           series={trajectory}
-          height={260}
+          height={230}
           note={tr(
             '赤：最新の反復の軌道、灰色：以前の反復。反復ごとに軌道が目標へ近づく様子です。',
             'Red: latest iteration; gray: earlier ones. Watch the trajectory move toward the target.',
@@ -269,7 +271,7 @@ export function ProgressView({
           xLabel={tr('打上げからの時間 [s]', 'Time since launch [s]')}
           series={speed}
           digits={3}
-          height={260}
+          height={230}
           note={tr(
             '最後に目標の円軌道速度（青破線）へ届けば投入できます。',
             'Insertion requires reaching the circular speed (blue dashed).',
@@ -281,7 +283,7 @@ export function ProgressView({
           xLabel={tr('反復', 'Iteration')}
           series={convergence}
           logY
-          height={220}
+          height={200}
           note={tr('2本とも許容値（灰破線）を下回ると収束です。', 'Converged when both fall below the tolerance (gray dashed).')}
         />
         <OptChart
@@ -289,7 +291,7 @@ export function ProgressView({
           unit="kg"
           xLabel={tr('反復', 'Iteration')}
           series={payload}
-          height={220}
+          height={200}
           note={tr(
             '条件を満たす前の値は物理的に成立していません。最終的な値は結果で確認してください。',
             'Values before feasibility are not physically achievable. Read the final value in the results.',
@@ -308,12 +310,12 @@ export function ProgressView({
 
 function Kpi({ label, value, unit, note, ok }: { label: string; value: string; unit: string; note?: string; ok?: boolean }) {
   return (
-    <div className="min-w-0 rounded-[8px] border border-line bg-surface px-3 py-2.5">
+    <div className="min-w-0 rounded-[8px] border border-line bg-surface px-3 py-1.5">
       <dt className="flex items-center gap-1.5 text-[11px] text-ink-2">
         {ok !== undefined ? <span className={cn('h-1.5 w-1.5 rounded-full', ok ? 'bg-[var(--ok)]' : 'bg-line-strong')} /> : null}
         {label}
       </dt>
-      <dd className="num mt-1 text-[18px] font-medium">
+      <dd className="num text-[16px] font-medium">
         {value} <span className="text-[11px] font-normal text-ink-3">{unit}</span>
       </dd>
       {note ? <p className="mt-0.5 text-[10px] text-ink-3">{note}</p> : null}

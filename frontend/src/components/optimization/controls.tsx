@@ -33,7 +33,7 @@ export function OptNumber({
     : ctx.issues.find((i) => i.path === path)?.message
   return (
     <div className="min-w-0" data-opt-field={path}>
-      <label htmlFor={id} className="mb-1.5 block text-[12px] font-medium text-ink-2">
+      <label htmlFor={id} className="mb-1 block text-[11px] font-medium text-ink-2">
         {label}
         {unit ? <span className="sr-only"> ({unit})</span> : null}
       </label>
@@ -69,7 +69,7 @@ export function OptNumber({
         ) : null}
       </div>
       {error || hint ? (
-        <p id={`${id}-help`} className={cn('mt-1 text-[11px] leading-relaxed', error ? 'text-danger' : 'text-ink-2')}>
+        <p id={`${id}-help`} className={cn('mt-0.5 text-[10px] leading-snug', error ? 'text-danger' : 'text-ink-2')}>
           {error ?? hint}
         </p>
       ) : null}
@@ -103,12 +103,12 @@ export function OptText({
   }
   return (
     <div className="min-w-0" data-opt-field={path}>
-      <label htmlFor={id} className="mb-1.5 block text-[12px] font-medium text-ink-2">
+      <label htmlFor={id} className="mb-1 block text-[11px] font-medium text-ink-2">
         {label}
       </label>
       {multiline ? <textarea {...props} rows={3} /> : <input {...props} type="text" />}
       {error || hint ? (
-        <p id={`${id}-help`} className={cn('mt-1 text-[11px] leading-relaxed', error ? 'text-danger' : 'text-ink-2')}>
+        <p id={`${id}-help`} className={cn('mt-0.5 text-[10px] leading-snug', error ? 'text-danger' : 'text-ink-2')}>
           {error ?? hint}
         </p>
       ) : null}
@@ -117,10 +117,10 @@ export function OptText({
 }
 export function OptGroup({ title, note, children, id }: { title: ReactNode; note?: ReactNode; children: ReactNode; id?: string }) {
   return (
-    <section id={id} className="rounded-[9px] border border-line bg-surface p-4 sm:p-5">
-      <h3 className="text-[14px] font-semibold">{title}</h3>
-      {note ? <p className="mt-1.5 text-[12px] leading-relaxed text-ink-2">{note}</p> : null}
-      <div className="mt-4 space-y-4">{children}</div>
+    <section id={id} className="rounded-[9px] border border-line bg-surface px-3 py-3 sm:px-4">
+      <h3 className="text-[13px] font-semibold">{title}</h3>
+      {note ? <p className="mt-0.5 text-[11px] leading-snug text-ink-3">{note}</p> : null}
+      <div className="mt-2.5 space-y-3">{children}</div>
     </section>
   )
 }
@@ -164,7 +164,7 @@ export function OptTabs<T extends string>({
           tabIndex={value === option.value ? 0 : -1}
           disabled={option.disabled}
           className={cn(
-            'whitespace-nowrap rounded-[6px] px-3 py-2 text-[12px] font-medium transition-colors disabled:opacity-40',
+            'whitespace-nowrap rounded-[6px] px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-40',
             value === option.value ? 'bg-surface text-ink shadow-[0_0_0_1px_var(--line)]' : 'text-ink-3 hover:bg-surface-2 hover:text-ink',
           )}
           onClick={() => onChange(option.value)}

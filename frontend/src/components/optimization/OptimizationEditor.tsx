@@ -9,8 +9,9 @@ import { OptGroup, OptNumber, OptText } from './controls'
 import { OptimizationEditorContext } from './editor-context'
 import { SequenceTimeline } from './SequenceTimeline'
 
-const grid = 'grid gap-4 sm:grid-cols-2'
-const grid3 = 'grid gap-4 sm:grid-cols-3'
+const grid = 'grid gap-x-3 gap-y-2 sm:grid-cols-2'
+const grid3 = 'grid gap-x-3 gap-y-2 sm:grid-cols-3'
+const grid4 = 'grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4'
 type Rocket = MultiStageInput | SingleStageInput
 const G0 = 9.80665
 
@@ -19,15 +20,15 @@ export function OptimizationEditor({ input, onJson }: { input: OptimizationInput
   const p = input.problem
   if (!isRocketInput(p)) return <BenchmarkFields input={input} onJson={onJson} />
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <MissionFields p={p} />
       <VehicleFields p={p} />
       <SequenceFields p={p} />
       <ConstraintFields p={p} />
       <details className="group rounded-[9px] border border-line bg-surface" data-opt-details>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:px-5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
           <span>
-            <span className="block text-[14px] font-semibold">{tr('詳細設定', 'Advanced settings')}</span>
+            <span className="block text-[13px] font-semibold">{tr('詳細設定', 'Advanced settings')}</span>
             <span className="mt-0.5 block text-[11px] text-ink-3">
               {tr(
                 '打上げ日時・出典・エンジン形状・計算メッシュ・初期推定・ソルバー・検証の許容値。通常は変更不要です。',
@@ -37,7 +38,7 @@ export function OptimizationEditor({ input, onJson }: { input: OptimizationInput
           </span>
           <span className="text-[12px] text-ink-3 group-open:rotate-90">›</span>
         </summary>
-        <div className="space-y-4 border-t border-line p-4 sm:p-5">
+        <div className="space-y-3 border-t border-line px-3 py-3 sm:px-4">
           <AdvancedFields input={input} p={p} onJson={onJson} />
         </div>
       </details>
@@ -50,7 +51,7 @@ function Step({ n, title, note, children }: { n: number; title: string; note?: R
     <OptGroup
       title={
         <span className="flex items-center gap-2">
-          <span className="num flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[11px] text-surface">{n}</span>
+          <span className="num flex h-4.5 w-4.5 items-center justify-center rounded-full bg-ink text-[10px] text-surface">{n}</span>
           {title}
         </span>
       }
@@ -62,7 +63,21 @@ function Step({ n, title, note, children }: { n: number; title: string; note?: R
 }
 
 /** Lower/upper bounds; the initial guess is clamped into them automatically. */
-function RangeField({ path, label, value, unit, hint }: { path: string; label: string; value: Bounds; unit: string; hint?: string }) {
+function RangeField({
+  path,
+  label,
+  value,
+  unit,
+  hint,
+  className,
+}: {
+  path: string
+  label: string
+  value: Bounds
+  unit: string
+  hint?: string
+  className?: string
+}) {
   const ctx = useContext(OptimizationEditorContext)
   const set = (key: 'lower' | 'upper', v: number) => {
     const next = { ...value, [key]: v }
@@ -70,14 +85,14 @@ function RangeField({ path, label, value, unit, hint }: { path: string; label: s
     ctx.edit(path, next)
   }
   return (
-    <div data-opt-field={path} className="min-w-0">
-      <p className="mb-1.5 text-[12px] font-medium text-ink-2">{label}</p>
-      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2">
+    <div data-opt-field={path} className={cn('min-w-0', className)}>
+      <p className="mb-1 text-[11px] font-medium text-ink-2">{label}</p>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-1.5 [&_label]:sr-only">
         <OptNumber path={`${path}.lower`} label={tr('下限', 'Min')} value={value.lower} unit={unit} onValue={(v) => set('lower', v)} />
-        <span className="pt-8 text-ink-3">〜</span>
+        <span className="pt-1.5 text-ink-3">〜</span>
         <OptNumber path={`${path}.upper`} label={tr('上限', 'Max')} value={value.upper} unit={unit} onValue={(v) => set('upper', v)} />
       </div>
-      {hint ? <p className="mt-1 text-[11px] text-ink-3">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-[10px] leading-snug text-ink-3">{hint}</p> : null}
     </div>
   )
 }
@@ -99,35 +114,40 @@ function MissionFields({ p }: { p: Rocket }) {
             )
       }
     >
-      {p.kind === 'multi_stage' ? (
-        <div className={grid}>
-          <OptNumber
-            path="problem.orbit.altitude_m"
-            label={tr('円軌道の高度', 'Circular-orbit altitude')}
-            value={p.orbit.altitude_m}
-            scale={1000}
-            unit="km"
-          />
-          <OptNumber
-            path="problem.orbit.inclination_deg"
-            label={tr('軌道傾斜角', 'Inclination')}
-            value={p.orbit.inclination_deg}
-            unit="°"
-          />
-        </div>
-      ) : (
-        <div className={grid}>
-          <OptNumber
-            path="problem.target_apogee_altitude_m"
-            label={tr('目標の頂点高度', 'Target apogee')}
-            value={p.target_apogee_altitude_m}
-            scale={1000}
-            unit="km"
-          />
-          <OptNumber path="problem.azimuth_deg" label={tr('発射方位角（固定）', 'Launch azimuth (fixed)')} value={p.azimuth_deg} unit="°" />
-        </div>
-      )}
-      <div className={grid}>
+      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.6fr)]">
+        {p.kind === 'multi_stage' ? (
+          <>
+            <OptNumber
+              path="problem.orbit.altitude_m"
+              label={tr('円軌道の高度', 'Circular-orbit altitude')}
+              value={p.orbit.altitude_m}
+              scale={1000}
+              unit="km"
+            />
+            <OptNumber
+              path="problem.orbit.inclination_deg"
+              label={tr('軌道傾斜角', 'Inclination')}
+              value={p.orbit.inclination_deg}
+              unit="°"
+            />
+          </>
+        ) : (
+          <>
+            <OptNumber
+              path="problem.target_apogee_altitude_m"
+              label={tr('目標の頂点高度', 'Target apogee')}
+              value={p.target_apogee_altitude_m}
+              scale={1000}
+              unit="km"
+            />
+            <OptNumber
+              path="problem.azimuth_deg"
+              label={tr('発射方位角（固定）', 'Launch azimuth (fixed)')}
+              value={p.azimuth_deg}
+              unit="°"
+            />
+          </>
+        )}
         <OptNumber
           path="problem.vehicle.launch.latitude_deg"
           label={tr('発射地点の緯度', 'Launch latitude')}
@@ -140,26 +160,28 @@ function MissionFields({ p }: { p: Rocket }) {
           value={p.vehicle.launch.longitude_deg}
           unit="°E"
         />
+        {p.kind === 'multi_stage' ? (
+          <RangeField
+            path="problem.net_payload_kg"
+            className="lg:col-span-2 xl:col-span-1"
+            label={tr('衛星質量を探す範囲', 'Satellite mass search range')}
+            value={p.net_payload_kg}
+            unit="kg"
+            hint={tr(
+              'PAF（衛星分離機構）は含まない。結果が端に張り付いたら広げる。',
+              'Excludes the payload adapter. Widen it if the result sits at an end.',
+            )}
+          />
+        ) : (
+          <RangeField
+            path="problem.additional_payload_kg"
+            className="lg:col-span-2 xl:col-span-1"
+            label={tr('追加ペイロードを探す範囲', 'Additional payload search range')}
+            value={p.additional_payload_kg}
+            unit="kg"
+          />
+        )}
       </div>
-      {p.kind === 'multi_stage' ? (
-        <RangeField
-          path="problem.net_payload_kg"
-          label={tr('衛星質量を探す範囲', 'Satellite mass search range')}
-          value={p.net_payload_kg}
-          unit="kg"
-          hint={tr(
-            '結果がこの範囲の端に張り付いたら範囲を広げてください。PAF（衛星分離機構）は含みません。',
-            'Widen the range if the result sits at either end. Excludes the payload adapter.',
-          )}
-        />
-      ) : (
-        <RangeField
-          path="problem.additional_payload_kg"
-          label={tr('追加ペイロードを探す範囲', 'Additional payload search range')}
-          value={p.additional_payload_kg}
-          unit="kg"
-        />
-      )}
     </Step>
   )
 }
@@ -247,7 +269,7 @@ function VehicleFields({ p }: { p: Rocket }) {
     >
       <div className="grid gap-4">
         <div className="min-w-0 overflow-x-auto">
-          <table className="w-full min-w-[420px] border-separate border-spacing-y-1 text-left text-[12px]">
+          <table className="w-full min-w-[420px] border-separate border-spacing-y-0.5 text-left text-[12px]">
             <thead>
               <tr className="text-[11px] text-ink-3">
                 <th className="w-[38%] font-normal" />
@@ -298,7 +320,7 @@ function VehicleFields({ p }: { p: Rocket }) {
             </tbody>
           </table>
           {multi ? (
-            <div className={cn(grid, 'mt-3')}>
+            <div className={cn(grid4, 'mt-2')}>
               <OptNumber path="problem.fairing_kg" label={tr('フェアリング', 'Fairing')} value={p.fairing_kg} unit="kg" />
               <OptNumber
                 path="problem.payload_adapter_kg"
@@ -470,15 +492,15 @@ function SequenceFields({ p }: { p: Rocket }) {
       {p.kind === 'multi_stage' ? (
         <ol className="divide-y divide-line rounded-[8px] border border-line">
           {p.phases.map((phase, i) => (
-            <li key={i} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2">
+            <li key={i} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-1">
               <span className="flex min-w-0 items-center gap-2 text-[12px]">
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{ background: `var(--stage-${(phase.stage % 5) + 1})`, opacity: phase.mode === 'burn' ? 1 : 0.35 }}
                 />
                 <span className="min-w-0">
-                  <span className="block font-medium">{phaseLabel(p.phases, i)}</span>
-                  <span className="text-[11px] text-ink-3">
+                  <span className="font-medium">{phaseLabel(p.phases, i)}</span>
+                  <span className="ml-2 text-[10px] text-ink-3">
                     {phase.duration_s.lower === phase.duration_s.upper
                       ? tr('時間固定', 'Fixed duration')
                       : tr('時間を最適化', 'Optimized duration')}
@@ -534,14 +556,14 @@ function ConstraintFields({ p }: { p: Rocket }) {
         <>
           <div>
             <p className="text-[12px] font-medium">{tr('区間ごとの上限', 'Per-segment limits')}</p>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-ink-3">
+            <p className="mt-0.5 text-[10px] leading-snug text-ink-3">
               {tr(
                 '迎角：機体の向きと気流のずれ（空気力による横向き荷重）。加速度：推力・空気力による加速度（重力を除く、1 G = 9.81 m/s²）。最低高度：地面・大気への余裕。',
                 'Angle of attack: body axis vs. airflow (side load). Acceleration: from thrust and aerodynamics, gravity excluded (1 G = 9.81 m/s²). Minimum altitude: clearance.',
               )}
             </p>
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[560px] border-separate border-spacing-y-1 text-left text-[12px]">
+            <div className="mt-1 overflow-x-auto">
+              <table className="w-full min-w-[560px] border-separate border-spacing-y-0.5 text-left text-[12px]">
                 <thead>
                   <tr className="text-[11px] text-ink-3">
                     <th className="font-normal">{tr('区間', 'Segment')}</th>
@@ -702,10 +724,10 @@ function ConstraintFields({ p }: { p: Rocket }) {
 }
 function LimitRow({ title, help, children }: { title: string; help: string; children: ReactNode }) {
   return (
-    <div className="grid gap-2 border-t border-line pt-3 first:border-t-0 first:pt-0 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-4">
+    <div className="grid gap-1.5 border-t border-line pt-2 first:border-t-0 first:pt-0 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-4">
       <div>
         <p className="text-[12px] font-medium">{title}</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-ink-3">{help}</p>
+        <p className="mt-0.5 text-[10px] leading-snug text-ink-3">{help}</p>
       </div>
       <div className="min-w-0 max-w-xl">{children}</div>
     </div>
@@ -785,7 +807,7 @@ function AdvancedFields({ input, p, onJson }: { input: OptimizationInput; p: Roc
         )}
       >
         <OptNumber path="problem.degree" label={tr('多項式の次数（3〜8）', 'Polynomial degree (3–8)')} value={p.degree} integer />
-        <div className={grid3}>
+        <div className={grid4}>
           {p.kind === 'multi_stage' ? (
             p.phases.map((phase, i) => (
               <OptNumber key={i} path={`problem.phases.${i}.intervals`} label={phaseLabel(p.phases, i)} value={phase.intervals} integer />
@@ -859,7 +881,7 @@ function AdvancedFields({ input, p, onJson }: { input: OptimizationInput; p: Roc
           'After solving, the controls are reintegrated independently; differences and limit excesses must stay within these. They do not relax physical limits.',
         )}
       >
-        <div className={grid3}>
+        <div className={grid4}>
           {(
             [
               ['position_m', tr('位置', 'Position'), 'm'],
@@ -875,7 +897,7 @@ function AdvancedFields({ input, p, onJson }: { input: OptimizationInput; p: Roc
           ))}
         </div>
         {p.kind === 'multi_stage' ? (
-          <div className={grid3}>
+          <div className={grid4}>
             {(
               [
                 ['radius_tolerance_m', tr('投入半径', 'Insertion radius'), 'm'],
@@ -913,10 +935,10 @@ function InitialGuessFields({ p }: { p: MultiStageInput }) {
 }
 function Sub({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
   return (
-    <section className="space-y-3 border-t border-line pt-4 first:border-t-0 first:pt-0">
+    <section className="space-y-2 border-t border-line pt-3 first:border-t-0 first:pt-0">
       <div>
         <h4 className="text-[13px] font-semibold">{title}</h4>
-        {note ? <p className="mt-0.5 text-[11px] leading-relaxed text-ink-3">{note}</p> : null}
+        {note ? <p className="mt-0.5 text-[10px] leading-snug text-ink-3">{note}</p> : null}
       </div>
       {children}
     </section>
