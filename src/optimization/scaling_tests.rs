@@ -351,7 +351,10 @@ fn si_and_kilometre_formulations_solve_to_the_same_si_optimum_and_sensitivity() 
             hessian_calls: 0,
             exact_hessian: true,
             stop_after: None,
-            callback: Box::new(|_| true),
+            callback: Box::new(|_, _| true),
+            last_x: vec![],
+            snapshot_interval_s: None,
+            last_snapshot: None,
         }));
         let mut app = IpoptApplication::new();
         app.initialize_with_options_str("hessian_approximation exact\nnlp_scaling_method none\npresolve no\nprint_level 0\ntol 1e-10\nmax_iter 300\nacceptable_iter 0\nbound_relax_factor 0\n").unwrap();

@@ -816,6 +816,32 @@ impl NlpModel for SingleStage {
             *v = entries[&(r as usize, c as usize)];
         }
     }
+    fn snapshot(&self, x: &[f64]) -> Option<super::ProgressSnapshot> {
+        let mut s = super::ProgressSnapshot {
+            payload_kg: self.payload(x),
+            phase_end_s: vec![
+                self.input.vertical_ascent_s,
+                self.burn_end,
+                self.burn_end + self.coast_duration(x),
+            ],
+            ..Default::default()
+        };
+        for k in 0..self.intervals() {
+            let phase = if k == 0 {
+                0
+            } else if k < self.burn_intervals {
+                1
+            } else {
+                2
+            };
+            for j in 0..=self.input.degree {
+                let (t, _) = self.interval_time(x, k, self.grid.nodes[j]);
+                let y = self.state(x, k * self.input.degree + j);
+                s.push(&self.vehicle.launch.llh, t, phase, &y);
+            }
+        }
+        Some(s)
+    }
 }
 
 #[cfg(test)]

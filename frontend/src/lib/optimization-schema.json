@@ -380,6 +380,16 @@
             },
             "validation": {
               "$ref": "#/$defs/FlightTolerances"
+            },
+            "initial_guess": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/InitialGuess"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "additionalProperties": false,
@@ -1516,6 +1526,66 @@
         "inclination_tolerance_deg",
         "apsis_tolerance_m"
       ]
+    },
+    "InitialGuess": {
+      "description": "A trajectory to start from instead of integrating the attitude seed, e.g.\nthe reintegrated samples of an earlier run of the same phase layout.\nSamples are interpolated in each phase's normalized time, so durations may\ndiffer from this problem's initial values.",
+      "type": "object",
+      "properties": {
+        "net_payload_kg": {
+          "type": "number",
+          "format": "double"
+        },
+        "phase_durations_s": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GuessSample"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": ["net_payload_kg", "phase_durations_s", "samples"]
+    },
+    "GuessSample": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "time_s": {
+          "description": "Time since launch [s].",
+          "type": "number",
+          "format": "double"
+        },
+        "state_eci": {
+          "description": "`[m, r_ECI(3), v_ECI(3)]` in kg, m, m/s.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 7,
+          "maxItems": 7
+        },
+        "azimuth_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "elevation_deg": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["phase", "time_s", "state_eci", "azimuth_deg", "elevation_deg"]
     },
     "SolverSettings": {
       "type": "object",

@@ -465,6 +465,9 @@ impl NlpModel for ScaledModel {
     fn coordinates(&self) -> PhysicalCoordinates {
         self.report.physical_coordinates.clone()
     }
+    fn snapshot(&self, x: &[f64]) -> Option<super::ProgressSnapshot> {
+        self.base.snapshot(&self.to_base(x))
+    }
 }
 
 #[cfg(test)]

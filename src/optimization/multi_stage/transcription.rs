@@ -1,4 +1,4 @@
-use super::problem::{EndEvent, MultiStageProblem};
+use super::problem::{EndEvent, GuessSample, InitialGuess, MultiStageProblem};
 use crate::{
     math::{constants::MU_EARTH, integrator::DormandPrince54},
     optimization::{
@@ -549,6 +549,11 @@ impl MultiStage {
         )
     }
     fn initialize(&mut self) -> Result<(), String> {
+        if let Some(guess) = self.input.initial_guess.take() {
+            self.initialize_from_guess(&guess);
+            self.input.initial_guess = Some(guess);
+            return Ok(());
+        }
         let mut x = self.layout.initial.clone();
         for i in 0..self.intervals.len() {
             let interval = self.intervals[i];
@@ -609,6 +614,78 @@ impl MultiStage {
         }
         self.layout.initial = x;
         Ok(())
+    }
+    /// Warm start: durations, payload, states and controls from an earlier
+    /// trajectory, interpolated in each phase's normalized time and clamped to
+    /// this problem's bounds.
+    fn initialize_from_guess(&mut self, g: &InitialGuess) {
+        let mut x = self.layout.initial.clone();
+        for (p, phase) in self.input.phases.iter().enumerate() {
+            let b = &phase.duration_s;
+            x[self.time_index(p)] =
+                g.phase_durations_s[p].clamp(b.lower, b.upper) / self.scaling.time_s;
+        }
+        let b = &self.input.net_payload_kg;
+        x[self.payload_index()] =
+            g.net_payload_kg.clamp(b.lower, b.upper) / self.scaling.payload_objective_kg;
+        let mut by_phase: Vec<Vec<&GuessSample>> = vec![vec![]; self.input.phases.len()];
+        for sample in &g.samples {
+            by_phase[sample.phase].push(sample);
+        }
+        for samples in &mut by_phase {
+            samples.sort_by(|a, b| a.time_s.total_cmp(&b.time_s));
+        }
+        // Linear interpolation at normalized phase time s in [0, 1].
+        let at = |p: usize, s: f64| -> ([f64; 7], [f64; 2]) {
+            let v = &by_phase[p];
+            let (t0, t1) = (v[0].time_s, v[v.len() - 1].time_s);
+            let t = t0 + s.clamp(0.0, 1.0) * (t1 - t0);
+            let k = v.partition_point(|q| q.time_s <= t).clamp(1, v.len() - 1);
+            let (a, b) = (v[k - 1], v[k]);
+            let w = if b.time_s > a.time_s {
+                ((t - a.time_s) / (b.time_s - a.time_s)).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let mix = |u: f64, v: f64| u + w * (v - u);
+            (
+                std::array::from_fn(|c| mix(a.state_eci[c], b.state_eci[c])),
+                [
+                    mix(a.azimuth_deg, b.azimuth_deg),
+                    mix(a.elevation_deg, b.elevation_deg),
+                ],
+            )
+        };
+        let az = self.input.azimuth_bounds_deg;
+        let el = self.input.elevation_bounds_deg;
+        for i in 0..self.intervals.len() {
+            let p = self.intervals[i].phase;
+            let (start, duration) = (self.phase_start(&x, p), self.duration(&x, p));
+            let normalized = |t: f64| (t - start) / duration;
+            for j in 0..=self.input.degree {
+                let (t, _) = self.interval_time(&x, i, self.grid.nodes[j]);
+                let (y, _) = at(p, normalized(t));
+                for c in 0..7 {
+                    x[7 * self.node(i, j) + c] = (y[c] - self.origin[c]) / self.scale(c);
+                }
+            }
+            if self.input.phases[p].vertical {
+                continue;
+            }
+            for j in 0..self.input.degree {
+                let (t, _) = self.interval_time(&x, i, self.grid.nodes[j + 1]);
+                let (_, u) = at(p, normalized(t));
+                x[self.control_index(i, j, 0)] = u[0].clamp(az[0], az[1]).to_radians();
+                x[self.control_index(i, j, 1)] = u[1].clamp(el[0], el[1]).to_radians();
+            }
+        }
+        let last = self.input.phases.len() - 1;
+        let (mut y, _) = at(last, 1.0);
+        y[0] -= self.removed_mass(&x, self.intervals.len() - 1);
+        for c in 0..7 {
+            x[7 * self.final_node() + c] = (y[c] - self.origin[c]) / self.scale(c);
+        }
+        self.layout.initial = x;
     }
     pub fn interpolated_state(&self, x: &[f64], i: usize, tau: f64) -> [f64; 7] {
         let (b, _) = basis(&self.grid.nodes, tau);
@@ -951,6 +1028,24 @@ impl NlpModel for MultiStage {
             *v = a[&(r as usize, c as usize)];
         }
     }
+    fn snapshot(&self, x: &[f64]) -> Option<crate::optimization::ProgressSnapshot> {
+        let mut s = crate::optimization::ProgressSnapshot {
+            payload_kg: self.payload(x),
+            phase_end_s: (1..=self.input.phases.len())
+                .map(|p| self.phase_start(x, p))
+                .collect(),
+            ..Default::default()
+        };
+        for i in 0..self.intervals.len() {
+            for j in 0..=self.input.degree {
+                let (t, _) = self.interval_time(x, i, self.grid.nodes[j]);
+                let y = self.state(x, self.node(i, j));
+                s.push(&self.vehicle.launch.llh, t, self.intervals[i].phase, &y);
+            }
+        }
+        s.set_orbit(&self.state(x, self.final_node()));
+        Some(s)
+    }
 }
 
 #[cfg(test)]
@@ -1006,6 +1101,68 @@ mod tests {
                 jd[r]
             );
         }
+    }
+    #[test]
+    fn progress_snapshot_follows_the_seed_trajectory() {
+        let m = model();
+        let x = &m.layout.initial;
+        let s = m.snapshot(x).unwrap();
+        let n = m.intervals.len() * (m.input.degree + 1);
+        assert_eq!(s.time_s.len(), n);
+        assert_eq!(s.phase_end_s.len(), m.input.phases.len());
+        assert!((s.payload_kg - m.input.net_payload_kg.initial).abs() < 1e-9);
+        assert!((s.altitude_m[0] - m.vehicle.launch.llh.z).abs() < 1e-3);
+        assert!(s.downrange_m[0].abs() < 1e-3);
+        assert!(s.time_s.windows(2).all(|w| w[1] >= w[0]));
+        assert!((s.time_s[n - 1] - s.phase_end_s.last().unwrap()).abs() < 1e-9);
+        assert!((s.mass_kg[0] - m.input.initial_mass(s.payload_kg)).abs() < 1e-6);
+        assert!(s.altitude_m.iter().copied().fold(0.0, f64::max) > 100_000.0);
+        assert!(s.inclination_deg.is_some_and(|i| (0.0..180.0).contains(&i)));
+    }
+    #[test]
+    fn warm_start_reproduces_a_trajectory_given_at_its_own_nodes() {
+        use super::super::problem::{GuessSample, InitialGuess};
+        let cold = model();
+        let x = &cold.layout.initial;
+        let mut samples = vec![];
+        for i in 0..cold.intervals.len() {
+            for j in 0..=cold.input.degree {
+                let tau = cold.grid.nodes[j];
+                let (t, _) = cold.interval_time(x, i, tau);
+                let u = cold.control(x, i, tau);
+                samples.push(GuessSample {
+                    phase: cold.intervals[i].phase,
+                    time_s: t,
+                    state_eci: cold.state(x, cold.node(i, j)),
+                    azimuth_deg: u[0].to_degrees(),
+                    elevation_deg: u[1].to_degrees(),
+                });
+            }
+        }
+        let mut input = cold.input.clone();
+        input.initial_guess = Some(InitialGuess {
+            net_payload_kg: cold.payload(x),
+            phase_durations_s: (0..input.phases.len())
+                .map(|p| cold.duration(x, p))
+                .collect(),
+            samples,
+        });
+        let warm = MultiStage::new(input.clone()).unwrap();
+        let y = &warm.layout.initial;
+        for (k, (a, b)) in x.iter().zip(y).enumerate() {
+            assert!(
+                (a - b).abs() <= 1e-7 * a.abs().max(1.0),
+                "{}: {a} vs {b}",
+                warm.layout.variables[k]
+            );
+        }
+        input
+            .initial_guess
+            .as_mut()
+            .unwrap()
+            .phase_durations_s
+            .pop();
+        assert!(MultiStage::new(input).is_err());
     }
     #[test]
     fn seed_mass_ledger_closes_through_stage_fairing_and_payload_events() {

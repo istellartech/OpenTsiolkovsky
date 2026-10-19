@@ -55,6 +55,31 @@ pub struct OrbitTarget {
     pub apsis_tolerance_m: f64,
 }
 
+/// A trajectory to start from instead of integrating the attitude seed, e.g.
+/// the reintegrated samples of an earlier run of the same phase layout.
+/// Samples are interpolated in each phase's normalized time, so durations may
+/// differ from this problem's initial values.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct InitialGuess {
+    pub net_payload_kg: f64,
+    pub phase_durations_s: Vec<f64>,
+    pub samples: Vec<GuessSample>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct GuessSample {
+    pub phase: usize,
+    /// Time since launch [s].
+    pub time_s: f64,
+    /// `[m, r_ECI(3), v_ECI(3)]` in kg, m, m/s.
+    pub state_eci: [f64; 7],
+    pub azimuth_deg: f64,
+    pub elevation_deg: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(deny_unknown_fields)]
@@ -78,6 +103,8 @@ pub struct MultiStageProblem {
     pub max_elevation_rate_deg_s: f64,
     pub max_inertial_direction_rate_deg_s: f64,
     pub validation: FlightTolerances,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_guess: Option<InitialGuess>,
 }
 fn valid_bounds(b: &DurationBounds, min: f64) -> bool {
     [b.lower, b.initial, b.upper].iter().all(|v| v.is_finite())
@@ -267,6 +294,28 @@ impl MultiStageProblem {
         }
         if !(self.initial_mass(self.net_payload_kg.upper)).is_finite() {
             return Err("stack mass overflow".into());
+        }
+        if let Some(g) = &self.initial_guess {
+            let finite = g.net_payload_kg.is_finite()
+                && g.phase_durations_s
+                    .iter()
+                    .all(|d| d.is_finite() && *d > 0.0)
+                && g.samples.iter().all(|s| {
+                    s.time_s.is_finite()
+                        && s.state_eci.iter().all(|v| v.is_finite())
+                        && s.azimuth_deg.is_finite()
+                        && s.elevation_deg.is_finite()
+                });
+            let covered = (0..self.phases.len())
+                .all(|p| g.samples.iter().filter(|s| s.phase == p).count() >= 2);
+            if !finite
+                || g.phase_durations_s.len() != self.phases.len()
+                || !covered
+                || g.samples.iter().any(|s| s.phase >= self.phases.len())
+                || g.samples.len() > 20_000
+            {
+                return Err("initial_guess: needs finite durations for every phase and at least two samples per phase of the same layout".into());
+            }
         }
         Ok(v)
     }

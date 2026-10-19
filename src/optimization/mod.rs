@@ -38,6 +38,54 @@ pub struct IterationRecord {
     pub dual_infeasibility: f64,
 }
 
+/// Live view of the solver's last evaluated point for progress displays.
+/// It is usually, but not necessarily, the accepted iterate (line-search
+/// trials and restoration also evaluate the model). Never stored in results.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProgressSnapshot {
+    pub payload_kg: f64,
+    pub phase_end_s: Vec<f64>,
+    pub time_s: Vec<f64>,
+    pub phase: Vec<usize>,
+    pub altitude_m: Vec<f64>,
+    pub downrange_m: Vec<f64>,
+    pub speed_m_s: Vec<f64>,
+    pub mass_kg: Vec<f64>,
+    pub perigee_altitude_m: Option<f64>,
+    pub apogee_altitude_m: Option<f64>,
+    pub inclination_deg: Option<f64>,
+}
+impl ProgressSnapshot {
+    /// Append one ECI state `[m, r, v]` at flight time `t` (ECI = ECEF at t = 0).
+    pub fn push(
+        &mut self,
+        launch_llh: &nalgebra::Vector3<f64>,
+        t: f64,
+        phase: usize,
+        y: &[f64; 7],
+    ) {
+        use crate::physics::coordinates::CoordinateTransform as C;
+        let r = nalgebra::Vector3::new(y[1], y[2], y[3]);
+        let llh = C::pos_ecef_to_llh(&C::pos_eci_to_ecef(&r, t));
+        self.time_s.push(t);
+        self.phase.push(phase);
+        self.altitude_m.push(llh.z);
+        self.downrange_m.push(C::distance_surface(launch_llh, &llh));
+        self.speed_m_s
+            .push(nalgebra::Vector3::new(y[4], y[5], y[6]).norm());
+        self.mass_kg.push(y[0]);
+    }
+    /// Osculating perigee/apogee/inclination of the state `y`.
+    pub fn set_orbit(&mut self, y: &[f64; 7]) {
+        let r = nalgebra::Vector3::new(y[1], y[2], y[3]);
+        let v = nalgebra::Vector3::new(y[4], y[5], y[6]);
+        let e = crate::physics::orbit::elements(&r, &v, 0.0);
+        self.perigee_altitude_m = Some(e.perigee_altitude_m).filter(|v| v.is_finite());
+        self.apogee_altitude_m = e.apogee_altitude_m.filter(|v| v.is_finite());
+        self.inclination_deg = Some(e.inclination_deg).filter(|v| v.is_finite());
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FullSolution {
     pub x: Vec<f64>,
@@ -115,12 +163,15 @@ pub struct NumericalMetrics {
 }
 
 pub fn solve(request: OptimizationRequest) -> Result<OptimizationResult, String> {
-    solve_with_callback(request, |_| true)
+    solve_with_callback(request, None, |_, _| true)
 }
 
+/// `snapshot_interval_s`: minimum wall time between trajectory snapshots
+/// passed to `callback` (None disables them).
 pub fn solve_with_callback(
     request: OptimizationRequest,
-    callback: impl FnMut(&IterationRecord) -> bool + 'static,
+    snapshot_interval_s: Option<f64>,
+    callback: impl FnMut(&IterationRecord, Option<&ProgressSnapshot>) -> bool + 'static,
 ) -> Result<OptimizationResult, String> {
     let setup_start = std::time::Instant::now();
     request.validate()?;
@@ -186,6 +237,11 @@ pub fn solve_with_callback(
             "linear_system_scaling {mode}\nlinear_scaling_on_demand no\n"
         ));
     }
+    // A warm start sits at active bounds; the default push into the interior
+    // (1 % of the value) would bend the control polynomials and break rate limits.
+    if matches!(&request.problem, Problem::MultiStage(p) if p.initial_guess.is_some()) {
+        options.push_str("bound_push 1e-8\nbound_frac 1e-8\n");
+    }
     options.push_str("timing_statistics yes\n");
     app.initialize_with_options_str(&options)
         .map_err(|e| format!("solver options: {e}"))?;
@@ -208,6 +264,9 @@ pub fn solve_with_callback(
         exact_hessian: request.solver.hessian == HessianMethod::Exact,
         stop_after: request.solver.stop_after_iteration,
         callback: Box::new(callback),
+        last_x: vec![],
+        snapshot_interval_s,
+        last_snapshot: None,
     }));
     let erased: Rc<RefCell<dyn TNLP>> = nlp.clone();
     let setup_seconds = setup_start.elapsed().as_secs_f64();
@@ -330,7 +389,7 @@ pub fn solve_with_callback(
 pub fn solve_json(input: &str) -> Result<String, String> {
     let request = serde_json::from_str(input).map_err(|e| format!("optimization input: {e}"))?;
     #[cfg(all(target_arch = "wasm32", target_os = "wasi"))]
-    let result = solve_with_callback(request, wasm_abi::emit_progress)?;
+    let result = solve_with_callback(request, Some(0.25), wasm_abi::emit_progress)?;
     #[cfg(not(all(target_arch = "wasm32", target_os = "wasi")))]
     let result = solve(request)?;
     serde_json::to_string(&result).map_err(|e| e.to_string())

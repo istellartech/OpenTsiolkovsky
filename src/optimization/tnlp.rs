@@ -1,4 +1,4 @@
-use super::{FullSolution, IterationRecord};
+use super::{FullSolution, IterationRecord, ProgressSnapshot};
 use pounce_nlp::tnlp::*;
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +31,14 @@ pub trait NlpModel {
     fn coordinates(&self) -> super::scaling::PhysicalCoordinates {
         super::scaling::PhysicalCoordinates::dimensionless(self.layout())
     }
+    /// Flight trajectory at `x` for progress displays; None for benchmarks.
+    fn snapshot(&self, _: &[f64]) -> Option<ProgressSnapshot> {
+        None
+    }
 }
+
+/// Per-iteration observer; returning false stops the solve.
+pub type ProgressCallback = Box<dyn FnMut(&IterationRecord, Option<&ProgressSnapshot>) -> bool>;
 
 pub struct SolverNlp {
     pub model: Box<dyn NlpModel>,
@@ -40,7 +47,31 @@ pub struct SolverNlp {
     pub hessian_calls: usize,
     pub exact_hessian: bool,
     pub stop_after: Option<u32>,
-    pub callback: Box<dyn FnMut(&IterationRecord) -> bool>,
+    pub callback: ProgressCallback,
+    /// Last point passed to eval_f/eval_g (pounce exposes no current iterate).
+    pub last_x: Vec<f64>,
+    pub snapshot_interval_s: Option<f64>,
+    pub last_snapshot: Option<std::time::Instant>,
+}
+impl SolverNlp {
+    fn remember(&mut self, x: &[f64]) {
+        if self.snapshot_interval_s.is_some() {
+            self.last_x.clear();
+            self.last_x.extend_from_slice(x);
+        }
+    }
+    fn due_snapshot(&mut self) -> Option<ProgressSnapshot> {
+        let interval = self.snapshot_interval_s?;
+        if self.last_x.is_empty()
+            || self
+                .last_snapshot
+                .is_some_and(|t| t.elapsed().as_secs_f64() < interval)
+        {
+            return None;
+        }
+        self.last_snapshot = Some(std::time::Instant::now());
+        self.model.snapshot(&self.last_x)
+    }
 }
 
 impl TNLP for SolverNlp {
@@ -76,6 +107,7 @@ impl TNLP for SolverNlp {
         true
     }
     fn eval_f(&mut self, x: &[f64], _: bool) -> Option<f64> {
+        self.remember(x);
         let f = self.model.objective(x);
         f.is_finite().then_some(f)
     }
@@ -84,6 +116,7 @@ impl TNLP for SolverNlp {
         out.iter().all(|v| v.is_finite())
     }
     fn eval_g(&mut self, x: &[f64], _: bool, out: &mut [f64]) -> bool {
+        self.remember(x);
         self.model.constraints(x, out);
         out.iter().all(|v| v.is_finite())
     }
@@ -147,7 +180,8 @@ impl TNLP for SolverNlp {
             primal_infeasibility: s.inf_pr,
             dual_infeasibility: s.inf_du,
         };
-        let keep_going = (self.callback)(&record)
+        let snapshot = self.due_snapshot();
+        let keep_going = (self.callback)(&record, snapshot.as_ref())
             && self
                 .stop_after
                 .is_none_or(|stop| i64::from(s.iter) < i64::from(stop));

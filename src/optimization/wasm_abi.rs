@@ -1,6 +1,6 @@
 //! A separate WASI cdylib: no wasm-bindgen, filesystem, or ambient options.
 //! The host owns every allocation and frees it with exactly the original length.
-use super::{IterationRecord, solve_json};
+use super::{IterationRecord, ProgressSnapshot, solve_json};
 
 const MAX_INPUT: usize = 1_048_576;
 
@@ -9,8 +9,19 @@ unsafe extern "C" {
     fn progress(ptr: *const u8, len: usize);
 }
 
-pub(super) fn emit_progress(record: &IterationRecord) -> bool {
-    if let Ok(bytes) = serde_json::to_vec(record) {
+#[derive(serde::Serialize)]
+struct ProgressRecord<'a> {
+    #[serde(flatten)]
+    iteration: &'a IterationRecord,
+    snapshot: Option<&'a ProgressSnapshot>,
+}
+
+pub(super) fn emit_progress(record: &IterationRecord, snapshot: Option<&ProgressSnapshot>) -> bool {
+    let record = ProgressRecord {
+        iteration: record,
+        snapshot,
+    };
+    if let Ok(bytes) = serde_json::to_vec(&record) {
         // The import must copy the bytes synchronously; it cannot retain ptr.
         unsafe { progress(bytes.as_ptr(), bytes.len()) };
     }
