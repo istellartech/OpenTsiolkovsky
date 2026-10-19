@@ -8,21 +8,21 @@ OpenTsiolkovskyの物理を使い、ブラウザ内で多段ロケットのペ�
 
 | 項目 | 方針 |
 | --- | --- |
-| 基準ミッション | ZERO、500 km円軌道、傾斜角43°。RAAN・軌道位相は指定がなければ自由 |
+| 基準ミッション | 2段の小型ロケット、500 km円軌道、傾斜角43°。RAAN・軌道位相は指定がなければ自由 |
 | 離散化・微分 | 複数区間のflipped LGR、線形項の解析微分、物理の局所前進AD |
 | NLP | pounce 0.12.0のRust TNLP、FERAL、L-BFGS既定。厳密Hessianは段階評価 |
 | 実行 | 専用WASIモジュールとWeb Worker。既存シミュレータWASMは維持 |
 | 合否 | 求解収束と独立再積分を別々に判定し、適用制約をSIで検査 |
 
-### 1.1 ZERO基準ケース
+### 1.1 実機データの基準ケース
 
-- 公開構成の2段・液体メタン/LOX・1段9基/2段1基を出発点とする。段別質量・実推力/Isp・空力・運用条件は版付き機体データで与える。
-- HOSPO/大樹を基準とし、LC-1の座標・高度・射向/回廊と打上げUTCを確定する。MOMOの座標を流用しない。
+- 2段機を出発点とする。段別質量・実推力/Isp・空力・運用条件は版付き機体データで与える。
+- 発射点の座標・高度・射向/回廊と打上げUTCは、対象の射点の確定値を使う。別の機体の座標を流用しない。
 - 軌道高度は`r_target = R_orbit_ref + 500000 m`。球基準半径の初期値は6,378,137 m。大気・地表判定にはWGS84測地高度を使う。
 - 最終段停止後、衛星分離直後の接触軌道を終端とする。停止・惰行・分離は別イベント。分離Δvを導入したら分離後へ投入条件を課す。
 - 正味衛星質量を目的とし、PAF・分離機構・フェアリング・上段残量は別計上する。再着火回数とイベント順序は固定する。
 
-公開仕様のLEO最大1,000 kgとガイドv2.0の800 kg / 561 km / 42.2°は条件・版が異なり、500 km / 43°の正解や質量上限には使わない。43°への到達は地球回転・射向分岐・回廊を含めて確認する。データ未確定のケースは仮定した機体として表示する。
+公開された性能値は条件・版が異なるため、500 km / 43°の正解や質量上限には使わない。43°への到達は地球回転・射向分岐・回廊を含めて確認する。データ未確定のケースは仮定した機体として表示する。
 
 ## 2. 構成
 
@@ -74,7 +74,7 @@ h_z/|h| - cos(i_t) = 0                 [-]
 
 RAAN/位相が自由なケースに位置・速度6成分や重複したエネルギー条件を追加しない。赤道軌道では傾斜角残差のランク退化へ対応する。許容域を最適化に使う設定と厳密な目標等式を区別し、再積分後に近地点・遠地点・傾斜角を検査する。
 
-Cは初期投入問題の必須条件、ZはZEROデータ確定時の適用条件、Vは外部検証。各IDには適用域、上下限・単位、出典/版、設計余裕、数値許容差、実装/検査状態を持たせる。未実装・不足・非適用を区別する。
+Cは初期投入問題の必須条件、Zは実機データ確定時の適用条件、Vは外部検証。各IDには適用域、上下限・単位、出典/版、設計余裕、数値許容差、実装/検査状態を持たせる。未実装・不足・非適用を区別する。
 
 | ID | 区分 | 要件 |
 | --- | --- | --- |
@@ -92,7 +92,7 @@ Cは初期投入問題の必須条件、ZはZEROデータ確定時の適用条�
 | OPERATIONS | 指定時Z | RAAN/窓、通信・追跡、指定位置、日照・電力 |
 | GNC / ENV | V | 6DoF/TVC余裕、構造・スロッシング、振動・衝撃・音響等 |
 
-ZEROガイドp.21の荷重は軸/横連成の準静的包絡であり、独立の矩形上限にしない。p.26の投棄時加熱1135 W/m²は自由分子流の条件を含み、`ρv³/2`等の代理式へ直接代入しない。実機のICD・荷重配分・吸収/流れ領域を確定してから使う。
+ユーザーズガイド類の荷重は軸/横連成の準静的包絡であり、独立の矩形上限にしない。投棄時加熱の値は自由分子流などの条件を含み、`ρv³/2`等の代理式へ直接代入しない。実機のICD・荷重配分・吸収/流れ領域を確定してから使う。
 
 ## 4. LGR転写
 
@@ -147,7 +147,7 @@ R_i = Σ_j D_ij X_j - h f(t_i,X_i,U_i,t_phase_start,p)/2 = 0
 
 - 物理上限とSI検証許容値を固定し、bounds・初期値・微分・主双対を同じ写像で変換する。固定幅0、無限境界、ゼロ勾配、floor/capを扱う。
 - アプリ/NLP係数は1求解中に固定。フェーズ別質量尺度を使う場合も接続をSIで整合させる。短区間を理由にdefectを過小化しない。
-- 小問題→単段→仮多段→ZERO実データの順に、3初期推定・粗細メッシュ・Hessian方式を評価する。KKT none/Ruiz/slack-basedは別軸で、on-demand条件と実効動作を記録する。
+- 小問題→単段→仮多段→実機データの順に、3初期推定・粗細メッシュ・Hessian方式を評価する。KKT none/Ruiz/slack-basedは別軸で、on-demand条件と実効動作を記録する。
 - 合否、SI違反/投入誤差、性能、反復/復元、微分・因子分解時間、メモリ、全係数を保存する。m/km・kg/t・Pa/kPaで値・微分・既知解を照合する。
 
 ### 5.5 Hessian
@@ -174,13 +174,13 @@ UIは編集→入力検査→求解→独立検証→SI比較→保存/再読込
 
 | PR | 作業 | 完了条件 |
 | --- | --- | --- |
-| 0 | pounce/TNLP・native/WASI接続、ZERO入力schema | 既知解・全解・終了理由・中断/再実行、微分検査、不足検出 |
+| 0 | pounce/TNLP・native/WASI接続 | 既知解・全解・終了理由・中断/再実行、微分検査 |
 | 1 | 共通物理・局所AD、nalgebra更新 | 既存出力・C++参照・保存則と微分監査が合格 |
 | 2 | 厳密RK45・イベント写像 | 精度未達を拒否し、刻み依存なく停止・質量ジャンプを処理 |
 | 3 | LGR・尺度・疎微分・小問題Hessian | 既知解/自由時間/再積分、SI主双対・単位不変性、同条件比較を保存 |
 | 4 | 単段ロケット | 固定条件から自由化、荷重不適合・ノード外違反を検出、ブラウザ再現 |
 | 5a | 仮2段機 | 500 km / 43°、再着火・質量収支、投棄後の熱、複数初期値/メッシュ |
-| 5b | ZERO実データ接続 | データ版、全適用Z条件・収支・数値収束、V項目の検証先と記録 |
+| 5b | 実機データ接続 | データ版、全適用Z条件・収支・数値収束、V項目の検証先と記録 |
 | 6 | UI・保存・比較 | 入力不足/未評価を区別し、一連の操作とJSON往復を再現 |
 | 以降 | warm start・自動細分化・姿勢状態・分散/感度 | 基準問題を維持し、SI精度と費用を比較 |
 
@@ -191,6 +191,5 @@ UIは編集→入力検査→求解→独立検証→SI比較→保存/再読込
 - [GELATO](https://github.com/istellartech/GELATO)、[OpenGoddard](https://github.com/istellartech/OpenGoddard)：問題分割・比較基準。移植時はMIT表示と参照commitを保持する。
 - [pounce](https://github.com/jkitchin/pounce)、[num-dual](https://docs.rs/num-dual/)：[TNLP](https://github.com/jkitchin/pounce/blob/main/crates/pounce-nlp/src/tnlp.rs)、[WASM](https://github.com/jkitchin/pounce/blob/main/docs/src/wasm.md)、[scaling](https://github.com/jkitchin/pounce/blob/main/docs/src/scaling.md)。実挙動は固定版ソースで確認する。
 - [Garg et al. 2010](https://people.clas.ufl.edu/hager/files/unified.pdf)：flipped LGR。
-- [ZERO公式仕様](https://www.istellartech.com/launch/zero)、[Payload User’s Guide v2.0, July 2024](https://www.istellartech.com/7hbym/wp-content/themes/ist_2023/assets/pdf/usersguide_zero.pdf)：構成/性能pp.7–12、投入p.13、荷重pp.20–21、熱p.26、シーケンスp.36。計画立案時の確認日は2026-10-19。
 - [NASAの打上げ機設計資料](https://ntrs.nasa.gov/citations/20010066713)、[Benedikter et al. 2020](https://arxiv.org/abs/2008.13239)：荷重・熱・分離段落下域を含む制約。
 - [GPOPS-II Guide](https://www.gpops2.com/resources/gpops2UsersGuide.pdf)、[Ross et al. 2018](https://arxiv.org/abs/1810.11073)、[Ipopt options](https://coin-or.github.io/Ipopt/OPTIONS.html)、[Ruiz 2001](https://cerfacs.fr/wp-content/uploads/2017/06/14_DanielRuiz.pdf)：尺度と主双対・線形系の比較。

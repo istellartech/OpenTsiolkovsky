@@ -242,7 +242,7 @@ fn old_result_archives_and_default_solver_inputs_remain_readable() {
     bad.solver.scaling.floor = 0.0;
     assert!(bad.validate().is_err());
     let mut bad: OptimizationRequest = serde_json::from_str(include_str!(
-        "../../examples/optimization/momo_single_stage.json"
+        "../../examples/optimization/single_stage_100km.json"
     ))
     .unwrap();
     bad.solver.hessian = HessianMethod::Exact;
@@ -253,7 +253,7 @@ fn metre_kilometre_tonne_and_kpa_representations_preserve_values_and_derivatives
     // A different unit is a conjugate coordinate change, never a change to the
     // vehicle JSON's *_m / *_kg / *_pa fields or to its physical limits.
     let input: OptimizationRequest = serde_json::from_str(include_str!(
-        "../../examples/optimization/momo_single_stage_coarse.json"
+        "../../examples/optimization/single_stage_100km_coarse.json"
     ))
     .unwrap();
     let super::super::problem::Problem::SingleStage(p) = input.problem else {

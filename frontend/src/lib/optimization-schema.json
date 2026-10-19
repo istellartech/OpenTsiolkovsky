@@ -96,85 +96,6 @@
           "properties": {
             "kind": {
               "type": "string",
-              "const": "zero"
-            },
-            "data_version": {
-              "type": "string"
-            },
-            "model_fidelity": {
-              "type": "string"
-            },
-            "orbit_reference_radius_m": {
-              "type": "number",
-              "format": "double"
-            },
-            "target_altitude_m": {
-              "type": "number",
-              "format": "double"
-            },
-            "target_inclination_deg": {
-              "type": "number",
-              "format": "double"
-            },
-            "target_event": {
-              "type": "string"
-            },
-            "launch": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/LaunchSite"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "stages": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/StageMass"
-              }
-            },
-            "payload_adapter_kg": {
-              "type": ["number", "null"],
-              "format": "double"
-            },
-            "fairing_kg": {
-              "type": ["number", "null"],
-              "format": "double"
-            },
-            "phases": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/PhaseDefinition"
-              }
-            },
-            "constraints": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/ConstraintDefinition"
-              }
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "kind",
-            "data_version",
-            "model_fidelity",
-            "orbit_reference_radius_m",
-            "target_altitude_m",
-            "target_inclination_deg",
-            "target_event",
-            "stages",
-            "phases",
-            "constraints"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "type": "string",
               "const": "single_stage"
             },
             "vehicle": {
@@ -436,145 +357,6 @@
       },
       "additionalProperties": false,
       "required": ["initial", "lower", "upper"]
-    },
-    "LaunchSite": {
-      "type": "object",
-      "properties": {
-        "latitude_deg": {
-          "type": "number",
-          "format": "double"
-        },
-        "longitude_deg": {
-          "type": "number",
-          "format": "double"
-        },
-        "geodetic_altitude_m": {
-          "type": "number",
-          "format": "double"
-        },
-        "utc": {
-          "type": "string"
-        },
-        "source": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": ["latitude_deg", "longitude_deg", "geodetic_altitude_m", "utc", "source"]
-    },
-    "StageMass": {
-      "type": "object",
-      "properties": {
-        "dry_kg": {
-          "type": "number",
-          "format": "double"
-        },
-        "propellant_kg": {
-          "type": "number",
-          "format": "double"
-        },
-        "reserve_kg": {
-          "type": "number",
-          "format": "double"
-        },
-        "source": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": ["dry_kg", "propellant_kg", "reserve_kg", "source"]
-    },
-    "PhaseDefinition": {
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "stage": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "mode": {
-          "$ref": "#/$defs/PhaseMode"
-        },
-        "duration_s": {
-          "$ref": "#/$defs/DurationBounds"
-        },
-        "jettison_after_kg": {
-          "description": "Mass explicitly removed at the end of the phase; no stack-mass reset.",
-          "type": "number",
-          "format": "double"
-        }
-      },
-      "additionalProperties": false,
-      "required": ["name", "stage", "mode", "duration_s", "jettison_after_kg"]
-    },
-    "PhaseMode": {
-      "type": "string",
-      "enum": ["burn", "coast"]
-    },
-    "ConstraintDefinition": {
-      "type": "object",
-      "properties": {
-        "id": {
-          "$ref": "#/$defs/ConstraintId"
-        },
-        "required": {
-          "type": "boolean"
-        },
-        "coverage": {
-          "$ref": "#/$defs/Coverage"
-        },
-        "unit": {
-          "type": "string"
-        },
-        "physical_limit": {
-          "type": ["number", "null"],
-          "format": "double"
-        },
-        "validation_tolerance": {
-          "type": ["number", "null"],
-          "format": "double"
-        },
-        "scale": {
-          "type": ["number", "null"],
-          "format": "double"
-        },
-        "source": {
-          "type": ["string", "null"]
-        },
-        "note": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": ["id", "required", "coverage", "unit", "note"]
-    },
-    "ConstraintId": {
-      "type": "string",
-      "enum": [
-        "INIT",
-        "DYN",
-        "ORBIT",
-        "MASS",
-        "ENGINE",
-        "CLEARANCE",
-        "Q",
-        "AEROLOAD",
-        "ACCEL",
-        "CONTROL",
-        "FAIRING",
-        "STAGING",
-        "RANGE",
-        "DEPLOY",
-        "OPERATIONS",
-        "GNC/ENV"
-      ]
-    },
-    "Coverage": {
-      "type": "string",
-      "enum": ["missing_data", "not_implemented", "configured", "checked", "not_applicable", "external_validation"]
     },
     "Config": {
       "description": "A vehicle and the flight to simulate",
@@ -1474,6 +1256,10 @@
         "min_altitude_m",
         "initial_attitude_end_deg"
       ]
+    },
+    "PhaseMode": {
+      "type": "string",
+      "enum": ["burn", "coast"]
     },
     "EndEvent": {
       "type": "string",

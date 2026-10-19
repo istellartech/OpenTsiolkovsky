@@ -10,29 +10,37 @@ fn command() -> Command {
 }
 
 #[test]
-fn independent_schema_and_zero_readiness_use_documented_exit_codes() {
+fn independent_schema_and_input_check_use_documented_exit_codes() {
     let schema = command().arg("--schema").output().unwrap();
     assert!(schema.status.success());
     let json: Value = serde_json::from_slice(&schema.stdout).unwrap();
     assert_eq!(json["title"], "OptimizationRequest");
-    let check = command()
+    let ready = command()
         .args([
             "--check",
             "--config",
-            "examples/optimization/zero_500km_43deg.json",
+            "examples/optimization/two_stage_80t_500km_43deg.json",
         ])
+        .output()
+        .unwrap();
+    assert_eq!(ready.status.code(), Some(0));
+    let mut request: Value = serde_json::from_str(include_str!(
+        "../examples/optimization/two_stage_80t_500km_43deg.json"
+    ))
+    .unwrap();
+    request["problem"]["stages"][0]["dry_kg"] = 1.into();
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), serde_json::to_vec(&request).unwrap()).unwrap();
+    let check = command()
+        .arg("--check")
+        .arg("--config")
+        .arg(file.path())
         .output()
         .unwrap();
     assert_eq!(check.status.code(), Some(3));
     let json: Value = serde_json::from_slice(&check.stdout).unwrap();
     assert_eq!(json["ready"], false);
-    assert!(
-        json["issues"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|s| s.as_str().unwrap().contains("LC-1"))
-    );
+    assert!(!json["issues"].as_array().unwrap().is_empty());
 }
 
 #[test]
@@ -56,7 +64,7 @@ fn converged_rocket_with_failed_reintegration_saves_diagnostics_and_exits_one() 
     let output = command()
         .args([
             "--config",
-            "examples/optimization/momo_single_stage_coarse.json",
+            "examples/optimization/single_stage_100km_coarse.json",
             "--output",
         ])
         .arg(output_file.path())

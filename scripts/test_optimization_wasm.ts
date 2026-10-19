@@ -19,7 +19,7 @@ function near(actual: number, expected: number, tolerance = 2e-5) {
   assert(Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`)
 }
 
-for (const name of ['hs071', 'double_integrator', 'momo_single_stage', 'two_stage_500km_43deg']) {
+for (const name of ['hs071', 'double_integrator', 'single_stage_100km', 'two_stage_500km_43deg']) {
   const path = resolve(root, `examples/optimization/${name}.json`)
   const input = await Bun.file(path).json()
   const run = Bun.spawnSync([native, '--config', path], { stdout: 'pipe', stderr: 'pipe' })
@@ -90,7 +90,7 @@ for (const name of ['hs071', 'double_integrator', 'momo_single_stage', 'two_stag
     console.log('Multi-stage maximum native/WASI differences:', maxima)
   }
   near(result.solution.objective, reference.solution.objective)
-  if (name === 'momo_single_stage') {
+  if (name === 'single_stage_100km') {
     const f = result.validation.flight
     const ref = reference.validation.flight
     near(f.mass_ledger.additional_payload_kg, ref.mass_ledger.additional_payload_kg, 1e-7)
@@ -156,14 +156,14 @@ for (const strategy of ['s0', 's1_bounds', 's1_guess', 's2', 's3']) {
     console.log(`PR3 ${strategy}/${kkt}: exact Hessian, full SI primal/duals passed`)
   }
 }
-const rocket = await Bun.file(resolve(root, 'examples/optimization/momo_single_stage.json')).json()
+const rocket = await Bun.file(resolve(root, 'examples/optimization/single_stage_100km.json')).json()
 const unsupported = optimizer.solve({ ...rocket, solver: { ...rocket.solver, hessian: 'exact' } }) as { error: string }
 assert.match(unsupported.error, /exact Hessian/)
-const coarse = await Bun.file(resolve(root, 'examples/optimization/momo_single_stage_coarse.json')).json()
+const coarse = await Bun.file(resolve(root, 'examples/optimization/single_stage_100km_coarse.json')).json()
 const coarseResult = optimizer.solve(coarse) as { converged: boolean, validation: { status: string } }
 assert.equal(coarseResult.converged, true)
 assert.equal(coarseResult.validation.status, 'failed')
 assert(progress > 0, 'callback progress must cross the custom WASM import')
-const zero = await Bun.file(resolve(root, 'examples/optimization/zero_500km_43deg.json')).json()
-assert.match((optimizer.solve(zero) as { error: string }).error, /LC-1/)
+const invalid = optimizer.solve({ ...rocket, problem: { ...rocket.problem, degree: 2 } }) as { error: string }
+assert.ok(invalid.error, 'an invalid input must return an error, not a result')
 console.log(`Parity, full primal/dual vectors, cancellation, restart, malformed input: passed; WASM ${bytes.byteLength} bytes; memory ${optimizer.memoryBytes()} bytes`)

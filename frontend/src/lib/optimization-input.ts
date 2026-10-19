@@ -139,12 +139,7 @@ export interface DoubleIntegratorInput {
   position_tolerance_m: number
   velocity_tolerance_m_s: number
 }
-export type OptimizationProblem =
-  | MultiStageInput
-  | SingleStageInput
-  | DoubleIntegratorInput
-  | { kind: 'hs071' }
-  | { kind: 'zero'; [key: string]: unknown }
+export type OptimizationProblem = MultiStageInput | SingleStageInput | DoubleIntegratorInput | { kind: 'hs071' }
 export interface OptimizationInput {
   schema_version: number
   run_id: string
@@ -283,16 +278,6 @@ export function optimizationInputIssues(input: OptimizationInput): InputIssue[] 
       tr('厳密Hessianは現在HS071と二重積分器に対応しています。', 'Exact Hessians currently support HS071 and the double integrator.'),
     )
   const p = input.problem
-  if (p.kind === 'zero') {
-    add(
-      'problem',
-      tr(
-        'ZEROの機体・運用データと転写は未対応です。数値実証用の機体を選択してください。',
-        'ZERO vehicle/operations data and transcription are not available. Select a numerical demonstrator.',
-      ),
-    )
-    return issues
-  }
   if (p.kind === 'double_integrator') {
     bounds('problem.duration_s', p.duration_s, Number.MIN_VALUE)
     positive('problem.distance_m', p.distance_m)
@@ -573,13 +558,7 @@ export function phaseViews(p: OptimizationProblem): PhaseView[] {
 }
 export function inputTitle(input: OptimizationInput): string {
   const p = input.problem
-  return isRocketInput(p)
-    ? p.vehicle.name
-    : p.kind === 'double_integrator'
-      ? tr('二重積分器', 'Double integrator')
-      : p.kind === 'zero'
-        ? 'ZERO'
-        : 'HS071'
+  return isRocketInput(p) ? p.vehicle.name : p.kind === 'double_integrator' ? tr('二重積分器', 'Double integrator') : 'HS071'
 }
 export function sectionForPath(path: string): EditorSection {
   if (/^solver\.(scaling|hessian|kkt_scaling)/.test(path)) return 'json'

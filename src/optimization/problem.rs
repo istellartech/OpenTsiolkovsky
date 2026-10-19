@@ -20,7 +20,6 @@ pub struct OptimizationRequest {
 pub enum Problem {
     Hs071 {},
     DoubleIntegrator(DoubleIntegratorProblem),
-    Zero(Box<ZeroMission>),
     SingleStage(Box<super::single_stage::SingleStageProblem>),
     MultiStage(Box<super::multi_stage::MultiStageProblem>),
 }
@@ -134,57 +133,6 @@ impl Default for SolverSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct ZeroMission {
-    pub data_version: String,
-    pub model_fidelity: String,
-    pub orbit_reference_radius_m: f64,
-    pub target_altitude_m: f64,
-    pub target_inclination_deg: f64,
-    pub target_event: String,
-    pub launch: Option<LaunchSite>,
-    pub stages: Vec<StageMass>,
-    pub payload_adapter_kg: Option<f64>,
-    pub fairing_kg: Option<f64>,
-    pub phases: Vec<PhaseDefinition>,
-    pub constraints: Vec<ConstraintDefinition>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct LaunchSite {
-    pub latitude_deg: f64,
-    pub longitude_deg: f64,
-    pub geodetic_altitude_m: f64,
-    pub utc: String,
-    pub source: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct StageMass {
-    pub dry_kg: f64,
-    pub propellant_kg: f64,
-    pub reserve_kg: f64,
-    pub source: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct PhaseDefinition {
-    pub name: String,
-    pub stage: usize,
-    pub mode: PhaseMode,
-    pub duration_s: DurationBounds,
-    /// Mass explicitly removed at the end of the phase; no stack-mass reset.
-    pub jettison_after_kg: f64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum PhaseMode {
     Burn,
@@ -198,97 +146,6 @@ pub struct DurationBounds {
     pub initial: f64,
     pub lower: f64,
     pub upper: f64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ConstraintId {
-    Init,
-    Dyn,
-    Orbit,
-    Mass,
-    Engine,
-    Clearance,
-    Q,
-    Aeroload,
-    Accel,
-    Control,
-    Fairing,
-    Staging,
-    Range,
-    Deploy,
-    Operations,
-    #[serde(rename = "GNC/ENV")]
-    GncEnv,
-}
-
-impl ConstraintId {
-    pub const ALL: [Self; 16] = [
-        Self::Init,
-        Self::Dyn,
-        Self::Orbit,
-        Self::Mass,
-        Self::Engine,
-        Self::Clearance,
-        Self::Q,
-        Self::Aeroload,
-        Self::Accel,
-        Self::Control,
-        Self::Fairing,
-        Self::Staging,
-        Self::Range,
-        Self::Deploy,
-        Self::Operations,
-        Self::GncEnv,
-    ];
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Init => "INIT",
-            Self::Dyn => "DYN",
-            Self::Orbit => "ORBIT",
-            Self::Mass => "MASS",
-            Self::Engine => "ENGINE",
-            Self::Clearance => "CLEARANCE",
-            Self::Q => "Q",
-            Self::Aeroload => "AEROLOAD",
-            Self::Accel => "ACCEL",
-            Self::Control => "CONTROL",
-            Self::Fairing => "FAIRING",
-            Self::Staging => "STAGING",
-            Self::Range => "RANGE",
-            Self::Deploy => "DEPLOY",
-            Self::Operations => "OPERATIONS",
-            Self::GncEnv => "GNC/ENV",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(rename_all = "snake_case")]
-pub enum Coverage {
-    MissingData,
-    NotImplemented,
-    Configured,
-    Checked,
-    NotApplicable,
-    ExternalValidation,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
-#[serde(deny_unknown_fields)]
-pub struct ConstraintDefinition {
-    pub id: ConstraintId,
-    pub required: bool,
-    pub coverage: Coverage,
-    pub unit: String,
-    pub physical_limit: Option<f64>,
-    pub validation_tolerance: Option<f64>,
-    pub scale: Option<f64>,
-    pub source: Option<String>,
-    pub note: String,
 }
 
 impl OptimizationRequest {
@@ -329,61 +186,6 @@ impl OptimizationRequest {
             p.validate()?;
         }
         Ok(())
-    }
-}
-
-impl ZeroMission {
-    /// A preset is deliberately incomplete until vehicle/operations data exist.
-    /// User-supplied coverage never establishes implementation or validation.
-    pub fn readiness_issues(&self) -> Vec<String> {
-        let mut issues = vec!["ZERO flight transcription is not implemented yet".into()];
-        if self.launch.is_none() {
-            issues.push("launch: LC-1 coordinates, UTC and source are required".into());
-        }
-        if self.stages.len() != 2 {
-            issues.push(
-                "stages: two explicit dry/propellant/reserve mass records are required".into(),
-            );
-        }
-        for (i, s) in self.stages.iter().enumerate() {
-            if !s.dry_kg.is_finite()
-                || s.dry_kg <= 0.0
-                || !s.propellant_kg.is_finite()
-                || s.propellant_kg <= 0.0
-                || !s.reserve_kg.is_finite()
-                || !(0.0..s.propellant_kg).contains(&s.reserve_kg)
-                || s.source.is_empty()
-            {
-                issues.push(format!(
-                    "stages[{i}]: invalid mass inventory or missing source"
-                ));
-            }
-        }
-        if self.payload_adapter_kg.is_none() || self.fairing_kg.is_none() {
-            issues
-                .push("PAF and fairing masses must be supplied separately from net payload".into());
-        }
-        if self.phases.is_empty() {
-            issues.push(
-                "phases: ignition, cutoff, coast, staging and deployment sequence is required"
-                    .into(),
-            );
-        }
-        for id in ConstraintId::ALL {
-            let rows: Vec<_> = self.constraints.iter().filter(|c| c.id == id).collect();
-            let id = id.as_str();
-            if rows.len() != 1 {
-                issues.push(format!("{id}: exactly one coverage record is required"));
-            } else if rows[0].required
-                && !matches!(rows[0].coverage, Coverage::Configured | Coverage::Checked)
-            {
-                issues.push(format!(
-                    "{id}: required constraint is unevaluated ({:?})",
-                    rows[0].coverage
-                ));
-            }
-        }
-        issues
     }
 }
 

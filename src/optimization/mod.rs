@@ -1,5 +1,5 @@
 //! Solver connection, analytic benchmarks and single/multi-stage optimization.
-//! Assumed multi-stage demonstrations are distinct from the gated ZERO baseline.
+//! Rocket cases are assumed vehicles for numerical demonstration.
 pub mod control;
 pub mod events;
 pub mod flight_validation;
@@ -182,7 +182,6 @@ pub fn solve_with_callback(
         }
         Problem::MultiStage(input) => Box::new(multi_stage::MultiStage::new((**input).clone())?),
         Problem::SingleStage(input) => Box::new(single_stage::SingleStage::new((**input).clone())?),
-        Problem::Zero(mission) => return Err(mission.readiness_issues().join("\n")),
     };
     if request.solver.hessian == HessianMethod::Exact && model.hessian_structure().is_empty() {
         return Err(
@@ -342,7 +341,7 @@ pub fn solve_with_callback(
         .as_ref()
         .map(|s| scaling_report.physical_coordinates.solution(s));
     let model_fidelity = if multi_model.is_some() {
-        "assumed multi-stage numerical demonstrator; osculating orbit after payload deployment; thermal/range/6DoF not evaluated; not the ZERO baseline"
+        "assumed multi-stage numerical demonstrator; osculating orbit after payload deployment; thermal/range/6DoF not evaluated; not a real vehicle"
     } else if flight_model.is_some() {
         "single-stage 3DoF sounding-rocket model; additional payload above the supplied base dry mass; no flight certification"
     } else {
@@ -431,16 +430,5 @@ mod tests {
         assert_eq!(limited.solver_status, "Maximum_Iterations_Exceeded");
         assert!(!limited.converged);
         assert!(solve(request()).unwrap().converged);
-    }
-    #[test]
-    fn missing_zero_data_are_explicit() {
-        let r: OptimizationRequest = serde_json::from_str(include_str!(
-            "../../examples/optimization/zero_500km_43deg.json"
-        ))
-        .unwrap();
-        let error = solve(r).unwrap_err();
-        assert!(error.contains("LC-1"));
-        assert!(error.contains("MASS"));
-        assert!(error.contains("RANGE"));
     }
 }

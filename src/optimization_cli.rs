@@ -1,13 +1,10 @@
 #![allow(non_snake_case)]
 use clap::Parser;
-use openTsiolkovsky::optimization::{
-    problem::{OptimizationRequest, Problem},
-    solve,
-};
+use openTsiolkovsky::optimization::{problem::OptimizationRequest, solve};
 use std::process::ExitCode;
 
 #[derive(Parser)]
-#[command(about = "Trajectory optimization, numerical benchmarks and ZERO input readiness")]
+#[command(about = "Trajectory optimization and numerical benchmarks")]
 struct Args {
     #[arg(long, required_unless_present = "schema", conflicts_with = "schema")]
     config: Option<std::path::PathBuf>,
@@ -32,11 +29,7 @@ fn execute(args: Args) -> Result<u8, (u8, String)> {
     let bytes = std::fs::read(path).map_err(|e| (1, e.to_string()))?;
     let input: OptimizationRequest =
         serde_json::from_slice(&bytes).map_err(|e| (3, e.to_string()))?;
-    input.validate().map_err(|e| (3, e))?;
-    let issues = match &input.problem {
-        Problem::Zero(m) => m.readiness_issues(),
-        _ => vec![],
-    };
+    let issues: Vec<String> = input.validate().err().into_iter().collect();
     if args.check {
         println!(
             "{}",

@@ -120,7 +120,7 @@
         }
       ]
     },
-    "data_source": "All stage masses, engine characteristics, operating limits and launch coordinates are numerical demonstration assumptions. This is not a ZERO vehicle data set or LC-1 survey. The target 500 km / 43 deg follows the project plan.",
+    "data_source": "All stage masses, engine characteristics, operating limits and launch coordinates are numerical demonstration assumptions. They are not data of any real vehicle or launch site. The target 500 km / 43 deg follows the project plan.",
     "stages": [
       {
         "dry_kg": 13000,

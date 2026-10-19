@@ -229,14 +229,14 @@ mod tests {
     use nalgebra::SVector;
     use num_dual::jacobian;
 
-    fn momo() -> Vehicle {
+    fn sounding_rocket() -> Vehicle {
         let config = Config::from_json(include_str!("../../examples/momo.json")).unwrap();
         Vehicle::load(&config, &NoFiles).unwrap().0
     }
 
     #[test]
-    fn external_control_matches_simulator_during_momo_ascent() {
-        let mut vehicle = momo();
+    fn external_control_matches_simulator_during_sounding_rocket_ascent() {
+        let mut vehicle = sounding_rocket();
         vehicle.end_time = 240.0;
         let flight = simulate(&vehicle);
         for s in flight.trajectory.iter().skip(1) {
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn local_ad_matches_directional_differences_in_physical_units() {
-        let mut vehicle = momo();
+        let mut vehicle = sounding_rocket();
         // Nonconstant engine tables test absolute time and stage epoch separately.
         use crate::math::interp::Linear;
         let engine = vehicle.stages[0].engine.as_mut().unwrap();
@@ -352,7 +352,7 @@ mod tests {
 
     #[test]
     fn axial_airflow_retains_normal_force_derivative() {
-        let vehicle = momo();
+        let vehicle = sounding_rocket();
         let (_, j) = jacobian(
             |v| {
                 aerodynamics(

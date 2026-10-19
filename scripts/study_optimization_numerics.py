@@ -41,11 +41,11 @@ def cases():
                     request['problem'].update(intervals=intervals, degree=degree)
                     request['problem']['duration_s']['initial'] = seed
                     add(f'double_{mesh}_{seed}', request, strategy, hessian)
-        for kind, file, seeds in [('momo', 'momo_single_stage', [83, 85, 87]), ('multi', 'two_stage_500km_43deg', [98, 99, 100])]:
+        for kind, file, seeds in [('single', 'single_stage_100km', [83, 85, 87]), ('multi', 'two_stage_500km_43deg', [98, 99, 100])]:
             for mesh in ['coarse', 'base']:
                 for seed in seeds:
                     request = load(file + ('_coarse' if mesh == 'coarse' else ''))
-                    if kind == 'momo':
+                    if kind == 'single':
                         request['problem']['initial_pitch_end_deg'] = seed
                     else:
                         request['problem']['initial_azimuth_deg'] = seed
@@ -56,10 +56,10 @@ def cases():
     for kkt in ['none', 'ruiz', 'slack_based']:
         add('hs071', load('hs071'), 's0', 'exact', kkt)
         add('double_base_12', load('double_integrator'), 's0', 'exact', kkt)
-        for kind, file, seeds in [('momo', 'momo_single_stage', [83, 85, 87]), ('multi', 'two_stage_500km_43deg', [98, 99, 100])]:
+        for kind, file, seeds in [('single', 'single_stage_100km', [83, 85, 87]), ('multi', 'two_stage_500km_43deg', [98, 99, 100])]:
             for seed in seeds:
                 request = load(file)
-                if kind == 'momo':
+                if kind == 'single':
                     request['problem']['initial_pitch_end_deg'] = seed
                 else:
                     request['problem']['initial_azimuth_deg'] = seed

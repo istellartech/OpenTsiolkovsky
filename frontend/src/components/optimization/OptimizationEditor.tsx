@@ -264,7 +264,7 @@ function VehicleFields({ p }: { p: Rocket }) {
               '各段の質量とエンジン性能。燃焼できる時間・全備質量・Δvは自動で計算し、燃焼時間の上限やシーケンスにも反映します。',
               'Stage masses and engine performance. Burn time, wet mass and Δv are derived automatically and applied to the burn limits and sequence.',
             )
-          : tr('MOMOのエンジン推力・燃焼時間は実績データを固定で使います。', 'MOMO engine thrust and burn time use fixed flight data.')
+          : tr('エンジン推力・燃焼時間は機体データの値を固定で使います。', 'Engine thrust and burn time are fixed by the vehicle data.')
       }
     >
       <div className="grid gap-4">
@@ -970,17 +970,10 @@ function BenchmarkFields({ input, onJson }: { input: OptimizationInput; onJson: 
     )
   return (
     <OptGroup
-      title={p.kind === 'zero' ? tr('ZEROのテンプレート', 'ZERO template') : tr('HS071（接続試験）', 'HS071 (connection test)')}
-      note={
-        p.kind === 'zero'
-          ? tr(
-              '機体・運用データと対応する計算モデルが未整備のため実行できません。仮定した2段機を選んでください。',
-              'Vehicle/operations data and a matching model are not available yet. Select an assumed two-stage vehicle.',
-            )
-          : tr('既知解を持つ小さな制約付き問題でソルバーを確認します。', 'A small constrained problem with a known solution.')
-      }
+      title={tr('HS071（接続試験）', 'HS071 (connection test)')}
+      note={tr('既知解を持つ小さな制約付き問題でソルバーを確認します。', 'A small constrained problem with a known solution.')}
     >
-      {p.kind === 'hs071' ? <SolverFields input={input} /> : null}
+      <SolverFields input={input} />
       <button type="button" className="text-[12px] underline" onClick={onJson}>
         {tr('JSONを確認', 'Inspect JSON')}
       </button>

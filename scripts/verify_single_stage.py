@@ -16,7 +16,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 BINARY = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "target/release/openTsiolkovsky-optimize").resolve()
 OUTPUT = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else ROOT / "out/optimization/verification").resolve()
 OUTPUT.mkdir(parents=True, exist_ok=True)
-BASE = json.loads((ROOT / "examples/optimization/momo_single_stage.json").read_text())
+BASE = json.loads((ROOT / "examples/optimization/single_stage_100km.json").read_text())
 CASES = [
     ("fixed_mass_time", {"additional_payload_kg": {"initial": 10., "lower": 10., "upper": 10.},
                          "coast_duration_s": {"initial": 118.16, "lower": 118.16, "upper": 118.16}}, True, True),

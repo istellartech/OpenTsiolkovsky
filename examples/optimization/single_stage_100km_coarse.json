@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "run_id": "momo-single-stage-coarse",
+  "run_id": "single-stage-100km-coarse",
   "problem": {
     "kind": "single_stage",
     "vehicle": {
-      "name": "MOMO (Flight 3 record)",
+      "name": "Assumed single-stage sounding rocket",
       "simulation": {
         "end_time_s": 700,
         "output_step_s": 0.5,
@@ -111,7 +111,7 @@
         }
       ]
     },
-    "data_source": "Repository examples/momo.json (Flight 3 record model); added payload and constraints are numerical demonstration assumptions, not certified MOMO performance.",
+    "data_source": "Repository single-stage liquid sounding-rocket sample model; added payload and constraints are numerical demonstration assumptions, not the performance of any real vehicle.",
     "dry_mass_kg": 282.9638783,
     "propellant_mass_kg": 867.0361217,
     "reserve_propellant_kg": 0.01,

@@ -18,8 +18,8 @@ describe('optimization form input', () => {
   for (const name of [
     'two_stage_500km_43deg',
     'two_stage_500km_43deg_coarse',
-    'momo_single_stage',
-    'momo_single_stage_coarse',
+    'single_stage_100km',
+    'single_stage_100km_coarse',
     'hs071',
     'double_integrator',
   ]) {
@@ -30,11 +30,6 @@ describe('optimization form input', () => {
       expect(result.input).toEqual(original)
     })
   }
-  it('retains the incomplete ZERO template and blocks solving it', () => {
-    const result = inspectOptimizationInput(JSON.stringify(read('zero_500km_43deg')))
-    expect(result.input?.problem.kind).toBe('zero')
-    expect(result.issues.length).toBeGreaterThan(0)
-  })
   it('rejects unknown fields and overflow instead of silently fixing them', () => {
     const original = read()
     original.problem.stages[0].propelant_kg = 1
@@ -62,7 +57,7 @@ describe('optimization form input', () => {
     expect(original.problem.stages[0].dry_kg).toBe(13000)
   })
   it('keeps single-stage base mass separate from additional payload', () => {
-    const original = read('momo_single_stage'),
+    const original = read('single_stage_100km'),
       changed = editOptimizationInput(original, 'problem.propellant_mass_kg', 900)
     expect(changed.problem.kind).toBe('single_stage')
     if (changed.problem.kind !== 'single_stage') return
@@ -108,7 +103,7 @@ describe('optimization form input', () => {
     expect(inspectOptimizationInput(JSON.stringify(input)).issues.map((i) => i.path)).toContain('solver.scaling.floor')
   })
   it('compares omitted schema defaults with recorded serde defaults without changing the draft', () => {
-    const draft = read('momo_single_stage'),
+    const draft = read('single_stage_100km'),
       recorded = structuredClone(draft)
     recorded.problem.vehicle.simulation.integrator.abs_tol = 1e-9
     recorded.problem.vehicle.simulation.integrator.rel_tol = 1e-9

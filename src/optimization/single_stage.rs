@@ -853,7 +853,7 @@ mod tests {
     };
     fn request() -> OptimizationRequest {
         serde_json::from_str(include_str!(
-            "../../examples/optimization/momo_single_stage.json"
+            "../../examples/optimization/single_stage_100km.json"
         ))
         .unwrap()
     }
@@ -947,7 +947,7 @@ mod tests {
     #[test]
     fn coarse_mesh_convergence_is_rejected_by_independent_integration() {
         let r: OptimizationRequest = serde_json::from_str(include_str!(
-            "../../examples/optimization/momo_single_stage_coarse.json"
+            "../../examples/optimization/single_stage_100km_coarse.json"
         ))
         .unwrap();
         let r = solve(r).unwrap();
@@ -1007,7 +1007,7 @@ mod tests {
         assert!(m.load_vehicle().is_err());
     }
     #[test]
-    fn solve_momo() {
+    fn solve_single_stage() {
         let r = solve(request()).unwrap();
         eprintln!(
             "{} iterations={} objective={:?}",

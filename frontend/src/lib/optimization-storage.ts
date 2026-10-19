@@ -220,7 +220,7 @@ export function readOptimizationFile(raw: string): { kind: 'result'; result: Opt
   const value: unknown = JSON.parse(raw)
   if (object(value) && 'input' in value) return { kind: 'result', result: readOptimizationResult(value) }
   const { input, issues } = inspectOptimizationInput(raw)
-  // Structurally valid inputs may need edits (e.g. a ZERO data template).
+  // Structurally valid inputs may still need edits before running.
   if (!input) throw new Error(issues[0]?.message ?? tr('入力JSONを確認してください。', 'Check the input JSON.'))
   return { kind: 'input', raw: JSON.stringify(value, null, 2) }
 }

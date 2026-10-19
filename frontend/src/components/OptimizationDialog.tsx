@@ -32,7 +32,6 @@ import {
 import type { OptimizationDraft, SavedRunInfo } from '../lib/optimization-storage'
 import {
   DEFAULT_OPTIMIZATION_PRESET,
-  developerPresetOptions,
   optimizationPresets,
   rocketPresetOptions,
   type OptimizationPresetId,
@@ -43,7 +42,7 @@ import { OptimizationResults } from './optimization/OptimizationResults'
 import { OptTabs } from './optimization/controls'
 import { OptimizationEditorContext } from './optimization/editor-context'
 import { ProgressView } from './optimization/ProgressView'
-import { optButton, optInput, optPrimary } from './optimization/styles'
+import { optButton, optPrimary } from './optimization/styles'
 import { cn } from '../lib/cn'
 
 type View = 'setup' | 'results' | 'history'
@@ -117,10 +116,10 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
     let alive = true
     loadOptimizationDraft()
       .then((value) => {
-        // Drafts that still hold the former default preset untouched move to the new default vehicle.
         if (alive && !touched.current && value)
           setDraft(
-            value.preset === 'multi_stage' && value.raw === optimizationPresets.multi_stage
+            // Former preset ids (benchmarks, the old default) are no longer offered.
+            value.preset !== 'custom' && !(value.preset in optimizationPresets)
               ? { ...value, raw: optimizationPresets[DEFAULT_OPTIMIZATION_PRESET], preset: DEFAULT_OPTIMIZATION_PRESET, fields: {} }
               : value,
           )
@@ -759,11 +758,8 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
   )
 }
 
-/** Vehicles as cards; regression and numerical test cases tucked away. */
+/** The two example cases as cards. */
 function CasePicker({ value, disabled, onPick }: { value: string; disabled: boolean; onPick: (id: OptimizationPresetId) => void }) {
-  const rockets = rocketPresetOptions(),
-    dev = developerPresetOptions()
-  const devValue = dev.some((d) => d.id === value) ? value : ''
   return (
     <section
       className="rounded-[9px] border border-line bg-surface px-3 py-2.5 sm:px-4"
@@ -773,7 +769,7 @@ function CasePicker({ value, disabled, onPick }: { value: string; disabled: bool
       )}
     >
       <div
-        className="grid items-center gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_14rem]"
+        className="grid items-center gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]"
         role="radiogroup"
         aria-label={tr('出発点にする機体', 'Starting vehicle')}
       >
@@ -781,7 +777,7 @@ function CasePicker({ value, disabled, onPick }: { value: string; disabled: bool
           {tr('出発点の機体', 'Starting vehicle')}
           {value === 'custom' ? <span className="ml-2 text-[10px] font-normal text-ink-3">{tr('（編集中）', '(edited)')}</span> : null}
         </h3>
-        {rockets.map((r) => (
+        {rocketPresetOptions().map((r) => (
           <button
             key={r.id}
             type="button"
@@ -798,20 +794,6 @@ function CasePicker({ value, disabled, onPick }: { value: string; disabled: bool
             <span className="block truncate text-[10px] text-ink-3">{r.description}</span>
           </button>
         ))}
-        <select
-          className={optInput}
-          value={devValue}
-          disabled={disabled}
-          aria-label={tr('開発・検証用のケース', 'Development and test cases')}
-          onChange={(event) => event.target.value && onPick(event.target.value as OptimizationPresetId)}
-        >
-          <option value="">{tr('開発・検証用のケース…', 'Development and test cases…')}</option>
-          {dev.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.label}
-            </option>
-          ))}
-        </select>
       </div>
     </section>
   )
