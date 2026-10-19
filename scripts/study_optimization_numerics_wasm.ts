@@ -1,6 +1,6 @@
 // Matched WASI measurements through the browser ABI. Each case gets a fresh
 // instance. Keep failures and platform differences; do not retry/select winners.
-// Usage: bun scripts/study_optimization_numerics_wasm.ts MANIFEST [NAME_REGEX]
+// Usage: bun scripts/study_optimization_numerics_wasm.ts MANIFEST [NAME_REGEX] [WASM_PATH] [OUTPUT_DIR]
 import { instantiateOptimizer } from '../frontend/src/lib/optimization-wasm'
 import { createHash } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
@@ -13,7 +13,7 @@ type Result = {
   code_revision: string
   solver_status: string
   converged: boolean
-  iterations: unknown[]
+  iterations: { iteration: number }[]
   physical_solution: Solution | null
   numerical_metrics: unknown
   validation: { status: string, flight?: Flight, multi_stage?: Flight }
@@ -23,11 +23,12 @@ type Case = { name: string, input: unknown, problem_fingerprint: string }
 
 const root = resolve(import.meta.dir, '..')
 const manifest = resolve(process.argv[2] ?? 'out/optimization/pr3-numerics/manifest.json')
-const directory = resolve(dirname(manifest), 'wasi')
+const directory = process.argv[5] ? resolve(process.argv[5]) : resolve(dirname(manifest), 'wasi')
 const selected = (await Bun.file(manifest).json() as Case[]).filter(c => new RegExp(process.argv[3] ?? '.*').test(c.name))
 if (!selected.length) throw new Error('no matching cases')
+if (await Bun.file(resolve(directory, 'environment.json')).exists() || await Bun.file(resolve(directory, 'summary.json')).exists()) throw new Error('WASI study already exists; choose a fresh OUTPUT_DIR')
 await mkdir(directory, { recursive: true })
-const bytes = await Bun.file(resolve(root, 'frontend/public/optimization/optimizer.wasm')).arrayBuffer()
+const bytes = await Bun.file(resolve(root, process.argv[4] ?? 'frontend/public/optimization/optimizer.wasm')).arrayBuffer()
 // Freeze the bytes/hash even if another build completes while the study runs.
 await Bun.write(resolve(directory, 'optimizer.wasm'), bytes)
 await Bun.write(resolve(directory, 'environment.json'), JSON.stringify({ runtime: Bun.version, platform: platform(), arch: arch(), wasm_bytes: bytes.byteLength, wasm_sha256: createHash('sha256').update(new Uint8Array(bytes)).digest('hex'), cases: selected.map(c => c.name) }, null, 2))
@@ -43,7 +44,7 @@ for (const c of selected) {
     if (result.error) throw new Error(result.error)
     const v = result.validation
     const flight = v.flight ?? v.multi_stage
-    Object.assign(row, { code_revision: result.code_revision, solver_status: result.solver_status, converged: result.converged, validation: v.status, iterations: result.iterations.length, numerical_metrics: result.numerical_metrics, memory_bytes: optimizer.memoryBytes(), callbacks, physical_objective: result.physical_solution?.objective, net_payload_kg: flight?.net_payload_kg, additional_payload_kg: flight?.mass_ledger?.additional_payload_kg, max_position_error_m: flight?.max_position_error_m, max_velocity_error_m_s: flight?.max_velocity_error_m_s, orbit: flight?.orbit, failed_checks: flight?.checks.filter(x => !x.passed).map(x => x.id) })
+    Object.assign(row, { code_revision: result.code_revision, solver_status: result.solver_status, converged: result.converged, validation: v.status, iterations: Math.max(0, ...result.iterations.map(i => i.iteration)), iteration_records: result.iterations.length, numerical_metrics: result.numerical_metrics, memory_bytes: optimizer.memoryBytes(), callbacks, physical_objective: result.physical_solution?.objective, net_payload_kg: flight?.net_payload_kg, additional_payload_kg: flight?.mass_ledger?.additional_payload_kg, max_position_error_m: flight?.max_position_error_m, max_velocity_error_m_s: flight?.max_velocity_error_m_s, orbit: flight?.orbit, failed_checks: flight?.checks.filter(x => !x.passed).map(x => x.id) })
     const referenceFile = Bun.file(resolve(dirname(manifest), `${c.name}-result.json`))
     if (await referenceFile.exists()) {
       const reference = await referenceFile.json() as Result

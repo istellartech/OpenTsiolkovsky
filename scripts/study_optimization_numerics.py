@@ -79,6 +79,8 @@ def main():
     args = parser.parse_args()
     directory = args.output.resolve()
     directory.mkdir(parents=True, exist_ok=True)
+    if (directory / 'manifest.json').exists():
+        parser.error('study directory already contains a manifest; choose a fresh --output directory')
     selected = [c for c in cases() if fnmatch.fnmatch(c['name'], args.filter)]
     if not selected:
         parser.error('no matching cases')
@@ -109,7 +111,7 @@ def main():
                 result = json.loads(result_path.read_text())
                 validation = result.get('validation') or {}
                 trajectory = validation.get('multi_stage') or validation.get('flight') or validation.get('trajectory') or {}
-                row.update(code_revision=result['code_revision'], solver_status=result['solver_status'], converged=result['converged'], validation=validation.get('status'), iterations=len(result['iterations']), numerical_metrics=result['numerical_metrics'], physical_objective=(result.get('physical_solution') or {}).get('objective'), net_payload_kg=trajectory.get('net_payload_kg'), additional_payload_kg=trajectory.get('mass_ledger', {}).get('additional_payload_kg'), max_position_error_m=trajectory.get('max_position_error_m'), max_velocity_error_m_s=trajectory.get('max_velocity_error_m_s'), orbit=trajectory.get('orbit'), failed_checks=[c['id'] for c in trajectory.get('checks', []) if not c['passed']])
+                row.update(code_revision=result['code_revision'], solver_status=result['solver_status'], converged=result['converged'], validation=validation.get('status'), iterations=max((i['iteration'] for i in result['iterations']), default=0), iteration_records=len(result['iterations']), numerical_metrics=result['numerical_metrics'], physical_objective=(result.get('physical_solution') or {}).get('objective'), net_payload_kg=trajectory.get('net_payload_kg'), additional_payload_kg=trajectory.get('mass_ledger', {}).get('additional_payload_kg'), max_position_error_m=trajectory.get('max_position_error_m'), max_velocity_error_m_s=trajectory.get('max_velocity_error_m_s'), orbit=trajectory.get('orbit'), failed_checks=[c['id'] for c in trajectory.get('checks', []) if not c['passed']])
                 assert run.returncode == (0 if result['converged'] and validation.get('status') == 'passed' else 1)
             else:
                 row['error'] = run.stderr

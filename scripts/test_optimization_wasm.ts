@@ -129,6 +129,9 @@ for (const name of ['hs071', 'double_integrator', 'momo_single_stage', 'two_stag
 const pr3Directory = resolve(root, 'out/optimization/wasm-parity/pr3')
 await mkdir(pr3Directory, { recursive: true })
 const double = await Bun.file(resolve(root, 'examples/optimization/double_integrator_exact.json')).json()
+const secondOrder = optimizer.solve(double) as { converged: boolean, hessian_calls: number }
+assert.equal(secondOrder.converged, true)
+assert(secondOrder.hessian_calls > 0)
 for (const strategy of ['s0', 's1_bounds', 's1_guess', 's2', 's3']) {
   for (const kkt of ['none', 'ruiz', 'slack_based']) {
     const input = { ...double, solver: { ...double.solver, derivative_test: false, scaling: { strategy, gradient_max: 1 }, kkt_scaling: kkt } }
