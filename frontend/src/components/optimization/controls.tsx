@@ -2,7 +2,6 @@ import { useContext, useId, type ReactNode } from 'react'
 import { cn } from '../../lib/cn'
 import { tr } from '../../lib/i18n'
 import { numericDraftValue } from '../../lib/optimization-input'
-import type { Bounds } from '../../lib/optimization-input'
 import { OptimizationEditorContext } from './editor-context'
 import { optInput } from './styles'
 
@@ -47,7 +46,7 @@ export function OptNumber({
           autoComplete="off"
           spellCheck={false}
           disabled={ctx.disabled}
-          value={draft?.text ?? String(value / scale)}
+          value={draft?.text ?? (scale === 1 ? String(value) : String(Number((value / scale).toPrecision(6))))}
           aria-invalid={!!error}
           aria-describedby={error || hint ? `${id}-help` : undefined}
           onChange={(event) => {
@@ -114,63 +113,6 @@ export function OptText({
         </p>
       ) : null}
     </div>
-  )
-}
-export function OptBounds({
-  path,
-  label,
-  value,
-  unit,
-  fixedOnly = false,
-}: {
-  path: string
-  label: string
-  value: Bounds
-  unit: string
-  fixedOnly?: boolean
-}) {
-  const ctx = useContext(OptimizationEditorContext),
-    fixed = value.lower === value.upper
-  return (
-    <fieldset className="rounded-[8px] border border-line p-3" data-opt-field={path}>
-      <legend className="px-1 text-[12px] font-medium">
-        {label} <span className="ml-2 font-normal text-ink-3">{fixed ? tr('固定', 'Fixed') : tr('最適化', 'Optimized')}</span>
-      </legend>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <OptNumber
-          path={`${path}.initial`}
-          label={fixed ? tr('値', 'Value') : tr('初期値', 'Initial value')}
-          value={value.initial}
-          unit={unit}
-          onValue={(v) => ctx.edit(fixed ? path : `${path}.initial`, fixed ? { initial: v, lower: v, upper: v } : v)}
-        />
-        {!fixedOnly ? (
-          <>
-            <OptNumber path={`${path}.lower`} label={tr('下限', 'Lower bound')} value={value.lower} unit={unit} />
-            <OptNumber path={`${path}.upper`} label={tr('上限', 'Upper bound')} value={value.upper} unit={unit} />
-          </>
-        ) : null}
-      </div>
-      {!fixedOnly ? (
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-3">
-          <p>
-            {tr('上下限が同じなら固定、異なれば範囲内で最適化します。', 'Equal bounds fix the value; different bounds allow optimization.')}
-          </p>
-          <button
-            type="button"
-            className="rounded px-1 py-1 text-ink-2 underline underline-offset-2 disabled:opacity-40"
-            disabled={ctx.disabled}
-            onClick={() => {
-              ctx.setField(`${path}.lower`, null)
-              ctx.setField(`${path}.upper`, null)
-              ctx.edit(path, { initial: value.initial, lower: value.initial, upper: value.initial })
-            }}
-          >
-            {tr('初期値で固定', 'Fix at initial value')}
-          </button>
-        </div>
-      ) : null}
-    </fieldset>
   )
 }
 export function OptGroup({ title, note, children, id }: { title: ReactNode; note?: ReactNode; children: ReactNode; id?: string }) {

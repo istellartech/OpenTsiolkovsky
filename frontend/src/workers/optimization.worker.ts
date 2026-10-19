@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { instantiateOptimizer } from '../lib/optimization-wasm'
-import type { OptimizationResult, OptimizationWorkerRequest, IterationRecord, OptimizationWorkerMessage } from '../lib/optimization'
+import type { OptimizationResult, OptimizationWorkerRequest, ProgressRecord, OptimizationWorkerMessage } from '../lib/optimization'
 
 declare const self: DedicatedWorkerGlobalScope
 
@@ -13,10 +13,12 @@ self.onmessage = async (event: MessageEvent<OptimizationWorkerRequest>) => {
     const response = await fetch(wasmUrl)
     if (!response.ok) throw new Error(`Optimizer WASM could not be loaded (${response.status}); run build:optimization`)
     let lastProgress = -Infinity
-    const optimizer = await instantiateOptimizer(await response.arrayBuffer(), (record) => {
+    const optimizer = await instantiateOptimizer(await response.arrayBuffer(), (value) => {
+      const record = value as ProgressRecord
       const now = performance.now()
-      if (now - lastProgress >= 100) {
-        send({ runId, type: 'progress', record: record as IterationRecord })
+      // Trajectory snapshots are already rate-limited by the solver; keep them all.
+      if (record.snapshot || now - lastProgress >= 100) {
+        send({ runId, type: 'progress', record })
         lastProgress = now
       }
     })

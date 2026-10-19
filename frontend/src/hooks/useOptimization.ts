@@ -1,10 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import { createOptimizationRun, type OptimizationRun } from '../lib/optimization-storage'
-import { optimizationSnapshot, type IterationRecord, type OptimizationWorkerMessage } from '../lib/optimization'
+import { optimizationSnapshot, type IterationRecord, type OptimizationWorkerMessage, type ProgressSnapshot } from '../lib/optimization'
+
+/** What the progress view needs from a running solve. */
+export interface LiveProgress {
+  startedAt: number
+  /** Forwarded iteration records (rate-limited, in order). */
+  iterations: IterationRecord[]
+  /** Recent trajectory snapshots, oldest first, tagged with their iteration. */
+  snapshots: { iteration: number; snapshot: ProgressSnapshot }[]
+  /** Payload of every snapshot, for a payload-vs-iteration trace. */
+  payload: { iteration: number; kg: number }[]
+}
+const KEEP_SNAPSHOTS = 8
 
 export function useOptimization() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'solving' | 'done' | 'cancelled' | 'error'>('idle')
   const [progress, setProgress] = useState<IterationRecord | null>(null)
+  const [live, setLive] = useState<LiveProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [runs, setRuns] = useState<OptimizationRun[]>([])
   const [memoryBytes, setMemoryBytes] = useState<number | null>(null)
@@ -36,6 +49,7 @@ export function useOptimization() {
       activeRun.current = runId
       workerRef.current = worker
       setStatus('loading')
+      setLive({ startedAt: Date.now(), iterations: [], snapshots: [], payload: [] })
       const finish = () => {
         activeRun.current = null
         worker.terminate()
@@ -44,8 +58,19 @@ export function useOptimization() {
       worker.onmessage = (event: MessageEvent<OptimizationWorkerMessage>) => {
         const message = event.data
         if (activeRun.current !== message.runId) return
-        if (message.type === 'progress') setProgress(message.record)
-        else if (message.type === 'stage') setStatus('solving')
+        if (message.type === 'progress') {
+          const { snapshot, ...record } = message.record
+          setProgress(record)
+          setLive((old) => {
+            if (!old) return old
+            const next = { ...old, iterations: [...old.iterations, record] }
+            if (snapshot) {
+              next.snapshots = [...old.snapshots, { iteration: record.iteration, snapshot }].slice(-KEEP_SNAPSHOTS)
+              next.payload = [...old.payload, { iteration: record.iteration, kg: snapshot.payload_kg }]
+            }
+            return next
+          })
+        } else if (message.type === 'stage') setStatus('solving')
         else if (message.type === 'error') {
           setError(message.error)
           setStatus('error')
@@ -97,6 +122,7 @@ export function useOptimization() {
     status,
     running: status === 'loading' || status === 'solving',
     progress,
+    live,
     error,
     runs,
     memoryBytes,

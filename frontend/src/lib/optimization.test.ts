@@ -59,10 +59,19 @@ describe('flight mesh refinement', () => {
       phases: input.problem.phases.map((p) => ({ ...p, intervals: Math.min(16, 2 * p.intervals) })),
     })
     expect(input.problem.phases[0].intervals).toBe(10)
-    expect(() =>
+    // Doubling all five phases would exceed 64 intervals: grow up to the limit instead.
+    const capped = JSON.parse(
       refineFlightMesh(
         JSON.stringify({ problem: { kind: 'multi_stage', degree: 8, phases: Array.from({ length: 5 }, () => ({ intervals: 8 })) } }),
       ),
-    ).toThrow(/64/)
+    )
+    const counts = capped.problem.phases.map((p: { intervals: number }) => p.intervals)
+    expect(counts.reduce((a: number, b: number) => a + b, 0)).toBe(64)
+    expect(counts.every((n: number) => n >= 12 && n <= 16)).toBe(true)
+    expect(() =>
+      refineFlightMesh(
+        JSON.stringify({ problem: { kind: 'multi_stage', degree: 8, phases: Array.from({ length: 4 }, () => ({ intervals: 16 })) } }),
+      ),
+    ).toThrow(/limit/)
   })
 })

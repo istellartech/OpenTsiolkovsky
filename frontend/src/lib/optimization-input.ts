@@ -4,6 +4,7 @@ import schema from './optimization-schema.json'
 import type { Config } from './config'
 import { isValidDateTime } from './config'
 import { tr } from './i18n'
+import { phaseLabel } from './optimization-vehicle'
 
 export interface NumericDraft {
   text: string
@@ -76,8 +77,15 @@ interface RocketProblem {
   validation: FlightTolerances
   max_dynamic_pressure_pa: number
 }
+export interface InitialGuess {
+  net_payload_kg: number
+  phase_durations_s: number[]
+  samples: { phase: number; time_s: number; state_eci: number[]; azimuth_deg: number; elevation_deg: number }[]
+}
 export interface MultiStageInput extends RocketProblem {
   kind: 'multi_stage'
+  /** Warm start from an earlier trajectory of the same phase layout. */
+  initial_guess?: InitialGuess
   stages: StageInventory[]
   phases: OptimizationPhase[]
   net_payload_kg: Bounds
@@ -513,7 +521,7 @@ export function phaseViews(p: OptimizationProblem): PhaseView[] {
       const start = time
       time += phase.duration_s.initial
       return {
-        name: phase.name,
+        name: phaseLabel(p.phases, i),
         stage: phase.stage,
         powered: phase.mode === 'burn',
         fixed: phase.duration_s.lower === phase.duration_s.upper,
@@ -593,8 +601,14 @@ export function canonicalJson(value: unknown): string {
       .join(',')}}`
   return JSON.stringify(value)
 }
+/** The same input without a warm-start trajectory (which only changes the starting point). */
+export function withoutInitialGuess(input: OptimizationInput): OptimizationInput {
+  if (input.problem.kind !== 'multi_stage' || !input.problem.initial_guess) return input
+  const { initial_guess: _guess, ...problem } = input.problem
+  return { ...input, problem }
+}
 export function requestFingerprint(input: OptimizationInput): string {
-  const { run_id: _id, ...rest } = schemaDefaultedInput(input)
+  const { run_id: _id, ...rest } = schemaDefaultedInput(withoutInitialGuess(input))
   return canonicalJson(rest)
 }
 /** Compare serde's recorded input with a draft that may omit schema defaults.
@@ -637,7 +651,7 @@ function schemaDefaultedInput(input: OptimizationInput): OptimizationInput {
 }
 export function samePhysicalProblem(a: OptimizationInput, b: OptimizationInput): boolean {
   const strip = (input: OptimizationInput) => {
-    const p = structuredClone(schemaDefaultedInput(input).problem) as unknown as Record<string, unknown>
+    const p = structuredClone(schemaDefaultedInput(withoutInitialGuess(input)).problem) as unknown as Record<string, unknown>
     for (const key of ['degree', 'intervals', 'burn_intervals', 'coast_intervals', 'initial_pitch_end_deg']) delete p[key]
     for (const value of Object.values(p)) if (jsonObject(value) && 'lower' in value && 'upper' in value) delete value.initial
     if (Array.isArray(p.phases))

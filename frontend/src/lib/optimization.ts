@@ -8,6 +8,24 @@ export interface IterationRecord {
   restoration: boolean
 }
 
+/** Solver's last evaluated trajectory, sent during a run (never stored in results). */
+export interface ProgressSnapshot {
+  payload_kg: number
+  phase_end_s: number[]
+  time_s: number[]
+  phase: number[]
+  altitude_m: number[]
+  downrange_m: number[]
+  speed_m_s: number[]
+  mass_kg: number[]
+  perigee_altitude_m: number | null
+  apogee_altitude_m: number | null
+  inclination_deg: number | null
+}
+export interface ProgressRecord extends IterationRecord {
+  snapshot?: ProgressSnapshot | null
+}
+
 export interface TrajectorySample {
   time_s: number
   position_m: number
@@ -111,6 +129,9 @@ export interface MultiStageValidation {
     angle_of_attack_deg: number
     specific_force_m_s2: number
     inertial_direction_rate_deg_s: number
+    thrust_n: number
+    /** Cumulative propellant consumed per stage [kg]. */
+    consumed_propellant_kg: number[]
   }[]
   checks: PhysicalCheck[]
   unevaluated_constraints: string[]
@@ -166,7 +187,7 @@ export interface OptimizationWorkerRequest {
 }
 
 export type OptimizationWorkerMessage = { runId: string } & (
-  | { type: 'progress'; record: IterationRecord }
+  | { type: 'progress'; record: ProgressRecord }
   | { type: 'stage'; stage: 'solving' }
   | { type: 'result'; result: OptimizationResult | { error: string }; memoryBytes: number }
   | { type: 'error'; error: string }
@@ -204,10 +225,24 @@ export function refineFlightMesh(raw: string): string {
         p.intervals > 16
       )
         throw new Error('Invalid phase mesh')
-      return { ...p, intervals: Math.min(16, p.intervals * 2) }
+      return { ...p, intervals: p.intervals }
     })
+    // Double every phase where the 16-per-phase and 64-total limits allow,
+    // adding intervals one at a time to the phases that have the most.
+    const target = nextPhases.map((p) => Math.min(16, p.intervals * 2))
+    let total = nextPhases.reduce((sum, p) => sum + p.intervals, 0)
+    for (let grew = true; grew && total < 64;) {
+      grew = false
+      for (const i of nextPhases.map((_, i) => i).sort((a, b) => nextPhases[b].intervals - nextPhases[a].intervals)) {
+        if (total >= 64) break
+        if (nextPhases[i].intervals < target[i]) {
+          nextPhases[i].intervals++
+          total++
+          grew = true
+        }
+      }
+    }
     const nextDegree = Math.min(8, Math.max(6, degree + 1))
-    if (nextPhases.reduce((sum, p) => sum + p.intervals, 0) > 64) throw new Error('Refined mesh exceeds 64 intervals')
     if (nextDegree === degree && nextPhases.every((p, i) => p.intervals === phases[i].intervals)) {
       throw new Error('The mesh is already at the supported limit')
     }
