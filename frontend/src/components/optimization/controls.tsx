@@ -4,6 +4,8 @@ import { tr } from '../../lib/i18n'
 import { numericDraftValue } from '../../lib/optimization-input'
 import { OptimizationEditorContext } from './editor-context'
 import { optInput } from './styles'
+import { NumericControl } from '../primitives'
+import { fmtInput } from '../../lib/format'
 
 export function OptNumber({
   path,
@@ -37,37 +39,32 @@ export function OptNumber({
         {label}
         {unit ? <span className="sr-only"> ({unit})</span> : null}
       </label>
-      <div className="relative">
-        <input
-          id={id}
-          className={cn(optInput, 'num pr-14', error && 'border-danger')}
-          type="text"
-          inputMode={integer ? 'numeric' : 'decimal'}
-          autoComplete="off"
-          spellCheck={false}
-          disabled={ctx.disabled}
-          value={draft?.text ?? (scale === 1 ? String(value) : String(Number((value / scale).toPrecision(6))))}
-          aria-invalid={!!error}
-          aria-describedby={error || hint ? `${id}-help` : undefined}
-          onChange={(event) => {
-            const next = { text: event.target.value, scale, integer }
-            ctx.setField(path, next)
-            const number = numericDraftValue(next)
-            if (number !== null) {
-              if (onValue) onValue(number)
-              else ctx.edit(path, number)
-            }
-          }}
-          onBlur={() => {
-            if (draft && numericDraftValue(draft) !== null) ctx.setField(path, null)
-          }}
-        />
-        {unit ? (
-          <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-[11px] text-ink-3" aria-hidden="true">
-            {unit}
-          </span>
-        ) : null}
-      </div>
+      <NumericControl
+        id={id}
+        unit={unit}
+        inputMode={integer ? 'numeric' : 'decimal'}
+        disabled={ctx.disabled}
+        value={draft?.text ?? fmtInput(value / scale)}
+        aria-invalid={!!error}
+        aria-describedby={error || hint ? `${id}-help` : undefined}
+        onFocus={(event) => {
+          ctx.setField(path, { text: String(value / scale), scale, integer })
+          const el = event.currentTarget
+          requestAnimationFrame(() => el.select())
+        }}
+        onChange={(event) => {
+          const next = { text: event.target.value, scale, integer }
+          ctx.setField(path, next)
+          const number = numericDraftValue(next)
+          if (number !== null) {
+            if (onValue) onValue(number)
+            else ctx.edit(path, number)
+          }
+        }}
+        onBlur={() => {
+          if (draft && numericDraftValue(draft) !== null) ctx.setField(path, null)
+        }}
+      />
       {error || hint ? (
         <p id={`${id}-help`} className={cn('mt-0.5 text-[10px] leading-snug', error ? 'text-danger' : 'text-ink-2')}>
           {error ?? hint}
@@ -115,9 +112,21 @@ export function OptText({
     </div>
   )
 }
-export function OptGroup({ title, note, children, id }: { title: ReactNode; note?: ReactNode; children: ReactNode; id?: string }) {
+export function OptGroup({
+  title,
+  note,
+  children,
+  id,
+  className,
+}: {
+  title: ReactNode
+  note?: ReactNode
+  children: ReactNode
+  id?: string
+  className?: string
+}) {
   return (
-    <section id={id} className="rounded-[9px] border border-line bg-surface px-3 py-3 sm:px-4">
+    <section id={id} className={cn('rounded-[9px] border border-line bg-surface px-3 py-3 sm:px-4', className)}>
       <h3 className="text-[13px] font-semibold">{title}</h3>
       {note ? <p className="mt-0.5 text-[11px] leading-snug text-ink-3">{note}</p> : null}
       <div className="mt-2.5 space-y-3">{children}</div>
@@ -129,17 +138,23 @@ export function OptTabs<T extends string>({
   options,
   onChange,
   label,
+  variant = 'pill',
+  className,
 }: {
   value: T
   options: { value: T; label: string; disabled?: boolean }[]
   onChange: (v: T) => void
   label: string
+  /** `underline`: a flat tab row like the simulation's panels */
+  variant?: 'pill' | 'underline'
+  className?: string
 }) {
+  const underline = variant === 'underline'
   return (
     <div
       role="tablist"
       aria-label={label}
-      className="flex gap-1 overflow-x-auto"
+      className={cn('scroll-quiet flex overflow-x-auto', underline ? 'gap-0' : 'gap-1', className)}
       onKeyDown={(event) => {
         const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=tab]:not(:disabled)'))
         const index = tabs.indexOf(document.activeElement as HTMLButtonElement)
@@ -164,12 +179,20 @@ export function OptTabs<T extends string>({
           tabIndex={value === option.value ? 0 : -1}
           disabled={option.disabled}
           className={cn(
-            'whitespace-nowrap rounded-[6px] px-3 py-1.5 text-[12px] font-medium transition-colors disabled:opacity-40',
-            value === option.value ? 'bg-surface text-ink shadow-[0_0_0_1px_var(--line)]' : 'text-ink-3 hover:bg-surface-2 hover:text-ink',
+            'whitespace-nowrap text-[12px] font-medium transition-colors disabled:opacity-40',
+            underline
+              ? cn('relative h-10 px-2.5', value === option.value ? 'text-ink' : 'text-ink-3 hover:text-ink')
+              : cn(
+                  'rounded-[6px] px-3 py-1.5',
+                  value === option.value
+                    ? 'bg-surface text-ink shadow-[0_0_0_1px_var(--line)]'
+                    : 'text-ink-3 hover:bg-surface-2 hover:text-ink',
+                ),
           )}
           onClick={() => onChange(option.value)}
         >
           {option.label}
+          {underline && value === option.value ? <span className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-ink" /> : null}
         </button>
       ))}
     </div>

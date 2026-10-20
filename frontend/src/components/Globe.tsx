@@ -551,10 +551,11 @@ function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number) {
   return CesiumMath.toDegrees(Math.atan2(y, x))
 }
 
-function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
+/** Fit the whole flight into view; false when the canvas is hidden and nothing was framed. */
+function frameOverview(viewer: Viewer, built: Built, duration = 1.2): boolean {
   viewer.trackedEntity = undefined
   // A hidden canvas has no view to fit (Cesium throws on the zero-size frustum).
-  if (viewer.canvas.clientWidth === 0 || viewer.canvas.clientHeight === 0) return
+  if (viewer.canvas.clientWidth === 0 || viewer.canvas.clientHeight === 0) return false
   const radius = Math.max(built.sphere.radius, 20000)
   // Fit the whole trajectory into the narrower field of view, with margin.
   const frustum = viewer.camera.frustum as PerspectiveFrustum
@@ -567,6 +568,7 @@ function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
     offset: new HeadingPitchRange(built.heading, CesiumMath.toRadians(built.overviewPitch ?? -20), range),
     duration,
   })
+  return true
 }
 
 /** Turn the view so north is up, keeping the point being looked at (or the tracked vehicle) in place. */
@@ -618,6 +620,8 @@ export default function Globe({
   const viewerRef = useRef<Viewer | null>(null)
   const builtRef = useRef<Built | null>(null)
   const launchKeyRef = useRef<string>('')
+  /** Whether the camera has been fitted to a flight at least once (false while the map was hidden). */
+  const framedRef = useRef(false)
   const recordedTimeRef = useRef(recordedTime)
   recordedTimeRef.current = recordedTime
   const [mode, setMode] = useState<CameraMode>('overview')
@@ -698,10 +702,16 @@ export default function Globe({
       ? recordedPath.id
       : `${f!.lat.toFixed(2)},${f!.lon.toFixed(2)},${Math.round(l!.downrange / 50)},${Math.round(track!.summary.apogee / 50000)}`
     if (key !== launchKeyRef.current) {
-      const isFirst = launchKeyRef.current === ''
+      const isFirst = !framedRef.current
       launchKeyRef.current = key
-      if (mode === 'follow') viewer.trackedEntity = built.vehicle
-      else frameOverview(viewer, built, isFirst ? 0 : 1.4)
+      if (mode === 'follow') {
+        viewer.trackedEntity = built.vehicle
+        framedRef.current = true
+      } else {
+        // While hidden (the other workspace, or another view on phones) the
+        // resize observer frames it as soon as the map gets a size.
+        framedRef.current = frameOverview(viewer, built, isFirst ? 0 : 1.4)
+      }
     } else if (mode === 'follow') {
       viewer.trackedEntity = built.vehicle
     }
@@ -729,8 +739,18 @@ export default function Globe({
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth
       const h = el.clientHeight
-      // Hidden (another view is showing on phones/tablets): nothing to frame.
+      // Hidden (another workspace or view is showing): nothing to frame.
       if (w === 0 || h === 0) return
+      const viewer = viewerRef.current
+      const built = builtRef.current
+      // First time the map has a size for a flight built while hidden: jump
+      // straight to it rather than flying in from Cesium's whole-Earth view.
+      if (viewer && built && !framedRef.current && modeRef.current === 'overview') {
+        last = { w, h }
+        window.clearTimeout(timer)
+        framedRef.current = frameOverview(viewer, built, 0)
+        return
+      }
       if (Math.abs(w - last.w) < 24 && Math.abs(h - last.h) < 24) return
       last = { w, h }
       window.clearTimeout(timer)

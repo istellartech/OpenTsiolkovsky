@@ -50,8 +50,8 @@ export function OptimizationHistory({
           <h3 className="text-[16px] font-semibold">{tr('保存した実行', 'Saved runs')}</h3>
           <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-ink-2">
             {tr(
-              '入力・全解・検証記録をこのブラウザのIndexedDBへ自動保存します。ページを再読込しても残ります。共有やバックアップには全結果JSONを使ってください。',
-              'Inputs, full solutions and validation records are saved to this browser’s IndexedDB and survive reloads. Download full result JSON for sharing or backup.',
+              '入力・全解・検証記録をこのブラウザのIndexedDBへ自動保存します。ページを再読込しても残ります。共有やバックアップにはケース保存を使うと変換履歴も残ります。',
+              'Inputs, full solutions and validation records are saved to this browser’s IndexedDB and survive reloads. Export a case file to retain conversion history when sharing or backing up.',
             )}
           </p>
         </div>
@@ -92,6 +92,11 @@ export function OptimizationHistory({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h4 className="break-words text-[13px] font-semibold">{run.label}</h4>
+                  {run.context ? (
+                    <p className="num mt-1 text-[10px] text-ink-3">
+                      {run.context.id.slice(0, 6)} · r{run.context.revision}
+                    </p>
+                  ) : null}
                   <p className="mt-1 text-[11px] text-ink-3">
                     {new Date(run.createdAt).toLocaleString()} · {run.problemKind} ·{' '}
                     {run.origin === 'import' ? tr('JSONから読込', 'Imported JSON') : tr('ブラウザで実行', 'Browser solve')}
@@ -140,7 +145,7 @@ export function OptimizationHistory({
                   onClick={() => void act(run.id, () => onExport(run.id))}
                 >
                   <ArrowDownToLine className="h-3.5 w-3.5" />
-                  {tr('JSON', 'JSON')}
+                  {tr('ケース保存', 'Save case')}
                 </button>
                 <button
                   type="button"

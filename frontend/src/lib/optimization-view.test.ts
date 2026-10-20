@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vite-plus/test'
 import recorded from './__fixtures__/optimization-map.json'
 import type { OptimizationResult } from './optimization'
-import { checkTime, optimizationMapPath, resultPhaseViews } from './optimization-view'
+import { checkTime, optimizationMapPath, optimizationTimeline, resultPhaseViews } from './optimization-view'
 
 // Unmodified native output slices; no optimizer or physics is run by these view tests.
 const result = () => structuredClone(recorded) as unknown as OptimizationResult
@@ -39,4 +39,13 @@ describe('recorded optimization presentation', () => {
     r.validation!.multi_stage!.samples[0].state_eci[1] = NaN
     expect(optimizationMapPath(r, 'invalid')).toBeNull()
   })
+})
+
+it('adapts the verified optimization timeline to the common player without creating flight quantities', () => {
+  const r = result()
+  const timeline = optimizationTimeline(r)!
+  expect(timeline.t1).toBeCloseTo(r.validation!.multi_stage!.final_time_s, 8)
+  expect(timeline.events.map((e) => e.kind)).toEqual(['separation', 'jettison', 'end'])
+  expect(timeline).not.toHaveProperty('samples')
+  expect(optimizationTimeline({ ...r, validation: null })).toBeNull()
 })

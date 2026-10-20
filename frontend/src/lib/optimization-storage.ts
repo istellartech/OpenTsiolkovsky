@@ -1,3 +1,4 @@
+import { newCase, readCaseContext, readCaseFile, type CaseContext } from './case'
 import type { OptimizationResult } from './optimization'
 import { assertFiniteJson, inspectOptimizationInput, inputTitle } from './optimization-input'
 import type { EditorSection, NumericDraft } from './optimization-input'
@@ -9,6 +10,7 @@ export interface OptimizationRun {
   label: string
   origin: 'solver' | 'import'
   result: OptimizationResult
+  context?: CaseContext
 }
 export interface SavedRunInfo extends Omit<OptimizationRun, 'result'> {
   runId: string
@@ -24,6 +26,7 @@ export interface OptimizationDraft {
   section: EditorSection
   preset: string
   updatedAt: number
+  context?: CaseContext
 }
 export const MAX_OPTIMIZATION_FILE_BYTES = 64 * 1024 * 1024
 const DATABASE = 'ot-optimization'
@@ -216,21 +219,35 @@ export function readOptimizationResult(value: unknown): OptimizationResult {
   }
   return value as unknown as OptimizationResult
 }
-export function readOptimizationFile(raw: string): { kind: 'result'; result: OptimizationResult } | { kind: 'input'; raw: string } {
-  const value: unknown = JSON.parse(raw)
-  if (object(value) && 'input' in value) return { kind: 'result', result: readOptimizationResult(value) }
+export function readOptimizationFile(
+  raw: string,
+): { kind: 'result'; result: OptimizationResult; context?: CaseContext } | { kind: 'input'; raw: string; context?: CaseContext } {
+  let value: unknown = JSON.parse(raw)
+  const envelope = readCaseFile(value)
+  if (envelope) {
+    if (envelope.workspace !== 'optimize') throw new Error(tr('最適化のケースを選んでください。', 'Select an optimization case.'))
+    value = envelope.data
+    raw = JSON.stringify(value)
+  }
+  const context = envelope?.context
+  if (object(value) && 'input' in value) return { kind: 'result', result: readOptimizationResult(value), context }
   const { input, issues } = inspectOptimizationInput(raw)
   // Structurally valid inputs may still need edits before running.
   if (!input) throw new Error(issues[0]?.message ?? tr('入力JSONを確認してください。', 'Check the input JSON.'))
-  return { kind: 'input', raw: JSON.stringify(value, null, 2) }
+  return { kind: 'input', raw: JSON.stringify(value, null, 2), context }
 }
-export function createOptimizationRun(result: OptimizationResult, origin: OptimizationRun['origin']): OptimizationRun {
+export function createOptimizationRun(
+  result: OptimizationResult,
+  origin: OptimizationRun['origin'],
+  context?: CaseContext,
+): OptimizationRun {
   return {
     id: origin === 'solver' ? result.input.run_id : crypto.randomUUID(),
     createdAt: Date.now(),
     label: inputTitle(result.input),
     origin,
     result,
+    context: structuredClone(context ?? newCase(inputTitle(result.input))),
   }
 }
 function runInfo(run: OptimizationRun, archived = false): SavedRunInfo {
@@ -239,6 +256,7 @@ function runInfo(run: OptimizationRun, archived = false): SavedRunInfo {
     createdAt: run.createdAt,
     label: run.label,
     origin: run.origin,
+    context: run.context,
     runId: run.result.input.run_id,
     problemKind: run.result.input.problem.kind,
     converged: run.result.converged,
@@ -334,7 +352,14 @@ export async function loadOptimizationRun(id: string): Promise<OptimizationRun> 
       requestValue(tx.objectStore('results').get(id)),
     ])) as [SavedRunInfo | undefined, unknown]
     if (!info || !result) throw new Error(tr('保存した実行が見つかりません。', 'Saved run not found.'))
-    return { id: info.id, createdAt: info.createdAt, label: info.label, origin: info.origin, result: readOptimizationResult(result) }
+    return {
+      id: info.id,
+      createdAt: info.createdAt,
+      label: info.label,
+      origin: info.origin,
+      context: info.context ? readCaseContext(info.context) : undefined,
+      result: readOptimizationResult(result),
+    }
   })
 }
 export async function archiveOptimizationRun(id: string, archived: boolean): Promise<void> {
@@ -367,6 +392,7 @@ export async function loadOptimizationDraft(): Promise<OptimizationDraft | null>
     typeof draft.updatedAt !== 'number'
   )
     throw new Error('Invalid saved draft')
+  if (draft.context !== undefined) readCaseContext(draft.context)
   return draft as unknown as OptimizationDraft
 }
 /** Close connections on application teardown / in isolated storage tests. */

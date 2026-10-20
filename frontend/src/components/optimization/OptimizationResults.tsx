@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
-import { ArrowDownToLine, CircleAlert, CircleCheck, Copy, Rocket, SplitSquareHorizontal } from 'lucide-react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { CircleAlert, CircleCheck, MoreHorizontal, Rocket, SplitSquareHorizontal } from 'lucide-react'
 import { tr, useLang } from '../../lib/i18n'
 import { fileBase, saveFile } from '../../lib/download'
 import { fmt } from '../../lib/format'
@@ -7,21 +7,28 @@ import { requestFingerprint, samePhysicalProblem } from '../../lib/optimization-
 import type { OptimizationInput } from '../../lib/optimization-input'
 import type { OptimizationRun } from '../../lib/optimization-storage'
 import type { MultiStageValidation, OptimizationResult } from '../../lib/optimization'
-import { optimizationMapPath, resultPhaseViews } from '../../lib/optimization-view'
+import { checkTime, optimizationMapPath, optimizationTimeline, resultPhaseViews } from '../../lib/optimization-view'
 import { phaseLabel } from '../../lib/optimization-vehicle'
 import type { ConstraintView } from '../../lib/optimization-constraints'
 import { pointOnPath } from '../../lib/globe-path'
 import { SequenceTimeline } from './SequenceTimeline'
 import { OptGroup, OptTabs } from './controls'
-import { optButton, optInput } from './styles'
+import { optButton, optInput, optPrimary } from './styles'
+import { Menu } from '../Header'
 import { ConstraintReport, LimitingConstraints, useConstraintViews } from './ConstraintReport'
 import { ResultCharts } from './ResultCharts'
 import { cn } from '../../lib/cn'
+import { caseFile, type CaseContext } from '../../lib/case'
+import { CaseDetails } from '../CaseDetails'
+import { PlaybackBar } from '../Playback'
+import { usePlayerKeys } from '../../hooks/usePlayer'
+import { createPlayback, suggestedSpeed, usePlayback } from '../../lib/playback'
+import { SplitView, useSplitRatio } from '../SplitView'
 
 const Globe = lazy(() => import('../Globe'))
 const number = (v: number | null | undefined, digits = 3) =>
   v === null || v === undefined || !Number.isFinite(v) ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: digits })
-type ResultTab = 'charts' | 'map' | 'sequence' | 'checks' | 'compare' | 'diagnostics'
+export type ResultTab = 'charts' | 'map' | 'split' | 'sequence' | 'checks' | 'compare' | 'diagnostics' | 'history'
 
 export function OptimizationResults({
   runs,
@@ -34,11 +41,17 @@ export function OptimizationResults({
   running,
   saved,
   memoryBytes,
+  active = true,
+  selectedTab,
+  onTab,
+  history,
+  historyCount,
+  progress,
 }: {
   runs: OptimizationRun[]
   currentInput: OptimizationInput | null
   draftIncomplete: boolean
-  onEdit: (input: OptimizationInput) => void
+  onEdit: (input: OptimizationInput, context?: CaseContext) => void
   onRefine: (result: OptimizationResult) => void
   /** Fly this result in the trajectory simulation */
   onSimulate: (result: OptimizationResult) => void
@@ -46,11 +59,26 @@ export function OptimizationResults({
   running: boolean
   saved: Record<string, string>
   memoryBytes: number | null
+  active?: boolean
+  selectedTab?: ResultTab
+  onTab?: (tab: ResultTab) => void
+  /** The saved-runs list, shown as the last tab */
+  history: ReactNode
+  historyCount: number
+  /** Shown instead of the result while a solve is running */
+  progress?: ReactNode
 }) {
   const run = runs[0],
     reference = runs[1]
-  const [tab, setTab] = useState<ResultTab>('charts')
-  const [cursor, setCursor] = useState<number | null>(null)
+  const [localTab, setLocalTab] = useState<ResultTab>('charts')
+  const tab = selectedTab ?? localTab
+  const setTab = onTab ?? setLocalTab
+  const [player] = useState(createPlayback)
+  const time = usePlayback((s) => s.t, player)
+  usePlayerKeys(undefined, active && !!run, player)
+  const setCursor = useCallback((t: number) => player.seek(t), [player])
+  const split = useSplitRatio('ot.optimization.split', 0.5)
+  const [showCase, setShowCase] = useState(false)
   const lang = useLang()
   const result = run?.result,
     validation = result?.validation
@@ -73,179 +101,223 @@ export function OptimizationResults({
   const phaseName = useCallback(
     (i: number) => {
       void lang
-      return inputPhases ? phaseLabel(inputPhases, i) : tr(`区間${i + 1}`, `segment ${i + 1}`)
+      return inputPhases
+        ? phaseLabel(inputPhases, i, result?.input.problem.kind === 'multi_stage' ? result.input.problem.vehicle : undefined)
+        : tr(`区間${i + 1}`, `segment ${i + 1}`)
     },
-    [inputPhases, lang],
+    [inputPhases, lang, result],
   )
   const prescribed = useCallback((i: number) => !!inputPhases?.[i]?.vertical, [inputPhases])
   const checks = multi?.checks ?? flight?.checks ?? []
   const views = useConstraintViews(checks, phaseName, prescribed)
-  if (!result)
+  const timeline = useMemo(() => (result ? optimizationTimeline(result) : null), [result])
+  useEffect(() => {
+    if (!timeline) return
+    player.pause()
+    player.load(timeline.t0, timeline.t1, { speed: suggestedSpeed(timeline.t1 - timeline.t0) })
+    player.seek(timeline.t1)
+    return () => player.pause()
+  }, [player, timeline])
+  useEffect(() => {
+    if (!active) player.pause()
+  }, [active, player])
+  const historyTab = { value: 'history' as const, label: `${tr('保存した実行', 'Saved runs')} · ${historyCount}` }
+  if (!result || tab === 'history' || progress) {
+    const shown = tab === 'history' ? 'history' : progress ? 'progress' : 'empty'
     return (
-      <div className="flex min-h-72 flex-col items-center justify-center rounded-[10px] border border-dashed border-line-strong bg-surface p-8 text-center">
-        <SplitSquareHorizontal className="mb-3 h-7 w-7 text-ink-3" />
-        <h3 className="text-[15px] font-medium">{tr('実行結果はここに表示されます', 'Your results will appear here')}</h3>
-        <p className="mt-2 max-w-md text-[12px] leading-relaxed text-ink-2">
-          {tr('設定から実行するか、保存した実行・結果JSONを読み込んでください。', 'Run the settings, or open a saved run or result JSON.')}
-        </p>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <ResultTabBar
+          value={shown === 'history' ? 'history' : 'charts'}
+          onChange={setTab}
+          options={[
+            {
+              value: 'charts',
+              label: progress ? tr('実行中…', 'Running…') : result ? tr('結果', 'Result') : tr('結果', 'Result'),
+            },
+            historyTab,
+          ]}
+        />
+        <div className="scroll-quiet min-h-0 flex-1 overflow-y-auto p-3">
+          {shown === 'history' ? (
+            history
+          ) : shown === 'progress' ? (
+            progress
+          ) : (
+            <div className="flex min-h-72 flex-col items-center justify-center rounded-[10px] border border-dashed border-line-strong bg-surface p-8 text-center">
+              <SplitSquareHorizontal className="mb-3 h-7 w-7 text-ink-3" />
+              <h3 className="text-[15px] font-medium">{tr('実行結果はここに表示されます', 'Your results will appear here')}</h3>
+              <p className="mt-2 max-w-md text-[12px] leading-relaxed text-ink-2">
+                {tr(
+                  '左の設定を確認して「最適化を実行」（⌘/Ctrl+Enter）を押すか、保存した実行を開いてください。',
+                  'Review the settings on the left and press Run optimization (⌘/Ctrl+Enter), or open a saved run.',
+                )}
+              </p>
+              {historyCount ? (
+                <button type="button" className={cn(optButton, 'mt-4')} onClick={() => setTab('history')}>
+                  {tr(`保存した実行を開く（${historyCount}件）`, `Open saved runs (${historyCount})`)}
+                </button>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
     )
-  const end = multi?.final_time_s ?? flight?.final_time_s ?? 0
-  const time = cursor ?? end
+  }
   const currentPoint = mapPath ? pointOnPath(mapPath.points, time) : null
   const stale = draftIncomplete || !currentInput || requestFingerprint(currentInput) !== requestFingerprint(result.input)
   const locate = (v: ConstraintView) => {
-    if (!multi) return
-    if (v.check.id.startsWith('ORBIT.')) setCursor(multi.final_time_s)
-    else if (v.phase !== null) {
-      const own = multi.samples.filter((s) => s.phase === v.phase)
-      const key = (
-        {
-          aero: v.check.id.startsWith('Q') ? 'dynamic_pressure_pa' : 'angle_of_attack_deg',
-          accel: 'specific_force_m_s2',
-          altitude: 'altitude_m',
-          attitude: 'inertial_direction_rate_deg_s',
-        } as Record<string, keyof (typeof own)[number]>
-      )[v.family]
-      const best = key
-        ? own.reduce<(typeof own)[number] | null>(
-            (b, s) =>
-              !b || (v.family === 'altitude' ? (s[key] as number) < (b[key] as number) : (s[key] as number) > (b[key] as number)) ? s : b,
-            null,
-          )
-        : own[0]
-      if (best) setCursor(best.time_s)
+    const t = checkTime(result, v.check)
+    if (t !== null) {
+      setCursor(t)
+      setTab('charts')
     }
-    setTab('charts')
   }
-  return (
-    <div className="space-y-3">
-      {running ? (
-        <p role="status" className="rounded-[8px] border border-signal/25 bg-signal/5 p-3 text-[12px]">
-          {tr(
-            '新しい入力を求解中です。完了するまで前回の結果を表示しています。',
-            'Solving the new input. The previous result remains visible until it finishes.',
-          )}
-        </p>
-      ) : null}
-      <Verdict
-        result={result}
-        run={run}
-        saved={saved[run.id]}
-        onEdit={onEdit}
-        running={running}
-        onRefine={onRefine}
-        onSimulate={hasPath ? onSimulate : undefined}
-      />
-      {stale ? (
-        <p className="rounded-[6px] bg-surface-2 px-3 py-2 text-[11px] text-ink-2">
-          {tr(
-            'この結果は実行したときの入力に対応します。いま編集中の設定とは異なります。',
-            'This result belongs to the input it was run with, which differs from the settings being edited.',
-          )}
-        </p>
-      ) : null}
-      <LimitingConstraints views={views} onLocate={hasPath ? locate : undefined} />
-      <div className="sticky top-0 z-20 rounded-[8px] bg-surface-2 p-1 shadow-[0_1px_0_var(--line)]">
-        <OptTabs
-          value={tab}
-          onChange={setTab}
-          label={tr('結果の表示', 'Result views')}
-          options={[
-            { value: 'charts', label: tr('グラフ', 'Charts') },
-            { value: 'map', label: tr('地図', 'Map'), disabled: !mapPath },
-            { value: 'sequence', label: tr('シーケンス・質量', 'Sequence and mass'), disabled: !hasPath },
-            {
-              value: 'checks',
-              label: `${tr('条件の確認', 'Checks')}${views.some((v) => !v.check.passed) ? ` · ${views.filter((v) => !v.check.passed).length}` : ''}`,
-            },
-            ...(reference ? [{ value: 'compare' as const, label: tr('比較', 'Compare') }] : []),
-            { value: 'diagnostics', label: tr('計算の詳細', 'Solver details') },
-          ]}
-        />
-      </div>
-      {tab === 'charts' ? <ResultCharts result={result} reference={reference?.result} cursor={time} onCursor={setCursor} /> : null}
-      {tab === 'map' && mapPath ? (
-        <OptGroup
-          title={tr('軌道と分離位置', 'Trajectory and separation points')}
-          note={tr(
-            '分離した段・フェアリングの落下位置は計算していません。',
-            'Impact points of separated stages and the fairing are not computed.',
-          )}
+  const canLocate = (v: ConstraintView) => checkTime(result, v.check) !== null
+  const renderMap = (embedded = false) =>
+    mapPath ? (
+      <div className={cn('flex min-h-0 flex-col gap-1.5', embedded ? 'h-full' : 'h-full min-h-[320px]')}>
+        <div
+          className="min-h-[100px] flex-1 overflow-hidden rounded-[8px] border border-line"
+          aria-label={tr('最適化軌道の3D地図', '3D map of the optimized trajectory')}
+          onWheelCapture={(event) => {
+            if (!event.ctrlKey && !event.metaKey) event.stopPropagation()
+          }}
         >
-          <div
-            className="h-[clamp(260px,50dvh,520px)] overflow-hidden rounded-[8px] border border-line"
-            aria-label={tr('最適化軌道の3D地図', '3D map of the optimized trajectory')}
-            onWheelCapture={(event) => {
-              if (!event.ctrlKey && !event.metaKey) event.stopPropagation()
-            }}
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center text-[12px] text-ink-3">
+                {tr('3D地図を読み込み中…', 'Loading 3D map…')}
+              </div>
+            }
           >
-            <Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center text-[12px] text-ink-3">
-                  {tr('3D地図を読み込み中…', 'Loading 3D map…')}
-                </div>
-              }
-            >
-              <Globe track={null} recordedPath={mapPath} recordedReference={mapReference} recordedTime={time} />
-            </Suspense>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-ink-2">
+            <Globe track={null} recordedPath={mapPath} recordedReference={mapReference} recordedTime={time} />
+          </Suspense>
+        </div>
+        {embedded ? null : (
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-[11px] text-ink-2">
             <span>
               {tr('実線：燃焼 · 破線：慣性飛行 · Ctrl/⌘＋ホイールで拡大', 'Solid: burn · dashed: coast · Ctrl/⌘ + wheel to zoom')}
               {mapReference ? ` · ${tr('灰色破線：比較対象', 'gray dashed: reference')}` : ''}
+              {' · '}
+              {tr('分離した段・フェアリングの落下位置は計算していません。', 'Impact points of separated bodies are not computed.')}
             </span>
             <span className="num">
               T+{number(time, 1)} s · {number(currentPoint?.alt === undefined ? undefined : currentPoint.alt / 1000, 1)} km
             </span>
           </div>
-          <input
-            className="w-full accent-[var(--signal)]"
-            type="range"
-            aria-label={tr('表示時刻', 'Display time')}
-            min={mapPath.points[0].time}
-            max={mapPath.points[mapPath.points.length - 1].time}
-            step="0.5"
-            value={time}
-            onChange={(e) => setCursor(Number(e.target.value))}
-          />
-          <SequenceTimeline
-            phases={phases}
-            actual
-            compact
-            selected={phases.findIndex((p) => time >= p.start && time <= p.end)}
-            onSelect={(i) => setCursor(phases[i].start)}
-          />
-        </OptGroup>
-      ) : null}
-      {tab === 'sequence' ? (
-        <>
-          <OptGroup title={tr('飛行シーケンス', 'Flight sequence')}>
-            <SequenceTimeline
-              phases={phases}
-              actual
-              onSelect={(i) => {
-                setCursor(phases[i].start)
-                setTab('charts')
-              }}
+        )}
+      </div>
+    ) : null
+  const failedCount = views.filter((v) => !v.check.passed).length
+  // Map views fill the panel; the others scroll under the summary.
+  const fills = tab === 'split' || tab === 'map'
+  return (
+    <div className="@container flex min-h-0 flex-1 flex-col">
+      <ResultTabBar
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: 'charts', label: tr('グラフ', 'Charts') },
+          { value: 'map', label: tr('地図', 'Map'), disabled: !mapPath },
+          { value: 'split', label: tr('地図＋グラフ', 'Map + charts'), disabled: !mapPath },
+          { value: 'sequence', label: tr('シーケンス・質量', 'Sequence and mass'), disabled: !hasPath },
+          { value: 'checks', label: `${tr('条件の確認', 'Checks')}${failedCount ? ` · ${failedCount}` : ''}` },
+          ...(reference ? [{ value: 'compare' as const, label: tr('比較', 'Compare') }] : []),
+          { value: 'diagnostics', label: tr('計算の詳細', 'Solver details') },
+          historyTab,
+        ]}
+      />
+      {showCase && run.context ? <CaseDetails context={run.context} onClose={() => setShowCase(false)} /> : null}
+      <div className={cn('flex min-h-0 flex-1 flex-col gap-2 p-3', fills ? 'overflow-hidden' : 'scroll-quiet overflow-y-auto')}>
+        <Verdict
+          result={result}
+          run={run}
+          saved={saved[run.id]}
+          onEdit={onEdit}
+          running={running}
+          onRefine={onRefine}
+          onSimulate={hasPath ? onSimulate : undefined}
+          onCase={run.context ? () => setShowCase(true) : undefined}
+          compact={fills}
+          note={
+            running
+              ? tr(
+                  '新しい入力を求解中。完了まで前回の結果を表示しています。',
+                  'Solving the new input; showing the previous result until it finishes.',
+                )
+              : stale
+                ? tr(
+                    'この結果は編集中の設定とは異なる入力で計算したものです。',
+                    'This result was computed from an input that differs from the settings being edited.',
+                  )
+                : null
+          }
+        />
+        {tab === 'charts' || tab === 'sequence' ? (
+          <LimitingConstraints canLocate={canLocate} views={views} onLocate={hasPath ? locate : undefined} />
+        ) : null}
+        {timeline && tab !== 'split' && tab !== 'checks' && tab !== 'compare' && tab !== 'diagnostics' ? (
+          <div className="shrink-0 overflow-hidden rounded-[8px] border border-line">
+            <PlaybackBar track={timeline} player={player} />
+          </div>
+        ) : null}
+        {tab === 'charts' ? <ResultCharts result={result} reference={reference?.result} cursor={time} onCursor={setCursor} /> : null}
+        {tab === 'map' ? <div className="min-h-0 flex-1">{renderMap()}</div> : null}
+        {tab === 'split' && timeline ? (
+          <div className="flex min-h-[360px] flex-1 flex-col overflow-hidden rounded-[8px] border border-line">
+            <SplitView
+              ratio={split.ratio}
+              onRatio={split.setRatio}
+              top={renderMap(true)}
+              bar={<PlaybackBar track={timeline} player={player} />}
+              bottom={
+                <div className="scroll-quiet h-full overflow-y-auto p-2">
+                  <ResultCharts result={result} reference={reference?.result} cursor={time} onCursor={setCursor} />
+                </div>
+              }
             />
-          </OptGroup>
-          {multi ? <MassLedger m={multi} /> : flight ? <SingleLedger result={result} /> : null}
-          {hasPath ? (
-            <button type="button" className={optButton} disabled={running} onClick={() => onRefine(result)}>
-              {tr('計算メッシュを細かくして再実行', 'Re-run with a finer mesh')}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-      {tab === 'checks' ? (
-        <>
-          <ConstraintReport views={views} onLocate={hasPath ? locate : undefined} />
-          {multi?.unevaluated_constraints.length ? <Unevaluated items={multi.unevaluated_constraints} /> : null}
-        </>
-      ) : null}
-      {tab === 'compare' && reference ? <Comparison a={run} b={reference} onClear={onClearComparison} /> : null}
-      {tab === 'diagnostics' ? <Diagnostics result={result} memoryBytes={memoryBytes} /> : null}
+          </div>
+        ) : null}
+        {tab === 'sequence' ? (
+          <>
+            <OptGroup title={tr('飛行シーケンス', 'Flight sequence')}>
+              <SequenceTimeline
+                phases={phases}
+                actual
+                onSelect={(i) => {
+                  setCursor(phases[i].start)
+                  setTab('charts')
+                }}
+              />
+            </OptGroup>
+            {multi ? <MassLedger m={multi} /> : flight ? <SingleLedger result={result} /> : null}
+          </>
+        ) : null}
+        {tab === 'checks' ? (
+          <>
+            <ConstraintReport canLocate={canLocate} views={views} onLocate={hasPath ? locate : undefined} />
+            {multi?.unevaluated_constraints.length ? <Unevaluated items={multi.unevaluated_constraints} /> : null}
+          </>
+        ) : null}
+        {tab === 'compare' && reference ? <Comparison a={run} b={reference} onClear={onClearComparison} /> : null}
+        {tab === 'diagnostics' ? <Diagnostics result={result} memoryBytes={memoryBytes} /> : null}
+      </div>
+    </div>
+  )
+}
+
+function ResultTabBar({
+  value,
+  onChange,
+  options,
+}: {
+  value: ResultTab
+  onChange: (tab: ResultTab) => void
+  options: { value: ResultTab; label: string; disabled?: boolean }[]
+}) {
+  return (
+    <div className="shrink-0 border-b border-line bg-surface px-1.5">
+      <OptTabs value={value} onChange={onChange} options={options} label={tr('結果の表示', 'Result views')} variant="underline" />
     </div>
   )
 }
@@ -257,14 +329,21 @@ function Verdict({
   onEdit,
   onRefine,
   onSimulate,
+  onCase,
+  compact,
+  note,
   running,
 }: {
   result: OptimizationResult
   run: OptimizationRun
   saved: string | undefined
-  onEdit: (input: OptimizationInput) => void
+  onEdit: (input: OptimizationInput, context?: CaseContext) => void
   onRefine: (result: OptimizationResult) => void
   onSimulate?: (result: OptimizationResult) => void
+  onCase?: () => void
+  /** Headline only (the map views need the room) */
+  compact?: boolean
+  note: string | null
   running: boolean
 }) {
   const v = result.validation,
@@ -334,57 +413,65 @@ function Verdict({
       { label: tr('終端時刻', 'Final time'), value: fmt(flight.final_time_s, 1), unit: 's' },
     )
   }
+  const more: { label: string; onSelect: () => void; disabled?: boolean }[] = [
+    {
+      label: tr('この入力を設定に読み込んで編集', 'Load this input into the settings'),
+      onSelect: () => onEdit(result.input, run.context),
+      disabled: running,
+    },
+    ...(onSimulate && !(meshFailure && result.converged && !ok)
+      ? [{ label: tr('計算メッシュを細かくして再実行', 'Re-run with a finer mesh'), onSelect: () => onRefine(result), disabled: running }]
+      : []),
+    ...(run.context
+      ? [
+          {
+            label: tr('結果ケースを保存（.otcase.json）', 'Save result case (.otcase.json)'),
+            onSelect: () =>
+              saveFile(`${fileBase(run.label)}_result.otcase.json`, caseFile('optimize', run.context!, result), 'application/json'),
+          },
+        ]
+      : []),
+    {
+      label: tr('全結果JSONを保存', 'Save full result JSON'),
+      onSelect: () => saveFile(`${fileBase(run.label)}_optimization.json`, JSON.stringify(result, null, 2), 'application/json'),
+    },
+    ...(onCase ? [{ label: tr('ケース情報・変換履歴', 'Case details and history'), onSelect: onCase }] : []),
+  ]
   return (
     <section
       className={cn(
-        'rounded-[10px] border px-3 py-3 sm:px-4',
+        'shrink-0 rounded-[10px] border px-3 py-2',
         ok ? 'border-[var(--ok)]/35 bg-[var(--ok)]/5' : 'border-danger/30 bg-danger/5',
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 gap-3">
-          {ok ? (
-            <CircleCheck className="mt-0.5 h-6 w-6 shrink-0 text-[var(--ok)]" />
-          ) : (
-            <CircleAlert className="mt-0.5 h-6 w-6 shrink-0 text-danger" />
-          )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="flex min-w-[min(100%,16rem)] flex-1 items-center gap-2">
+          {ok ? <CircleCheck className="h-5 w-5 shrink-0 text-[var(--ok)]" /> : <CircleAlert className="h-5 w-5 shrink-0 text-danger" />}
           <div className="min-w-0">
-            <p className="text-[11px] text-ink-3">
-              {run.label} · {new Date(run.createdAt).toLocaleString()} ·{' '}
-              {run.origin === 'import'
-                ? tr('読み込んだ結果（再計算なし）', 'Imported (not re-solved)')
-                : tr('このブラウザで計算', 'Solved in this browser')}
-              {saved === 'saved'
-                ? tr(' · 端末に保存済み', ' · saved')
-                : saved === 'error'
-                  ? tr(' · 保存失敗（JSONを保存してください）', ' · storage failed')
-                  : ''}
-            </p>
-            <h3 className="mt-0.5 break-words text-[15px] font-semibold leading-snug">{headline}</h3>
-            <p className="mt-1.5 flex flex-wrap gap-2 text-[11px]">
-              <Badge
-                ok={result.converged}
-                label={
-                  result.converged ? tr('最適化：収束', 'Optimization: converged') : tr('最適化：未収束', 'Optimization: not converged')
-                }
-              />
+            <h3 className="break-words text-[14px] font-semibold leading-snug">{headline}</h3>
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-ink-3">
+              <Badge ok={result.converged} label={result.converged ? tr('収束', 'Converged') : tr('未収束', 'Not converged')} />
               <Badge
                 ok={v?.status === 'passed'}
                 label={
                   v?.status === 'passed'
-                    ? tr('独立検証：合格', 'Independent check: passed')
+                    ? tr('独立検証 合格', 'Check passed')
                     : v
-                      ? tr('独立検証：不合格', 'Independent check: failed')
-                      : tr('独立検証：未実施', 'Independent check: not run')
+                      ? tr('独立検証 不合格', 'Check failed')
+                      : tr('独立検証 未実施', 'Not checked')
                 }
               />
+              <span className="min-w-0 truncate">
+                {run.label} · {new Date(run.createdAt).toLocaleString()}
+                {run.origin === 'import' ? tr(' · 読み込んだ結果（再計算なし）', ' · imported, not re-solved') : ''}
+                {saved === 'error' ? tr(' · 端末への保存失敗', ' · not saved on this device') : ''}
+              </span>
             </p>
-            {advice ? <p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-ink">{advice}</p> : null}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
           {!ok && meshFailure && result.converged ? (
-            <button type="button" className={optButton} disabled={running} onClick={() => onRefine(result)}>
+            <button type="button" className={optPrimary} disabled={running} onClick={() => onRefine(result)}>
               {tr('メッシュを細かくして再実行', 'Re-run with a finer mesh')}
             </button>
           ) : null}
@@ -402,34 +489,45 @@ function Verdict({
               {tr('軌道計算で開く', 'Open in simulation')}
             </button>
           ) : null}
-          <button type="button" className={optButton} disabled={running} onClick={() => onEdit(result.input)}>
-            <Copy className="h-3.5 w-3.5" />
-            {tr('この入力を編集', 'Edit this input')}
-          </button>
-          <button
-            type="button"
-            className={optButton}
-            onClick={() => saveFile(`${fileBase(run.label)}_optimization.json`, JSON.stringify(result, null, 2), 'application/json')}
-          >
-            <ArrowDownToLine className="h-3.5 w-3.5" />
-            {tr('結果JSON', 'Result JSON')}
-          </button>
+          <Menu
+            align="right"
+            wide
+            trigger={(toggle) => (
+              <button
+                type="button"
+                className={cn(optButton, 'px-2')}
+                onClick={toggle}
+                aria-haspopup="menu"
+                aria-label={tr('その他の操作', 'More actions')}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            )}
+            items={more}
+          />
         </div>
       </div>
-      {kpis.length ? (
-        <dl className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      {kpis.length && !compact ? (
+        <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 border-t border-line/70 pt-1.5">
           {kpis.map((k) => (
-            <div key={k.label} className="min-w-0 rounded-[8px] border border-line bg-surface px-3 py-1.5">
+            <div key={k.label} className="flex min-w-0 items-baseline gap-1.5">
               <dt className="text-[11px] text-ink-3">{k.label}</dt>
-              <dd className="num mt-0.5 break-words text-[16px] font-medium">
+              <dd className="num text-[13px] font-medium">
                 {k.value} <span className="text-[10px] font-normal text-ink-3">{k.unit}</span>
               </dd>
             </div>
           ))}
         </dl>
       ) : null}
+      {advice || note ? (
+        <p className="mt-1.5 max-w-4xl text-[12px] leading-snug text-ink-2">
+          {advice}
+          {advice && note ? ' ' : ''}
+          {note ? <span className="text-ink-3">{note}</span> : null}
+        </p>
+      ) : null}
       {v?.error && !ok ? (
-        <details className="mt-3 text-[11px] text-ink-2">
+        <details className="mt-1 text-[11px] text-ink-2">
           <summary className="cursor-pointer">{tr('検証メッセージの原文', 'Raw validation message')}</summary>
           <p className="mt-1 break-words">{v.error}</p>
         </details>
@@ -441,7 +539,7 @@ function Badge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
       className={cn(
-        'rounded-full border bg-surface px-2 py-0.5',
+        'shrink-0 rounded-full border bg-surface px-1.5 py-px',
         ok ? 'border-[var(--ok)]/40 text-[var(--ok)]' : 'border-danger/40 text-danger',
       )}
     >

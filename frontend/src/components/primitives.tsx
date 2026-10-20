@@ -170,6 +170,44 @@ function FieldRow({
 const inputBase =
   'h-8 w-full rounded-[6px] border border-line bg-surface-2 text-ink outline-none transition-colors hover:border-line-strong focus:border-signal focus:bg-surface pointer-coarse:h-10 pointer-coarse:text-[16px]'
 
+/** Shared input chrome and unit placement for both solver workspaces. */
+export function NumericControl({
+  unit,
+  inputRef,
+  className,
+  inputClassName,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  unit?: string
+  inputRef?: (el: HTMLElement | null) => void
+  inputClassName?: string
+}) {
+  return (
+    <div className={cn('relative min-w-0', className)}>
+      <input
+        {...props}
+        ref={inputRef}
+        type="text"
+        inputMode={props.inputMode ?? 'decimal'}
+        autoComplete="off"
+        spellCheck={false}
+        className={cn(
+          inputBase,
+          'num pl-2 text-right text-[13px] disabled:opacity-50',
+          unit ? 'pr-14' : 'pr-2',
+          props['aria-invalid'] && 'border-danger',
+          inputClassName,
+        )}
+      />
+      {unit ? (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[11px] text-ink-3">
+          {unit}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 /**
  * Numeric input that keeps the raw text while typing ("-", "1.", "") and commits valid numbers.
  * Shown rounded with digit grouping until focused; focusing reveals the full stored value.
@@ -195,37 +233,27 @@ export function NumberInput({
   const full = Number.isFinite(value) ? String(value) : ''
   const shown = draft ?? fmtInput(value)
   return (
-    <div className={cn('relative', className)}>
-      <input
-        ref={inputRef}
-        type="text"
-        inputMode="decimal"
-        autoComplete="off"
-        spellCheck={false}
-        aria-label={ariaLabel}
-        aria-invalid={error || undefined}
-        title={draft === null && shown !== full ? full : undefined}
-        value={shown}
-        onFocus={(e) => {
-          setDraft(full)
-          const el = e.currentTarget
-          requestAnimationFrame(() => el.select())
-        }}
-        onBlur={() => setDraft(null)}
-        onChange={(e) => {
-          setDraft(e.target.value)
-          const text = e.target.value.replace(/,/g, '').trim()
-          const n = text === '' ? NaN : Number(text)
-          if (Number.isFinite(n)) onChange(n)
-        }}
-        className={cn(inputBase, 'num pl-2 text-right text-[13px]', unit ? 'pr-10' : 'pr-2', error && 'border-danger')}
-      />
-      {unit && (
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-start pl-1 text-[11px] text-ink-3">
-          {unit}
-        </span>
-      )}
-    </div>
+    <NumericControl
+      inputRef={inputRef}
+      aria-label={ariaLabel}
+      aria-invalid={error || undefined}
+      title={draft === null && shown !== full ? full : undefined}
+      value={shown}
+      className={className}
+      unit={unit}
+      onFocus={(e) => {
+        setDraft(full)
+        const el = e.currentTarget
+        requestAnimationFrame(() => el.select())
+      }}
+      onBlur={() => setDraft(null)}
+      onChange={(e) => {
+        setDraft(e.target.value)
+        const text = e.target.value.replace(/,/g, '').trim()
+        const n = text === '' ? NaN : Number(text)
+        if (Number.isFinite(n)) onChange(n)
+      }}
+    />
   )
 }
 

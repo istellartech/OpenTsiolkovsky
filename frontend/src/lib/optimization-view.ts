@@ -4,6 +4,35 @@ import { phaseViews } from './optimization-input'
 import { posEciToLlh } from './geo'
 import type { GeographicMarker, GeographicPath, GeographicPoint } from './globe-path'
 import { tr } from './i18n'
+import type { TimelineTrack } from './trajectory'
+import { presentationFromConfig } from './presentation'
+
+/** Presentation adapter only: solver results and solver validation remain distinct. */
+export function optimizationTimeline(result: OptimizationResult): TimelineTrack | null {
+  const p = result.input.problem
+  if (!result.validation?.multi_stage && !result.validation?.flight) return null
+  const phases = resultPhaseViews(result)
+  if ((p.kind !== 'multi_stage' && p.kind !== 'single_stage') || !phases.length) return null
+  const spans = new Map<number, { stage: number; t0: number; t1: number }>()
+  for (const phase of phases) {
+    const key = phase.stage + 1
+    const prev = spans.get(key)
+    spans.set(key, { stage: key, t0: prev?.t0 ?? phase.start, t1: phase.end })
+  }
+  return {
+    t0: phases[0].start,
+    t1: phases[phases.length - 1].end,
+    stages: [...spans.values()],
+    presentation: presentationFromConfig(p.vehicle),
+    events:
+      result.validation?.multi_stage?.events.map((e) => ({
+        kind: e.kind === 'separate_stage' ? 'separation' : e.kind === 'jettison_fairing' ? 'jettison' : 'end',
+        stage: e.stage + 1,
+        t: e.time_s,
+        ...(e.kind === 'jettison_fairing' ? { body: 'fairing' } : {}),
+      })) ?? [],
+  }
+}
 
 export function resultPhaseViews(result: OptimizationResult): PhaseView[] {
   const phases = phaseViews(result.input.problem),

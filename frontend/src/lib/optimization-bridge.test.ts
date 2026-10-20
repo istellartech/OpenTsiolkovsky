@@ -18,6 +18,7 @@ import { instantiateOptimizer } from './optimization-wasm'
 import { runSimulation } from './simulation'
 import { validateConfig } from './validation'
 import { setLang } from './i18n'
+import { caseFile, editedSimulationCase, newCase, readCaseFile } from './case'
 
 setLang('en')
 const result = () => structuredClone(recorded) as unknown as OptimizationResult
@@ -119,6 +120,21 @@ describe('simulation → optimization input', () => {
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.errors.join(' ')).toMatch(/dry mass/)
   })
+  it('sizes a sounding-rocket mission from its simulated flight', () => {
+    const config = PRESET_OPTIONS.find((p) => p.id === 's310')!.create()
+    const r = optimizationFromSimulation(config, template(config), undefined, { apogeeM: 179_700, apogeeTimeS: 211, maxQPa: 280_000 })
+    if (!r.ok) throw new Error(r.errors.join('\n'))
+    const q = r.value.problem as SingleStageInput
+    expect(q.target_apogee_altitude_m).toBe(160_000)
+    expect(q.max_dynamic_pressure_pa).toBeGreaterThan(280_000)
+    expect(q.coast_duration_s.lower).toBeLessThan(211)
+    expect(q.coast_duration_s.upper).toBeGreaterThan(180)
+    expect(optimizationInputIssues(r.value)).toEqual([])
+    // A target already within reach is kept.
+    const momo = PRESET_OPTIONS.find((p) => p.id === 'momo')!.create()
+    const m = optimizationFromSimulation(momo, template(momo), undefined, { apogeeM: 113_000, apogeeTimeS: 244, maxQPa: 30_400 })
+    expect(m.ok && (m.value.problem as SingleStageInput).target_apogee_altitude_m).toBe(100_000)
+  })
   it.each(PRESET_OPTIONS.map((p) => [p.id, p] as const))('converts the %s sample vehicle', (_, preset) => {
     const { value } = seeded(preset.create())
     expect(optimizationInputIssues(value)).toEqual([])
@@ -155,4 +171,88 @@ describe.skipIf(!existsSync(optWasm))('converted inputs in the optimizer', () =>
     const solved = optimizer.solve(value) as OptimizationResult | { error: string }
     expect('error' in solved ? solved.error : solved.solver_status).toBe('Maximum_Iterations_Exceeded')
   })
+})
+
+describe('case-aware round trips', () => {
+  it('retains mass inventory and provenance over repeated optimizer/simulator handoffs', () => {
+    let r = result()
+    let context = newCase('Original optimization')
+    const original = r.input.problem as MultiStageInput
+    for (let i = 0; i < 3; i++) {
+      const simulation = simulationFromOptimization(r, context)
+      if (!simulation.ok) throw new Error(simulation.errors.join(' '))
+      // Include file export/import, so this is not just an in-memory association.
+      const saved = readCaseFile(JSON.parse(caseFile('simulate', simulation.context!, simulation.value)))!
+      const next = optimizationFromSimulation(saved.data as Config, template(simulation.value), saved.context)
+      if (!next.ok) throw new Error(next.errors.join(' '))
+      const p = next.value.problem as MultiStageInput
+      expect(p.stages.map((s) => s.dry_kg)).toEqual(original.stages.map((s) => s.dry_kg))
+      expect(p.stages.map((s) => s.propellant_kg)).toEqual(original.stages.map((s) => s.propellant_kg))
+      expect(p.payload_adapter_kg).toBe(original.payload_adapter_kg)
+      expect(p.fairing_kg).toBe(original.fairing_kg)
+      expect(next.context!.rootId).toBe(context.rootId)
+      expect(next.context!.history).toHaveLength((i + 1) * 2)
+      expect(next.context!.history[next.context!.history.length - 2].runId).toBe(r.input.run_id)
+      r = { ...r, input: next.value }
+      context = next.context!
+    }
+  })
+  it('retains physical edits and the actual adapter mass rather than a template adapter', () => {
+    const r = result()
+    ;(r.input.problem as MultiStageInput).payload_adapter_kg = 200
+    const sim = simulationFromOptimization(r, newCase('Adapter 200'))
+    if (!sim.ok) throw new Error('conversion')
+    const edited = structuredClone(sim.value)
+    edited.stages[1].mass_initial_kg += 100
+    edited.stages[1].mass_dry_kg! += 100
+    edited.wind = { speed_mps: 10 }
+    const context = editedSimulationCase(sim.context!, sim.value, edited)
+    const next = optimizationFromSimulation(edited, template(edited), context)
+    if (!next.ok) throw new Error(next.errors.join(' '))
+    const p = next.value.problem as MultiStageInput
+    expect(p.stages[1].dry_kg).toBe(1700)
+    expect(p.payload_adapter_kg).toBe(200)
+    expect(p.vehicle.wind).toEqual({ speed_mps: 10 })
+  })
+  it('requires review after an interval layout change instead of subtracting from the wrong interval', () => {
+    const sim = simulationFromOptimization(result(), newCase('Original'))
+    if (!sim.ok) throw new Error('conversion')
+    const edited = { ...sim.value, stages: [sim.value.stages[1]] }
+    const context = editedSimulationCase(sim.context!, sim.value, edited)
+    expect(optimizationFromSimulation(edited, template(edited), context).ok).toBe(false)
+  })
+  it('subtracts a single-stage extra payload only once', () => {
+    const config = PRESET_OPTIONS.find((p) => p.id === 'momo')!.create()
+    const p = seeded(config).value.problem as SingleStageInput
+    const r = {
+      ...result(),
+      input: { ...result().input, problem: p },
+      validation: {
+        ...result().validation,
+        multi_stage: null,
+        flight: {
+          mass_ledger: { additional_payload_kg: 12.5 },
+          samples: [
+            { time_s: 0, pitch_deg: 90 },
+            { time_s: 120, pitch_deg: 80 },
+          ],
+        },
+      },
+    } as unknown as OptimizationResult
+    const sim = simulationFromOptimization(r)
+    if (!sim.ok) throw new Error('conversion')
+    const next = optimizationFromSimulation(sim.value, template(config), sim.context)
+    if (!next.ok) throw new Error(next.errors.join(' '))
+    expect((next.value.problem as SingleStageInput).dry_mass_kg).toBe(p.dry_mass_kg)
+  })
+})
+
+it('retains provisional status in conversion history and rejects invalid payload accounting', () => {
+  const r = result()
+  r.converged = false
+  const provisional = simulationFromOptimization(r)
+  expect(provisional.ok).toBe(true)
+  if (provisional.ok) expect(provisional.context!.history[0].notes.join(' ')).toMatch(/provisional/)
+  r.validation!.multi_stage!.net_payload_kg = -10
+  expect(simulationFromOptimization(r).ok).toBe(false)
 })

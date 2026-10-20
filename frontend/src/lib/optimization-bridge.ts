@@ -10,13 +10,14 @@
 //
 // Neither direction is lossless; every approximation is reported as a note.
 import type { Config, Curve, Rows, Stage } from './config'
+import { convertedCase, newCase, withoutCarriedMass, type CaseContext } from './case'
 import { evalCurve, isRows } from './config'
 import type { OptimizationResult } from './optimization'
 import type { MultiStageInput, OptimizationInput, OptimizationPhase, SingleStageInput } from './optimization-input'
 import { fitHorizon, G0 } from './optimization-vehicle'
 import { tr } from './i18n'
 
-export type Handoff<T> = { ok: true; value: T; notes: string[] } | { ok: false; errors: string[] }
+export type Handoff<T> = { ok: true; value: T; notes: string[]; context?: CaseContext } | { ok: false; errors: string[] }
 
 const round = (v: number, digits = 3) => Math.round(v * 10 ** digits) / 10 ** digits
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
@@ -25,7 +26,47 @@ const kg = (v: number) => `${Math.round(v).toLocaleString('en-US')} kg`
 // --- Optimization result → simulation configuration --------------------------
 
 /** A simulation configuration that flies the optimized trajectory open-loop. */
-export function simulationFromOptimization(result: OptimizationResult): Handoff<Config> {
+export function simulationFromOptimization(result: OptimizationResult, source?: CaseContext): Handoff<Config> {
+  const converted = rawSimulationFromOptimization(result)
+  if (!converted.ok) return converted
+  if (!result.converged || result.validation?.status !== 'passed')
+    converted.notes.unshift(
+      tr(
+        '暫定結果（未収束または独立検証不合格）から作成したケースです。',
+        'This case was created from a provisional result (not converged or independent validation failed).',
+      ),
+    )
+  const context = convertedCase(
+    source ??
+      newCase(
+        result.input.problem.kind === 'multi_stage' || result.input.problem.kind === 'single_stage'
+          ? result.input.problem.vehicle.name
+          : 'Optimization',
+      ),
+    'simulate',
+    converted.value.name,
+    converted.notes,
+    result.input.run_id,
+  )
+  context.carriedMass = {
+    stage: converted.value.stages.length - 1,
+    stageCount: converted.value.stages.length,
+    payloadKg: result.validation?.multi_stage?.net_payload_kg ?? result.validation?.flight?.mass_ledger.additional_payload_kg ?? 0,
+    adapterKg: result.input.problem.kind === 'multi_stage' ? result.input.problem.payload_adapter_kg : 0,
+  }
+  if (![context.carriedMass.payloadKg, context.carriedMass.adapterKg].every((v) => Number.isFinite(v) && v >= 0))
+    return {
+      ok: false,
+      errors: [
+        tr(
+          '搭載質量が不正なため、この暫定結果は軌道計算へ渡せません。',
+          'The provisional result has invalid carried masses and cannot be opened in simulation.',
+        ),
+      ],
+    }
+  return { ...converted, context }
+}
+function rawSimulationFromOptimization(result: OptimizationResult): Handoff<Config> {
   const p = result.input.problem
   if (p.kind === 'multi_stage') return fromMultiStage(result, p)
   if (p.kind === 'single_stage') return fromSingleStage(result, p)
@@ -250,7 +291,44 @@ interface Burn {
  * and attitude program of a simulation configuration. Mission settings come
  * from `template`, which must be of the kind `optimizationKindFor` names.
  */
-export function optimizationFromSimulation(config: Config, template: OptimizationInput): Handoff<OptimizationInput> {
+export function optimizationFromSimulation(
+  config: Config,
+  template: OptimizationInput,
+  source?: CaseContext,
+  flight?: SimulatedFlight,
+): Handoff<OptimizationInput> {
+  let vehicle: Config
+  try {
+    vehicle = withoutCarriedMass(config, source)
+  } catch (error) {
+    return { ok: false, errors: [error instanceof Error ? error.message : String(error)] }
+  }
+  const converted = rawOptimizationFromSimulation(vehicle, template, !!source?.carriedMass, flight)
+  if (!converted.ok) return converted
+  if (source?.carriedMass && converted.value.problem.kind === 'multi_stage')
+    converted.value.problem.payload_adapter_kg = source.carriedMass.adapterKg
+  if (source?.carriedMass)
+    converted.notes.unshift(
+      tr(
+        `衛星 ${kg(source.carriedMass.payloadKg)}・PAF ${kg(source.carriedMass.adapterKg)} を段の質量から除き、最適化で別に数えます。`,
+        `Removed the ${kg(source.carriedMass.payloadKg)} payload and ${kg(source.carriedMass.adapterKg)} adapter from stage masses; optimization counts them separately.`,
+      ),
+    )
+  return { ...converted, context: convertedCase(source ?? newCase(config.name), 'optimize', config.name, converted.notes) }
+}
+/** Figures of the simulated flight of the same configuration, used to size a sounding-rocket mission. */
+export interface SimulatedFlight {
+  apogeeM: number
+  apogeeTimeS: number
+  maxQPa: number
+}
+
+function rawOptimizationFromSimulation(
+  config: Config,
+  template: OptimizationInput,
+  payloadAccounted: boolean,
+  flight?: SimulatedFlight,
+): Handoff<OptimizationInput> {
   const kind = optimizationKindFor(config)
   const errors: string[] = []
   if (!kind)
@@ -263,6 +341,13 @@ export function optimizationFromSimulation(config: Config, template: Optimizatio
   else if (template.problem.kind !== kind)
     errors.push(tr('最適化のひな形の種類が機体と合いません。', 'The optimization template does not fit this vehicle.'))
   const notes: string[] = []
+  if (config.presentation?.stage_count && config.presentation.stage_count !== config.stages.length)
+    notes.push(
+      tr(
+        'この機体の計算区間は実機の段数と一致しません。最適化でも合成推進系の計算区間として扱います。',
+        'Calculation intervals differ from physical stages; optimization retains the combined propulsion interval model.',
+      ),
+    )
   const vehicle = structuredClone(config)
   const burns: Burn[] = []
   vehicle.stages.forEach((stage, s) => {
@@ -298,8 +383,8 @@ export function optimizationFromSimulation(config: Config, template: Optimizatio
   const out = structuredClone(template)
   delete (out.problem as { initial_guess?: unknown }).initial_guess
   const source = tr(`軌道計算の機体「${config.name}」から変換`, `Converted from the simulation vehicle “${config.name}”`)
-  if (out.problem.kind === 'single_stage') toSingleStage(out.problem, vehicle, burns[0], source, notes)
-  else if (out.problem.kind === 'multi_stage') toMultiStage(out.problem, vehicle, burns, source, notes)
+  if (out.problem.kind === 'single_stage') toSingleStage(out.problem, vehicle, burns[0], source, notes, flight)
+  else if (out.problem.kind === 'multi_stage') toMultiStage(out.problem, vehicle, burns, source, notes, payloadAccounted)
   return { ok: true, value: out, notes }
 }
 
@@ -406,11 +491,50 @@ function constantEngine(stage: Stage, b: Burn, burnEnd: number) {
 const burnLimit = (b: Burn, propellant: number, reserve: number) =>
   Math.floor(Math.min(b.onTime, (propellant - reserve) / (round(b.thrust, 3) / (round(b.isp, 4) * G0))) * 10) / 10
 
+/**
+ * Fit the template's mission to what the simulated flight shows the vehicle can
+ * do: a target apogee it can exceed with added payload, a dynamic-pressure
+ * limit above its own peak, and a coast that reaches that apogee.
+ */
+function sizeSoundingMission(p: SingleStageInput, flight: SimulatedFlight, burn: number, notes: string[]) {
+  const { apogeeM, apogeeTimeS, maxQPa } = flight
+  if (!(apogeeM > 0 && apogeeTimeS > burn && maxQPa > 0)) return
+  const target = p.target_apogee_altitude_m
+  if (target > 0.95 * apogeeM || target < 0.75 * apogeeM) {
+    const step = apogeeM > 200e3 ? 10e3 : 5e3
+    p.target_apogee_altitude_m = Math.max(step, Math.floor((0.9 * apogeeM) / step) * step)
+    notes.push(
+      tr(
+        `目標頂点高度を、軌道計算の頂点 ${round(apogeeM / 1000, 1)} km より低い ${round(p.target_apogee_altitude_m / 1000, 0)} km にしました（差分を追加ペイロードに充てます）。`,
+        `The target apogee is now ${round(p.target_apogee_altitude_m / 1000, 0)} km, below the simulated ${round(apogeeM / 1000, 1)} km; the margin goes to extra payload.`,
+      ),
+    )
+  }
+  if (maxQPa * 1.1 > p.max_dynamic_pressure_pa) {
+    p.max_dynamic_pressure_pa = Math.ceil((maxQPa * 1.2) / 5000) * 5000
+    notes.push(
+      tr(
+        `最大動圧の上限を、軌道計算の最大動圧 ${round(maxQPa / 1000, 1)} kPa を上回る ${round(p.max_dynamic_pressure_pa / 1000, 0)} kPa にしました。`,
+        `The dynamic-pressure limit is now ${round(p.max_dynamic_pressure_pa / 1000, 0)} kPa, above the simulated peak of ${round(maxQPa / 1000, 1)} kPa.`,
+      ),
+    )
+  }
+  const coast = apogeeTimeS - burn
+  if (coast < p.coast_duration_s.lower || coast > p.coast_duration_s.upper) {
+    const lower = Math.max(10, Math.floor(coast * 0.4))
+    const upper = Math.ceil(coast * 1.3)
+    p.coast_duration_s = { lower, upper, initial: clamp(Math.round(coast * 0.9), lower, upper) }
+  }
+  const loaded = p.dry_mass_kg + p.propellant_mass_kg
+  if (p.additional_payload_kg.upper < 0.15 * loaded)
+    p.additional_payload_kg = { ...p.additional_payload_kg, upper: Math.ceil((0.15 * loaded) / 10) * 10 }
+}
+
 function attitudeAt(config: Config, t: number): [number, number] {
   return [evalCurve(config.attitude?.azimuth_deg, t, 0), evalCurve(config.attitude?.elevation_deg, t, 90)]
 }
 
-function toSingleStage(p: SingleStageInput, vehicle: Config, b: Burn, source: string, notes: string[]) {
+function toSingleStage(p: SingleStageInput, vehicle: Config, b: Burn, source: string, notes: string[], flight?: SimulatedFlight) {
   const stage = vehicle.stages[0]
   if (stage.jettisons?.length) {
     delete stage.jettisons
@@ -439,18 +563,20 @@ function toSingleStage(p: SingleStageInput, vehicle: Config, b: Burn, source: st
     initial_pitch_end_deg: round(clamp(attitudeAt(vehicle, limit)[1], p.minimum_pitch_deg, 89.9), 3),
     max_specific_force_m_s2: Math.max(p.max_specific_force_m_s2, Math.ceil((1.1 * b.thrust) / (dry + reserve))),
   })
+  if (flight) sizeSoundingMission(p, flight, limit, notes)
   vehicle.simulation.end_time_s = Math.max(vehicle.simulation.end_time_s, Math.ceil(limit + p.coast_duration_s.upper + 10))
 }
 
-function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source: string, notes: string[]) {
+function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source: string, notes: string[], payloadAccounted: boolean) {
   const n = vehicle.stages.length
   const lastStage = n - 1
-  notes.push(
-    tr(
-      `ペイロードとPAFは最適化で別に数えます。軌道計算の第${n}段の質量（乾燥 ${kg(vehicle.stages[lastStage].mass_dry_kg ?? 0)}）に含まれている場合は、機体の欄で差し引いてください。`,
-      `The payload and adapter are counted separately here. If the simulation's stage ${n} mass (dry ${kg(vehicle.stages[lastStage].mass_dry_kg ?? 0)}) includes them, subtract them in the vehicle section.`,
-    ),
-  )
+  if (!payloadAccounted)
+    notes.push(
+      tr(
+        `ペイロードとPAFは最適化で別に数えます。軌道計算の第${n}段の質量（乾燥 ${kg(vehicle.stages[lastStage].mass_dry_kg ?? 0)}）に含まれている場合は、機体の欄で差し引いてください。`,
+        `The payload and adapter are counted separately here. If the simulation's stage ${n} mass (dry ${kg(vehicle.stages[lastStage].mass_dry_kg ?? 0)}) includes them, subtract them in the vehicle section.`,
+      ),
+    )
   const alt = vehicle.launch.altitude_m ?? 0
   // Absolute timeline of the simulation (stage starts, jettison times).
   const starts: number[] = []

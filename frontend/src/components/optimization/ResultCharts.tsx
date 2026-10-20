@@ -4,7 +4,7 @@ import { multiStageSeries, phaseLimit, sampleIndexAt, type ResultSample, type Re
 import { fmt } from '../../lib/format'
 import { tr } from '../../lib/i18n'
 import { cssVar } from '../../lib/theme'
-import { OptChart, type OptBand, type OptMarker, type OptSeries } from './OptChart'
+import { CHART_HEIGHT_LARGE, OptChart, type OptBand, type OptMarker, type OptSeries } from './OptChart'
 
 const G0 = 9.80665
 const MU = 3.986004418e14
@@ -129,7 +129,7 @@ function MultiCharts({
           ))}
         </div>
       ) : null}
-      <div className="grid gap-2 lg:grid-cols-2">
+      <div className="grid gap-2 @min-[760px]:grid-cols-2">
         <OptChart
           title={tr('飛行経路（高度 × 地表距離）', 'Flight path (altitude vs. ground distance)')}
           unit="km"
@@ -151,7 +151,7 @@ function MultiCharts({
           cursor={null}
           xMax={downrangeMax}
           value={`${fmt(at.downrangeKm, 0)} km · ${fmt(at.altKm, 1)} km`}
-          height={230}
+          height={CHART_HEIGHT_LARGE}
           note={tr('色は段（実線：燃焼中、細線：慣性飛行）。', 'Color shows the stage (thick: burning, thin: coasting).')}
         />
         <OptChart
@@ -174,10 +174,10 @@ function MultiCharts({
               : []),
           ]}
           value={value(at.altKm, 1, 'km')}
-          height={230}
+          height={CHART_HEIGHT_LARGE}
         />
       </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+      <div className="grid gap-2 @min-[760px]:grid-cols-2 @min-[1280px]:grid-cols-3">
         <OptChart
           {...common}
           title={tr('速度', 'Speed')}
@@ -409,7 +409,7 @@ function SingleStageCharts({ result, cursor, onCursor }: { result: OptimizationR
       color: signal,
     })
     return (
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 @min-[760px]:grid-cols-2">
         <OptChart
           {...common}
           title={tr('飛行経路（高度 × 距離）', 'Flight path (altitude vs. downrange)')}
@@ -469,7 +469,7 @@ function SingleStageCharts({ result, cursor, onCursor }: { result: OptimizationR
     const samples = numerical.samples
     const pts = (get: (x: (typeof samples)[number]) => number) => samples.map((x) => ({ x: x.time_s, y: get(x) }))
     return (
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 @min-[760px]:grid-cols-2">
         <OptChart
           title={tr('位置', 'Position')}
           unit="m"

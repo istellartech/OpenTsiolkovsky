@@ -1,4 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
+import { ChartTools } from '../ChartTools'
+import { tr } from '../../lib/i18n'
+import { fileBase } from '../../lib/download'
+import { useEffect, useRef, useState } from 'react'
 import { Chart, type ChartConfiguration, type Plugin } from 'chart.js/auto'
 import { cssVar, useTheme } from '../../lib/theme'
 import { fmt } from '../../lib/format'
@@ -78,25 +82,7 @@ const overlay: Plugin<'line'> = {
   },
 }
 
-export function OptChart({
-  title,
-  unit,
-  xLabel,
-  series,
-  bands = [],
-  markers = [],
-  cursor = null,
-  onCursor,
-  logY = false,
-  yMin,
-  yMax,
-  xMin,
-  xMax,
-  digits = 1,
-  height = 180,
-  note,
-  value,
-}: {
+interface OptChartProps {
   title: string
   unit: string
   xLabel: string
@@ -111,11 +97,41 @@ export function OptChart({
   xMin?: number
   xMax?: number
   digits?: number
-  height?: number
+  /** CSS height; by default it grows with the window */
+  height?: number | string
   note?: string
   /** Text shown at the top right (e.g. the value at the cursor). */
   value?: string
-}) {
+  large?: boolean
+}
+/** Default chart height: roomy on tall windows, still two rows on short ones. */
+export const CHART_HEIGHT = 'clamp(220px, 30dvh, 340px)'
+/** The headline charts (flight path, altitude). */
+export const CHART_HEIGHT_LARGE = 'clamp(260px, 38dvh, 440px)'
+
+export function OptChart(props: OptChartProps) {
+  const {
+    title,
+    unit,
+    xLabel,
+    series,
+    bands = [],
+    markers = [],
+    cursor = null,
+    onCursor,
+    logY = false,
+    yMin,
+    yMax,
+    xMin,
+    xMax,
+    digits = 1,
+    height = CHART_HEIGHT,
+    note,
+    value,
+    large = false,
+  } = props
+  const [expanded, setExpanded] = useState(false)
+
   const canvas = useRef<HTMLCanvasElement>(null),
     chart = useRef<Chart<'line'> | null>(null)
   const theme = useTheme(),
@@ -225,34 +241,87 @@ export function OptChart({
     ch.update('none')
   }, [series, bands, markers, cursor, logY, yMin, yMax, xMin, xMax, xLabel, unit, digits, theme, lang])
   return (
-    <figure className="flex min-w-0 flex-col rounded-[8px] border border-line bg-surface px-2.5 pb-1.5 pt-2" style={{ height }}>
-      <figcaption className="flex shrink-0 items-baseline gap-2 pb-1">
-        <span className="text-[12px] font-semibold">{title}</span>
-        {unit ? <span className="text-[11px] text-ink-3">[{unit}]</span> : null}
-        {value ? <span className="num ml-auto whitespace-nowrap text-[12px] text-ink">{value}</span> : null}
-      </figcaption>
-      {note ? (
-        <p className="-mt-0.5 mb-0.5 truncate text-[10px] leading-snug text-ink-3" title={note}>
-          {note}
-        </p>
+    <>
+      {expanded ? (
+        <ExpandedChart onClose={() => setExpanded(false)}>
+          <OptChart {...props} large height={540} />
+        </ExpandedChart>
       ) : null}
-      <div className="relative min-h-0 flex-1 cursor-crosshair">
-        <canvas ref={canvas} aria-label={title} role="img" />
-      </div>
-      {series.some((s) => !s.faint) && series.length > 1 ? (
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 pt-1 text-[10px] text-ink-3">
-          {series
-            .filter((s, i, all) => all.findIndex((v) => v.label === s.label) === i && !s.faint)
-            .map((s) => (
-              <span key={s.label} className="inline-flex items-center gap-1">
-                <svg width="14" height="4" aria-hidden="true">
-                  <line x1="0" y1="2" x2="14" y2="2" stroke={s.color} strokeWidth="2" strokeDasharray={s.dash?.join(' ')} />
-                </svg>
-                {s.label}
-              </span>
-            ))}
+      <figure className="flex min-w-0 flex-col rounded-[8px] border border-line bg-surface px-2.5 pb-1.5 pt-2" style={{ height }}>
+        <figcaption className="flex shrink-0 items-baseline gap-2 pb-1">
+          <span className="min-w-0 text-[12px] font-semibold">{title}</span>
+          {unit ? <span className="text-[11px] text-ink-3">[{unit}]</span> : null}
+          {value ? <span className="num ml-auto text-right text-[12px] text-ink">{value}</span> : null}
+          <ChartTools
+            title={title}
+            onDownload={() => {
+              const image = chart.current?.toBase64Image('image/png', 1)
+              if (image) {
+                const link = document.createElement('a')
+                link.href = image
+                link.download = `${fileBase(title)}.png`
+                link.click()
+              }
+            }}
+            onExpand={large ? undefined : () => setExpanded(true)}
+          />
+        </figcaption>
+        {note ? (
+          <p className="-mt-0.5 mb-0.5 truncate text-[10px] leading-snug text-ink-3" title={note}>
+            {note}
+          </p>
+        ) : null}
+        <div className="relative min-h-0 flex-1 cursor-crosshair">
+          <canvas ref={canvas} aria-label={title} role="img" />
         </div>
-      ) : null}
-    </figure>
+        {series.some((s) => !s.faint) && series.length > 1 ? (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 pt-1 text-[10px] text-ink-3">
+            {series
+              .filter((s, i, all) => all.findIndex((v) => v.label === s.label) === i && !s.faint)
+              .map((s) => (
+                <span key={s.label} className="inline-flex items-center gap-1">
+                  <svg width="14" height="4" aria-hidden="true">
+                    <line x1="0" y1="2" x2="14" y2="2" stroke={s.color} strokeWidth="2" strokeDasharray={s.dash?.join(' ')} />
+                  </svg>
+                  {s.label}
+                </span>
+              ))}
+          </div>
+        ) : null}
+      </figure>
+    </>
+  )
+}
+
+function ExpandedChart({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const el = dialog.current
+    el?.showModal()
+    return () => el?.close()
+  }, [])
+  return (
+    <dialog
+      ref={dialog}
+      aria-label={tr('グラフを拡大', 'Expanded chart')}
+      onCancel={(e) => {
+        e.preventDefault()
+        onClose()
+      }}
+      className="m-auto w-[min(96vw,1100px)] max-w-none rounded-[10px] border border-line bg-surface p-3 text-ink backdrop:bg-black/35"
+    >
+      <div className="mb-2 flex justify-end">
+        <button
+          type="button"
+          autoFocus
+          onClick={onClose}
+          aria-label={tr('閉じる', 'Close')}
+          className="flex h-8 w-8 items-center justify-center rounded hover:bg-surface-2"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      {children}
+    </dialog>
   )
 }

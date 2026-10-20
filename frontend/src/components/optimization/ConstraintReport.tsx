@@ -17,20 +17,31 @@ export function useConstraintViews(checks: PhysicalCheck[], phaseName: (i: numbe
 }
 
 /** Limits the optimum presses against, in plain words. */
-export function LimitingConstraints({ views, onLocate }: { views: ConstraintView[]; onLocate?: (v: ConstraintView) => void }) {
+export function LimitingConstraints({
+  views,
+  onLocate,
+  canLocate = () => true,
+}: {
+  views: ConstraintView[]
+  onLocate?: (v: ConstraintView) => void
+  canLocate?: (v: ConstraintView) => boolean
+}) {
   const active = views.filter((v) => v.active)
+  const [expanded, setExpanded] = useState(false)
   if (!active.length) return null
   return (
-    <section className="rounded-[9px] border border-line bg-surface px-3 py-3 sm:px-4">
-      <h3 className="text-[13px] font-semibold">{tr('ペイロードを制限している条件', 'Limits that cap the payload')}</h3>
+    <details className="rounded-[9px] border border-line bg-surface px-3 py-2 sm:px-4">
+      <summary className="cursor-pointer text-[13px] font-semibold">
+        {tr('ペイロードを制限している条件', 'Limits that cap the payload')} · {active.length}
+      </summary>
       <p className="mt-0.5 text-[11px] leading-snug text-ink-3">
         {tr(
-          '最適解はこれらの上限・下限ぎりぎりで飛んでいます。これらを緩めればペイロードは増え、厳しくすれば減ります。',
-          'The optimal flight runs right at these limits. Relaxing them would raise the payload; tightening them would lower it.',
+          '上限・下限に近い条件です。ペイロードへの影響の大きさは、感度や再計算で確認してください。',
+          'Conditions close to their bounds. Use sensitivities or re-solves to determine their effect on payload.',
         )}
       </p>
       <ul className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
-        {active.map((v) => (
+        {(expanded ? active : active.slice(0, 3)).map((v) => (
           <li key={v.check.id} className="flex items-center gap-2 rounded-[7px] border border-line bg-surface-2 px-2.5 py-1 text-[12px]">
             <span className="h-2 w-2 shrink-0 rounded-full bg-signal" />
             <span className="min-w-0 flex-1">
@@ -41,7 +52,7 @@ export function LimitingConstraints({ views, onLocate }: { views: ConstraintView
                 {num(v.upper !== null && (v.lower === null || v.value > (v.lower + v.upper) / 2) ? v.upper : v.lower, v.unit)}
               </span>
             </span>
-            {onLocate ? (
+            {onLocate && canLocate(v) ? (
               <button
                 type="button"
                 className="flex h-7 w-7 items-center justify-center rounded hover:bg-surface"
@@ -55,12 +66,30 @@ export function LimitingConstraints({ views, onLocate }: { views: ConstraintView
           </li>
         ))}
       </ul>
-    </section>
+      {active.length > 3 ? (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-2 min-h-8 text-[12px] text-ink-2 underline"
+        >
+          {expanded ? tr('折りたたむ', 'Show fewer') : tr(`全${active.length}件を見る`, `Show all ${active.length}`)}
+        </button>
+      ) : null}
+    </details>
   )
 }
 
 /** Every check grouped by family, with how much of each limit is used. */
-export function ConstraintReport({ views, onLocate }: { views: ConstraintView[]; onLocate?: (v: ConstraintView) => void }) {
+export function ConstraintReport({
+  views,
+  onLocate,
+  canLocate = () => true,
+}: {
+  views: ConstraintView[]
+  onLocate?: (v: ConstraintView) => void
+  canLocate?: (v: ConstraintView) => boolean
+}) {
   const [onlyFailed, setOnlyFailed] = useState(false)
   const failures = views.filter((v) => !v.check.passed).length
   return (
@@ -110,7 +139,7 @@ export function ConstraintReport({ views, onLocate }: { views: ConstraintView[];
               <p className="mb-2 text-[11px] leading-relaxed text-ink-3">{familyHelp(family)}</p>
               <ul className="divide-y divide-line">
                 {rows.map((v) => (
-                  <ConstraintRow key={v.check.id} v={v} onLocate={onLocate} />
+                  <ConstraintRow key={v.check.id} v={v} onLocate={canLocate(v) ? onLocate : undefined} />
                 ))}
               </ul>
             </div>

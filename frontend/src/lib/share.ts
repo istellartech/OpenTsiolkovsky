@@ -1,3 +1,4 @@
+import type { CaseContext } from './case'
 // Shareable links. An unedited preset is linked by id (`#preset=h3_22s`); an
 // edited config travels in the fragment as deflated, base64url-encoded JSON
 // (`#c=...`). The fragment never reaches the server. The CLI (`share`) and
@@ -29,20 +30,22 @@ export async function decodePayload(s: string): Promise<unknown> {
   return JSON.parse(new TextDecoder().decode(json))
 }
 
-export type ShareTarget = { kind: 'preset'; id: string } | { kind: 'config'; data: string }
+export type ShareTarget = { kind: 'preset'; id: string; context?: string } | { kind: 'config'; data: string; context?: string }
 
 /** What a URL fragment like `#preset=...` or `#c=...` points to, if anything. */
 export function parseShareHash(hash: string): ShareTarget | null {
   const params = new URLSearchParams(hash.replace(/^#/, ''))
+  const context = params.get('case') ?? undefined
   const id = params.get('preset')
-  if (id) return { kind: 'preset', id }
+  if (id) return context ? { kind: 'preset', id, context } : { kind: 'preset', id }
   const data = params.get('c')
-  if (data) return { kind: 'config', data }
+  if (data) return context ? { kind: 'config', data, context } : { kind: 'config', data }
   return null
 }
 
-export async function buildShareUrl(base: string, config: unknown, presetId: string): Promise<string> {
+export async function buildShareUrl(base: string, config: unknown, presetId: string, context?: CaseContext): Promise<string> {
   const url = new URL(base)
   url.hash = presetId !== 'custom' ? `preset=${encodeURIComponent(presetId)}` : `c=${await encodePayload(config)}`
+  if (context) url.hash += `&case=${await encodePayload(context)}`
   return url.toString()
 }

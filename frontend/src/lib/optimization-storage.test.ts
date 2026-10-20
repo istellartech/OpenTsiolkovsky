@@ -1,3 +1,4 @@
+import { caseFile, convertedCase, newCase } from './case'
 import 'fake-indexeddb/auto'
 import { afterEach, describe, expect, it } from 'vite-plus/test'
 import fixture from './__fixtures__/optimization-result.json'
@@ -91,4 +92,21 @@ describe('optimization result import and local storage', () => {
     await expect(loadOptimizationRun('missing')).rejects.toThrow()
     expect(await loadOptimizationRun(run.id)).toEqual(run)
   })
+})
+
+it('retains immutable case metadata through result storage and case-file import', async () => {
+  const context = convertedCase(newCase('Source'), 'optimize', 'Optimization copy', ['constant thrust'])
+  const run = createOptimizationRun(result(), 'solver', context)
+  context.name = 'Edited after running'
+  context.history[0].notes.push('not in the run')
+  expect(run.context!.name).toBe('Optimization copy')
+  expect(run.context!.history[0].notes).toEqual(['constant thrust'])
+  await saveOptimizationRun(run)
+  await closeOptimizationStorage()
+  const restored = await loadOptimizationRun(run.id)
+  expect(restored.context).toEqual(run.context)
+  const imported = readOptimizationFile(caseFile('optimize', restored.context!, restored.result))
+  expect(imported.context).toEqual(run.context)
+  expect(imported.kind).toBe('result')
+  expect(() => readOptimizationFile(caseFile('simulate', restored.context!, restored.result))).toThrow()
 })

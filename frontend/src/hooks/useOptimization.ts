@@ -1,3 +1,4 @@
+import type { CaseContext } from '../lib/case'
 import { useEffect, useRef, useState } from 'react'
 import { createOptimizationRun, type OptimizationRun } from '../lib/optimization-storage'
 import { optimizationSnapshot, type IterationRecord, type OptimizationWorkerMessage, type ProgressSnapshot } from '../lib/optimization'
@@ -38,11 +39,12 @@ export function useOptimization() {
     setStatus('cancelled')
   }
 
-  function run(raw: string): boolean {
+  function run(raw: string, context?: CaseContext): boolean {
     if (workerRef.current) return false
     setError(null)
     setProgress(null)
     try {
+      const caseSnapshot = context ? structuredClone(context) : undefined
       const runId = crypto.randomUUID()
       const input = optimizationSnapshot(raw, runId)
       const worker = new Worker(new URL('../workers/optimization.worker.ts', import.meta.url), { type: 'module' })
@@ -81,7 +83,7 @@ export function useOptimization() {
             setStatus('error')
           } else {
             const result = message.result
-            setRuns((old) => [createOptimizationRun(result, 'solver'), ...old].slice(0, 2))
+            setRuns((old) => [createOptimizationRun(result, 'solver', caseSnapshot), ...old].slice(0, 2))
             setProgress(result.iterations[result.iterations.length - 1] ?? null)
             setMemoryBytes(message.memoryBytes)
             setStatus('done')

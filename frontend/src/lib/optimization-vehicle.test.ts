@@ -117,3 +117,18 @@ describe('recorded 80 t result', () => {
     expect(warmStartGuess(r, changed)).toBeNull()
   })
 })
+
+it('keeps newly added physical constraints visible, with explicit categories and units', () => {
+  const check = { id: 'QALPHA[1]', value: 1000, lower: null, upper: 2000, unit: 'Pa*deg', tolerance: 0.01, violation: 0, passed: true }
+  const aero = constraintView(check, (i) => `phase ${i}`)
+  expect(aero.family).toBe('aero')
+  expect(aero.value).toBe(1)
+  expect(aero.unit).toBe('kPa·°')
+  const thrust = constraintView({ ...check, id: 'THRUST[1]', unit: 'N' }, () => 'burn')
+  expect(thrust.family).toBe('propulsion')
+  expect(thrust.unit).toBe('kN')
+  const other = constraintView({ ...check, id: 'NEW_LIMIT', unit: 'W/m²' }, () => '')
+  expect(other.family).toBe('other')
+  expect(other.label).toBe('NEW_LIMIT')
+  expect(other.unit).toBe('W/m²')
+})

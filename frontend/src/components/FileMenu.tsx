@@ -7,9 +7,13 @@ export interface FileActions {
   base: string
   open: (files: File[]) => void
   saveJson: () => void
-  copyLink: () => void
-  saveCsv: () => void
-  saveKml: () => void
+  saveCase?: () => void
+  saveResult?: () => void
+  optimization?: boolean
+  busy?: boolean
+  copyLink?: () => void
+  saveCsv?: () => void
+  saveKml?: () => void
 }
 
 interface ItemProps {
@@ -55,7 +59,7 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
         ref={input}
         type="file"
         accept=".json,.csv,application/json,text/csv"
-        multiple
+        multiple={!files.optimization}
         className="hidden"
         onChange={(e) => {
           const picked = Array.from(e.target.files ?? [])
@@ -83,51 +87,83 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
           <MenuItem
             onClose={close}
             icon={FolderOpen}
-            title={tr('設定ファイルを開く…', 'Open settings file…')}
+            title={tr('ケース・JSONを開く…', 'Open case or JSON…')}
             detail={tr(
-              '設定の .json（CLI と同じ形式）。CSV の表を使う設定は CSV も一緒に選びます。画面へのドロップでも開けます。',
+              'ケース保存ファイル、またはソルバーのJSON。軌道計算でCSV表を使う場合はCSVも選びます。',
               'A configuration .json (the format the CLI reads). If it uses CSV tables, select the CSV files too. You can also drop files on the window.',
             )}
+            disabled={files.busy}
             onSelect={() => input.current?.click()}
           />
+          {files.saveCase ? (
+            <MenuItem
+              onClose={close}
+              icon={Save}
+              title={tr('ケースを保存', 'Save case')}
+              detail={tr(
+                '質量内訳・ケースの由来・変換履歴も保存します。',
+                'Includes the mass breakdown, case identity and conversion history.',
+              )}
+              onSelect={files.saveCase}
+            />
+          ) : null}
           <MenuItem
             onClose={close}
             icon={Save}
-            title={tr('設定を保存', 'Save settings')}
-            detail={tr(`いまの入力を ${files.base}.json として保存します。`, `Saves the current inputs as ${files.base}.json.`)}
+            title={tr('ソルバー用JSONを保存', 'Save solver input JSON')}
+            detail={tr(
+              `入力のみを ${files.base}.json として保存します。内訳と履歴は「ケースを保存」で保持します。`,
+              `Saves inputs only as ${files.base}.json. Use Save case to retain accounting and history.`,
+            )}
             onSelect={files.saveJson}
           />
-          <MenuItem
-            onClose={close}
-            icon={Link2}
-            title={tr('共有リンクをコピー', 'Copy share link')}
-            detail={tr(
-              'いまの設定を URL に埋め込みます。開くと同じ機体・条件で計算されます。',
-              'Embeds the current settings in a URL; opening it runs the same vehicle and conditions.',
-            )}
-            onSelect={files.copyLink}
-          />
+          {files.copyLink ? (
+            <MenuItem
+              onClose={close}
+              icon={Link2}
+              title={tr('共有リンクをコピー', 'Copy share link')}
+              detail={tr(
+                'いまの設定を URL に埋め込みます。開くと同じ機体・条件で計算されます。',
+                'Embeds the current settings in a URL; opening it runs the same vehicle and conditions.',
+              )}
+              onSelect={files.copyLink}
+            />
+          ) : null}
           <div className="my-1 h-px bg-line" />
           <p className="px-2.5 pb-0.5 pt-1 text-[11px] font-semibold text-ink-2">{tr('計算結果を書き出す', 'Export results')}</p>
-          <MenuItem
-            onClose={close}
-            icon={Table2}
-            title={tr('軌道データ（CSV）', 'Trajectory data (CSV)')}
-            detail={tr(
-              '時刻ごとの位置・速度・推力・姿勢など（CLI の trajectory.csv と同じ列）。表計算ソフトで開けます。',
-              'Position, velocity, thrust, attitude and more per time step (the columns of the CLI’s trajectory.csv). Opens in any spreadsheet.',
-            )}
-            onSelect={files.saveCsv}
-            disabled={!hasResult}
-          />
-          <MenuItem
-            onClose={close}
-            icon={MapIcon}
-            title={tr('Google Earth 用（KML）', 'Google Earth (KML)')}
-            detail={tr('飛行経路を Google Earth で 3D 表示できます。', 'View the flight path in 3D in Google Earth.')}
-            onSelect={files.saveKml}
-            disabled={!hasResult}
-          />
+          {files.saveResult ? (
+            <MenuItem
+              onClose={close}
+              icon={Save}
+              title={tr('全結果JSONを保存', 'Save full result JSON')}
+              detail={tr('実行時の入力・求解と検証の結果。', 'Input snapshot, solution and independent validation.')}
+              onSelect={files.saveResult}
+              disabled={!hasResult}
+            />
+          ) : null}
+          {files.saveCsv ? (
+            <MenuItem
+              onClose={close}
+              icon={Table2}
+              title={tr('軌道データ（CSV）', 'Trajectory data (CSV)')}
+              detail={tr(
+                '時刻ごとの位置・速度・推力・姿勢など（CLI の trajectory.csv と同じ列）。表計算ソフトで開けます。',
+                'Position, velocity, thrust, attitude and more per time step (the columns of the CLI’s trajectory.csv). Opens in any spreadsheet.',
+              )}
+              onSelect={files.saveCsv}
+              disabled={!hasResult}
+            />
+          ) : null}
+          {files.saveKml ? (
+            <MenuItem
+              onClose={close}
+              icon={MapIcon}
+              title={tr('Google Earth 用（KML）', 'Google Earth (KML)')}
+              detail={tr('飛行経路を Google Earth で 3D 表示できます。', 'View the flight path in 3D in Google Earth.')}
+              onSelect={files.saveKml}
+              disabled={!hasResult}
+            />
+          ) : null}
         </div>
       )}
     </div>

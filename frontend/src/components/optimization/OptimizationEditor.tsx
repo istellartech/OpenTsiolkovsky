@@ -1,6 +1,6 @@
 import { useContext, type ReactNode } from 'react'
 import { tr } from '../../lib/i18n'
-import type { Bounds, MultiStageInput, OptimizationInput, SingleStageInput } from '../../lib/optimization-input'
+import type { Bounds, EditorSection, MultiStageInput, OptimizationInput, SingleStageInput } from '../../lib/optimization-input'
 import { isRocketInput, phaseViews } from '../../lib/optimization-input'
 import { editStage, phaseLabel, vehicleMetrics, type StageField } from '../../lib/optimization-vehicle'
 import { fmt } from '../../lib/format'
@@ -8,40 +8,55 @@ import { cn } from '../../lib/cn'
 import { OptGroup, OptNumber, OptText } from './controls'
 import { OptimizationEditorContext } from './editor-context'
 import { SequenceTimeline } from './SequenceTimeline'
+import { ConstraintFields } from './ConstraintFields'
 
-const grid = 'grid gap-x-3 gap-y-2 sm:grid-cols-2'
-const grid3 = 'grid gap-x-3 gap-y-2 sm:grid-cols-3'
-const grid4 = 'grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4'
+const grid = 'grid gap-x-3 gap-y-2 @min-[380px]:grid-cols-2'
+const grid3 = 'grid gap-x-3 gap-y-2 @min-[500px]:grid-cols-3'
+const grid4 = 'grid gap-x-3 gap-y-2 @min-[380px]:grid-cols-2 @min-[700px]:grid-cols-4'
 type Rocket = MultiStageInput | SingleStageInput
-const G0 = 9.80665
 
 /** The settings form: essentials first, everything numerical in one collapsible block. */
-export function OptimizationEditor({ input, onJson }: { input: OptimizationInput; onJson: () => void }) {
+export function OptimizationEditor({
+  input,
+  onJson,
+  section = 'mission',
+}: {
+  input: OptimizationInput
+  onJson: () => void
+  section?: EditorSection
+}) {
   const p = input.problem
   if (!isRocketInput(p)) return <BenchmarkFields input={input} onJson={onJson} />
   return (
     <div className="space-y-3">
-      <MissionFields p={p} />
-      <VehicleFields p={p} />
-      <SequenceFields p={p} />
-      <ConstraintFields p={p} />
-      <details className="group rounded-[9px] border border-line bg-surface" data-opt-details>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
-          <span>
-            <span className="block text-[13px] font-semibold">{tr('詳細設定', 'Advanced settings')}</span>
-            <span className="mt-0.5 block text-[11px] text-ink-3">
-              {tr(
-                '打上げ日時・出典・エンジン形状・計算メッシュ・初期推定・ソルバー・検証の許容値。通常は変更不要です。',
-                'Launch time, provenance, engine geometry, mesh, initial guess, solver and validation tolerances. Usually left unchanged.',
-              )}
+      {section === 'mission' ? (
+        <>
+          <OptText path="problem.vehicle.name" label={tr('ケース名', 'Case name')} value={p.vehicle.name} />
+          <MissionFields p={p} />
+        </>
+      ) : null}
+      {section === 'vehicle' ? <VehicleFields p={p} /> : null}
+      {section === 'sequence' ? <SequenceFields p={p} /> : null}
+      {section === 'constraints' ? <ConstraintFields p={p} /> : null}
+      {section === 'numerics' ? (
+        <details open className="group rounded-[9px] border border-line bg-surface" data-opt-details>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 sm:px-4">
+            <span>
+              <span className="block text-[13px] font-semibold">{tr('詳細設定', 'Advanced settings')}</span>
+              <span className="mt-0.5 block text-[11px] text-ink-3">
+                {tr(
+                  '打上げ日時・出典・エンジン形状・計算メッシュ・初期推定・ソルバー・検証の許容値。通常は変更不要です。',
+                  'Launch time, provenance, engine geometry, mesh, initial guess, solver and validation tolerances. Usually left unchanged.',
+                )}
+              </span>
             </span>
-          </span>
-          <span className="text-[12px] text-ink-3 group-open:rotate-90">›</span>
-        </summary>
-        <div className="space-y-3 border-t border-line px-3 py-3 sm:px-4">
-          <AdvancedFields input={input} p={p} onJson={onJson} />
-        </div>
-      </details>
+            <span className="text-[12px] text-ink-3 group-open:rotate-90">›</span>
+          </summary>
+          <div className="space-y-3 border-t border-line px-3 py-3 sm:px-4">
+            <AdvancedFields input={input} p={p} onJson={onJson} />
+          </div>
+        </details>
+      ) : null}
     </div>
   )
 }
@@ -114,7 +129,7 @@ function MissionFields({ p }: { p: Rocket }) {
             )
       }
     >
-      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.6fr)]">
+      <div className="grid gap-x-3 gap-y-2 @min-[380px]:grid-cols-2">
         {p.kind === 'multi_stage' ? (
           <>
             <OptNumber
@@ -163,7 +178,7 @@ function MissionFields({ p }: { p: Rocket }) {
         {p.kind === 'multi_stage' ? (
           <RangeField
             path="problem.net_payload_kg"
-            className="lg:col-span-2 xl:col-span-1"
+            className="@min-[380px]:col-span-2"
             label={tr('衛星質量を探す範囲', 'Satellite mass search range')}
             value={p.net_payload_kg}
             unit="kg"
@@ -175,7 +190,7 @@ function MissionFields({ p }: { p: Rocket }) {
         ) : (
           <RangeField
             path="problem.additional_payload_kg"
-            className="lg:col-span-2 xl:col-span-1"
+            className="@min-[380px]:col-span-2"
             label={tr('追加ペイロードを探す範囲', 'Additional payload search range')}
             value={p.additional_payload_kg}
             unit="kg"
@@ -261,7 +276,7 @@ function VehicleFields({ p }: { p: Rocket }) {
       note={
         multi
           ? tr(
-              '各段の質量とエンジン性能。燃焼できる時間・全備質量・Δvは自動で計算し、燃焼時間の上限やシーケンスにも反映します。',
+              '各計算区間の質量と推進性能。ブースタ付き機体では実機の段数と異なることがあります。衛星・PAFは段の質量に含めず別枠で数えます。',
               'Stage masses and engine performance. Burn time, wet mass and Δv are derived automatically and applied to the burn limits and sequence.',
             )
           : tr('エンジン推力・燃焼時間は機体データの値を固定で使います。', 'Engine thrust and burn time are fixed by the vehicle data.')
@@ -269,7 +284,7 @@ function VehicleFields({ p }: { p: Rocket }) {
     >
       <div className="grid gap-4">
         <div className="min-w-0 overflow-x-auto">
-          <table className="w-full min-w-[420px] border-separate border-spacing-y-0.5 text-left text-[12px]">
+          <table className="w-full min-w-[360px] border-separate border-spacing-y-0.5 text-left text-[12px]">
             <thead>
               <tr className="text-[11px] text-ink-3">
                 <th className="w-[38%] font-normal" />
@@ -499,7 +514,7 @@ function SequenceFields({ p }: { p: Rocket }) {
                   style={{ background: `var(--stage-${(phase.stage % 5) + 1})`, opacity: phase.mode === 'burn' ? 1 : 0.35 }}
                 />
                 <span className="min-w-0">
-                  <span className="font-medium">{phaseLabel(p.phases, i)}</span>
+                  <span className="font-medium">{phaseLabel(p.phases, i, p.vehicle)}</span>
                   <span className="ml-2 text-[10px] text-ink-3">
                     {phase.duration_s.lower === phase.duration_s.upper
                       ? tr('時間固定', 'Fixed duration')
@@ -523,214 +538,6 @@ function SequenceFields({ p }: { p: Rocket }) {
         </div>
       )}
     </Step>
-  )
-}
-
-function ConstraintFields({ p }: { p: Rocket }) {
-  const ctx = useContext(OptimizationEditorContext)
-  return (
-    <Step
-      n={4}
-      title={tr('守る条件（制約）', 'Limits to respect (constraints)')}
-      note={tr(
-        '最適化はこれらを必ず守ります。厳しくするとペイロードは減ります。結果画面で、どの条件がペイロードを制限したかを確認できます。',
-        'The optimizer always respects these. Tighter limits reduce payload. The results show which limits constrained the payload.',
-      )}
-    >
-      <LimitRow
-        title={tr('最大動圧', 'Max dynamic pressure')}
-        help={tr(
-          '空気から受ける圧力（½×空気密度×速度²）の上限。上昇中の構造荷重を抑えます。',
-          'Upper limit on ½·air density·speed². Keeps ascent structural loads down.',
-        )}
-      >
-        <OptNumber
-          path="problem.max_dynamic_pressure_pa"
-          label={tr('最大動圧', 'Max dynamic pressure')}
-          value={p.max_dynamic_pressure_pa}
-          scale={1000}
-          unit="kPa"
-        />
-      </LimitRow>
-      {p.kind === 'multi_stage' ? (
-        <>
-          <div>
-            <p className="text-[12px] font-medium">{tr('区間ごとの上限', 'Per-segment limits')}</p>
-            <p className="mt-0.5 text-[10px] leading-snug text-ink-3">
-              {tr(
-                '迎角：機体の向きと気流のずれ（空気力による横向き荷重）。加速度：推力・空気力による加速度（重力を除く、1 G = 9.81 m/s²）。最低高度：地面・大気への余裕。',
-                'Angle of attack: body axis vs. airflow (side load). Acceleration: from thrust and aerodynamics, gravity excluded (1 G = 9.81 m/s²). Minimum altitude: clearance.',
-              )}
-            </p>
-            <div className="mt-1 overflow-x-auto">
-              <table className="w-full min-w-[560px] border-separate border-spacing-y-0.5 text-left text-[12px]">
-                <thead>
-                  <tr className="text-[11px] text-ink-3">
-                    <th className="font-normal">{tr('区間', 'Segment')}</th>
-                    <th className="px-1 font-normal">{tr('最大迎角', 'Max AoA')}</th>
-                    <th className="px-1 font-normal">{tr('最大加速度', 'Max accel.')}</th>
-                    <th className="px-1 font-normal">{tr('最低高度', 'Min altitude')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {p.phases.map((phase, i) => (
-                    <tr key={i}>
-                      <th className="pr-2 font-normal text-ink-2">{phaseLabel(p.phases, i)}</th>
-                      <td className="w-28 px-1 [&_label]:sr-only">
-                        <OptNumber
-                          path={`problem.phases.${i}.max_angle_of_attack_deg`}
-                          label={tr('最大迎角', 'Max AoA')}
-                          value={phase.max_angle_of_attack_deg}
-                          unit="°"
-                        />
-                      </td>
-                      <td className="w-28 px-1 [&_label]:sr-only">
-                        <OptNumber
-                          path={`problem.phases.${i}.max_specific_force_m_s2`}
-                          label={tr('最大加速度', 'Max acceleration')}
-                          value={phase.max_specific_force_m_s2}
-                          scale={G0}
-                          unit="G"
-                        />
-                      </td>
-                      <td className="w-32 px-1 [&_label]:sr-only">
-                        <OptNumber
-                          path={`problem.phases.${i}.min_altitude_m`}
-                          label={tr('最低高度', 'Min altitude')}
-                          value={phase.min_altitude_m}
-                          scale={1000}
-                          unit="km"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <LimitRow
-            title={tr('姿勢を変える速さ', 'Attitude rates')}
-            help={tr(
-              '姿勢（方位角・仰角）を1秒あたり何度まで変えてよいか。機体軸そのものの回転速度にも上限を設けます。',
-              'How many degrees per second azimuth and elevation may change, plus a limit on the body axis rotation itself.',
-            )}
-          >
-            <div className={grid3}>
-              <OptNumber
-                path="problem.max_azimuth_rate_deg_s"
-                label={tr('方位角', 'Azimuth')}
-                value={p.max_azimuth_rate_deg_s}
-                unit="°/s"
-              />
-              <OptNumber
-                path="problem.max_elevation_rate_deg_s"
-                label={tr('仰角', 'Elevation')}
-                value={p.max_elevation_rate_deg_s}
-                unit="°/s"
-              />
-              <OptNumber
-                path="problem.max_inertial_direction_rate_deg_s"
-                label={tr('機体軸の回転', 'Body-axis rotation')}
-                value={p.max_inertial_direction_rate_deg_s}
-                unit="°/s"
-              />
-            </div>
-          </LimitRow>
-          <LimitRow
-            title={tr('姿勢の範囲', 'Attitude range')}
-            help={tr(
-              '方位角は北から時計回り（90°が東）。仰角は水平からの角度で、上限は真上（90°）です。',
-              'Azimuth from north, clockwise (90° = east). Elevation from the horizontal; the maximum is straight up (90°).',
-            )}
-          >
-            <div className={grid3}>
-              {[0, 1].map((axis) => (
-                <OptNumber
-                  key={axis}
-                  path={`problem.azimuth_bounds_deg.${axis}`}
-                  label={axis === 0 ? tr('方位角の最小', 'Min azimuth') : tr('方位角の最大', 'Max azimuth')}
-                  value={p.azimuth_bounds_deg[axis]}
-                  unit="°"
-                />
-              ))}
-              <OptNumber
-                path="problem.elevation_bounds_deg.0"
-                label={tr('仰角の最小', 'Min elevation')}
-                value={p.elevation_bounds_deg[0]}
-                unit="°"
-              />
-            </div>
-          </LimitRow>
-          <LimitRow
-            title={tr('フェアリング投棄', 'Fairing jettison')}
-            help={tr(
-              '空力加熱を避けるため、この高度より上で投棄します（熱流束そのものは評価していません）。',
-              'Jettison above this altitude to avoid aerodynamic heating (heat flux itself is not evaluated).',
-            )}
-          >
-            <div className={grid}>
-              <OptNumber
-                path="problem.fairing_release_min_altitude_m"
-                label={tr('投棄できる最低高度', 'Minimum release altitude')}
-                value={p.fairing_release_min_altitude_m}
-                scale={1000}
-                unit="km"
-              />
-            </div>
-          </LimitRow>
-          <p className="text-[11px] leading-relaxed text-ink-3">
-            {tr(
-              '予備推進剤と着火回数（機体・詳細設定）も条件として守ります。熱・落下域・分離時の相対運動・6自由度の姿勢運動は評価していません。',
-              'Propellant reserves and ignition counts (vehicle / advanced settings) are also enforced. Heating, debris regions, separation dynamics and 6-DoF attitude motion are not evaluated.',
-            )}
-          </p>
-        </>
-      ) : (
-        <div className={grid}>
-          <OptNumber
-            path="problem.max_angle_of_attack_deg"
-            label={tr('最大迎角', 'Max angle of attack')}
-            value={p.max_angle_of_attack_deg}
-            unit="°"
-          />
-          <OptNumber
-            path="problem.max_specific_force_m_s2"
-            label={tr('最大加速度（重力を除く）', 'Max acceleration (gravity excluded)')}
-            value={p.max_specific_force_m_s2}
-            scale={G0}
-            unit="G"
-          />
-          <OptNumber
-            path="problem.max_pitch_rate_deg_s"
-            label={tr('仰角を変える速さの上限', 'Max elevation rate')}
-            value={p.max_pitch_rate_deg_s}
-            unit="°/s"
-          />
-          <OptNumber path="problem.minimum_pitch_deg" label={tr('仰角の最小', 'Min elevation')} value={p.minimum_pitch_deg} unit="°" />
-          <OptNumber
-            path="problem.minimum_downrange_m"
-            label={tr('射向への最小飛行距離', 'Minimum downrange')}
-            value={p.minimum_downrange_m}
-            scale={1000}
-            unit="km"
-          />
-        </div>
-      )}
-      {ctx.disabled ? (
-        <p className="text-[11px] text-ink-3">{tr('実行中は入力を変更できません。', 'Inputs are locked during a run.')}</p>
-      ) : null}
-    </Step>
-  )
-}
-function LimitRow({ title, help, children }: { title: string; help: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-1.5 border-t border-line pt-2 first:border-t-0 first:pt-0 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)] lg:gap-4">
-      <div>
-        <p className="text-[12px] font-medium">{title}</p>
-        <p className="mt-0.5 text-[10px] leading-snug text-ink-3">{help}</p>
-      </div>
-      <div className="min-w-0 max-w-xl">{children}</div>
-    </div>
   )
 }
 
@@ -810,7 +617,13 @@ function AdvancedFields({ input, p, onJson }: { input: OptimizationInput; p: Roc
         <div className={grid4}>
           {p.kind === 'multi_stage' ? (
             p.phases.map((phase, i) => (
-              <OptNumber key={i} path={`problem.phases.${i}.intervals`} label={phaseLabel(p.phases, i)} value={phase.intervals} integer />
+              <OptNumber
+                key={i}
+                path={`problem.phases.${i}.intervals`}
+                label={phaseLabel(p.phases, i, p.vehicle)}
+                value={phase.intervals}
+                integer
+              />
             ))
           ) : (
             <>
@@ -838,7 +651,7 @@ function AdvancedFields({ input, p, onJson }: { input: OptimizationInput; p: Roc
             {p.phases.map((phase, i) =>
               phase.vertical ? null : (
                 <div key={i} className={grid3}>
-                  <p className="self-center text-[12px] text-ink-2">{phaseLabel(p.phases, i)}</p>
+                  <p className="self-center text-[12px] text-ink-2">{phaseLabel(p.phases, i, p.vehicle)}</p>
                   <OptNumber
                     path={`problem.phases.${i}.initial_attitude_end_deg.0`}
                     label={tr('方位角', 'Azimuth')}

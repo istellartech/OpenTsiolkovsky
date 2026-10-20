@@ -12,7 +12,7 @@ export function useUndoKeys(undo: () => void, redo: () => void, enabled = true) 
     if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return
-      if (e.target instanceof HTMLElement && e.target.closest('textarea, [contenteditable="true"]')) return
+      if (e.target instanceof HTMLElement && e.target.closest('textarea, [contenteditable="true"], dialog, [role=dialog]')) return
       const key = e.key.toLowerCase()
       if (key === 'z' && !e.shiftKey) {
         e.preventDefault()

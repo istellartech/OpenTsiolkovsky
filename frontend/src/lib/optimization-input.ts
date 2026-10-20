@@ -506,7 +506,7 @@ export function phaseViews(p: OptimizationProblem): PhaseView[] {
       const start = time
       time += phase.duration_s.initial
       return {
-        name: phaseLabel(p.phases, i),
+        name: phaseLabel(p.phases, i, p.vehicle),
         stage: phase.stage,
         powered: phase.mode === 'burn',
         fixed: phase.duration_s.lower === phase.duration_s.upper,

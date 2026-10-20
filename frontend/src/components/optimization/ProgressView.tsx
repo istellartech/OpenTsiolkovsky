@@ -6,7 +6,7 @@ import { isRocketInput } from '../../lib/optimization-input'
 import { fmt } from '../../lib/format'
 import { tr } from '../../lib/i18n'
 import { cssVar } from '../../lib/theme'
-import { OptChart, type OptSeries } from './OptChart'
+import { CHART_HEIGHT, CHART_HEIGHT_LARGE, OptChart, type OptSeries } from './OptChart'
 import { optButton } from './styles'
 import { cn } from '../../lib/cn'
 
@@ -185,7 +185,7 @@ export function ProgressView({
                 )}
             </p>
           </div>
-          <button type="button" className={optButton} onClick={onCancel}>
+          <button type="button" className={cn(optButton, 'lg:hidden')} onClick={onCancel}>
             <Square className="h-3.5 w-3.5" />
             {tr('中断', 'Cancel')}
           </button>
@@ -259,7 +259,7 @@ export function ProgressView({
           unit="km"
           xLabel={tr('地表距離 [km]', 'Ground distance [km]')}
           series={trajectory}
-          height={230}
+          height={CHART_HEIGHT_LARGE}
           note={tr(
             '赤：最新の反復の軌道、灰色：以前の反復。反復ごとに軌道が目標へ近づく様子です。',
             'Red: latest iteration; gray: earlier ones. Watch the trajectory move toward the target.',
@@ -271,7 +271,7 @@ export function ProgressView({
           xLabel={tr('打上げからの時間 [s]', 'Time since launch [s]')}
           series={speed}
           digits={3}
-          height={230}
+          height={CHART_HEIGHT_LARGE}
           note={tr(
             '最後に目標の円軌道速度（青破線）へ届けば投入できます。',
             'Insertion requires reaching the circular speed (blue dashed).',
@@ -283,7 +283,7 @@ export function ProgressView({
           xLabel={tr('反復', 'Iteration')}
           series={convergence}
           logY
-          height={200}
+          height={CHART_HEIGHT}
           note={tr('2本とも許容値（灰破線）を下回ると収束です。', 'Converged when both fall below the tolerance (gray dashed).')}
         />
         <OptChart
@@ -291,7 +291,7 @@ export function ProgressView({
           unit="kg"
           xLabel={tr('反復', 'Iteration')}
           series={payload}
-          height={200}
+          height={CHART_HEIGHT}
           note={tr(
             '条件を満たす前の値は物理的に成立していません。最終的な値は結果で確認してください。',
             'Values before feasibility are not physically achievable. Read the final value in the results.',

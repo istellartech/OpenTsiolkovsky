@@ -2,7 +2,17 @@
 import type { PhysicalCheck } from './optimization'
 import { tr } from './i18n'
 
-export type ConstraintFamily = 'orbit' | 'aero' | 'accel' | 'attitude' | 'altitude' | 'propellant' | 'payload' | 'numerical'
+export type ConstraintFamily =
+  | 'orbit'
+  | 'aero'
+  | 'accel'
+  | 'attitude'
+  | 'altitude'
+  | 'propellant'
+  | 'payload'
+  | 'numerical'
+  | 'propulsion'
+  | 'other'
 export interface ConstraintView {
   check: PhysicalCheck
   family: ConstraintFamily
@@ -24,6 +34,8 @@ export interface ConstraintView {
 
 export function familyLabel(f: ConstraintFamily): string {
   return {
+    propulsion: tr('推進・推力', 'Propulsion and thrust'),
+    other: tr('その他の拘束条件', 'Other constraints'),
     orbit: tr('投入軌道', 'Target orbit'),
     aero: tr('空力荷重（動圧・迎角）', 'Aerodynamic load (dynamic pressure, angle of attack)'),
     accel: tr('加速度', 'Acceleration'),
@@ -36,6 +48,14 @@ export function familyLabel(f: ConstraintFamily): string {
 }
 export function familyHelp(f: ConstraintFamily): string {
   return {
+    propulsion: tr(
+      '推進系の作動・推力の包絡。記録された検証値と上限・下限を表示します。',
+      'Propulsion operation and thrust envelopes, using recorded validation values and bounds.',
+    ),
+    other: tr(
+      '追加された拘束条件です。識別子と単位をそのまま表示します。',
+      'Additional constraints, shown with their recorded identifiers and units.',
+    ),
     orbit: tr(
       '衛星分離直後の軌道が目標の円軌道・傾斜角になっているか。',
       'Whether the orbit right after deployment is the target circular orbit and inclination.',
@@ -72,6 +92,9 @@ export function familyHelp(f: ConstraintFamily): string {
 }
 
 const display = (c: PhysicalCheck): { scale: number; unit: string } => {
+  if (c.unit === 'N') return { scale: 1e-3, unit: 'kN' }
+  if (c.unit === 'Pa*rad') return { scale: 180 / Math.PI / 1000, unit: 'kPa·°' }
+  if (c.unit === 'Pa*deg') return { scale: 1e-3, unit: 'kPa·°' }
   if (c.unit === 'Pa') return { scale: 1e-3, unit: 'kPa' }
   if (c.unit === 'm/s^2') return { scale: 1 / 9.80665, unit: 'G' }
   if (
@@ -103,7 +126,7 @@ export function constraintView(
   const n = index ? Number(index[1]) : null
   const stage = (i: number | null) => (i === null ? '' : tr(`第${i + 1}段`, `stage ${i + 1}`))
   const phase = (i: number | null) => (i === null ? '' : phaseName(i))
-  let family: ConstraintFamily = 'numerical',
+  let family: ConstraintFamily = 'other',
     label = c.id,
     perPhase = false
   switch (base) {
@@ -124,6 +147,14 @@ export function constraintView(
       break
     case 'ORBIT.apogee_radius':
       ;[family, label] = ['orbit', tr('遠地点', 'Apogee')]
+      break
+    case 'THRUST':
+    case 'ENGINE.thrust':
+      ;[family, label, perPhase] = ['propulsion', tr('推力', 'Thrust'), true]
+      break
+    case 'QALPHA':
+    case 'Q_ALPHA':
+      ;[family, label, perPhase] = ['aero', tr('動圧×迎角（qα）', 'Dynamic pressure × angle of attack (qα)'), true]
       break
     case 'Q':
       ;[family, label, perPhase] = ['aero', tr('最大動圧', 'Max dynamic pressure'), true]
@@ -193,6 +224,7 @@ export function constraintView(
     case 'EVENT.velocity_continuity':
     case 'MASS.monotonic':
     case 'MASS.integrated_consumption':
+      family = 'numerical'
       label = {
         'EVENT.position_continuity': tr(`イベント${(n ?? 0) + 1}前後の位置の連続性`, `Position continuity at event ${(n ?? 0) + 1}`),
         'EVENT.velocity_continuity': tr(`イベント${(n ?? 0) + 1}前後の速度の連続性`, `Velocity continuity at event ${(n ?? 0) + 1}`),
@@ -201,17 +233,21 @@ export function constraintView(
       }[base]
       break
     case 'DYN.mass':
+      family = 'numerical'
       label = tr('再積分との質量差', 'Reintegration mass difference')
       break
     case 'DYN.position':
+      family = 'numerical'
       label = tr('再積分との位置差', 'Reintegration position difference')
       break
     case 'DYN.velocity':
+      family = 'numerical'
       label = tr('再積分との速度差', 'Reintegration velocity difference')
       break
     case 'RK45.mass':
     case 'RK45.position':
     case 'RK45.velocity':
+      family = 'numerical'
       label = tr(
         `より細かい積分との${base.endsWith('mass') ? '質量' : base.endsWith('position') ? '位置' : '速度'}差`,
         `Tighter-integration ${base.split('.')[1]} difference`,
@@ -253,4 +289,15 @@ export function constraintView(
   return { check: c, family, label, phase: perPhase ? n : null, value, lower, upper, unit, usage, active, equality }
 }
 
-export const FAMILY_ORDER: ConstraintFamily[] = ['orbit', 'aero', 'accel', 'attitude', 'altitude', 'propellant', 'payload', 'numerical']
+export const FAMILY_ORDER: ConstraintFamily[] = [
+  'orbit',
+  'aero',
+  'propulsion',
+  'accel',
+  'attitude',
+  'altitude',
+  'propellant',
+  'payload',
+  'numerical',
+  'other',
+]

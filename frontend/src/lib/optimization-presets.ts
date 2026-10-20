@@ -27,3 +27,29 @@ export function rocketPresetOptions(): { id: OptimizationPresetId; label: string
     },
   ]
 }
+
+/**
+ * How the simulation's sample vehicles fare when turned into an optimization
+ * case with their simulated flight (`optimizationFromSimulation`) and solved
+ * with the default settings. Measured 2026-10-21 with the native solver; a
+ * vehicle edited after loading is no longer covered.
+ * - `validated`: converges and passes the independent check
+ * - `refine`: converges; the check passes after re-running with a finer mesh
+ * - `unsolved`: does not converge without adjusting the mission or limits
+ */
+export type SampleOptimizationStatus = 'validated' | 'refine' | 'unsolved'
+const SAMPLE_OPTIMIZATION: Record<string, SampleOptimizationStatus> = {
+  momo: 'validated',
+  h2a202: 'validated',
+  'h3-22s': 'validated',
+  s310: 'refine',
+  s520: 'refine',
+  epsilon: 'refine',
+  falcon9: 'unsolved',
+  ariane5: 'unsolved',
+  'long-march-3b': 'unsolved',
+  'saturn-v': 'unsolved',
+  'soyuz-2.1a': 'unsolved',
+  'ss520-5': 'unsolved',
+}
+export const sampleOptimizationStatus = (presetId: string): SampleOptimizationStatus | null => SAMPLE_OPTIMIZATION[presetId] ?? null

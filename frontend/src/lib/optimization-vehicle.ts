@@ -1,3 +1,5 @@
+import type { Config } from './config'
+import { phaseLabel as intervalLabel, presentationFromConfig } from './presentation'
 // Human-facing view of an optimization vehicle: derived performance numbers,
 // readable phase names, and edits that keep the coupled JSON fields in step
 // (stage wet mass, engine on-time, fixed burn phases and the time horizon).
@@ -158,10 +160,10 @@ interface PhaseLike {
   end_event: string
 }
 /** Readable phase name from stage, mode, burn count and end event; the JSON name stays the identifier. */
-export function phaseLabel(phases: PhaseLike[], i: number): string {
+export function phaseLabel(phases: PhaseLike[], i: number, vehicle?: Config): string {
   const ph = phases[i]
   if (!ph) return ''
-  const stage = tr(`第${ph.stage + 1}段`, `Stage ${ph.stage + 1}`)
+  const stage = vehicle ? intervalLabel(presentationFromConfig(vehicle), ph.stage + 1) : tr(`第${ph.stage + 1}段`, `Stage ${ph.stage + 1}`)
   // Consecutive burn phases of one stage are one ignition, possibly split into segments.
   const starts = (k: number) => phases[k].stage === ph.stage && phases[k].mode === 'burn' && phases[k - 1]?.mode !== 'burn'
   const ignitions = phases.filter((_, k) => starts(k)).length

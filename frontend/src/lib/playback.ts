@@ -14,33 +14,6 @@ export interface PlaybackState {
 
 type Listener = () => void
 
-let state: PlaybackState = { t: 0, t0: 0, t1: 1, playing: false, speed: 10 }
-const listeners = new Set<Listener>()
-let raf: number | null = null
-let lastFrame = 0
-
-function emit() {
-  for (const l of listeners) l()
-}
-
-function set(patch: Partial<PlaybackState>) {
-  state = { ...state, ...patch }
-  emit()
-}
-
-function tick(now: number) {
-  const dt = (now - lastFrame) / 1000
-  lastFrame = now
-  const next = state.t + dt * state.speed
-  if (next >= state.t1) {
-    set({ t: state.t1, playing: false })
-    raf = null
-    return
-  }
-  set({ t: next })
-  raf = requestAnimationFrame(tick)
-}
-
 export const SPEEDS = [1, 2, 5, 10, 20, 50, 100, 200, 500]
 
 /** A playback rate that plays the whole flight in roughly 20 seconds. */
@@ -49,45 +22,79 @@ export function suggestedSpeed(duration: number): number {
   return SPEEDS.find((s) => s >= target) ?? SPEEDS[SPEEDS.length - 1]
 }
 
-export const playback = {
-  get: () => state,
-  subscribe: (l: Listener) => {
-    listeners.add(l)
-    return () => {
-      listeners.delete(l)
+export function createPlayback() {
+  let state: PlaybackState = { t: 0, t0: 0, t1: 1, playing: false, speed: 10 }
+  const listeners = new Set<Listener>()
+  let raf: number | null = null
+  let lastFrame = 0
+
+  function emit() {
+    for (const l of listeners) l()
+  }
+
+  function set(patch: Partial<PlaybackState>) {
+    state = { ...state, ...patch }
+    emit()
+  }
+
+  function tick(now: number) {
+    const dt = (now - lastFrame) / 1000
+    lastFrame = now
+    const next = state.t + dt * state.speed
+    if (next >= state.t1) {
+      set({ t: state.t1, playing: false })
+      raf = null
+      return
     }
-  },
-  load(t0: number, t1: number, opts: { keepTime?: boolean; speed?: number } = {}) {
-    const t = opts.keepTime ? Math.min(Math.max(state.t, t0), t1) : t0
-    set({ t0, t1, t, speed: opts.speed ?? state.speed })
-  },
-  seek(t: number) {
-    set({ t: Math.min(Math.max(t, state.t0), state.t1) })
-  },
-  step(dt: number) {
-    playback.seek(state.t + dt)
-  },
-  play() {
-    if (state.playing) return
-    const t = state.t >= state.t1 ? state.t0 : state.t
-    set({ playing: true, t })
-    lastFrame = performance.now()
+    set({ t: next })
     raf = requestAnimationFrame(tick)
-  },
-  pause() {
-    if (raf !== null) cancelAnimationFrame(raf)
-    raf = null
-    set({ playing: false })
-  },
-  toggle() {
-    if (state.playing) playback.pause()
-    else playback.play()
-  },
-  setSpeed(speed: number) {
-    set({ speed })
-  },
+  }
+
+  const player = {
+    get: () => state,
+    subscribe: (l: Listener) => {
+      listeners.add(l)
+      return () => {
+        listeners.delete(l)
+      }
+    },
+    load(t0: number, t1: number, opts: { keepTime?: boolean; speed?: number } = {}) {
+      const t = opts.keepTime ? Math.min(Math.max(state.t, t0), t1) : t0
+      set({ t0, t1, t, speed: opts.speed ?? state.speed })
+    },
+    seek(t: number) {
+      set({ t: Math.min(Math.max(t, state.t0), state.t1) })
+    },
+    step(dt: number) {
+      player.seek(state.t + dt)
+    },
+    play() {
+      if (state.playing) return
+      const t = state.t >= state.t1 ? state.t0 : state.t
+      set({ playing: true, t })
+      lastFrame = performance.now()
+      raf = requestAnimationFrame(tick)
+    },
+    pause() {
+      if (raf !== null) cancelAnimationFrame(raf)
+      raf = null
+      set({ playing: false })
+    },
+    toggle() {
+      if (state.playing) player.pause()
+      else player.play()
+    },
+    setSpeed(speed: number) {
+      set({ speed })
+    },
+  }
+
+  return player
 }
 
-export function usePlayback<T>(selector: (s: PlaybackState) => T): T {
-  return useSyncExternalStore(playback.subscribe, () => selector(state))
+export const playback = createPlayback()
+export type PlaybackController = ReturnType<typeof createPlayback>
+
+export function usePlayback<T>(selector: (s: PlaybackState) => T, player: PlaybackController = playback): T {
+  return useSyncExternalStore(player.subscribe, () => selector(player.get()))
 }

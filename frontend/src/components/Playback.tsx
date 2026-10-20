@@ -1,8 +1,8 @@
 import { phaseLabel } from '../lib/presentation'
 import { useRef } from 'react'
 import { ChevronDown, ChevronUp, Pause, Play, RotateCcw } from 'lucide-react'
-import { SPEEDS, playback, usePlayback } from '../lib/playback'
-import { sampleAt, type FlightEvent, type Track } from '../lib/trajectory'
+import { SPEEDS, playback, usePlayback, type PlaybackController } from '../lib/playback'
+import { sampleAt, type FlightEvent, type Track, type TimelineTrack } from '../lib/trajectory'
 import { cn } from '../lib/cn'
 import { fmt } from '../lib/format'
 import { stageColorVar } from '../lib/theme'
@@ -16,7 +16,7 @@ const eventColor = (e: FlightEvent) =>
     : 'var(--ink-3)'
 
 /** Event labels that would collide with the previous one are dropped. */
-function spacedLabels(track: Track, pct: (t: number) => number, minGap = 4.5) {
+function spacedLabels(track: TimelineTrack, pct: (t: number) => number, minGap = 4.5) {
   let last = -Infinity
   return track.events
     .filter((e) => e.kind !== 'liftoff' && e.kind !== 'end' && e.t > track.t0)
@@ -28,9 +28,9 @@ function spacedLabels(track: Track, pct: (t: number) => number, minGap = 4.5) {
     })
 }
 
-function Scrubber({ track }: { track: Track }) {
+function Scrubber({ track, player }: { track: TimelineTrack; player: PlaybackController }) {
   const ref = useRef<HTMLDivElement>(null)
-  const t = usePlayback((s) => s.t)
+  const t = usePlayback((s) => s.t, player)
   const span = track.t1 - track.t0 || 1
   const pct = (v: number) => ((v - track.t0) / span) * 100
 
@@ -39,7 +39,7 @@ function Scrubber({ track }: { track: Track }) {
     if (!el) return
     const r = el.getBoundingClientRect()
     const f = Math.min(Math.max((clientX - r.left) / r.width, 0), 1)
-    playback.seek(track.t0 + f * span)
+    player.seek(track.t0 + f * span)
   }
 
   return (
@@ -61,10 +61,10 @@ function Scrubber({ track }: { track: Track }) {
       }}
       onKeyDown={(e) => {
         const step = e.shiftKey ? 10 : 1
-        if (e.key === 'ArrowRight') playback.step(step)
-        else if (e.key === 'ArrowLeft') playback.step(-step)
-        else if (e.key === 'Home') playback.seek(track.t0)
-        else if (e.key === 'End') playback.seek(track.t1)
+        if (e.key === 'ArrowRight') player.step(step)
+        else if (e.key === 'ArrowLeft') player.step(-step)
+        else if (e.key === 'Home') player.seek(track.t0)
+        else if (e.key === 'End') player.seek(track.t1)
         else return
         e.preventDefault()
         e.stopPropagation()
@@ -124,14 +124,14 @@ function Scrubber({ track }: { track: Track }) {
   )
 }
 
-export function PlaybackBar({ track }: { track: Track }) {
-  const { t, playing, speed } = usePlayback((s) => s)
+export function PlaybackBar({ track, player = playback }: { track: TimelineTrack; player?: PlaybackController }) {
+  const { t, playing, speed } = usePlayback((s) => s, player)
   const atEnd = t >= track.t1
   return (
     <div className="flex items-center gap-2 border-t border-line bg-surface px-2 py-1.5 sm:gap-3 sm:px-3">
       <button
         type="button"
-        onClick={() => playback.toggle()}
+        onClick={() => player.toggle()}
         aria-label={playing ? tr('一時停止', 'Pause') : tr('再生', 'Play')}
         title={playing ? tr('一時停止 (Space)', 'Pause (Space)') : tr('再生 (Space)', 'Play (Space)')}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-surface hover:opacity-90"
@@ -149,13 +149,13 @@ export function PlaybackBar({ track }: { track: Track }) {
         {fmt(t)}
         <span className="text-ink-3"> s</span>
       </div>
-      <Scrubber track={track} />
+      <Scrubber track={track} player={player} />
       <div className="num hidden shrink-0 text-[12px] text-ink-3 sm:block">{fmt(track.t1)} s</div>
       <label className="relative shrink-0">
         <span className="sr-only">{tr('再生速度', 'Playback speed')}</span>
         <select
           value={speed}
-          onChange={(e) => playback.setSpeed(Number(e.target.value))}
+          onChange={(e) => player.setSpeed(Number(e.target.value))}
           className="num h-7 cursor-pointer appearance-none rounded-[6px] border border-line bg-surface-2 pl-2 pr-2 text-[12px] text-ink-2 hover:border-line-strong"
           title={tr('再生速度', 'Playback speed')}
         >
@@ -191,7 +191,7 @@ export function Telemetry({
     [tr('速度', 'Velocity'), fmt(s.speed, 0), 'm/s'],
     [tr('マッハ', 'Mach'), fmt(s.mach, 2), ''],
     [tr('動圧', 'Dyn. pressure'), fmt(s.q / 1000, 1), 'kPa'],
-    [tr('加速度', 'Accel.'), fmt(s.accelAxial, 1), 'G'],
+    [tr('機軸加速度（重力を除く）', 'Axial accel. (no gravity)'), fmt(s.accelAxial, 1), 'G'],
     [tr('距離', 'Downrange'), fmt(s.downrange, 1), 'km'],
   ]
   // Instantaneous impact point, while one exists

@@ -35,16 +35,16 @@ export function VehiclePicker({
   useDismiss(ref, open, close)
 
   return (
-    <div ref={ref} className="relative min-w-0 flex-1 sm:flex-none">
+    <div ref={ref} className="relative min-w-0 flex-1">
       <button
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[6px] px-2 text-left hover:bg-surface-2 sm:w-auto"
+        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[6px] px-2 text-left hover:bg-surface-2 max-w-full"
       >
         <span className="min-w-0 truncate text-[13px] font-medium">{current ? current.label : name || tr('カスタム', 'Custom')}</span>
-        <span className="hidden truncate text-[12px] text-ink-3 md:inline">
+        <span className="hidden truncate text-[12px] text-ink-3 2xl:inline">
           {current ? current.kind : tr('編集中の設定', 'Edited settings')}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-3" />

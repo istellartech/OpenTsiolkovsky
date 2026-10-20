@@ -1,3 +1,4 @@
+import { newCase, readCaseContext } from './case'
 import { describe, expect, it } from 'vite-plus/test'
 import { PRESET_OPTIONS } from '../config/presets'
 import { buildShareUrl, decodePayload, encodePayload, parseShareHash } from './share'
@@ -39,4 +40,15 @@ describe('share links', () => {
     expect(config.stages[0].mass_initial_kg).toBe(100)
     expect(config.launch.time_utc).toBe('2000-01-01T00:00:00Z')
   })
+})
+
+it('retains payload accounting and history in a separate, backward-compatible share fragment', async () => {
+  const context = newCase('Payload case')
+  context.carriedMass = { stage: 0, stageCount: 1, payloadKg: 10, adapterKg: 2 }
+  const config = PRESET_OPTIONS[0].create()
+  const target = parseShareHash(new URL(await buildShareUrl('https://example.org/', config, 'custom', context)).hash)!
+  expect(target.kind).toBe('config')
+  if (target.kind !== 'config') throw new Error('config')
+  expect(await decodePayload(target.data)).toEqual(config)
+  expect(readCaseContext(await decodePayload(target.context!))).toEqual(context)
 })

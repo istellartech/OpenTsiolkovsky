@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, FolderOpen, Play, Rocket, Square, X } from 'lucide-react'
+import { ArrowDownToLine, Maximize2, Minimize2, X } from 'lucide-react'
 import { useOptimization } from '../hooks/useOptimization'
 import { useLatest } from '../hooks/useLatest'
 import { tr, useLang } from '../lib/i18n'
@@ -13,11 +13,17 @@ import {
   numericDraftValue,
   sectionForPath,
   withoutInitialGuess,
+  requestFingerprint,
 } from '../lib/optimization-input'
 import { warmStartGuess, withInitialGuess } from '../lib/optimization-vehicle'
 import type { OptimizationResult } from '../lib/optimization'
 import type { Config } from '../lib/config'
-import { optimizationFromSimulation, optimizationKindFor, simulationFromOptimization } from '../lib/optimization-bridge'
+import {
+  optimizationFromSimulation,
+  optimizationKindFor,
+  simulationFromOptimization,
+  type SimulatedFlight,
+} from '../lib/optimization-bridge'
 import type { EditorSection, InputIssue, NumericDraft, OptimizationInput } from '../lib/optimization-input'
 import {
   archiveOptimizationRun,
@@ -39,14 +45,22 @@ import {
 } from '../lib/optimization-presets'
 import { OptimizationEditor, VehicleSummary } from './optimization/OptimizationEditor'
 import { OptimizationHistory } from './optimization/OptimizationHistory'
-import { OptimizationResults } from './optimization/OptimizationResults'
+import { OptimizationResults, type ResultTab } from './optimization/OptimizationResults'
+import { WorkspaceNav } from './WorkspaceNav'
 import { OptTabs } from './optimization/controls'
+import { IconButton } from './primitives'
 import { OptimizationEditorContext } from './optimization/editor-context'
 import { ProgressView } from './optimization/ProgressView'
-import { optButton, optPrimary } from './optimization/styles'
+import { optButton } from './optimization/styles'
 import { cn } from '../lib/cn'
+import { caseFile, editCase, newCase, type CaseContext } from '../lib/case'
+import type { OptimizationControls } from '../lib/workspace'
+import { commit, initHistory, redo, undo } from '../lib/history'
+import { useUndoKeys } from '../hooks/useUndoKeys'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 
-type View = 'setup' | 'results' | 'history'
+/** On phones and tablets one pane is shown at a time; desktops show both. */
+type Pane = 'setup' | 'results'
 /** Draft preset id of an input converted from the simulation's vehicle. */
 const FROM_SIMULATION = 'simulation'
 
@@ -56,24 +70,69 @@ const FROM_SIMULATION = 'simulation'
  */
 export function OptimizationWorkspace({
   simConfig,
+  simContext,
+  simFlight,
+  active,
+  onControls,
   onOpenInSimulation,
 }: {
   /** The vehicle currently in the simulation */
   simConfig: Config
-  onOpenInSimulation: (config: Config, notes: string[]) => void
+  simContext: CaseContext
+  /** The simulated flight of `simConfig`, when it is up to date */
+  simFlight?: SimulatedFlight
+  active: boolean
+  onControls: (controls: OptimizationControls) => void
+  onOpenInSimulation: (config: Config, notes: string[], context?: CaseContext) => void
 }) {
-  const editor = useRef<HTMLDivElement>(null),
-    fileInput = useRef<HTMLInputElement>(null)
+  const editor = useRef<HTMLElement>(null)
   const lang = useLang(),
     opt = useOptimization()
-  const [view, setView] = useState<View>('setup')
-  const [draft, setDraft] = useState<OptimizationDraft>(() => ({
-    raw: optimizationPresets[DEFAULT_OPTIMIZATION_PRESET],
-    fields: {},
-    section: 'mission',
-    preset: DEFAULT_OPTIMIZATION_PRESET,
-    updatedAt: Date.now(),
-  }))
+  const [view, setView] = useState<Pane>('setup')
+  const [resultTab, setResultTab] = useState<ResultTab>('charts')
+  /** Bring the result (not the saved-runs list) into view. */
+  const showResults = useCallback(() => {
+    setView('results')
+    setResultTab((t) => (t === 'history' ? 'charts' : t))
+  }, [])
+  const showHistory = useCallback(() => {
+    setView('results')
+    setResultTab('history')
+  }, [])
+  const [draftHistory, setDraftHistory] = useState(() =>
+    initHistory<OptimizationDraft>({
+      raw: optimizationPresets[DEFAULT_OPTIMIZATION_PRESET],
+      fields: {},
+      section: 'mission',
+      preset: DEFAULT_OPTIMIZATION_PRESET,
+      updatedAt: Date.now(),
+      context: newCase('Assumed 80 t two-stage small launcher'),
+    }),
+  )
+  const draft = draftHistory.present
+  const setDraft = useCallback(
+    (update: (draft: OptimizationDraft) => OptimizationDraft) => setDraftHistory((h) => ({ ...h, present: update(h.present) })),
+    [],
+  )
+  const undoDraft = useCallback(
+    () =>
+      setDraftHistory((h) => {
+        const next = undo(h)
+        return { ...next, present: { ...next.present, fields: {} } }
+      }),
+    [],
+  )
+  const redoDraft = useCallback(
+    () =>
+      setDraftHistory((h) => {
+        const next = redo(h)
+        return { ...next, present: { ...next.present, fields: {} } }
+      }),
+    [],
+  )
+  const desktop = useMediaQuery('(min-width: 1024px)')
+  const [expanded, setExpanded] = useState(false)
+  useUndoKeys(undoDraft, redoDraft, active && !opt.running)
   const latestDraft = useLatest(draft)
   const touched = useRef(false),
     savedIds = useRef(new Set<string>())
@@ -99,12 +158,12 @@ export function OptimizationWorkspace({
       (issue, i, all) => all.findIndex((v) => v.path === issue.path && v.message === issue.message) === i,
     )
   }, [draft.fields, inspected.issues, lang])
-  const section: EditorSection = draft.section === 'json' ? 'json' : 'mission'
+  const section = draft.section
   const ready = hydrated && !!input && !issues.length
   const latest = opt.runs[0]
   useLayoutEffect(() => {
     editor.current?.scrollTo({ top: 0 })
-  }, [view, section, latest?.id])
+  }, [section])
   const refreshHistory = async () => {
     setHistoryLoading(true)
     try {
@@ -126,11 +185,24 @@ export function OptimizationWorkspace({
     loadOptimizationDraft()
       .then((value) => {
         if (alive && !touched.current && value)
-          setDraft(
+          setDraft(() =>
             // Former preset ids (benchmarks, the old default) are no longer offered.
             value.preset !== 'custom' && value.preset !== FROM_SIMULATION && !(value.preset in optimizationPresets)
-              ? { ...value, raw: optimizationPresets[DEFAULT_OPTIMIZATION_PRESET], preset: DEFAULT_OPTIMIZATION_PRESET, fields: {} }
-              : value,
+              ? {
+                  ...value,
+                  raw: optimizationPresets[DEFAULT_OPTIMIZATION_PRESET],
+                  preset: DEFAULT_OPTIMIZATION_PRESET,
+                  fields: {},
+                  context: newCase('Assumed 80 t two-stage small launcher'),
+                }
+              : {
+                  ...value,
+                  context:
+                    value.context ??
+                    newCase(
+                      inspectOptimizationInput(value.raw).input ? inputTitle(inspectOptimizationInput(value.raw).input!) : 'Optimization',
+                    ),
+                },
           )
       })
       .catch(() => {
@@ -164,7 +236,7 @@ export function OptimizationWorkspace({
     return () => {
       alive = false
     }
-  }, [])
+  }, [setDraft])
   useEffect(() => {
     if (!hydrated) return
     const timer = window.setTimeout(() => {
@@ -203,7 +275,17 @@ export function OptimizationWorkspace({
     touched.current = true
     const updatedAt = Date.now()
     setDraftStatus('saving')
-    setDraft((old) => ({ ...update(old), updatedAt }))
+    setDraftHistory((h) => {
+      const old = h.present,
+        next = update(old)
+      const parsed = inspectOptimizationInput(next.raw).input
+      const name = parsed ? inputTitle(parsed) : (old.context?.name ?? 'Optimization')
+      const context =
+        next.context !== old.context ? next.context : next.raw !== old.raw ? editCase(old.context ?? newCase(name), name) : old.context
+      const present = { ...next, context, updatedAt }
+      if (next.raw === old.raw && context === old.context) return { ...h, present }
+      return commit(h, present, { key: next.context?.id !== old.context?.id ? undefined : 'edit' })
+    })
   }, [])
   const edit = useCallback(
     (path: string, value: unknown) =>
@@ -236,12 +318,21 @@ export function OptimizationWorkspace({
     () => ({ edit, replace, fields: draft.fields, setField, issues, disabled: opt.running }),
     [edit, replace, draft.fields, setField, issues, opt.running],
   )
-  const loadInput = (raw: string, preset = 'custom', target: EditorSection = 'mission') => {
-    changeDraft(() => ({ raw, fields: {}, section: target, preset, updatedAt: Date.now() }))
+  const loadInput = (raw: string, preset = 'custom', target: EditorSection = 'mission', context?: CaseContext) => {
+    const parsed = inspectOptimizationInput(raw).input
+    changeDraft(() => ({
+      raw,
+      fields: {},
+      section: target,
+      preset,
+      updatedAt: Date.now(),
+      context: context ?? newCase(parsed ? inputTitle(parsed) : 'Optimization'),
+    }))
     setView('setup')
     setNotice(null)
   }
-  const editInput = (value: OptimizationInput) => loadInput(JSON.stringify(withoutInitialGuess(value), null, 2))
+  const editInput = (value: OptimizationInput, context?: CaseContext) =>
+    loadInput(JSON.stringify(withoutInitialGuess(value), null, 2), 'custom', 'mission', context)
   const focusIssue = (issue: InputIssue) => {
     const target = sectionForPath(issue.path)
     onSection(target)
@@ -268,16 +359,16 @@ export function OptimizationWorkspace({
     }
     const guess = seed ? warmStartGuess(seed, check.input) : null
     const solveRaw = guess ? withInitialGuess(raw, guess) : raw
-    if (opt.run(solveRaw)) {
+    if (opt.run(solveRaw, draft.context)) {
       setRunningInput(guess ? (JSON.parse(solveRaw) as OptimizationInput) : check.input)
-      setView('results')
+      showResults()
       setNotice(null)
     }
   }
   const refine = (result: OptimizationResult) => {
     try {
       const raw = refineFlightMesh(JSON.stringify(withoutInitialGuess(result.input)))
-      loadInput(raw, 'custom', 'numerics')
+      loadInput(raw, 'custom', 'numerics', latest?.context)
       // The coarser solution is a good start for the finer mesh.
       run(raw, result.validation?.multi_stage ? result : null)
     } catch (error) {
@@ -286,11 +377,12 @@ export function OptimizationWorkspace({
   }
   /** Start from the simulation's vehicle, keeping the mission settings of a draft of the same kind. */
   const importFromSimulation = () => {
+    if (opt.running) return
     const kind = optimizationKindFor(simConfig)
     const keep = !!input && input.problem.kind === kind
     const preset = optimizationPresets[kind === 'single_stage' ? 'single_stage' : DEFAULT_OPTIMIZATION_PRESET]
     const template = keep ? input : (JSON.parse(preset) as OptimizationInput)
-    const converted = optimizationFromSimulation(simConfig, withoutInitialGuess(template))
+    const converted = optimizationFromSimulation(simConfig, withoutInitialGuess(template), simContext, simFlight)
     if (!converted.ok) {
       setNotice({
         text: tr('軌道計算の機体を最適化に使えません。', 'The simulation vehicle cannot be used for optimization.'),
@@ -299,19 +391,19 @@ export function OptimizationWorkspace({
       })
       return
     }
-    loadInput(JSON.stringify(converted.value, null, 2), FROM_SIMULATION)
+    loadInput(JSON.stringify(converted.value, null, 2), FROM_SIMULATION, 'mission', converted.context)
     setNotice({
       text: tr(
-        `軌道計算の機体「${simConfig.name}」を読み込みました。目標軌道・制約は${keep ? '編集中の設定' : 'ひな形'}のままです。`,
-        `Loaded the simulation vehicle “${simConfig.name}”. The target and limits are kept from ${keep ? 'the current settings' : 'the template'}.`,
+        `軌道計算の機体「${simConfig.name}」を読み込みました。目標・制約は${keep ? '編集中の設定' : '例題'}を基に、機体に合わせて調整しています（詳細を確認してください）。`,
+        `Loaded the simulation vehicle “${simConfig.name}”. The target and limits start from ${keep ? 'the current settings' : 'the example'}, adjusted to the vehicle (see the details).`,
       ),
       error: false,
       details: converted.notes,
     })
   }
   const openInSimulation = (result: OptimizationResult) => {
-    const converted = simulationFromOptimization(result)
-    if (converted.ok) onOpenInSimulation(converted.value, converted.notes)
+    const converted = simulationFromOptimization(result, opt.runs.find((r) => r.result === result)?.context)
+    if (converted.ok) onOpenInSimulation(converted.value, converted.notes, converted.context)
     else setNotice({ text: converted.errors.join(' '), error: true })
   }
   const importFile = async (file: File) => {
@@ -326,14 +418,14 @@ export function OptimizationWorkspace({
         throw new Error(tr('ファイルは64 MiB以下にしてください。', 'Files must be at most 64 MiB.'))
       const data = readOptimizationFile(await file.text())
       if (data.kind === 'input') {
-        loadInput(data.raw)
+        loadInput(data.raw, 'custom', 'mission', data.context)
         setNotice({
           text: tr('入力を読み込みました。実行前に設定を確認してください。', 'Input loaded. Review it before running.'),
           error: false,
         })
       } else {
-        opt.adopt(createOptimizationRun(data.result, 'import'))
-        setView('results')
+        opt.adopt(createOptimizationRun(data.result, 'import', data.context))
+        showResults()
         setNotice({
           text: tr(
             '結果の記録を読み込みました。再求解・再検証はしていません。',
@@ -372,10 +464,102 @@ export function OptimizationWorkspace({
     idle: ready ? tr('実行の準備ができました', 'Ready to run') : tr('入力を確認してください', 'Review the input'),
     loading: tr('最適化WASMを読み込み中…', 'Loading optimizer WASM…'),
     solving: tr('最適化を計算中（完了後に独立検証）', 'Optimizing (independent check follows)'),
-    done: tr('実行結果を確認できます', 'Results are available'),
+    done:
+      latest &&
+      (!input ||
+        issues.length > 0 ||
+        latest.context?.id !== draft.context?.id ||
+        requestFingerprint(input) !== requestFingerprint(latest.result.input))
+        ? tr('設定に未実行の変更があります', 'Settings have unrun changes')
+        : latest?.result.converged && latest.result.validation?.status === 'passed'
+          ? tr('最適化・独立検証が完了', 'Optimization and validation complete')
+          : tr('実行完了・結果を確認してください', 'Run finished; review the result'),
     cancelled: tr('中断しました（途中解は保存されません）', 'Cancelled (no intermediate solution saved)'),
     error: tr('入力・実行エラー', 'Input or execution error'),
   }
+  const controlsActions = useLatest({ run, cancel: opt.cancel, importFromSimulation, importFile, loadInput, undoDraft, redoDraft })
+  const [fallbackContext] = useState(() => newCase(input ? inputTitle(input) : 'Optimization'))
+  const caseContext = draft.context ?? fallbackContext
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLElement && event.target.closest('dialog, [role=dialog]')) return
+      if (
+        !event.defaultPrevented &&
+        active &&
+        ready &&
+        !opt.running &&
+        (event.ctrlKey || event.metaKey) &&
+        event.key === 'Enter' &&
+        !event.isComposing
+      ) {
+        event.preventDefault()
+        controlsActions.current.run()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, ready, opt.running, controlsActions])
+  const contextRef = useLatest(caseContext)
+  const inputRef = useLatest(input)
+  const latestRun = useLatest(latest)
+  useEffect(() => {
+    onControls({
+      context: caseContext,
+      running: opt.running,
+      status: statusLabels[opt.status],
+      iteration: opt.progress?.iteration ?? null,
+      issueCount: issues.length,
+      presets: rocketPresetOptions(),
+      hasResult: !!latest,
+      resultPassed: !!latest?.result.converged && latest.result.validation?.status === 'passed',
+      ready: ready && !importing,
+      run: () => controlsActions.current.run(),
+      cancel: () => controlsActions.current.cancel(),
+      fromSimulation: () => controlsActions.current.importFromSimulation(),
+      preset: (id) => controlsActions.current.loadInput(optimizationPresets[id as OptimizationPresetId], id),
+      showResults,
+      showHistory,
+      history: {
+        canUndo: !!draftHistory.past.length && !opt.running,
+        canRedo: !!draftHistory.future.length && !opt.running,
+        undo: () => controlsActions.current.undoDraft(),
+        redo: () => controlsActions.current.redoDraft(),
+      },
+      files: {
+        base: fileBase(caseContext.name),
+        optimization: true,
+        busy: opt.running || importing,
+        open: (files) => {
+          if (files.length === 1) void controlsActions.current.importFile(files[0])
+        },
+        saveJson: () => saveFile(`${fileBase(contextRef.current.name)}_input.json`, latestDraft.current.raw, 'application/json'),
+        saveCase: () => {
+          const data = inputRef.current
+          if (data)
+            saveFile(`${fileBase(contextRef.current.name)}.otcase.json`, caseFile('optimize', contextRef.current, data), 'application/json')
+        },
+        saveResult: () => {
+          const r = latestRun.current
+          if (r) saveFile(`${fileBase(r.label)}_optimization.json`, JSON.stringify(r.result, null, 2), 'application/json')
+        },
+      },
+    })
+    // Actions read current refs; only the small header projection updates its parent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    onControls,
+    draft.context,
+    opt.running,
+    opt.status,
+    opt.progress?.iteration,
+    ready,
+    importing,
+    issues.length,
+    latest?.id,
+    draftHistory.past.length,
+    draftHistory.future.length,
+    lang,
+  ])
   return (
     <section
       aria-label={tr('軌道最適化', 'Trajectory optimization')}
@@ -404,46 +588,14 @@ export function OptimizationWorkspace({
       }}
       className="flex h-full min-h-0 flex-col bg-bg text-ink"
     >
-      <header className="shrink-0 border-b border-line bg-surface px-3 py-1.5 sm:px-4">
-        <div className="flex items-center justify-between gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1 overflow-x-auto">
-            <div className="inline-flex max-w-full rounded-[8px] bg-surface-2 p-0.5">
-              <OptTabs
-                value={view}
-                onChange={setView}
-                label={tr('最適化ワークスペース', 'Optimization workspace')}
-                options={[
-                  { value: 'setup', label: tr('設定', 'Settings') },
-                  { value: 'results', label: opt.running ? tr('実行中…', 'Running…') : tr('実行・結果', 'Run and results') },
-                  {
-                    value: 'history',
-                    label: `${tr('保存した実行', 'Saved runs')}${history.length ? ` · ${history.filter((r) => !r.archived).length}` : ''}`,
-                  },
-                ]}
-              />
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <input
-              ref={fileInput}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              disabled={opt.running || importing}
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0]
-                event.currentTarget.value = ''
-                if (file) void importFile(file)
-              }}
-            />
-            <button type="button" className={optButton} disabled={opt.running || importing} onClick={() => fileInput.current?.click()}>
-              <FolderOpen className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{importing ? tr('読込中…', 'Importing…') : tr('JSONを読み込む', 'Import JSON')}</span>
-              <span className="sm:hidden">{tr('読込', 'Import')}</span>
-            </button>
-          </div>
-        </div>
-      </header>
+      {opt.error ? (
+        <p
+          role="alert"
+          className="max-h-24 shrink-0 overflow-auto break-words border-b border-danger/20 bg-danger/5 px-4 py-2 text-[12px] text-danger"
+        >
+          {opt.error}
+        </p>
+      ) : null}
       {notice || storageError ? (
         <div
           className={cn(
@@ -455,11 +607,14 @@ export function OptimizationWorkspace({
           <div className="min-w-0 break-words">
             <p>{notice?.text ?? storageError}</p>
             {notice?.details?.length ? (
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px]">
-                {notice.details.map((d, i) => (
-                  <li key={i}>{d}</li>
-                ))}
-              </ul>
+              <details open={notice.error} className="mt-1 text-[11px]">
+                <summary className="cursor-pointer">{tr('変換・読込の詳細', 'Conversion/import details')}</summary>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px]">
+                  {notice.details.map((d, i) => (
+                    <li key={i}>{d}</li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
           </div>
           <button
@@ -475,378 +630,250 @@ export function OptimizationWorkspace({
           </button>
         </div>
       ) : null}
-      <main className="scroll-quiet min-h-0 flex-1 overflow-y-auto" ref={editor}>
-        <div hidden={view !== 'setup'} className="h-full">
-          <div className="mx-auto grid min-w-0 max-w-[88rem] grid-cols-[minmax(0,1fr)] content-start gap-3 p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-            <div className="min-w-0 space-y-3">
-              <CasePicker
-                value={draft.preset}
-                disabled={opt.running}
-                onPick={(key) => loadInput(optimizationPresets[key], key)}
-                simulation={simConfig.name}
-                onSimulation={importFromSimulation}
-              />
-              {issues.length ? (
-                <section className="rounded-[8px] border border-danger/25 bg-danger/5 p-3" aria-label={tr('入力の問題', 'Input issues')}>
-                  <p className="text-[12px] font-medium text-danger">
-                    {tr(`${issues.length}件の入力を確認してください`, `${issues.length} input issues to review`)}
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    {issues.slice(0, 6).map((issue, i) => (
-                      <li key={`${issue.path}-${i}`}>
-                        <button
-                          type="button"
-                          onClick={() => focusIssue(issue)}
-                          className="block max-w-full break-words py-1 text-left text-[11px] text-danger underline underline-offset-2"
-                        >
-                          {issue.message}
-                          {issue.path ? <span className="ml-1 text-danger/70">({issue.path})</span> : null}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              ) : null}
-              {section === 'json' ? (
-                <section className="space-y-3 rounded-[9px] border border-line bg-surface p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-[14px] font-semibold">{tr('全入力JSON（SI単位）', 'Full input JSON (SI units)')}</h3>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className={optButton}
-                        onClick={() =>
-                          saveFile(`${fileBase(input ? inputTitle(input) : 'optimization')}_input.json`, draft.raw, 'application/json')
-                        }
-                      >
-                        <ArrowDownToLine className="h-3.5 w-3.5" />
-                        {tr('入力を保存', 'Save input')}
-                      </button>
-                      <button type="button" className={optButton} disabled={!input} onClick={() => onSection('mission')}>
-                        {tr('フォームに戻る', 'Back to the form')}
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-[11px] leading-relaxed text-ink-3">
-                    {tr(
-                      'フォームにない空力テーブルやフェーズ構成も編集できます。不正な値は実行前に検査します。',
-                      'Edit settings outside the form, such as aerodynamic tables and the phase layout. Invalid values are checked before running.',
-                    )}
-                  </p>
-                  <label className="block text-[11px] text-ink-2">
-                    {tr('入力JSON', 'Input JSON')}
-                    <textarea
-                      className="num mt-1 h-[min(60vh,38rem)] w-full rounded-[6px] border border-line bg-surface-2 p-3 text-[11px] text-ink"
-                      maxLength={2 * 1024 * 1024}
-                      spellCheck={false}
-                      disabled={opt.running}
-                      value={draft.raw}
-                      onChange={(event) => changeDraft((old) => ({ ...old, raw: event.target.value, fields: {}, preset: 'custom' }))}
-                    />
-                  </label>
-                </section>
-              ) : input ? (
-                <OptimizationEditorContext.Provider value={ctx}>
-                  <OptimizationEditor input={input} onJson={() => onSection('json')} />
-                </OptimizationEditorContext.Provider>
-              ) : (
-                <section className="rounded-[9px] border border-line bg-surface p-5">
-                  <p className="text-[12px] text-ink-2">
-                    {tr(
-                      '入力をフォームに表示できません。JSONの構文と必須項目を確認するか、機体を選び直してください。',
-                      'The input cannot be shown as a form. Check its JSON syntax and required fields, or pick a vehicle again.',
-                    )}
-                  </p>
-                  <button type="button" className={`${optButton} mt-3`} onClick={() => onSection('json')}>
-                    {tr('JSONを編集', 'Edit JSON')}
-                  </button>
-                </section>
-              )}
-            </div>
-            <aside className="min-w-0 space-y-2 xl:sticky xl:top-4 xl:self-start">
-              <section className="rounded-[9px] border border-line bg-surface p-3">
-                <h3 className="text-[12px] font-semibold text-ink-2">{tr('実行する問題', 'Problem to solve')}</h3>
-                <p className="mt-1 break-words text-[14px] font-medium">
-                  {draft.preset === FROM_SIMULATION && input
-                    ? inputTitle(input)
-                    : (rocketPresetOptions().find((r) => r.id === draft.preset)?.label ?? (input ? inputTitle(input) : '—'))}
-                </p>
-                {input?.problem.kind === 'multi_stage' ? (
-                  <p className="mt-1 text-[12px] text-ink-2">
-                    {tr(
-                      `目標：高度${input.problem.orbit.altitude_m / 1000} km・傾斜角${input.problem.orbit.inclination_deg}°の円軌道`,
-                      `Target: ${input.problem.orbit.altitude_m / 1000} km, ${input.problem.orbit.inclination_deg}° circular orbit`,
-                    )}
-                  </p>
-                ) : null}
-                {input && isRocketInput(input.problem) ? (
-                  <div className="mt-3">
-                    <VehicleSummary p={input.problem} />
-                  </div>
-                ) : null}
-                {warmAvailable ? (
-                  <label className="mt-2 flex items-start gap-2 rounded-[7px] border border-line bg-surface-2 p-2 text-[11px] leading-snug text-ink-2">
-                    <input
-                      type="checkbox"
-                      className="mt-0.5 accent-[var(--signal)]"
-                      checked={warm}
-                      disabled={opt.running}
-                      onChange={(event) => setWarm(event.target.checked)}
-                    />
-                    <span>
-                      {tr('前回の結果を初期値に使う', 'Start from the previous result')}
-                      <span className="block text-ink-3">
-                        {tr(
-                          '同じシーケンスの前回の解から計算を始めます。機体や条件を少し変えた再計算が速くなります（試算で約1.5〜2倍）。',
-                          'Starts from the last solution with the same sequence. Re-solving after small changes gets faster (about 1.5–2× in tests).',
-                        )}
-                      </span>
-                    </span>
-                  </label>
-                ) : null}
-                <button
-                  type="button"
-                  className={cn(optPrimary, 'mt-2 w-full')}
-                  disabled={!ready || importing || opt.running}
-                  onClick={() => run()}
-                >
-                  <Play className="h-3.5 w-3.5" />
-                  {tr('最適化を実行', 'Run optimization')}
-                </button>
-                <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
-                  {tr(
-                    '数十秒〜1分ほどかかります。途中経過（軌道の変化）は「実行・結果」に表示されます。',
-                    'Takes tens of seconds to a minute. Live progress (the evolving trajectory) appears under “Run and results”.',
-                  )}
-                </p>
-              </section>
-              <section className="rounded-[8px] border border-line p-3 text-[11px] leading-relaxed text-ink-3">
-                <p>
-                  {tr(
-                    '機体の数値は計算例のための仮定で、実在の機体の性能ではありません。空力加熱・落下域・分離時の相対運動・6自由度の姿勢運動は評価していません。',
-                    'Vehicle numbers are assumptions for demonstration, not real vehicle performance. Heating, impact regions, separation dynamics and 6-DoF attitude motion are not evaluated.',
-                  )}
-                </p>
-                <a
-                  href={`${import.meta.env.BASE_URL}optimization/NOTICE.md`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-block underline"
-                >
-                  pounce 0.12.0 / EPL-2.0
-                </a>
-              </section>
-            </aside>
-          </div>
-        </div>
-        {view === 'results' ? (
-          <div className="mx-auto max-w-[96rem] p-3 sm:p-4">
-            {opt.running && opt.live ? (
-              <ProgressView
-                live={opt.live}
-                input={runningInput}
-                status={opt.status === 'loading' ? 'loading' : 'solving'}
-                onCancel={opt.cancel}
-              />
-            ) : (
-              <OptimizationResults
-                key={latest?.id ?? 'empty'}
-                runs={opt.runs}
-                currentInput={input}
-                draftIncomplete={issues.length > 0}
-                onEdit={editInput}
-                onRefine={refine}
-                onSimulate={openInSimulation}
-                onClearComparison={opt.clearComparison}
-                running={opt.running}
-                saved={saved}
-                memoryBytes={opt.memoryBytes}
-              />
-            )}
-          </div>
-        ) : null}
-        {view === 'history' ? (
-          <div className="mx-auto max-w-[76rem] p-3 sm:p-4">
-            <OptimizationHistory
-              runs={history}
-              loading={historyLoading}
-              active={latest?.id}
-              hasResult={!!latest}
-              running={opt.running}
-              onRefresh={refreshHistory}
-              onOpen={(id) =>
-                historyAction(async () => {
-                  const record = await loadOptimizationRun(id)
-                  savedIds.current.add(record.id)
-                  setSaved((old) => ({ ...old, [record.id]: 'saved' }))
-                  opt.adopt(record)
-                  setView('results')
-                })
-              }
-              onCompare={(id) =>
-                historyAction(async () => {
-                  const record = await loadOptimizationRun(id)
-                  savedIds.current.add(record.id)
-                  setSaved((old) => ({ ...old, [record.id]: 'saved' }))
-                  opt.adopt(record, true)
-                  setView('results')
-                })
-              }
-              onEdit={(id) =>
-                historyAction(async () => {
-                  const record = await loadOptimizationRun(id)
-                  editInput(record.result.input)
-                })
-              }
-              onArchive={(id, value) =>
-                historyAction(async () => {
-                  await archiveOptimizationRun(id, value)
-                  setHistory((old) => old.map((info) => (info.id === id ? { ...info, archived: value } : info)))
-                })
-              }
-              onExport={(id) =>
-                historyAction(async () => {
-                  const record = await loadOptimizationRun(id)
-                  saveFile(`${fileBase(record.label)}_optimization.json`, JSON.stringify(record.result, null, 2), 'application/json')
-                })
-              }
-            />
-          </div>
-        ) : null}
-      </main>
-      <footer className="shrink-0 border-t border-line bg-surface px-3 py-1.5 sm:px-4">
-        {opt.error ? (
-          <p role="alert" className="mb-2 max-h-24 overflow-auto break-words text-[11px] text-danger">
-            {opt.error}
-          </p>
-        ) : null}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1" role="status" aria-live="polite">
-            <p className="flex items-center gap-2 text-[12px] text-ink-2">
-              {opt.running ? (
-                <span className="h-2 w-2 animate-pulse rounded-full bg-signal" />
-              ) : (
-                <span className={`h-1.5 w-1.5 rounded-full ${issues.length ? 'bg-danger' : 'bg-[var(--ok)]'}`} />
-              )}{' '}
-              {statusLabels[opt.status]}
-            </p>
-            {opt.progress ? (
-              <p className="num mt-1 break-words text-[10px] text-ink-3">
-                {tr('反復', 'Iteration')} {opt.progress.iteration} · {tr('制約違反', 'constraint violation')}{' '}
-                {opt.progress.primal_infeasibility.toExponential(1)}
-              </p>
-            ) : (
-              <p className="mt-1 text-[10px] text-ink-3">
-                {ready ? tr('入力の事前検査が通りました', 'Input preflight passed') : tr('入力を確認してください', 'Review the input')} ·{' '}
-                {tr('⌘/Ctrl+Enterで実行', '⌘/Ctrl+Enter to run')}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={cn('max-w-24 text-[10px] sm:max-w-none', draftStatus === 'error' ? 'text-danger' : 'text-ink-3')}>
-              {draftStatus === 'saved'
-                ? tr('下書き保存済み', 'Draft saved')
-                : draftStatus === 'error'
-                  ? tr('下書き保存に失敗', 'Draft storage failed')
-                  : draftStatus === 'loading' && !hydrated
-                    ? tr('下書き復元中', 'Restoring draft')
-                    : tr('下書き保存中…', 'Saving draft…')}
-            </span>
-            {opt.running ? (
-              <button type="button" className={optButton} onClick={opt.cancel}>
-                <Square className="h-3.5 w-3.5" />
-                {tr('中断', 'Cancel')}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={optPrimary}
-                disabled={!ready || importing}
-                title={input ? tr(`設定タブの入力を実行: ${inputTitle(input)}`, `Run the settings input: ${inputTitle(input)}`) : undefined}
-                onClick={() => run()}
-              >
-                <Play className="h-3.5 w-3.5" />
-                {view === 'setup' ? tr('最適化を実行', 'Run optimization') : tr('設定を実行', 'Run settings')}
-              </button>
-            )}
-          </div>
-        </div>
-      </footer>
-    </section>
-  )
-}
-
-/** The simulation's vehicle and the two example cases as cards. */
-function CasePicker({
-  value,
-  disabled,
-  onPick,
-  simulation,
-  onSimulation,
-}: {
-  value: string
-  disabled: boolean
-  onPick: (id: OptimizationPresetId) => void
-  /** Name of the vehicle in the simulation */
-  simulation: string
-  onSimulation: () => void
-}) {
-  return (
-    <section
-      className="rounded-[9px] border border-line bg-surface px-3 py-2.5 sm:px-4"
-      title={tr(
-        '選ぶと下の設定が置き換わります。値を変更すると「編集中の入力」になります。',
-        'Picking replaces the settings below; editing a value makes it an “edited input”.',
-      )}
-    >
-      <div
-        className="grid items-center gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]"
-        role="radiogroup"
-        aria-label={tr('出発点にする機体', 'Starting vehicle')}
-      >
-        <h3 className="text-[13px] font-semibold">
-          {tr('出発点の機体', 'Starting vehicle')}
-          {value === 'custom' ? <span className="ml-2 text-[10px] font-normal text-ink-3">{tr('（編集中）', '(edited)')}</span> : null}
-        </h3>
-        <button
-          type="button"
-          role="radio"
-          aria-checked={value === FROM_SIMULATION}
-          disabled={disabled}
-          onClick={onSimulation}
-          title={tr(
-            '軌道計算で開いている機体の質量・推進・空力・射場・燃焼時刻・姿勢を初期値として読み込みます。',
-            'Loads the mass, propulsion, aerodynamics, launch site, burn times and attitude of the vehicle open in the simulation as the starting point.',
-          )}
+      <div className="flex min-h-0 flex-1">
+        <aside
+          ref={editor}
           className={cn(
-            'min-w-0 rounded-[7px] border px-2.5 py-1.5 text-left transition-colors disabled:opacity-50',
-            value === FROM_SIMULATION ? 'border-signal bg-signal/5' : 'border-line hover:bg-surface-2',
+            '@container scroll-quiet shrink-0 overflow-y-auto border-r border-line bg-surface-2',
+            desktop ? (expanded ? 'w-[min(70vw,900px)]' : 'w-[400px]') : view === 'setup' ? 'w-full' : 'hidden',
           )}
         >
-          <span className="flex items-center gap-1.5 truncate text-[12px] font-medium">
-            <Rocket className="h-3.5 w-3.5 shrink-0 text-ink-3" />
-            {tr('軌道計算の機体', 'Simulation vehicle')}
-          </span>
-          <span className="block truncate text-[10px] text-ink-3">{simulation || tr('（名前なし）', '(unnamed)')}</span>
-        </button>
-        {rocketPresetOptions().map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            role="radio"
-            aria-checked={value === r.id}
-            disabled={disabled}
-            onClick={() => onPick(r.id)}
-            className={cn(
-              'min-w-0 rounded-[7px] border px-2.5 py-1.5 text-left transition-colors disabled:opacity-50',
-              value === r.id ? 'border-signal bg-signal/5' : 'border-line hover:bg-surface-2',
+          <div className="sticky top-0 z-20 flex items-center border-b border-line bg-surface pl-1.5 pr-1">
+            <OptTabs
+              className="min-w-0 flex-1"
+              variant="underline"
+              value={section}
+              onChange={onSection}
+              label={tr('設定項目', 'Settings sections')}
+              options={[
+                { value: 'mission', label: tr('目標・概要', 'Mission') },
+                { value: 'vehicle', label: tr('機体', 'Vehicle') },
+                { value: 'sequence', label: tr('飛行', 'Flight') },
+                { value: 'constraints', label: tr('拘束条件', 'Constraints') },
+                { value: 'numerics', label: tr('詳細', 'Advanced') },
+                { value: 'json', label: 'JSON' },
+              ]}
+            />
+            {desktop ? (
+              <IconButton
+                label={expanded ? tr('設定欄を狭める', 'Narrow the settings') : tr('設定欄を広げる', 'Widen the settings')}
+                onClick={() => setExpanded((v) => !v)}
+              >
+                {expanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+              </IconButton>
+            ) : null}
+          </div>
+          <div className="space-y-3 p-3">
+            {issues.length ? (
+              <section className="rounded-[8px] border border-danger/25 bg-danger/5 p-3" aria-label={tr('入力の問題', 'Input issues')}>
+                <p className="text-[12px] font-medium text-danger">
+                  {tr(`${issues.length}件の入力を確認してください`, `${issues.length} input issues to review`)}
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {issues.slice(0, 6).map((issue, i) => (
+                    <li key={`${issue.path}-${i}`}>
+                      <button
+                        type="button"
+                        onClick={() => focusIssue(issue)}
+                        className="block max-w-full break-words py-1 text-left text-[11px] text-danger underline underline-offset-2"
+                      >
+                        {issue.message}
+                        {issue.path ? <span className="ml-1 text-danger/70">({issue.path})</span> : null}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {section === 'json' ? (
+              <section className="space-y-3 rounded-[9px] border border-line bg-surface p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-[14px] font-semibold">{tr('全入力JSON（SI単位）', 'Full input JSON (SI units)')}</h3>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={optButton}
+                      onClick={() =>
+                        saveFile(`${fileBase(input ? inputTitle(input) : 'optimization')}_input.json`, draft.raw, 'application/json')
+                      }
+                    >
+                      <ArrowDownToLine className="h-3.5 w-3.5" />
+                      {tr('入力を保存', 'Save input')}
+                    </button>
+                    <button type="button" className={optButton} disabled={!input} onClick={() => onSection('mission')}>
+                      {tr('フォームに戻る', 'Back to the form')}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] leading-relaxed text-ink-3">
+                  {tr(
+                    'フォームにない空力テーブルやフェーズ構成も編集できます。不正な値は実行前に検査します。',
+                    'Edit settings outside the form, such as aerodynamic tables and the phase layout. Invalid values are checked before running.',
+                  )}
+                </p>
+                <label className="block text-[11px] text-ink-2">
+                  {tr('入力JSON', 'Input JSON')}
+                  <textarea
+                    className="num mt-1 h-[min(60vh,38rem)] w-full rounded-[6px] border border-line bg-surface-2 p-3 text-[11px] text-ink"
+                    maxLength={2 * 1024 * 1024}
+                    spellCheck={false}
+                    disabled={opt.running}
+                    value={draft.raw}
+                    onChange={(event) => changeDraft((old) => ({ ...old, raw: event.target.value, fields: {}, preset: 'custom' }))}
+                  />
+                </label>
+              </section>
+            ) : input ? (
+              <OptimizationEditorContext.Provider value={ctx}>
+                <OptimizationEditor input={input} section={section} onJson={() => onSection('json')} />
+              </OptimizationEditorContext.Provider>
+            ) : (
+              <section className="rounded-[9px] border border-line bg-surface p-5">
+                <p className="text-[12px] text-ink-2">
+                  {tr(
+                    '入力をフォームに表示できません。JSONの構文と必須項目を確認するか、機体を選び直してください。',
+                    'The input cannot be shown as a form. Check its JSON syntax and required fields, or pick a vehicle again.',
+                  )}
+                </p>
+                <button type="button" className={`${optButton} mt-3`} onClick={() => onSection('json')}>
+                  {tr('JSONを編集', 'Edit JSON')}
+                </button>
+              </section>
             )}
-          >
-            <span className="block truncate text-[12px] font-medium">{r.label}</span>
-            <span className="block truncate text-[10px] text-ink-3">{r.description}</span>
-          </button>
-        ))}
+
+            {section === 'mission' && input && isRocketInput(input.problem) ? (
+              <>
+                <VehicleSummary p={input.problem} />
+                <p className="text-[11px] text-ink-3">
+                  {tr(
+                    '例題の機体諸元は仮定です。空力加熱・落下域・相対分離・6自由度の姿勢運動は評価していません。',
+                    'Example vehicle data are assumed. Heating, impact regions, relative separation and 6-DoF attitude motion are not evaluated.',
+                  )}
+                </p>
+              </>
+            ) : null}
+            {warmAvailable ? (
+              <label className="flex min-h-10 items-start gap-2 text-[12px] text-ink-2">
+                <input
+                  type="checkbox"
+                  className="mt-1 accent-[var(--signal)]"
+                  checked={warm}
+                  disabled={opt.running}
+                  onChange={(e) => setWarm(e.target.checked)}
+                />
+                <span>
+                  {tr('前回の結果を初期値に使う', 'Start from the previous result')}
+                  <span className="block text-[11px] text-ink-3">
+                    {tr('同じシーケンスの解を使って再計算を速めます。', 'Reuse a solution with the same sequence to accelerate the solve.')}
+                  </span>
+                </span>
+              </label>
+            ) : null}
+            <p className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[10px] text-ink-3">
+              <span className={draftStatus === 'error' ? 'text-danger' : undefined} role="status">
+                {draftStatus === 'saved'
+                  ? tr('下書きはこの端末に自動保存されます', 'The draft is saved on this device automatically')
+                  : draftStatus === 'error'
+                    ? tr('下書きを保存できませんでした', 'Draft storage failed')
+                    : draftStatus === 'loading' && !hydrated
+                      ? tr('下書きを復元中…', 'Restoring draft…')
+                      : tr('下書きを保存中…', 'Saving draft…')}
+              </span>
+              <a href={`${import.meta.env.BASE_URL}optimization/NOTICE.md`} target="_blank" rel="noreferrer" className="underline">
+                pounce / EPL-2.0
+              </a>
+            </p>
+          </div>
+        </aside>
+        <main className={cn('flex min-w-0 flex-1 flex-col', !desktop && view === 'setup' && 'hidden')}>
+          <OptimizationResults
+            key={latest?.id ?? 'empty'}
+            selectedTab={resultTab}
+            onTab={setResultTab}
+            runs={opt.runs}
+            currentInput={input}
+            draftIncomplete={issues.length > 0}
+            onEdit={editInput}
+            onRefine={refine}
+            onSimulate={openInSimulation}
+            onClearComparison={opt.clearComparison}
+            running={opt.running}
+            saved={saved}
+            memoryBytes={opt.memoryBytes}
+            active={active && (desktop || view !== 'setup')}
+            historyCount={history.filter((r) => !r.archived).length}
+            progress={
+              opt.running && opt.live ? (
+                <ProgressView
+                  live={opt.live}
+                  input={runningInput}
+                  status={opt.status === 'loading' ? 'loading' : 'solving'}
+                  onCancel={opt.cancel}
+                />
+              ) : undefined
+            }
+            history={
+              <OptimizationHistory
+                runs={history}
+                loading={historyLoading}
+                active={latest?.id}
+                hasResult={!!latest}
+                running={opt.running}
+                onRefresh={refreshHistory}
+                onOpen={(id) =>
+                  historyAction(async () => {
+                    const record = await loadOptimizationRun(id)
+                    savedIds.current.add(record.id)
+                    setSaved((old) => ({ ...old, [record.id]: 'saved' }))
+                    opt.adopt(record)
+                    showResults()
+                  })
+                }
+                onCompare={(id) =>
+                  historyAction(async () => {
+                    const record = await loadOptimizationRun(id)
+                    savedIds.current.add(record.id)
+                    setSaved((old) => ({ ...old, [record.id]: 'saved' }))
+                    opt.adopt(record, true)
+                    setResultTab('compare')
+                  })
+                }
+                onEdit={(id) =>
+                  historyAction(async () => {
+                    const record = await loadOptimizationRun(id)
+                    editInput(record.result.input, record.context)
+                  })
+                }
+                onArchive={(id, value) =>
+                  historyAction(async () => {
+                    await archiveOptimizationRun(id, value)
+                    setHistory((old) => old.map((info) => (info.id === id ? { ...info, archived: value } : info)))
+                  })
+                }
+                onExport={(id) =>
+                  historyAction(async () => {
+                    const record = await loadOptimizationRun(id)
+                    saveFile(
+                      `${fileBase(record.label)}_result.otcase.json`,
+                      caseFile('optimize', record.context ?? newCase(record.label), record.result),
+                      'application/json',
+                    )
+                  })
+                }
+              />
+            }
+          />
+        </main>
       </div>
+      {!desktop ? (
+        <WorkspaceNav
+          value={view === 'setup' ? 'params' : resultTab === 'history' ? null : resultTab === 'map' ? 'globe' : 'charts'}
+          onChange={(v) => {
+            setView(v === 'params' ? 'setup' : 'results')
+            if (v !== 'params') setResultTab(v === 'globe' ? 'map' : 'charts')
+          }}
+        />
+      ) : null}
     </section>
   )
 }
