@@ -13,7 +13,12 @@ import type { Config } from './config'
 import type { OptimizationResult } from './optimization'
 import type { MultiStageInput, OptimizationInput, SingleStageInput } from './optimization-input'
 import { optimizationInputIssues } from './optimization-input'
-import { optimizationFromSimulation, optimizationKindFor, simulationFromOptimization } from './optimization-bridge'
+import {
+  optimizationFromSimulation,
+  optimizationKindFor,
+  optimizationUsesSimulation,
+  simulationFromOptimization,
+} from './optimization-bridge'
 import { instantiateOptimizer } from './optimization-wasm'
 import { runSimulation } from './simulation'
 import { validateConfig } from './validation'
@@ -139,6 +144,15 @@ describe('simulation → optimization input', () => {
     const { value } = seeded(preset.create())
     expect(optimizationInputIssues(value)).toEqual([])
   })
+  it('keeps the mesh budget after splitting a four-stage mission at fairing release', () => {
+    const config = PRESET_OPTIONS.find((p) => p.id === 'long-march-3b')!.create()
+    config.stages[3].jettisons = [{ name: 'fairing', time_s: 100, mass_kg: 10 }]
+    const { value } = seeded(config)
+    const p = value.problem as MultiStageInput
+    expect(p.phases.some((ph) => ph.end_event === 'jettison_fairing')).toBe(true)
+    expect(p.phases.reduce((sum, ph) => sum + ph.intervals, 0)).toBeLessThanOrEqual(64)
+    expect(optimizationInputIssues(value)).toEqual([])
+  })
 })
 
 const simWasm = fileURLToPath(new URL('../wasm/openTsiolkovsky_bg.wasm', import.meta.url))
@@ -174,6 +188,16 @@ describe.skipIf(!existsSync(optWasm))('converted inputs in the optimizer', () =>
 })
 
 describe('case-aware round trips', () => {
+  it('reuses mission edits for the source case and resets them for a different vehicle', () => {
+    const config = PRESET_OPTIONS.find((p) => p.id === 'falcon9')!.create()
+    const source = newCase(config.name)
+    const converted = optimizationFromSimulation(config, template(config), source)
+    if (!converted.ok) throw new Error(converted.errors.join(' '))
+    expect(optimizationUsesSimulation(converted.context!, source)).toBe(true)
+    expect(optimizationUsesSimulation(converted.context!, { ...source, revision: 2 })).toBe(true)
+    expect(optimizationUsesSimulation(converted.context!, newCase(config.name))).toBe(false)
+    expect(optimizationUsesSimulation(newCase(config.name), source)).toBe(false)
+  })
   it('retains mass inventory and provenance over repeated optimizer/simulator handoffs', () => {
     let r = result()
     let context = newCase('Original optimization')

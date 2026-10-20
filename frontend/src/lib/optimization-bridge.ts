@@ -16,6 +16,7 @@ import type { OptimizationResult } from './optimization'
 import type { MultiStageInput, OptimizationInput, OptimizationPhase, SingleStageInput } from './optimization-input'
 import { fitHorizon, G0 } from './optimization-vehicle'
 import { tr } from './i18n'
+import type { Sample } from './simulation'
 
 export type Handoff<T> = { ok: true; value: T; notes: string[]; context?: CaseContext } | { ok: false; errors: string[] }
 
@@ -275,6 +276,12 @@ function optimizedName(name: string) {
 export const optimizationKindFor = (config: Config): 'single_stage' | 'multi_stage' | null =>
   config.stages.length === 1 ? 'single_stage' : config.stages.length >= 2 && config.stages.length <= 4 ? 'multi_stage' : null
 
+/** Keep mission edits when reimporting the same case; other vehicles start from fresh defaults. */
+export function optimizationUsesSimulation(context: CaseContext, source: CaseContext): boolean {
+  const last = context.history[context.history.length - 1]
+  return last?.from === 'simulate' && last.to === 'optimize' && last.sourceId === source.id
+}
+
 interface Burn {
   thrust: number
   isp: number
@@ -303,10 +310,8 @@ export function optimizationFromSimulation(
   } catch (error) {
     return { ok: false, errors: [error instanceof Error ? error.message : String(error)] }
   }
-  const converted = rawOptimizationFromSimulation(vehicle, template, !!source?.carriedMass, flight)
+  const converted = rawOptimizationFromSimulation(vehicle, template, source?.carriedMass?.adapterKg, flight)
   if (!converted.ok) return converted
-  if (source?.carriedMass && converted.value.problem.kind === 'multi_stage')
-    converted.value.problem.payload_adapter_kg = source.carriedMass.adapterKg
   if (source?.carriedMass)
     converted.notes.unshift(
       tr(
@@ -316,17 +321,18 @@ export function optimizationFromSimulation(
     )
   return { ...converted, context: convertedCase(source ?? newCase(config.name), 'optimize', config.name, converted.notes) }
 }
-/** Figures of the simulated flight of the same configuration, used to size a sounding-rocket mission. */
+/** Flight of the same configuration, used to size the mission and seed the guidance. */
 export interface SimulatedFlight {
   apogeeM: number
   apogeeTimeS: number
   maxQPa: number
+  trajectory?: Sample[]
 }
 
 function rawOptimizationFromSimulation(
   config: Config,
   template: OptimizationInput,
-  payloadAccounted: boolean,
+  adapterKg: number | undefined,
   flight?: SimulatedFlight,
 ): Handoff<OptimizationInput> {
   const kind = optimizationKindFor(config)
@@ -384,7 +390,26 @@ function rawOptimizationFromSimulation(
   delete (out.problem as { initial_guess?: unknown }).initial_guess
   const source = tr(`軌道計算の機体「${config.name}」から変換`, `Converted from the simulation vehicle “${config.name}”`)
   if (out.problem.kind === 'single_stage') toSingleStage(out.problem, vehicle, burns[0], source, notes, flight)
-  else if (out.problem.kind === 'multi_stage') toMultiStage(out.problem, vehicle, burns, source, notes, payloadAccounted)
+  else if (out.problem.kind === 'multi_stage') {
+    if (adapterKg !== undefined) out.problem.payload_adapter_kg = adapterKg
+    toMultiStage(out.problem, vehicle, burns, source, notes, adapterKg !== undefined)
+    if (flight?.trajectory) sizeOrbitalMission(out.problem, config, flight, notes)
+    if (out.problem.stages.reduce((m, s) => m + s.dry_kg + s.propellant_kg, 0) < 10_000) {
+      // A tiny upper stage amplifies accumulated mass defects. Tighten the
+      // NLP, keeping all independent physical validation tolerances intact.
+      out.solver = {
+        ...out.solver,
+        tolerance: Math.min(out.solver?.tolerance ?? 1e-7, 1e-8),
+        max_iterations: Math.max(out.solver?.max_iterations ?? 1000, 2000),
+      }
+      notes.push(
+        tr(
+          '小型多段機では最終段の質量誤差が速度に強く影響するため、求解精度を高めました。',
+          'The solve tolerance is tighter because upper-stage mass errors strongly affect a small launcher’s final speed.',
+        ),
+      )
+    }
+  }
   return { ok: true, value: out, notes }
 }
 
@@ -564,6 +589,11 @@ function toSingleStage(p: SingleStageInput, vehicle: Config, b: Burn, source: st
     max_specific_force_m_s2: Math.max(p.max_specific_force_m_s2, Math.ceil((1.1 * b.thrust) / (dry + reserve))),
   })
   if (flight) sizeSoundingMission(p, flight, limit, notes)
+  if (flight && flight.maxQPa > 100_000) {
+    p.degree = 8
+    p.burn_intervals = 16
+    p.coast_intervals = 12
+  }
   vehicle.simulation.end_time_s = Math.max(vehicle.simulation.end_time_s, Math.ceil(limit + p.coast_duration_s.upper + 10))
 }
 
@@ -609,12 +639,16 @@ function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source
     delete stage.jettisons
   })
   const template = p
+  // An existing simulation already carries its adapter in the dry mass unless
+  // case metadata explicitly separates it. Do not add a fictitious one.
+  if (!payloadAccounted) p.payload_adapter_kg = 0
   const plan = vehicle.stages.map((stage, s) => {
     const b = burns[s]
     const dry = stage.mass_dry_kg ?? 0
     const propellant = stage.mass_initial_kg - dry
     const ratio = template.stages[Math.min(s, template.stages.length - 1)]
-    const reserve = round(Math.min(propellant * (ratio ? ratio.reserve_kg / ratio.propellant_kg : 0.01), propellant * 0.05), 3)
+    const residual = Math.max(0, propellant - (b.onTime * b.thrust) / (b.isp * G0))
+    const reserve = Math.floor(Math.min(propellant * (ratio ? ratio.reserve_kg / ratio.propellant_kg : 0.01), residual) * 1000) / 1000
     const limit = burnLimit(b, propellant, reserve)
     if (limit < round(b.onTime, 1) - 0.1)
       notes.push(
@@ -687,7 +721,7 @@ function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source
       stage,
       mode,
       duration_s: duration,
-      intervals: intervals(duration.initial, mode === 'burn'),
+      intervals: stage === 0 && mode === 'burn' && n > 2 ? 16 : intervals(duration.initial, mode === 'burn'),
       vertical: false,
       end_event: 'none',
       ...limits(stage, mode === 'coast'),
@@ -700,8 +734,8 @@ function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source
   plan.forEach(({ windows, inventory: { max_total_burn_s: limit } }, s) => {
     const last = s === lastStage
     // Stage time at ignition; the first stage ignites at liftoff.
-    const ignition = s === 0 ? 0 : Math.max(burns[s].start, 1)
-    if (s > 0) add(`${tag(s)}_ignition_coast`, s, 'coast', fixed(ignition))
+    const ignition = s === 0 ? 0 : burns[s].start
+    if (ignition > 0) add(`${tag(s)}_ignition_coast`, s, 'coast', fixed(ignition))
     windows.forEach(([a, b], k) => {
       const suffix = windows.length > 1 ? `_${k + 1}` : ''
       if (k > 0) {
@@ -717,7 +751,7 @@ function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source
       let d = b - a
       if (s === 0 && k === 0) {
         const vertical = round(Math.min(lower.vertical ? lower.duration_s.initial : 10, d / 4), 1)
-        add('vertical', 0, 'burn', fixed(vertical), { vertical: true, intervals: 1 })
+        add('vertical', 0, 'burn', fixed(vertical), { vertical: attitudeAt(vehicle, 0)[1] >= 89, intervals: 1 })
         d -= vertical
       }
       add(
@@ -730,16 +764,12 @@ function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source
     if (!last) {
       const sep = vehicle.stages[s].separation_time_s ?? 0
       const end = ignition + windows[windows.length - 1][1]
-      add(`${tag(s)}_to_separation`, s, 'coast', fixed(Math.max(sep - end, 1)), { end_event: 'separate_stage' })
+      const gap = round(Math.max(sep - end, 0))
+      if (gap >= 0.01) add(`${tag(s)}_to_separation`, s, 'coast', fixed(gap), { end_event: 'separate_stage' })
+      else phases[phases.length - 1].end_event = 'separate_stage'
     }
   })
   phases[phases.length - 1].end_event = 'deploy_payload'
-  // The whole mesh has at most 64 intervals.
-  while (phases.reduce((c, ph) => c + ph.intervals, 0) > 64) {
-    const widest = phases.reduce((w, ph) => (ph.intervals > w.intervals ? ph : w))
-    if (widest.intervals <= 1) break
-    widest.intervals--
-  }
 
   // The fairing leaves at the end of a phase: split the burn it falls in, or use the nearest phase end.
   let hasFairing = false
@@ -791,6 +821,13 @@ function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source
         ),
       )
     }
+  }
+
+  // The whole mesh has at most 64 intervals.
+  while (phases.reduce((c, ph) => c + ph.intervals, 0) > 64) {
+    const widest = phases.reduce((w, ph) => (ph.intervals > w.intervals ? ph : w))
+    if (widest.intervals <= 1) break
+    widest.intervals--
   }
 
   // Seed commands from the simulated attitude program; azimuth bounds around it.
@@ -870,4 +907,108 @@ function toMultiStage(p: MultiStageInput, vehicle: Config, burns: Burn[], source
     )
   }
   fitHorizon(p)
+}
+
+/** Use the source flight, including its dogleg, instead of a smooth pitch from vertical to burnout. */
+function sizeOrbitalMission(p: MultiStageInput, config: Config, flight: SimulatedFlight, notes: string[]) {
+  const samples = flight.trajectory
+  if (!samples || samples.length < 2) return
+  const cutoff =
+    config.stages.slice(0, -1).reduce((t, s) => t + (s.separation_time_s ?? 0), 0) +
+    config.stages[config.stages.length - 1].engine!.burn_end_s
+  const end = samples.reduce((a, b) => (Math.abs(a.time_s - cutoff) < Math.abs(b.time_s - cutoff) ? a : b))
+  const r = [end.pos_eci_x_m, end.pos_eci_y_m, end.pos_eci_z_m]
+  const v = [end.vel_eci_x_mps, end.vel_eci_y_mps, end.vel_eci_z_mps]
+  const h = [r[1] * v[2] - r[2] * v[1], r[2] * v[0] - r[0] * v[2], r[0] * v[1] - r[1] * v[0]]
+  const mu = 3.986004418e14
+  const radius = Math.hypot(...r)
+  const energy = Math.hypot(...v) ** 2 / 2 - mu / radius
+  const axis = -mu / (2 * energy)
+  const eccentricity = Math.sqrt(Math.max(0, 1 + (2 * energy * Math.hypot(...h) ** 2) / mu ** 2))
+  if (!(energy < 0 && Math.hypot(...h) > 0)) return
+  const perigee = axis * (1 - eccentricity) - p.orbit.reference_radius_m
+  // The optimizer currently targets circular orbits. For transfer missions,
+  // use a low circular parking orbit; do not pretend to optimize their GTO.
+  const altitude = eccentricity < 0.01 ? axis - p.orbit.reference_radius_m : Math.min(perigee, 500_000)
+  const step = altitude < 250_000 ? 10_000 : 25_000
+  p.orbit.altitude_m = Math.max(180_000, Math.round(altitude / step) * step)
+  p.orbit.inclination_deg = round((Math.acos(clamp(h[2] / Math.hypot(...h), -1, 1)) * 180) / Math.PI, 1)
+  p.max_dynamic_pressure_pa = Math.max(p.max_dynamic_pressure_pa, Math.ceil((flight.maxQPa * 1.2) / 5000) * 5000)
+  p.net_payload_kg = { ...p.net_payload_kg, lower: 1, initial: 1 }
+  // Recompute after resizing the payload range: using the template's 50 kg
+  // minimum here makes the acceleration limit infeasible for nanosat launchers.
+  const smallLauncher = p.stages.reduce((m, s) => m + s.dry_kg + s.propellant_kg, 0) < 10_000
+  p.stages.forEach((stage, s) => {
+    const above = p.stages.slice(s + 1).reduce((m, st) => m + st.dry_kg + st.propellant_kg, 0)
+    const e = p.vehicle.stages[s].engine!
+    const limit = Math.ceil(
+      (1.1 * (e.thrust_vac_n as number)) / (stage.dry_kg + stage.reserve_kg + above + p.net_payload_kg.lower + p.payload_adapter_kg) +
+        (smallLauncher ? 0.5 : 0),
+    )
+    for (const ph of p.phases) if (ph.stage === s) ph.max_specific_force_m_s2 = Math.max(ph.max_specific_force_m_s2, limit)
+  })
+  if (attitudeAt(config, 0)[1] < 89) p.phases[0].vertical = false
+  notes.push(
+    tr(
+      `軌道計算の投入状態を基に、目標を高度 ${p.orbit.altitude_m / 1000} km・傾斜角 ${p.orbit.inclination_deg}° の円軌道にしました。${eccentricity >= 0.01 ? '元の楕円軌道の代わりに待機円軌道を最適化します。' : ''}`,
+      `The simulated insertion sets a ${p.orbit.altitude_m / 1000} km, ${p.orbit.inclination_deg}° circular target.${eccentricity >= 0.01 ? ' A circular parking orbit replaces the original elliptical mission.' : ''}`,
+    ),
+  )
+  const sampleAt = (t: number) => {
+    let lo = 0,
+      hi = samples.length - 1
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1
+      if (samples[mid].time_s <= t) lo = mid
+      else hi = mid
+    }
+    const a = samples[lo],
+      b = samples[hi]
+    const w = clamp((t - a.time_s) / (b.time_s - a.time_s), 0, 1)
+    const mix = (key: keyof Sample) => Number(a[key]) + w * (Number(b[key]) - Number(a[key]))
+    return {
+      position: ['pos_eci_x_m', 'pos_eci_y_m', 'pos_eci_z_m', 'vel_eci_x_mps', 'vel_eci_y_mps', 'vel_eci_z_mps'].map((key) =>
+        mix(key as keyof Sample),
+      ),
+      azimuth: mix('azimuth_deg'),
+      elevation: mix('elevation_deg'),
+    }
+  }
+  let time = 0
+  let mass = p.stages.reduce((m, s) => m + s.dry_kg + s.propellant_kg, p.fairing_kg + p.payload_adapter_kg + p.net_payload_kg.initial)
+  const consumed = p.stages.map(() => 0)
+  const guess: NonNullable<MultiStageInput['initial_guess']> = {
+    net_payload_kg: p.net_payload_kg.initial,
+    phase_durations_s: p.phases.map((ph) => ph.duration_s.initial),
+    samples: [],
+  }
+  p.phases.forEach((ph, phase) => {
+    const duration = ph.duration_s.initial
+    const e = p.vehicle.stages[ph.stage].engine!
+    const flow = ph.mode === 'burn' ? (e.thrust_vac_n as number) / ((e.isp_vac_s as number) * G0) : 0
+    const count = Math.ceil(duration / 2)
+    for (let k = 0; k <= count; k++) {
+      const dt = Math.min(2 * k, duration)
+      const s = sampleAt(time + dt)
+      guess.samples.push({
+        phase,
+        time_s: time + dt,
+        state_eci: [mass - flow * dt, ...s.position],
+        azimuth_deg: s.azimuth,
+        elevation_deg: s.elevation,
+      })
+    }
+    mass -= flow * duration
+    consumed[ph.stage] += flow * duration
+    time += duration
+    if (ph.end_event === 'separate_stage') mass -= p.stages[ph.stage].dry_kg + p.stages[ph.stage].propellant_kg - consumed[ph.stage]
+    if (ph.end_event === 'jettison_fairing') mass -= p.fairing_kg
+  })
+  p.initial_guess = guess
+  notes.push(
+    tr(
+      '軌道計算の位置・速度・姿勢と、変換後の質量収支を初期推定に使います。',
+      'The initial guess follows the simulated position, velocity and guidance, with the converted mass ledger.',
+    ),
+  )
 }

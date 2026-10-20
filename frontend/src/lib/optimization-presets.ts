@@ -31,7 +31,7 @@ export function rocketPresetOptions(): { id: OptimizationPresetId; label: string
 /**
  * How the simulation's sample vehicles fare when turned into an optimization
  * case with their simulated flight (`optimizationFromSimulation`) and solved
- * with the default settings. Measured 2026-10-21 with the native solver; a
+ * with the adapted defaults. Measured 2026-10-21 with native/WASI solvers; a
  * vehicle edited after loading is no longer covered.
  * - `validated`: converges and passes the independent check
  * - `refine`: converges; the check passes after re-running with a finer mesh
@@ -42,14 +42,14 @@ const SAMPLE_OPTIMIZATION: Record<string, SampleOptimizationStatus> = {
   momo: 'validated',
   h2a202: 'validated',
   'h3-22s': 'validated',
-  s310: 'refine',
-  s520: 'refine',
-  epsilon: 'refine',
-  falcon9: 'unsolved',
-  ariane5: 'unsolved',
-  'long-march-3b': 'unsolved',
-  'saturn-v': 'unsolved',
-  'soyuz-2.1a': 'unsolved',
-  'ss520-5': 'unsolved',
+  s310: 'validated',
+  s520: 'validated',
+  epsilon: 'validated',
+  falcon9: 'validated',
+  ariane5: 'validated',
+  'long-march-3b': 'validated',
+  'saturn-v': 'validated',
+  'soyuz-2.1a': 'validated',
+  'ss520-5': 'validated',
 }
 export const sampleOptimizationStatus = (presetId: string): SampleOptimizationStatus | null => SAMPLE_OPTIMIZATION[presetId] ?? null

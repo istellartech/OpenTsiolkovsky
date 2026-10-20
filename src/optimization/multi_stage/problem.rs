@@ -147,7 +147,7 @@ impl MultiStageProblem {
             || self.fairing_kg < 0.0
             || !self.fairing_release_min_altitude_m.is_finite()
             || self.fairing_release_min_altitude_m < 0.0
-            || !(1.0..89.0).contains(&self.orbit.inclination_deg)
+            || !(1.0..179.0).contains(&self.orbit.inclination_deg)
         {
             return Err(
                 "multi_stage: invalid inventory, orbit, mesh, bounds, tolerances or source".into(),
@@ -234,11 +234,11 @@ impl MultiStageProblem {
                     return Err(format!("phase {i}: seed command outside angle bounds"));
                 }
             }
-            if p.vertical != (i == 0)
-                || (p.vertical
-                    && (!p.powered()
-                        || p.duration_s.lower != p.duration_s.upper
-                        || p.initial_attitude_end_deg != [self.initial_azimuth_deg, 90.0]))
+            if p.vertical
+                && (i != 0
+                    || !p.powered()
+                    || p.duration_s.lower != p.duration_s.upper
+                    || p.initial_attitude_end_deg != [self.initial_azimuth_deg, 90.0])
             {
                 return Err("only the initial fixed burn phase may be vertical".into());
             }
@@ -285,7 +285,7 @@ impl MultiStageProblem {
         for i in 0..self.stages.len() {
             if ignitions[i] == 0
                 || ignitions[i] > self.stages[i].max_ignitions
-                || burn_min[i] > self.stages[i].max_total_burn_s
+                || burn_min[i] > self.stages[i].max_total_burn_s + 1e-9
             {
                 return Err(format!(
                     "stage {i}: prescribed sequence exceeds ignition/on-time limits"
@@ -359,5 +359,32 @@ mod tests {
             }
             assert!(p.load_vehicle().is_err(), "case {change}");
         }
+    }
+
+    #[test]
+    fn allow_retrograde_orbits_and_an_inclined_launch() {
+        let mut p = input();
+        p.orbit.inclination_deg = 98.0;
+        p.phases[0].vertical = false;
+        p.phases[0].initial_attitude_end_deg[1] = 70.3;
+        assert!(p.load_vehicle().is_ok());
+        p.phases[1].vertical = true;
+        assert!(p.load_vehicle().is_err());
+        for inclination in [0.0, 179.0, 180.0, f64::NAN] {
+            let mut p = input();
+            p.orbit.inclination_deg = inclination;
+            assert!(p.load_vehicle().is_err());
+        }
+    }
+
+    #[test]
+    fn burn_budget_accepts_only_roundoff_above_the_limit() {
+        let mut p = input();
+        p.stages[0].max_total_burn_s -= 1e-10;
+        p.vehicle.stages[0].engine.as_mut().unwrap().burn_end_s -= 1e-10;
+        assert!(p.load_vehicle().is_ok());
+        p.stages[0].max_total_burn_s -= 1e-4;
+        p.vehicle.stages[0].engine.as_mut().unwrap().burn_end_s -= 1e-4;
+        assert!(p.load_vehicle().is_err());
     }
 }

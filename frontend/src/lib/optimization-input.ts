@@ -332,7 +332,7 @@ export function optimizationInputIssues(input: OptimizationInput): InputIssue[] 
     positive('problem.fairing_kg', p.fairing_kg, true)
     positive('problem.fairing_off_area_scale', p.fairing_off_area_scale)
     positive('problem.fairing_release_min_altitude_m', p.fairing_release_min_altitude_m, true)
-    range('problem.orbit.inclination_deg', p.orbit.inclination_deg, 1, 88.999999)
+    range('problem.orbit.inclination_deg', p.orbit.inclination_deg, 1, 178.999999)
     for (const [key, value] of Object.entries(p.orbit)) if (key !== 'inclination_deg') positive(`problem.orbit.${key}`, value)
     range('problem.stages.length', p.stages.length, 2, 4, true)
     range('problem.phases.length', p.phases.length, 3, 16, true)
@@ -371,16 +371,16 @@ export function optimizationInputIssues(input: OptimizationInput): InputIssue[] 
       if (phase.min_altitude_m < (p.vehicle.launch.altitude_m ?? 0))
         add(`${path}.min_altitude_m`, tr('最低高度を発射地点以上にしてください。', 'Minimum altitude must be at or above the launch site.'))
       if (
-        phase.vertical !== (i === 0) ||
-        (i === 0 &&
-          (phase.mode !== 'burn' ||
-            phase.duration_s.lower !== phase.duration_s.upper ||
-            phase.initial_attitude_end_deg[0] !== p.initial_azimuth_deg ||
-            phase.initial_attitude_end_deg[1] !== 90))
+        phase.vertical &&
+        (i !== 0 ||
+          phase.mode !== 'burn' ||
+          phase.duration_s.lower !== phase.duration_s.upper ||
+          phase.initial_attitude_end_deg[0] !== p.initial_azimuth_deg ||
+          phase.initial_attitude_end_deg[1] !== 90)
       )
         add(
           `${path}.duration_s`,
-          tr('最初のフェーズは固定時間・垂直姿勢の燃焼にしてください。', 'The first phase must be a fixed-duration vertical burn.'),
+          tr('垂直姿勢は最初の固定時間の燃焼だけに指定できます。', 'Only the initial fixed-duration burn may be vertical.'),
         )
       for (const [axis, limits] of [p.azimuth_bounds_deg, p.elevation_bounds_deg].entries())
         range(`${path}.initial_attitude_end_deg.${axis}`, phase.initial_attitude_end_deg[axis], ...limits)
@@ -427,7 +427,7 @@ export function optimizationInputIssues(input: OptimizationInput): InputIssue[] 
         )
       if (!stage.source.trim()) add(`${path}.source`, tr('出典・仮定を入力してください。', 'Enter a source or assumption.'))
       range(`${path}.max_ignitions`, stage.max_ignitions, 1, 8, true)
-      if (burns[i] > stage.max_total_burn_s)
+      if (burns[i] > stage.max_total_burn_s + 1e-9)
         add(
           `${path}.max_total_burn_s`,
           tr('燃焼時間の下限合計が段の上限を超えています。', 'The minimum prescribed burn exceeds the stage on-time limit.'),

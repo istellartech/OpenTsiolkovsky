@@ -20,6 +20,7 @@ import type { OptimizationResult } from '../lib/optimization'
 import type { Config } from '../lib/config'
 import {
   optimizationFromSimulation,
+  optimizationUsesSimulation,
   optimizationKindFor,
   simulationFromOptimization,
   type SimulatedFlight,
@@ -375,11 +376,11 @@ export function OptimizationWorkspace({
       setNotice({ text: error instanceof Error ? error.message : String(error), error: true })
     }
   }
-  /** Start from the simulation's vehicle, keeping the mission settings of a draft of the same kind. */
+  /** Reuse mission edits only for the same source case, so another rocket gets its own defaults. */
   const importFromSimulation = () => {
     if (opt.running) return
     const kind = optimizationKindFor(simConfig)
-    const keep = !!input && input.problem.kind === kind
+    const keep = !!input && input.problem.kind === kind && optimizationUsesSimulation(caseContext, simContext)
     const preset = optimizationPresets[kind === 'single_stage' ? 'single_stage' : DEFAULT_OPTIMIZATION_PRESET]
     const template = keep ? input : (JSON.parse(preset) as OptimizationInput)
     const converted = optimizationFromSimulation(simConfig, withoutInitialGuess(template), simContext, simFlight)

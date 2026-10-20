@@ -85,11 +85,11 @@ export default function App() {
     else setPendingOptimization(true)
   }
   useEffect(() => {
-    if (pendingOptimization && optControls) {
+    if (pendingOptimization && optControls && (result?.config === config || sim.status === 'invalid' || sim.status === 'error')) {
       setPendingOptimization(false)
       optControls.fromSimulation()
     }
-  }, [pendingOptimization, optControls])
+  }, [pendingOptimization, optControls, result, config, sim.status])
   const simulating = workspace === 'simulate'
   usePlayerTrack(track, result?.caseId, simulating)
   const optimizationWasRunning = useRef(false)
@@ -320,7 +320,12 @@ export default function App() {
               simContext={sim.context}
               simFlight={
                 track && result?.config === config
-                  ? { apogeeM: track.summary.apogee, apogeeTimeS: track.summary.apogeeTime, maxQPa: track.summary.maxQ }
+                  ? {
+                      apogeeM: track.summary.apogee,
+                      apogeeTimeS: track.summary.apogeeTime,
+                      maxQPa: track.summary.maxQ,
+                      trajectory: track.raw,
+                    }
                   : undefined
               }
               active={!simulating}
