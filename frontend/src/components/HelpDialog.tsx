@@ -101,40 +101,155 @@ export function HelpDialog({ onClose, showShortcuts }: { onClose: () => void; sh
           </button>
         </div>
 
-        <Section title={tr('このアプリについて', 'About')}>
+        <Section title={tr('まずはテンプレートを選ぶ', 'Start with a template')}>
           <p>
             {tr(
-              '多段ロケットの打ち上げから落下までを計算するオープンソースの飛行シミュレータです。計算はすべてブラウザ内（WebAssembly）で行い、入力を変えるとすぐに再計算します。設定はサーバーに送られません。',
-              'An open-source flight simulator for multi-stage rockets, from launch to impact. Everything runs in your browser (WebAssembly) and is recomputed as you edit; your settings are never sent to a server.',
-            )}
-          </p>
-          <p>
-            {tr(
-              'サンプル機体を選ぶか白紙から作り、パラメータを編集して地球儀とグラフで結果を確かめます。使用済みの段や投棄物の落下点も計算し、「分散解析」で落下点のばらつき（誤差楕円）を出せます。設定ファイルは CLI と同じ形式で、ファイルメニューから保存・読み込み・共有リンクの作成ができます。',
-              'Pick a sample vehicle or start from scratch, edit the parameters and check the result on the globe and charts. Impact points of spent stages and jettisoned parts are computed too, and "Dispersion" gives the scatter of impact points (error ellipses). Settings files use the same format as the CLI; the file menu saves, opens and shares them.',
+              '画面上部の機体名を押し、使いたいロケットを選びます。「概要」には機体の説明と、推定値・仮定など確認が必要な情報を表示します。選んだあとは「機体」「空力」「姿勢・風」などのタブで数値を編集できます。',
+              'Click the vehicle name at the top and choose a rocket. Overview explains the model and lists estimates and assumptions that need checking. Edit its values in the Vehicle, Aerodynamics and Attitude & Wind tabs.',
             )}
           </p>
         </Section>
 
-        <Section title={tr('理論・物理モデル', 'Theory and physics')}>
+        <Section title={tr('軌道計算：設定した機体の飛び方を見る', 'Simulation: see how your vehicle flies')}>
+          <ol className="list-decimal space-y-1 pl-4">
+            <li>
+              {tr(
+                '「軌道計算」を選び、質量・推力・姿勢などを設定します。値を変えると自動で再計算します。',
+                'Select Simulation and set mass, thrust, attitude and other values. Edits automatically trigger a new simulation.',
+              )}
+            </li>
+            <li>
+              {tr(
+                '「3D」で飛行経路を、「グラフ」で高度・速度・動圧などを確認します。',
+                'Use 3D to inspect the flight path, and Charts to check altitude, speed and dynamic pressure.',
+              )}
+            </li>
+            <li>
+              {tr(
+                '再生バーを動かすと、計算済みの飛行を好きな時刻で表示できます。分離した段や投棄物の落下点も確認できます。',
+                'Use the playback bar to inspect the computed flight at any time, including the impact points of released stages and parts.',
+              )}
+            </li>
+          </ol>
           <p>
             {tr(
-              '質点の 3 自由度（3DoF）運動を地球中心慣性系で解きます。重力は WGS84 の J2 項まで、大気は U.S. 標準大気 1976、空力は段ごとの CA・CN、姿勢は指定したプログラムに従います（姿勢の運動は解きません）。',
-              'Point-mass three-degree-of-freedom (3DoF) motion in an Earth-centred inertial frame: WGS84 gravity up to J2, the U.S. Standard Atmosphere 1976, per-stage CA/CN aerodynamics and a prescribed attitude program (attitude dynamics are not solved).',
+              '落下点のばらつきを調べるには「分散解析」を使います。風や推力などを変えた複数の飛行を計算します。',
+              'Use Dispersion to study the spread of impact points by simulating multiple flights with variations such as wind and thrust.',
+            )}
+          </p>
+        </Section>
+
+        <Section title={tr('軌道最適化：目標に届く飛ばし方を探す', 'Optimization: find a flight to your target')}>
+          <ol className="list-decimal space-y-1 pl-4">
+            <li>
+              {tr(
+                '軌道計算の「概要」で「この機体で最適化」を押します。目標や制約の初期設定が機体に合わせて作られます。',
+                'In the simulation Overview, click Optimize this vehicle. Initial targets and limits are adapted to the vehicle.',
+              )}
+            </li>
+            <li>
+              {tr(
+                '目標の高度・軌道と、動圧・加速度などの上限を確認します。追加で運ぶ荷物（追加ペイロード）や衛星の質量が最大になるよう、姿勢や一部の区間の長さを探します。',
+                'Review the target altitude or orbit and limits such as dynamic pressure and acceleration. The optimizer varies attitude and some phase durations to maximize extra payload or satellite mass.',
+              )}
+            </li>
+            <li>
+              {tr(
+                '「最適化を実行」を押して計算を始めます。最適化では、値を編集しただけでは計算を始めません。',
+                'Click Run optimization to start. Editing values alone does not start a solve.',
+              )}
+            </li>
+            <li>
+              {tr(
+                '結果で「収束」と「独立検証」の両方を確認します。「軌道計算で開く」で、求めた飛ばし方を軌道計算へ戻せます。',
+                'Check both convergence and independent validation in the result. Open in simulation transfers the optimized flight back to the simulator.',
+              )}
+            </li>
+          </ol>
+          <p>
+            {tr(
+              '「収束」は最適化の終了条件を満たしたこと、「独立検証」は求めた飛行を計算し直して目標や上限を満たしたことです。どちらも実機データの正しさを確認したという意味ではありません。',
+              'Convergence means the solver met its stopping criteria. Independent validation recomputes the flight and checks its targets and limits. Neither verifies the accuracy of the real vehicle data.',
+            )}
+          </p>
+        </Section>
+
+        <Section title={tr('テンプレートの「要確認」とは', 'What “data needs checking” means')}>
+          <p>
+            {tr(
+              'テンプレートは、公表値だけでなく、公開情報が足りない箇所を補う推定値や計算用の仮定も使っています。機体選択の詳細と「概要」で、どの項目が該当するか確認できます。',
+              'Templates combine published data with estimates and assumptions where information is missing. Vehicle details and Overview list the affected items.',
+            )}
+          </p>
+          <ul className="list-disc space-y-0.5 pl-4">
+            <li>
+              {tr(
+                '推定・仮定：非公表の値や、飛行実績に合うよう調整した値。',
+                'Estimated / assumed: unpublished values or parameters tuned to match a flight record.',
+              )}
+            </li>
+            <li>
+              {tr(
+                '二次資料：メーカーや打上げ機関の一次資料で確認できていない値。',
+                'Secondary source: values not confirmed against primary records from the manufacturer or launch organization.',
+              )}
+            </li>
+            <li>
+              {tr(
+                '別機体・別号機の値：対象のロケットにも使えるか確認が必要な転用値。',
+                'Other vehicle / flight: borrowed values whose applicability needs checking.',
+              )}
+            </li>
+            <li>
+              {tr(
+                'モデルの簡略化：平均推力を使う、投棄を段分離にまとめるなど、実際の飛行を簡単にした扱い。',
+                'Model simplification: approximations such as average thrust or combining jettisons with stage separation.',
+              )}
+            </li>
+          </ul>
+          <p>
+            {tr(
+              '詳しい根拠と出典リンクは「概要」の「数値の根拠」にあります。',
+              'Detailed modelling notes and source links are under Sources in Overview.',
+            )}
+          </p>
+        </Section>
+
+        <Section title={tr('保存・読み込み・共有', 'Save, open and share')}>
+          <p>
+            {tr(
+              'ファイルメニューの「ケースを保存」で、設定と変換履歴を保存できます。通常の設定JSONには履歴や衛星・PAFの質量内訳を含みません。保存したファイルはメニューから開くか、画面にドロップして読み込めます。',
+              'Save case in the file menu preserves settings and conversion history. A plain configuration JSON omits history and the payload/adapter mass breakdown. Open saved files from the menu or drop them into the app.',
+            )}
+          </p>
+          <p>
+            {tr(
+              '共有リンクでは設定をURLに含めて渡せます。計算はブラウザ内で行います。',
+              'Share links carry the settings in the URL. Calculations run in your browser.',
+            )}
+          </p>
+        </Section>
+
+        <Section title={tr('計算で扱う範囲', 'What the model calculates')}>
+          <p>
+            {tr(
+              'ロケットの位置・速度・質量を計算します。地球の重力・自転、大気、推力、空気による力を扱います。機体の向きは設定した姿勢に従い、機体が回転する運動や姿勢制御装置の応答は計算しません。',
+              'The model computes position, velocity and mass using Earth’s gravity and rotation, atmosphere, thrust and aerodynamic forces. Orientation follows the prescribed attitude; vehicle rotation and attitude-control response are not simulated.',
             )}
           </p>
           <Links
             items={[
-              [tr('物理モデルと数値計算', 'Physics models and numerics'), doc('physics.md')],
+              [tr('物理モデルの詳しい説明', 'Physics model details'), doc('physics.md')],
               [tr('設定ファイルの項目', 'Configuration reference'), doc('configuration.md')],
+              [tr('軌道最適化の詳しい使い方', 'Optimization guide'), doc('optimization.md')],
             ]}
           />
         </Section>
 
-        <Section title={tr('AI 連携', 'Using with AI')}>
+        <Section title={tr('CLI・AI エージェントから使う', 'Use from the CLI or an AI agent')}>
           <p>
             {tr(
-              'Claude Code などの AI エージェントは、CLI（JSON 出力）や MCP サーバーで同じ計算を実行できます。AI が作った設定は共有リンク（share）にすると、このアプリで開いて確かめられます。',
+              'コマンドライン（CLI）や、AI ツールから呼び出すためのMCPサーバーでも同じ計算を使えます。AIが作った設定は共有リンクにすると、この画面で開いて確認できます。',
               'AI agents such as Claude Code can run the same simulation through the CLI (JSON output) or the MCP server. A configuration an AI writes can be turned into a share link and opened in this app.',
             )}
           </p>

@@ -9,6 +9,7 @@ import { fmtForce, fmtMass } from '../lib/format'
 import { cn } from '../lib/cn'
 import { tr } from '../lib/i18n'
 import { Segmented } from './primitives'
+import { PresetReview } from './PresetReview'
 
 const PRESET_SPECS = new Map(PRESET_OPTIONS.map((p) => [p.id, computeSpecs(p.create())]))
 const countryLabel = (c: PresetCountry) => PRESET_COUNTRIES.find((x) => x.id === c)?.label ?? c
@@ -313,7 +314,10 @@ function PresetRow({
         <span className="shrink-0 text-[11px] text-ink-3">{countryLabel(preset.country)}</span>
         {selected && <Check className="ml-auto h-3.5 w-3.5 shrink-0 self-center text-ink" />}
       </span>
-      <span className="mt-0.5 block truncate text-[11px] text-ink-2">{preset.kind}</span>
+      <span className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-2">
+        <span className="truncate">{preset.kind}</span>
+        <span className="shrink-0 rounded border border-line-strong px-1 text-[10px]">{tr('要確認の情報あり', 'Data needs checking')}</span>
+      </span>
       {/* Phones and tablets have no detail pane: show the key figures inline */}
       <span className="num mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-ink-3 md:hidden">
         <SpecFigures specs={specs} />
@@ -368,10 +372,11 @@ function PresetDetail({
         ))}
       </dl>
       <p className="mt-3 text-[12px] leading-relaxed text-ink-2">{preset.description}</p>
+      <PresetReview preset={preset} />
       <p className="mt-2 text-[11px] text-ink-3">
         {tr(
-          `出典 ${preset.sources.length} 件・モデル化の注記は概要タブに表示されます`,
-          `${preset.sources.length} source${preset.sources.length === 1 ? '' : 's'}; modelling notes are in the Overview tab`,
+          '公表値と調整値の内訳、出典リンクは「概要」の「数値の根拠」で確認できます。',
+          'Published values, tuned parameters and source links are listed under Sources in the Overview tab.',
         )}
       </p>
       <button

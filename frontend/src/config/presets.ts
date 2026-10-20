@@ -10,6 +10,12 @@ export interface PresetSource {
   url: string
 }
 
+export interface PresetReviewPoint {
+  label: string
+  basis: 'assumed' | 'secondary' | 'borrowed' | 'simplified'
+  detail: string
+}
+
 export type PresetCategory = 'sounding' | 'orbital'
 
 export type PresetCountry = 'jp' | 'us' | 'eu' | 'ru' | 'cn'
@@ -27,6 +33,8 @@ export interface PresetOption {
   description: string
   /** Simplifications and estimates made when modelling */
   modelNotes: string[]
+  /** Specific values and modelling choices that still need checking. */
+  reviewPoints: PresetReviewPoint[]
   sources: PresetSource[]
   create: () => Config
 }
@@ -326,6 +334,12 @@ const SF_LM3BE = src(
   'https://web.archive.org/web/20151012065826/http://spaceflight101.com/spacerockets/long-march-3be/',
 )
 
+const review = (ja: string, en: string, basis: PresetReviewPoint['basis'], detailJa: string, detailEn: string): PresetReviewPoint => ({
+  label: tr(ja, en),
+  basis,
+  detail: tr(detailJa, detailEn),
+})
+
 const orbitalNotes = () => [
   tr(
     'ノズル出口面積（地上での推力低下に効く）は公開値が見当たらないため推定値です。',
@@ -355,6 +369,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         'インターステラテクノロジズの観測ロケット。民間単独開発として国内初の宇宙空間到達を果たした3号機（2019年、最高到達高度 113.4 km）の実績で構成。',
         "Interstellar Technologies' sounding rocket. Built from the record of Flight 3 (2019, apogee 113.4 km), the first privately developed Japanese rocket to reach space.",
       )
+    },
+    get reviewPoints() {
+      return [
+        review(
+          '比推力・推進薬量',
+          'Isp and propellant mass',
+          'assumed',
+          '最高高度と着水距離に合うよう調整した値です。実測の推進データとの照合が必要です。',
+          'Tuned to match apogee and splashdown range; measured propulsion data is needed to check them.',
+        ),
+        review(
+          'ノズル出口径・射場座標',
+          'Nozzle exit and launch coordinates',
+          'assumed',
+          '出口径は推定、座標は概略です。機体図面と射点の位置情報で確認が必要です。',
+          'The exit diameter is estimated and coordinates are approximate; check against drawings and launch-point coordinates.',
+        ),
+        review(
+          '姿勢・降下中の空気抵抗',
+          'Guidance and descent drag',
+          'assumed',
+          '姿勢は実績に合わせた計算用の設定です。飛行時間は公表値と差があり、降下中の抗力も確認が必要です。',
+          'Guidance is tuned for this model. Flight duration differs from the published value, so descent drag also needs checking.',
+        ),
+      ]
     },
     get modelNotes() {
       return [
@@ -397,6 +436,24 @@ export const PRESET_OPTIONS: PresetOption[] = [
         "JAXA's small sounding rocket (31 cm diameter). Built from the record of Flight 40 (elevation 76°, gross mass 727 kg, apogee about 180 km).",
       )
     },
+    get reviewPoints() {
+      return [
+        review(
+          '推力履歴・比推力・推進薬量',
+          'Thrust history, Isp and propellant',
+          'assumed',
+          '非公表の値を仮定し、最高高度に合うよう調整しています。実際の推力・質量データで確認が必要です。',
+          'Unpublished values are assumed and tuned to apogee; actual thrust and mass data is needed to check them.',
+        ),
+        review(
+          '打上げ方位・姿勢',
+          'Launch azimuth and attitude',
+          'assumed',
+          '方位角は仮定値です。姿勢も迎角ゼロを仮定しており、実際の飛行経路との照合が必要です。',
+          'Azimuth is assumed and attitude follows a zero-angle-of-attack approximation; check against the actual flight path.',
+        ),
+      ]
+    },
     get modelNotes() {
       return [
         ...soundingNotes(),
@@ -431,6 +488,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         "JAXA's mainstay sounding rocket (52 cm diameter). Built from the record of Flight 33 (elevation 79°, gross mass 2,273 kg, apogee about 304 km).",
       )
     },
+    get reviewPoints() {
+      return [
+        review(
+          '比推力・推進薬量',
+          'Isp and propellant mass',
+          'assumed',
+          '比推力を仮定し、最高高度に合うよう推進薬量を調整しています。実際の推進データで確認が必要です。',
+          'Isp is assumed and propellant is tuned to apogee; actual propulsion data is needed to check them.',
+        ),
+        review(
+          'ノズル出口径',
+          'Nozzle exit diameter',
+          'assumed',
+          '膨張比は公表値ですが、出口径は推定です。ノズル形状の確認が必要です。',
+          'Expansion ratio is published, but exit diameter is estimated; nozzle geometry needs checking.',
+        ),
+        review(
+          '打上げ方位・姿勢',
+          'Launch azimuth and attitude',
+          'assumed',
+          '方位角は仮定値、姿勢は迎角ゼロを仮定した設定です。実際の飛行経路との照合が必要です。',
+          'Azimuth is assumed and attitude follows a zero-angle-of-attack approximation; check against the actual flight path.',
+        ),
+      ]
+    },
     get modelNotes() {
       return [
         ...soundingNotes(),
@@ -461,6 +543,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         '2018年に約3 kgの超小型衛星 TRICOM-1R を軌道に投入した、世界最小級の衛星打上げロケット。公表された飛行シーケンス（1段燃焼 0–31.7 s、2段 180–204.4 s、3段 238–263.6 s）で構成。',
         'One of the smallest orbital launchers ever, which placed the ~3 kg nanosatellite TRICOM-1R in orbit in 2018. Built from the published flight sequence (stage 1 burn 0–31.7 s, stage 2 180–204.4 s, stage 3 238–263.6 s).',
       )
+    },
+    get reviewPoints() {
+      return [
+        review(
+          '第2・3段の諸元',
+          'Stage 2 and 3 specifications',
+          'borrowed',
+          '同梱のSS-520-4設定例から転用した値です。5号機にも適用できるか確認が必要です。',
+          'Taken from the bundled SS-520-4 example; applicability to Flight 5 needs checking.',
+        ),
+        review(
+          '第1段の比推力・推力履歴',
+          'Stage 1 Isp and thrust history',
+          'assumed',
+          '比推力はS-520と同じと仮定し、推力は燃焼終了時の高度・速度に合わせています。実測値との照合が必要です。',
+          'Isp is assumed equal to S-520 and thrust is tuned to burnout altitude and speed; check against measured data.',
+        ),
+        review(
+          '発射角・姿勢変更',
+          'Launch elevation and attitude changes',
+          'assumed',
+          '公開値が見当たらないため、目標軌道に合うよう調整しています。実際の姿勢履歴の確認が必要です。',
+          'No published values were found, so these are tuned to the target orbit; the actual attitude history is needed.',
+        ),
+      ]
     },
     get modelNotes() {
       return [
@@ -506,6 +613,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         'Built from the specifications and flight sequence of the test flight (2013, Spectroscopic Planet Observatory "Hisaki"), targeting an orbit of about 950 km perigee × 1,150 km apogee.',
       )
     },
+    get reviewPoints() {
+      return [
+        review(
+          '推力の時間変化',
+          'Thrust history',
+          'simplified',
+          '推進薬量・比推力・燃焼時間から一定の平均推力を求めています。実際の推力履歴との違いを確認する必要があります。',
+          'Constant average thrust is derived from propellant, Isp and burn time; differences from the real thrust history need checking.',
+        ),
+        review(
+          'PBS・フェアリングの扱い',
+          'PBS and fairing modelling',
+          'simplified',
+          'PBSの噴射を省略し、フェアリング投棄を段分離まで遅らせています。投入軌道と質量への影響を確認する必要があります。',
+          'PBS firings are omitted and fairing release is delayed to stage separation; check the effects on insertion and mass.',
+        ),
+        review(
+          '姿勢・ノズル出口面積',
+          'Attitude and nozzle exit areas',
+          'assumed',
+          '姿勢は実績軌道に合わせた設定、出口面積は推定です。実際の誘導とエンジン形状の確認が必要です。',
+          'Attitude is tuned to the achieved orbit and nozzle areas are estimated; actual guidance and engine geometry need checking.',
+        ),
+      ]
+    },
     get modelNotes() {
       return [
         tr(
@@ -547,6 +679,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         '50号機（2025年、温室効果ガス・水循環観測技術衛星「いぶきGW」）の実績シーケンスで構成。高度 約666 km の太陽同期軌道へ。',
         'Built from the actual sequence of Flight 50 (2025, Global Observing SATellite for Greenhouse gases and Water cycle "IBUKI GW"), to a sun-synchronous orbit at about 666 km.',
       )
+    },
+    get reviewPoints() {
+      return [
+        review(
+          'ブースタ燃焼終了時刻',
+          'Booster burnout time',
+          'borrowed',
+          '別号機の計画値を使っています。50号機の実績値と一致するか確認が必要です。',
+          'Uses a planned value from another flight; consistency with Flight 50 needs checking.',
+        ),
+        review(
+          '発射方位・旋回経路',
+          'Launch azimuth and dogleg',
+          'assumed',
+          '落下予想区域に合うよう推定・調整した経路です。50号機の実際の誘導履歴との照合が必要です。',
+          'Estimated and tuned to published drop zones; check against Flight 50’s actual guidance history.',
+        ),
+        review(
+          'フェアリング質量',
+          'Fairing mass',
+          'simplified',
+          '公開値が見当たらず、モデルには含めていません。実際の質量と投棄による変化の確認が必要です。',
+          'Not included because no published value was found; actual mass and its release need checking.',
+        ),
+      ]
     },
     get modelNotes() {
       return [
@@ -590,6 +747,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         '試験機1号機（ALOS-3）の主要諸元と計画シーケンスで構成した、計画どおり飛んだ場合の飛行。高度 約675 km の太陽同期軌道へ。',
         'The flight as planned, built from the specifications and planned sequence of Test Flight 1 (ALOS-3), to a sun-synchronous orbit at about 675 km.',
       )
+    },
+    get reviewPoints() {
+      return [
+        review(
+          'SRB-3の比推力',
+          'SRB-3 Isp',
+          'assumed',
+          '公開値が見当たらないためSRB-Aと同程度と仮定しています。SRB-3の実測値で確認が必要です。',
+          'Assumed similar to SRB-A because no published value was found; measured SRB-3 data is needed.',
+        ),
+        review(
+          '飛行結果・姿勢プログラム',
+          'Flight outcome and guidance',
+          'assumed',
+          '第2段が正常に着火した場合の計算例です。実際の試験機1号機は第2段が着火せず、軌道投入していません。',
+          'Models successful stage 2 ignition. The actual Test Flight 1 did not ignite stage 2 or reach orbit.',
+        ),
+        review(
+          'ノズル出口面積',
+          'Nozzle exit areas',
+          'assumed',
+          '公開値が見当たらないため推定しています。実際のエンジン形状との照合が必要です。',
+          'Estimated because no published values were found; check against actual engine geometry.',
+        ),
+      ]
     },
     get modelNotes() {
       return [
@@ -638,6 +820,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         '1969年に人類初の月着陸へ向かったアポロ11号の打上げ。NASA の飛行評価報告書の実測値（各段の質量・推力・比推力・燃焼時刻）で構成し、第3段の1回目の燃焼で高度約185 kmの待機軌道に入るまで。',
         "The 1969 launch of Apollo 11, the first crewed Moon landing mission. Built from measured values in NASA's flight evaluation report (stage masses, thrust, Isp and burn times), up to parking-orbit insertion at about 185 km by the third stage's first burn.",
       )
+    },
+    get reviewPoints() {
+      return [
+        review(
+          '第1段の真空比推力',
+          'Stage 1 vacuum Isp',
+          'assumed',
+          '飛行評価報告書に値がないため、燃焼終了時の高度・速度に合わせています。エンジンの実測値との照合が必要です。',
+          'Not given in the flight report, so tuned to burnout altitude and speed; check against measured engine data.',
+        ),
+        review(
+          '打上げ方位・姿勢',
+          'Launch azimuth and attitude',
+          'assumed',
+          '報告書の方位角をそのまま使わず、投入軌道に合うよう調整しています。実際の誘導履歴との照合が必要です。',
+          'Azimuth and attitude are tuned to insertion rather than copied from the report; check against actual guidance history.',
+        ),
+        review(
+          '脱出塔・段間部の投棄',
+          'Escape tower and interstage release',
+          'simplified',
+          '個別の投棄を段分離にまとめています。投棄時刻と飛行中の質量変化を確認する必要があります。',
+          'Individual releases are lumped into stage separation; release times and in-flight mass changes need checking.',
+        ),
+      ]
     },
     get modelNotes() {
       return [
@@ -690,6 +897,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         "Europe's heavy launcher. Built from the vehicle configuration and flight sequence in the VA247 launch kit (2019, two geostationary satellites totalling about 10 t), to geostationary transfer orbit (perigee 250 km × apogee 35,786 km).",
       )
     },
+    get reviewPoints() {
+      return [
+        review(
+          'EAPのノズル出口径',
+          'EAP nozzle exit diameter',
+          'assumed',
+          '公開値が見当たらないため推定しています。ブースタの形状資料で確認が必要です。',
+          'Estimated because no published value was found; check against booster geometry data.',
+        ),
+        review(
+          '姿勢プログラム',
+          'Attitude program',
+          'assumed',
+          '目標軌道に合わせた設定です。傾斜角は計算4.4°・目標3°と差があり、実際の誘導の確認が必要です。',
+          'Tuned to the target orbit. Simulated inclination is 4.4° versus the 3° target; actual guidance needs checking.',
+        ),
+        review(
+          '全備質量・フェアリング投棄',
+          'Liftoff mass and fairing release',
+          'simplified',
+          '全備質量は公表値と差があり、フェアリング投棄も段分離まで遅らせています。質量内訳と投棄時刻の確認が必要です。',
+          'Liftoff mass differs from the published value and fairing release is delayed; mass breakdown and release time need checking.',
+        ),
+      ]
+    },
     get modelNotes() {
       return [
         tr(
@@ -737,6 +969,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         'スペースXの再使用型ロケット（ブロック5）。NASAの海洋・大気観測衛星 PACE（2024年、約1.7 t）を高度 676.5 km・傾斜角 98° の太陽同期軌道へ送った打上げを、公式の推力・タイムラインで構成。第1段は射場に戻って着陸したため、燃焼を早めに終えています。',
         "SpaceX's reusable launcher (Block 5). The 2024 launch of NASA's ocean and atmosphere satellite PACE (about 1.7 t) to a 676.5 km, 98° sun-synchronous orbit, built from official thrust figures and the mission timeline. The first stage flew back to the launch site, so it shuts down early.",
       )
+    },
+    get reviewPoints() {
+      return [
+        review(
+          '段質量・推進薬量・フェアリング',
+          'Stage, propellant and fairing masses',
+          'secondary',
+          '公式に公表された段別の値がなく、二次資料の推定値を使っています。機体の実測値との照合が必要です。',
+          'Uses secondary-source estimates because official stage data is unavailable; check against measured vehicle data.',
+        ),
+        review(
+          '推力調整・燃焼終了時刻',
+          'Throttling and engine cutoff',
+          'simplified',
+          '実際の推力履歴は未確認です。一定の全推力を使うため、上段の停止時刻が公表値より早くなっています。',
+          'Actual thrust history is unconfirmed. Constant full thrust makes upper-stage cutoff earlier than the published time.',
+        ),
+        review(
+          '旋回経路・落下区域の解釈',
+          'Dogleg and drop-zone interpretation',
+          'assumed',
+          '航行警報の区域に合うよう経路を調整しています。旋回の時刻・量と、区域の用途の解釈は確認が必要です。',
+          'The path is tuned to navigation-warning areas; turn timing, magnitude and the interpretation of zone purposes need checking.',
+        ),
+      ]
     },
     get modelNotes() {
       return [
@@ -801,6 +1058,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         "Russia's workhorse, descended from the R-7. The 2025 launch of the Progress MS-30 cargo ship to the ISS, built from user's manual stage data and the telemetry flight sequence, to a 193 × 240 km orbit at 51.67°.",
       )
     },
+    get reviewPoints() {
+      return [
+        review(
+          '段諸元・フェアリング質量',
+          'Stage specifications and fairing mass',
+          'borrowed',
+          'クールー版・Soyuz/ST版の資料と商業用フェアリングの値を使っています。プログレス打上げへの適用を確認する必要があります。',
+          'Uses Kourou/Soyuz-ST data and a commercial fairing mass; applicability to the Progress launch needs checking.',
+        ),
+        review(
+          '宇宙船質量',
+          'Spacecraft mass',
+          'secondary',
+          '宇宙船質量は二次資料の値です。打上げ時の正式な質量との照合が必要です。',
+          'Spacecraft mass comes from a secondary source; check against the official launch mass.',
+        ),
+        review(
+          '姿勢・段間の点火',
+          'Attitude and stage ignition',
+          'simplified',
+          '姿勢は投入軌道に合わせ、実機のホットステージングを省略しています。姿勢履歴と点火・分離の重なりを確認する必要があります。',
+          'Attitude is tuned to insertion and hot staging is omitted; attitude history and ignition/separation overlap need checking.',
+        ),
+      ]
+    },
     get modelNotes() {
       return [
         tr(
@@ -844,6 +1126,31 @@ export const PRESET_OPTIONS: PresetOption[] = [
         '中国の静止衛星打上げの主力。中国長城工業の公式ユーザーズマニュアル（2011年版）にある標準の静止トランスファ軌道ミッション（近地点 200 km × 遠地点 35,958 km・傾斜角 28.5°、衛星 5.5 t）を、その飛行シーケンスで再現。第3段は2回燃焼です。',
         "China's workhorse for geostationary launches. The standard geostationary transfer mission in the official CGWIC user's manual (2011): 200 × 35,958 km at 28.5° with a 5.5 t satellite, flown with the manual's flight sequence. The third stage fires twice.",
       )
+    },
+    get reviewPoints() {
+      return [
+        review(
+          '段質量・フェアリング質量',
+          'Stage and fairing masses',
+          'secondary',
+          '公式マニュアルにない質量を二次資料で補っています。機体構成に対応する一次資料との照合が必要です。',
+          'Masses absent from the official manual are taken from secondary sources; check against primary data for this configuration.',
+        ),
+        review(
+          'ブースタ・第1段の真空性能',
+          'Booster and stage 1 vacuum performance',
+          'assumed',
+          '真空比推力を仮定し、真空推力とノズル出口面積を求めています。真空での実測性能の確認が必要です。',
+          'Vacuum Isp is assumed to derive vacuum thrust and nozzle areas; measured vacuum performance needs checking.',
+        ),
+        review(
+          '姿勢・上段停止時刻',
+          'Attitude and upper-stage cutoff',
+          'assumed',
+          '標準GTOに合うよう姿勢を調整し、上段をマニュアルより早く停止しています。実際の誘導・燃焼履歴との照合が必要です。',
+          'Attitude is tuned to the standard GTO and the upper stage stops earlier than in the manual; check against actual guidance and burn histories.',
+        ),
+      ]
     },
     get modelNotes() {
       return [

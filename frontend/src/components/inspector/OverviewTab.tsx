@@ -7,6 +7,7 @@ import { sampleOptimizationStatus } from '../../lib/optimization-presets'
 import type { Config } from '../../lib/config'
 import { curveRows, curveValue, isRows, launchDate } from '../../lib/config'
 import { PRESET_OPTIONS } from '../../config/presets'
+import { PresetReview } from '../PresetReview'
 
 import type { VehicleSpec } from '../../lib/specs'
 import { fmt, fmtForce, fmtMass } from '../../lib/format'
@@ -55,6 +56,7 @@ export function Overview({
         {structureLabel(config.presentation, config.stages.length)} · {preset ? preset.site : tr('カスタム設定', 'Custom configuration')}
       </p>
       {preset && <p className="mt-2 text-[12px] leading-relaxed text-ink-2">{preset.description}</p>}
+      {preset && <PresetReview preset={preset} />}
 
       <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-[8px] border border-line bg-line">
         {figures.map(([k, v, sub]) => (
@@ -201,8 +203,8 @@ function OptimizeCard({ config, presetId, onOptimize }: { config: Config; preset
       )
     : status === 'validated'
       ? tr(
-          'このサンプルは既定の設定で収束・独立検証合格を確認済みです。',
-          'This sample converges and passes the check with the default settings.',
+          'この計算モデルでは、既定の設定で最適化が収束し、条件チェックにも合格しています。',
+          'Optimization converges and passes the condition checks for this model with the default settings.',
         )
       : status === 'refine'
         ? tr(
@@ -237,6 +239,9 @@ function OptimizeCard({ config, presetId, onOptimize }: { config: Config; preset
         <span className={status === 'unsolved' || !kind ? 'text-danger' : status === 'validated' ? 'text-[var(--ok)]' : undefined}>
           {expect}
         </span>
+        {status === 'validated' && (
+          <> {tr('実機データの確かさを示すものではありません。', 'This does not verify the real vehicle data.')}</>
+        )}
       </p>
     </section>
   )
