@@ -44,6 +44,6 @@ PR 3はnative 184条件・WASI 67条件を比較した。新方式には停滞�
 ## 実装の入口
 
 - 数値基盤：[optimization/](../src/optimization/)、共有物理：[flight.rs](../src/physics/flight.rs)、積分：[integrator.rs](../src/math/integrator.rs)
-- UI：[OptimizationDialog.tsx](../frontend/src/components/OptimizationDialog.tsx)、[optimization/](../frontend/src/components/optimization/)、[useOptimization.ts](../frontend/src/hooks/useOptimization.ts)、機体の派生値・同期・フェーズ名・ウォームスタート：[optimization-vehicle.ts](../frontend/src/lib/optimization-vehicle.ts)、制約の分類：[optimization-constraints.ts](../frontend/src/lib/optimization-constraints.ts)
+- UI：[OptimizationWorkspace.tsx](../frontend/src/components/OptimizationWorkspace.tsx)（ヘッダで軌道計算と切替）、軌道計算との変換：[optimization-bridge.ts](../frontend/src/lib/optimization-bridge.ts)、[optimization/](../frontend/src/components/optimization/)、[useOptimization.ts](../frontend/src/hooks/useOptimization.ts)、機体の派生値・同期・フェーズ名・ウォームスタート：[optimization-vehicle.ts](../frontend/src/lib/optimization-vehicle.ts)、制約の分類：[optimization-constraints.ts](../frontend/src/lib/optimization-constraints.ts)
 - 入出力：[optimization-input.ts](../frontend/src/lib/optimization-input.ts)、[optimization-storage.ts](../frontend/src/lib/optimization-storage.ts)
 - 操作・実行方法：[optimization.md](optimization.md)

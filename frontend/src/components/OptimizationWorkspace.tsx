@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDownToLine, FolderOpen, Play, Square, Target, X } from 'lucide-react'
-import { IconButton } from './primitives'
+import { ArrowDownToLine, FolderOpen, Play, Rocket, Square, X } from 'lucide-react'
 import { useOptimization } from '../hooks/useOptimization'
 import { useLatest } from '../hooks/useLatest'
 import { tr, useLang } from '../lib/i18n'
@@ -17,6 +16,8 @@ import {
 } from '../lib/optimization-input'
 import { warmStartGuess, withInitialGuess } from '../lib/optimization-vehicle'
 import type { OptimizationResult } from '../lib/optimization'
+import type { Config } from '../lib/config'
+import { optimizationFromSimulation, optimizationKindFor, simulationFromOptimization } from '../lib/optimization-bridge'
 import type { EditorSection, InputIssue, NumericDraft, OptimizationInput } from '../lib/optimization-input'
 import {
   archiveOptimizationRun,
@@ -46,9 +47,22 @@ import { optButton, optPrimary } from './optimization/styles'
 import { cn } from '../lib/cn'
 
 type View = 'setup' | 'results' | 'history'
-export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void; onNotice?: (message: string) => void }) {
-  const dialog = useRef<HTMLDialogElement>(null),
-    editor = useRef<HTMLDivElement>(null),
+/** Draft preset id of an input converted from the simulation's vehicle. */
+const FROM_SIMULATION = 'simulation'
+
+/**
+ * Trajectory optimization, side by side with the simulation: it can start
+ * from the simulation's vehicle and hand an optimized trajectory back to it.
+ */
+export function OptimizationWorkspace({
+  simConfig,
+  onOpenInSimulation,
+}: {
+  /** The vehicle currently in the simulation */
+  simConfig: Config
+  onOpenInSimulation: (config: Config, notes: string[]) => void
+}) {
+  const editor = useRef<HTMLDivElement>(null),
     fileInput = useRef<HTMLInputElement>(null)
   const lang = useLang(),
     opt = useOptimization()
@@ -68,7 +82,7 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
   const [saved, setSaved] = useState<Record<string, string>>({}),
     [history, setHistory] = useState<SavedRunInfo[]>([]),
     [historyLoading, setHistoryLoading] = useState(true)
-  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null),
+  const [notice, setNotice] = useState<{ text: string; error: boolean; details?: string[] } | null>(null),
     [storageError, setStorageError] = useState<string | null>(null),
     [importing, setImporting] = useState(false)
   const inspected = useMemo(() => {
@@ -108,18 +122,13 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
     }
   }
   useEffect(() => {
-    const element = dialog.current
-    element?.showModal()
-    return () => element?.close()
-  }, [])
-  useEffect(() => {
     let alive = true
     loadOptimizationDraft()
       .then((value) => {
         if (alive && !touched.current && value)
           setDraft(
             // Former preset ids (benchmarks, the old default) are no longer offered.
-            value.preset !== 'custom' && !(value.preset in optimizationPresets)
+            value.preset !== 'custom' && value.preset !== FROM_SIMULATION && !(value.preset in optimizationPresets)
               ? { ...value, raw: optimizationPresets[DEFAULT_OPTIMIZATION_PRESET], preset: DEFAULT_OPTIMIZATION_PRESET, fields: {} }
               : value,
           )
@@ -275,18 +284,35 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
       setNotice({ text: error instanceof Error ? error.message : String(error), error: true })
     }
   }
-  const close = async () => {
-    opt.cancel()
-    if (hydrated) {
-      try {
-        await saveOptimizationDraft(latestDraft.current)
-      } catch {
-        onNotice?.(
-          tr('下書きを端末に保存できませんでした。このタブ内には保持します。', 'Draft storage failed. It is retained within this tab.'),
-        )
-      }
+  /** Start from the simulation's vehicle, keeping the mission settings of a draft of the same kind. */
+  const importFromSimulation = () => {
+    const kind = optimizationKindFor(simConfig)
+    const keep = !!input && input.problem.kind === kind
+    const preset = optimizationPresets[kind === 'single_stage' ? 'single_stage' : DEFAULT_OPTIMIZATION_PRESET]
+    const template = keep ? input : (JSON.parse(preset) as OptimizationInput)
+    const converted = optimizationFromSimulation(simConfig, withoutInitialGuess(template))
+    if (!converted.ok) {
+      setNotice({
+        text: tr('軌道計算の機体を最適化に使えません。', 'The simulation vehicle cannot be used for optimization.'),
+        error: true,
+        details: converted.errors,
+      })
+      return
     }
-    onClose()
+    loadInput(JSON.stringify(converted.value, null, 2), FROM_SIMULATION)
+    setNotice({
+      text: tr(
+        `軌道計算の機体「${simConfig.name}」を読み込みました。目標軌道・制約は${keep ? '編集中の設定' : 'ひな形'}のままです。`,
+        `Loaded the simulation vehicle “${simConfig.name}”. The target and limits are kept from ${keep ? 'the current settings' : 'the template'}.`,
+      ),
+      error: false,
+      details: converted.notes,
+    })
+  }
+  const openInSimulation = (result: OptimizationResult) => {
+    const converted = simulationFromOptimization(result)
+    if (converted.ok) onOpenInSimulation(converted.value, converted.notes)
+    else setNotice({ text: converted.errors.join(' '), error: true })
   }
   const importFile = async (file: File) => {
     if (opt.running) {
@@ -351,15 +377,9 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
     error: tr('入力・実行エラー', 'Input or execution error'),
   }
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="optimization-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        void close()
-      }}
+    <section
+      aria-label={tr('軌道最適化', 'Trajectory optimization')}
       onKeyDown={(event) => {
-        event.stopPropagation()
         if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && !event.nativeEvent.isComposing && ready && !opt.running) {
           event.preventDefault()
           run()
@@ -382,24 +402,11 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
           else setNotice({ text: tr('JSONファイルを1つずつ読み込んでください。', 'Import one JSON file at a time.'), error: true })
         }
       }}
-      className="m-auto flex h-[min(94dvh,72rem)] max-h-none w-[min(94rem,97vw)] max-w-none flex-col overflow-hidden rounded-[12px] border border-line bg-bg text-ink shadow-xl backdrop:bg-black/45 max-sm:h-[100dvh] max-sm:w-screen max-sm:rounded-none"
+      className="flex h-full min-h-0 flex-col bg-bg text-ink"
     >
-      <header className="shrink-0 border-b border-line bg-surface px-3 py-2 sm:px-4">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="rounded-[7px] bg-signal/10 p-1.5 text-signal">
-              <Target className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 id="optimization-title" className="text-[15px] font-semibold">
-                {tr('軌道最適化', 'Trajectory optimization')}
-              </h2>
-              <p className="hidden text-[10px] text-ink-3 xl:block">
-                {tr('計算例のための仮定した機体です', 'Assumed vehicles for demonstration')}
-              </p>
-            </div>
-          </div>
-          <div className="order-last w-full min-w-0 sm:order-none sm:w-auto sm:flex-1">
+      <header className="shrink-0 border-b border-line bg-surface px-3 py-1.5 sm:px-4">
+        <div className="flex items-center justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0 flex-1 overflow-x-auto">
             <div className="inline-flex max-w-full rounded-[8px] bg-surface-2 p-0.5">
               <OptTabs
                 value={view}
@@ -434,13 +441,6 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
               <span className="hidden sm:inline">{importing ? tr('読込中…', 'Importing…') : tr('JSONを読み込む', 'Import JSON')}</span>
               <span className="sm:hidden">{tr('読込', 'Import')}</span>
             </button>
-            <IconButton
-              label={tr('閉じる（実行中は中断）', 'Close (cancels any running solve)')}
-              onClick={() => void close()}
-              className="h-9 w-9"
-            >
-              <X className="h-4 w-4" />
-            </IconButton>
           </div>
         </div>
       </header>
@@ -452,7 +452,16 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
           )}
           role={notice?.error || storageError ? 'alert' : 'status'}
         >
-          <p className="min-w-0 break-words">{notice?.text ?? storageError}</p>
+          <div className="min-w-0 break-words">
+            <p>{notice?.text ?? storageError}</p>
+            {notice?.details?.length ? (
+              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px]">
+                {notice.details.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
           <button
             type="button"
             className="shrink-0 rounded p-1"
@@ -470,7 +479,13 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
         <div hidden={view !== 'setup'} className="h-full">
           <div className="mx-auto grid min-w-0 max-w-[88rem] grid-cols-[minmax(0,1fr)] content-start gap-3 p-3 sm:p-4 xl:grid-cols-[minmax(0,1fr)_280px]">
             <div className="min-w-0 space-y-3">
-              <CasePicker value={draft.preset} disabled={opt.running} onPick={(key) => loadInput(optimizationPresets[key], key)} />
+              <CasePicker
+                value={draft.preset}
+                disabled={opt.running}
+                onPick={(key) => loadInput(optimizationPresets[key], key)}
+                simulation={simConfig.name}
+                onSimulation={importFromSimulation}
+              />
               {issues.length ? (
                 <section className="rounded-[8px] border border-danger/25 bg-danger/5 p-3" aria-label={tr('入力の問題', 'Input issues')}>
                   <p className="text-[12px] font-medium text-danger">
@@ -552,7 +567,9 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
               <section className="rounded-[9px] border border-line bg-surface p-3">
                 <h3 className="text-[12px] font-semibold text-ink-2">{tr('実行する問題', 'Problem to solve')}</h3>
                 <p className="mt-1 break-words text-[14px] font-medium">
-                  {rocketPresetOptions().find((r) => r.id === draft.preset)?.label ?? (input ? inputTitle(input) : '—')}
+                  {draft.preset === FROM_SIMULATION && input
+                    ? inputTitle(input)
+                    : (rocketPresetOptions().find((r) => r.id === draft.preset)?.label ?? (input ? inputTitle(input) : '—'))}
                 </p>
                 {input?.problem.kind === 'multi_stage' ? (
                   <p className="mt-1 text-[12px] text-ink-2">
@@ -639,6 +656,7 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
                 draftIncomplete={issues.length > 0}
                 onEdit={editInput}
                 onRefine={refine}
+                onSimulate={openInSimulation}
                 onClearComparison={opt.clearComparison}
                 running={opt.running}
                 saved={saved}
@@ -754,12 +772,25 @@ export function OptimizationDialog({ onClose, onNotice }: { onClose: () => void;
           </div>
         </div>
       </footer>
-    </dialog>
+    </section>
   )
 }
 
-/** The two example cases as cards. */
-function CasePicker({ value, disabled, onPick }: { value: string; disabled: boolean; onPick: (id: OptimizationPresetId) => void }) {
+/** The simulation's vehicle and the two example cases as cards. */
+function CasePicker({
+  value,
+  disabled,
+  onPick,
+  simulation,
+  onSimulation,
+}: {
+  value: string
+  disabled: boolean
+  onPick: (id: OptimizationPresetId) => void
+  /** Name of the vehicle in the simulation */
+  simulation: string
+  onSimulation: () => void
+}) {
   return (
     <section
       className="rounded-[9px] border border-line bg-surface px-3 py-2.5 sm:px-4"
@@ -769,7 +800,7 @@ function CasePicker({ value, disabled, onPick }: { value: string; disabled: bool
       )}
     >
       <div
-        className="grid items-center gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)]"
+        className="grid items-center gap-2 lg:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]"
         role="radiogroup"
         aria-label={tr('出発点にする機体', 'Starting vehicle')}
       >
@@ -777,6 +808,27 @@ function CasePicker({ value, disabled, onPick }: { value: string; disabled: bool
           {tr('出発点の機体', 'Starting vehicle')}
           {value === 'custom' ? <span className="ml-2 text-[10px] font-normal text-ink-3">{tr('（編集中）', '(edited)')}</span> : null}
         </h3>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={value === FROM_SIMULATION}
+          disabled={disabled}
+          onClick={onSimulation}
+          title={tr(
+            '軌道計算で開いている機体の質量・推進・空力・射場・燃焼時刻・姿勢を初期値として読み込みます。',
+            'Loads the mass, propulsion, aerodynamics, launch site, burn times and attitude of the vehicle open in the simulation as the starting point.',
+          )}
+          className={cn(
+            'min-w-0 rounded-[7px] border px-2.5 py-1.5 text-left transition-colors disabled:opacity-50',
+            value === FROM_SIMULATION ? 'border-signal bg-signal/5' : 'border-line hover:bg-surface-2',
+          )}
+        >
+          <span className="flex items-center gap-1.5 truncate text-[12px] font-medium">
+            <Rocket className="h-3.5 w-3.5 shrink-0 text-ink-3" />
+            {tr('軌道計算の機体', 'Simulation vehicle')}
+          </span>
+          <span className="block truncate text-[10px] text-ink-3">{simulation || tr('（名前なし）', '(unnamed)')}</span>
+        </button>
         {rocketPresetOptions().map((r) => (
           <button
             key={r.id}

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Redo2, Undo2 } from 'lucide-react'
+import { Orbit, Redo2, Target, Undo2 } from 'lucide-react'
 import type { RunStatus } from '../hooks/useSimulation'
 import { useDismiss } from '../hooks/useDismiss'
 import type { ValidationIssue } from '../lib/validation'
@@ -10,7 +10,12 @@ import { VehiclePicker } from './VehiclePicker'
 import { FileMenu, type FileActions } from './FileMenu'
 import { tr } from '../lib/i18n'
 
+/** The two solvers that share one vehicle model. */
+export type Workspace = 'simulate' | 'optimize'
+
 export function Header(props: {
+  workspace: Workspace
+  onWorkspace: (w: Workspace) => void
   name: string
   presetId: string
   onPreset: (id: string) => void
@@ -33,8 +38,11 @@ export function Header(props: {
         <span className="text-[14px] font-semibold tracking-tight">OpenTsiolkovsky</span>
       </div>
       <div className="mx-1 hidden h-5 w-px shrink-0 bg-line sm:block" />
-      <VehiclePicker name={props.name} presetId={props.presetId} onPreset={props.onPreset} onBlank={props.onBlank} />
-      <div className="hidden shrink-0 items-center sm:flex">
+      <WorkspaceSwitch value={props.workspace} onChange={props.onWorkspace} />
+      {props.workspace === 'simulate' && (
+        <VehiclePicker name={props.name} presetId={props.presetId} onPreset={props.onPreset} onBlank={props.onBlank} />
+      )}
+      <div className={cn('hidden shrink-0 items-center', props.workspace === 'simulate' && 'sm:flex')}>
         <IconButton label={tr(`元に戻す (${mod}Z)`, `Undo (${mod}Z)`)} onClick={props.history.undo} disabled={!props.history.canUndo}>
           <Undo2 className="h-4 w-4" />
         </IconButton>
@@ -44,11 +52,39 @@ export function Header(props: {
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-1">
-        <StatusIndicator {...props} />
+        {props.workspace === 'simulate' && <StatusIndicator {...props} />}
         {props.actions}
-        <FileMenu files={props.files} hasResult={props.hasResult} />
+        {props.workspace === 'simulate' && <FileMenu files={props.files} hasResult={props.hasResult} />}
       </div>
     </header>
+  )
+}
+
+function WorkspaceSwitch({ value, onChange }: { value: Workspace; onChange: (w: Workspace) => void }) {
+  const items = [
+    ['simulate', tr('軌道計算', 'Simulation'), Orbit],
+    ['optimize', tr('軌道最適化', 'Optimization'), Target],
+  ] as const
+  return (
+    <div role="tablist" aria-label={tr('機能', 'Workspace')} className="flex shrink-0 rounded-[8px] bg-surface-2 p-0.5">
+      {items.map(([id, label, Icon]) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={value === id}
+          title={label}
+          onClick={() => onChange(id)}
+          className={cn(
+            'flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[12px] transition-colors',
+            value === id ? 'bg-surface font-medium text-ink shadow-[0_1px_2px_rgba(0,0,0,0.12)]' : 'text-ink-3 hover:text-ink',
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          <span className={value === id ? 'max-sm:sr-only' : 'max-md:sr-only'}>{label}</span>
+        </button>
+      ))}
+    </div>
   )
 }
 

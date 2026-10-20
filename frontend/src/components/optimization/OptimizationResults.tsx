@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
-import { ArrowDownToLine, CircleAlert, CircleCheck, Copy, SplitSquareHorizontal } from 'lucide-react'
+import { ArrowDownToLine, CircleAlert, CircleCheck, Copy, Rocket, SplitSquareHorizontal } from 'lucide-react'
 import { tr, useLang } from '../../lib/i18n'
 import { fileBase, saveFile } from '../../lib/download'
 import { fmt } from '../../lib/format'
@@ -29,6 +29,7 @@ export function OptimizationResults({
   draftIncomplete,
   onEdit,
   onRefine,
+  onSimulate,
   onClearComparison,
   running,
   saved,
@@ -39,6 +40,8 @@ export function OptimizationResults({
   draftIncomplete: boolean
   onEdit: (input: OptimizationInput) => void
   onRefine: (result: OptimizationResult) => void
+  /** Fly this result in the trajectory simulation */
+  onSimulate: (result: OptimizationResult) => void
   onClearComparison: () => void
   running: boolean
   saved: Record<string, string>
@@ -125,7 +128,15 @@ export function OptimizationResults({
           )}
         </p>
       ) : null}
-      <Verdict result={result} run={run} saved={saved[run.id]} onEdit={onEdit} running={running} onRefine={onRefine} />
+      <Verdict
+        result={result}
+        run={run}
+        saved={saved[run.id]}
+        onEdit={onEdit}
+        running={running}
+        onRefine={onRefine}
+        onSimulate={hasPath ? onSimulate : undefined}
+      />
       {stale ? (
         <p className="rounded-[6px] bg-surface-2 px-3 py-2 text-[11px] text-ink-2">
           {tr(
@@ -245,6 +256,7 @@ function Verdict({
   saved,
   onEdit,
   onRefine,
+  onSimulate,
   running,
 }: {
   result: OptimizationResult
@@ -252,6 +264,7 @@ function Verdict({
   saved: string | undefined
   onEdit: (input: OptimizationInput) => void
   onRefine: (result: OptimizationResult) => void
+  onSimulate?: (result: OptimizationResult) => void
   running: boolean
 }) {
   const v = result.validation,
@@ -373,6 +386,20 @@ function Verdict({
           {!ok && meshFailure && result.converged ? (
             <button type="button" className={optButton} disabled={running} onClick={() => onRefine(result)}>
               {tr('メッシュを細かくして再実行', 'Re-run with a finer mesh')}
+            </button>
+          ) : null}
+          {onSimulate ? (
+            <button
+              type="button"
+              className={optButton}
+              onClick={() => onSimulate(result)}
+              title={tr(
+                '最適解の姿勢・燃焼時刻・ペイロードを設定した機体を軌道計算で開きます（風・分散の評価に使えます）。',
+                'Opens a vehicle with the optimized attitude, burn times and payload in the simulation (for wind and dispersion studies).',
+              )}
+            >
+              <Rocket className="h-3.5 w-3.5" />
+              {tr('軌道計算で開く', 'Open in simulation')}
             </button>
           ) : null}
           <button type="button" className={optButton} disabled={running} onClick={() => onEdit(result.input)}>

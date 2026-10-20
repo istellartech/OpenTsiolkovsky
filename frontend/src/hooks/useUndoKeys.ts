@@ -3,11 +3,13 @@ import { useLatest } from './useLatest'
 
 /**
  * ⌘Z / Ctrl+Z = undo, ⇧⌘Z / Ctrl+Shift+Z / Ctrl+Y = redo. Text areas keep
- * their native undo (the table editor edits free text there).
+ * their native undo (the table editor edits free text there). Off while
+ * `enabled` is false (another workspace is shown).
  */
-export function useUndoKeys(undo: () => void, redo: () => void) {
+export function useUndoKeys(undo: () => void, redo: () => void, enabled = true) {
   const latest = useLatest({ undo, redo })
   useEffect(() => {
+    if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey) return
       if (e.target instanceof HTMLElement && e.target.closest('textarea, [contenteditable="true"]')) return
@@ -22,5 +24,5 @@ export function useUndoKeys(undo: () => void, redo: () => void) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [latest])
+  }, [latest, enabled])
 }

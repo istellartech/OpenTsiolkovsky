@@ -30,14 +30,15 @@ export function usePlayerTrack(track: Track | null) {
 export const isTypingTarget = (el: EventTarget | null) =>
   el instanceof HTMLElement && !!el.closest('input, select, textarea, [contenteditable="true"], [role="slider"]')
 
-/** Space = play/pause, ←/→ = ±1 s (Shift: ±10 s), ? = `onHelp`. */
-export function usePlayerKeys(onHelp?: () => void) {
+/** Space = play/pause, ←/→ = ±1 s (Shift: ±10 s), ? = `onHelp`; only `?` without `withPlayback`. */
+export function usePlayerKeys(onHelp?: () => void, withPlayback = true) {
   const help = useLatest(onHelp)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return
       const el = e.target as HTMLElement
       if (e.key === '?') help.current?.()
+      else if (!withPlayback) return
       else if (e.key === ' ' && !el.closest('button')) {
         e.preventDefault()
         playback.toggle()
@@ -46,5 +47,5 @@ export function usePlayerKeys(onHelp?: () => void) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [help])
+  }, [help, withPlayback])
 }

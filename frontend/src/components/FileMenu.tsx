@@ -71,7 +71,7 @@ export function FileMenu({ files, hasResult }: { files: FileActions; hasResult: 
         className="flex h-8 shrink-0 items-center gap-1.5 rounded-[6px] border border-line px-2 text-[13px] text-ink hover:bg-surface-2 sm:px-2.5"
       >
         <FileText className="h-4 w-4 text-ink-2" />
-        <span>{tr('ファイル', 'File')}</span>
+        <span className="max-sm:sr-only">{tr('ファイル', 'File')}</span>
         <ChevronDown className="h-3.5 w-3.5 text-ink-3" />
       </button>
       {open && (

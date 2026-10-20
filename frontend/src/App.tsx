@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
-import { CircleHelp, FolderOpen, Globe as GlobeIcon, LineChart, SlidersHorizontal, Target } from 'lucide-react'
+import { CircleHelp, FolderOpen, Globe as GlobeIcon, LineChart, SlidersHorizontal } from 'lucide-react'
 import { useSimulation } from './hooks/useSimulation'
 import { useMonteCarlo } from './hooks/useMonteCarlo'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -10,7 +10,7 @@ import { useOpenSharedLink } from './hooks/useShareLink'
 import { Inspector, navForField, type InspectorNav } from './components/Inspector'
 import { FieldContext, IconButton } from './components/primitives'
 import { PlaybackBar } from './components/Playback'
-import { Header } from './components/Header'
+import { Header, type Workspace } from './components/Header'
 import type { FileActions } from './components/FileMenu'
 import { LayoutSwitch, SplitView, useSplitRatio } from './components/SplitView'
 import { BottomPanel, MobileResults, type CompareProps, type McProps, type PanelTab, type Reference } from './components/BottomPanel'
@@ -28,10 +28,19 @@ import { buildShareUrl } from './lib/share'
 import { DEFAULT_ELLIPSE } from './lib/montecarlo'
 import { cn } from './lib/cn'
 import type { ValidationIssue } from './lib/validation'
+import type { Config } from './lib/config'
 import { tr, useLang } from './lib/i18n'
 
 type MobileView = 'params' | 'globe' | 'charts'
-const OptimizationDialog = lazy(() => import('./components/OptimizationDialog').then((m) => ({ default: m.OptimizationDialog })))
+const OptimizationWorkspace = lazy(() => import('./components/OptimizationWorkspace').then((m) => ({ default: m.OptimizationWorkspace })))
+const WORKSPACE_KEY = 'ot-workspace'
+function storedWorkspace(): Workspace {
+  try {
+    return localStorage.getItem(WORKSPACE_KEY) === 'optimize' ? 'optimize' : 'simulate'
+  } catch {
+    return 'simulate'
+  }
+}
 
 export default function App() {
   // Every string is picked at render time, so re-render the tree on a language switch.
@@ -51,9 +60,23 @@ export default function App() {
 
   usePlayerTrack(track)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [optimizationOpen, setOptimizationOpen] = useState(false)
-  usePlayerKeys(() => setHelpOpen((v) => !v))
-  useUndoKeys(sim.undo, sim.redo)
+  // Trajectory simulation and optimization are two workspaces on one vehicle
+  // model. The optimizer stays mounted once opened, so a solve keeps running
+  // while the simulation is shown.
+  const [workspace, setWorkspaceState] = useState<Workspace>(storedWorkspace)
+  const [optimizerMounted, setOptimizerMounted] = useState(workspace === 'optimize')
+  const setWorkspace = (w: Workspace) => {
+    setWorkspaceState(w)
+    if (w === 'optimize') setOptimizerMounted(true)
+    try {
+      localStorage.setItem(WORKSPACE_KEY, w)
+    } catch {
+      // Private mode: the choice lasts for this page only.
+    }
+  }
+  const simulating = workspace === 'simulate'
+  usePlayerKeys(() => setHelpOpen((v) => !v), simulating)
+  useUndoKeys(sim.undo, sim.redo, simulating)
   useOpenSharedLink(sim.load, showToast)
 
   const [reference, setReference] = useState<Reference | null>(null)
@@ -140,7 +163,13 @@ export default function App() {
     saveCsv: () => track && saveFile(`${base}_trajectory.csv`, samplesToCsv(track.raw), 'text/csv'),
     saveKml: () => track && saveFile(`${base}_trajectory.kml`, generateKML(track, config.name), 'application/vnd.google-earth.kml+xml'),
   }
-  const dragging = useFileDrop(openFiles, !optimizationOpen)
+  const dragging = useFileDrop(openFiles, simulating)
+  const openOptimized = (optimized: Config, notes: string[]) => {
+    sim.load(optimized)
+    setNav({ tab: 'overview', stage: 0 })
+    setWorkspace('simulate')
+    showToast(notes.join(' '), 'ok')
+  }
 
   const inspector = (
     <FieldContext.Provider value={fieldCtx}>
@@ -170,6 +199,8 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       <Header
+        workspace={workspace}
+        onWorkspace={setWorkspace}
         name={config.name}
         presetId={sim.presetId}
         onPreset={(id) => {
@@ -191,9 +222,6 @@ export default function App() {
         history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
         actions={
           <>
-            <IconButton label={tr('軌道最適化', 'Trajectory optimization')} onClick={() => setOptimizationOpen(true)}>
-              <Target className="h-4 w-4" />
-            </IconButton>
             <IconButton label={tr('ヘルプ (?)', 'Help (?)')} onClick={() => setHelpOpen(true)}>
               <CircleHelp className="h-4 w-4" />
             </IconButton>
@@ -203,7 +231,7 @@ export default function App() {
         }
       />
 
-      <div className="relative flex min-h-0 flex-1">
+      <div className={cn('relative flex min-h-0 flex-1', !simulating && 'hidden')}>
         {/* Parameters */}
         {isDesktop && (
           <aside className="scroll-quiet w-[372px] shrink-0 overflow-y-auto border-r border-line bg-surface">{inspector}</aside>
@@ -251,13 +279,16 @@ export default function App() {
         </main>
       </div>
 
+      {optimizerMounted && (
+        <div className={cn('min-h-0 flex-1', simulating && 'hidden')}>
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-ink-3">{tr('読み込み中…', 'Loading…')}</div>}>
+            <OptimizationWorkspace simConfig={config} onOpenInSimulation={openOptimized} />
+          </Suspense>
+        </div>
+      )}
+
       <Toast toast={toast} onDismiss={dismissToast} />
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} showShortcuts={!isPhone} />}
-      {optimizationOpen && (
-        <Suspense fallback={null}>
-          <OptimizationDialog onClose={() => setOptimizationOpen(false)} onNotice={(message) => showToast(message, 'error')} />
-        </Suspense>
-      )}
       {dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-bg/80 p-6">
           <div className="rounded-[12px] border-2 border-dashed border-ink-3 bg-surface px-8 py-6 text-center">
@@ -270,7 +301,7 @@ export default function App() {
         </div>
       )}
 
-      {isMobile && (
+      {isMobile && simulating && (
         <nav className="grid grid-cols-3 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
           {(
             [
