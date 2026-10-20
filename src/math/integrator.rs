@@ -133,6 +133,26 @@ struct Step<const N: usize> {
     error: f64,
     /// Derivative at the end of the step (first stage of the next one)
     k_end: [f64; N],
+    component_error: [f64; N],
+    finite: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AdaptiveStats {
+    pub accepted: usize,
+    pub rejected: usize,
+}
+
+#[derive(Debug, thiserror::Error, PartialEq)]
+pub enum IntegrationError {
+    #[error("invalid integration interval, step settings or component tolerances")]
+    InvalidSettings,
+    #[error("non-finite state or derivative at t={0}")]
+    InvalidEvaluation(f64),
+    #[error("accuracy not reached at t={time}, h={step}, error norm={error}")]
+    AccuracyNotReached { time: f64, step: f64, error: f64 },
+    #[error("integration step budget exhausted at t={0}")]
+    StepLimit(f64),
 }
 
 impl DormandPrince54 {
@@ -145,7 +165,7 @@ impl DormandPrince54 {
         }
     }
 
-    fn step<const N: usize, F>(
+    fn step<const N: usize, const CHECKED: bool, F>(
         &self,
         t: f64,
         y: &[f64; N],
@@ -158,17 +178,35 @@ impl DormandPrince54 {
     {
         let mut k = [[0.0; N]; 7];
         k[0] = k1;
+        let invalid = || Step {
+            y: [f64::NAN; N],
+            error: f64::INFINITY,
+            k_end: [f64::NAN; N],
+            component_error: [f64::NAN; N],
+            finite: false,
+        };
+        if CHECKED && k1.iter().any(|v| !v.is_finite()) {
+            return invalid();
+        }
         for s in 1..7 {
             let yt: [f64; N] =
                 std::array::from_fn(|i| y[i] + h * (0..s).map(|j| A[s][j] * k[j][i]).sum::<f64>());
+            if CHECKED && yt.iter().any(|v| !v.is_finite()) {
+                return invalid();
+            }
             k[s] = system(t + C[s] * h, &yt);
+            if CHECKED && k[s].iter().any(|v| !v.is_finite()) {
+                return invalid();
+            }
         }
         // The 7th stage is evaluated at the 5th order solution
         let y5: [f64; N] =
             std::array::from_fn(|i| y[i] + h * (0..7).map(|j| B5[j] * k[j][i]).sum::<f64>());
+        let component_error: [f64; N] =
+            std::array::from_fn(|i| h * (0..7).map(|j| (B5[j] - B4[j]) * k[j][i]).sum::<f64>());
         let mut error: f64 = 0.0;
         for i in 0..N {
-            let e = h * (0..7).map(|j| (B5[j] - B4[j]) * k[j][i]).sum::<f64>();
+            let e = component_error[i];
             let scale = self.abs_tol + self.rel_tol * y[i].abs().max(y5[i].abs());
             error = error.max((e / scale).abs());
         }
@@ -176,7 +214,100 @@ impl DormandPrince54 {
             y: y5,
             error,
             k_end: k[6],
+            component_error,
+            finite: !CHECKED || y5.iter().chain(&component_error).all(|v| v.is_finite()),
         }
+    }
+
+    /// Strict validation path using the same fixed-array DP54/FSAL kernel.
+    /// Component absolute tolerances override `abs_tol`; `rel_tol` is shared.
+    /// Rejects accuracy failure instead of forcing a step at `h_min`. Every
+    /// accepted state belongs to the exact time written to `t`. On error the
+    /// last accepted state remains available, and an event map must not run.
+    pub fn try_advance_to<const N: usize, F>(
+        &self,
+        state: &mut [f64; N],
+        t: &mut f64,
+        target: f64,
+        absolute_tolerances: &[f64; N],
+        max_steps: usize,
+        system: F,
+    ) -> Result<AdaptiveStats, IntegrationError>
+    where
+        F: Fn(f64, &[f64; N]) -> [f64; N],
+    {
+        if N == 0
+            || !t.is_finite()
+            || !target.is_finite()
+            || target < *t
+            || !(target - *t).is_finite()
+            || max_steps == 0
+            || absolute_tolerances
+                .iter()
+                .any(|v| !v.is_finite() || *v <= 0.0)
+            || !self.rel_tol.is_finite()
+            || self.rel_tol < 0.0
+            || !self.h_min.is_finite()
+            || self.h_min <= 0.0
+            || !self.h_max.is_finite()
+            || self.h_max < self.h_min
+        {
+            return Err(IntegrationError::InvalidSettings);
+        }
+        if state.iter().any(|v| !v.is_finite()) {
+            return Err(IntegrationError::InvalidEvaluation(*t));
+        }
+        let mut stats = AdaptiveStats::default();
+        if *t == target {
+            return Ok(stats);
+        }
+        let mut h = ((target - *t) / 10.0).clamp(self.h_min, self.h_max);
+        let mut k1 = system(*t, state);
+        for _ in 0..max_steps {
+            let next = (*t + h).min(target);
+            let used_h = next - *t;
+            if used_h <= 0.0 {
+                return Err(IntegrationError::AccuracyNotReached {
+                    time: *t,
+                    step: used_h,
+                    error: f64::INFINITY,
+                });
+            }
+            let step = self.step::<N, true, F>(*t, state, k1, used_h, &system);
+            if !step.finite {
+                return Err(IntegrationError::InvalidEvaluation(*t));
+            }
+            let mut norm = 0.0_f64;
+            for i in 0..N {
+                let scale =
+                    absolute_tolerances[i] + self.rel_tol * state[i].abs().max(step.y[i].abs());
+                if !scale.is_finite() {
+                    return Err(IntegrationError::InvalidSettings);
+                }
+                norm = norm.max((step.component_error[i] / scale).abs());
+            }
+            if norm <= 1.0 {
+                *t = next;
+                *state = step.y;
+                k1 = step.k_end;
+                stats.accepted += 1;
+                if *t == target {
+                    return Ok(stats);
+                }
+                h = (used_h * Self::factor(norm, 5.0)).clamp(self.h_min, self.h_max);
+            } else {
+                stats.rejected += 1;
+                if used_h <= self.h_min || *t + self.h_min == *t {
+                    return Err(IntegrationError::AccuracyNotReached {
+                        time: *t,
+                        step: used_h,
+                        error: norm,
+                    });
+                }
+                h = (used_h * Self::factor(norm, 0.5)).max(self.h_min);
+            }
+        }
+        Err(IntegrationError::StepLimit(*t))
     }
 
     /// Step size factor from the scaled error
@@ -216,7 +347,7 @@ impl DormandPrince54 {
             let remaining = t_target - *t;
             let last = h >= remaining;
             let h_try = if last { remaining } else { h };
-            let step = self.step(*t, state, k1, h_try, &system);
+            let step = self.step::<N, false, F>(*t, state, k1, h_try, &system);
             if step.error <= 1.0 || h_try <= self.h_min {
                 if step.error > 1.0 {
                     forced += 1;
@@ -244,6 +375,89 @@ impl DormandPrince54 {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+
+    #[test]
+    fn strict_rejects_at_minimum_without_advancing_time_or_state() {
+        let solver = DormandPrince54::new(1e-20, 0.0, 0.5, 0.5);
+        let (mut y, mut t) = ([1.0], 0.0);
+        let error = solver
+            .try_advance_to(&mut y, &mut t, 1.0, &[1e-20], 100, |_, y| [y[0] * y[0]])
+            .unwrap_err();
+        assert!(matches!(error, IntegrationError::AccuracyNotReached { .. }));
+        assert_eq!(t, 0.0);
+        assert_eq!(y, [1.0]);
+    }
+
+    #[test]
+    fn strict_reports_nonfinite_evaluation_settings_and_budget() {
+        let solver = DormandPrince54::new(1e-10, 1e-10, 1e-8, 0.01);
+        let (mut y, mut t) = ([1.0], 0.0);
+        assert!(matches!(
+            solver.try_advance_to(&mut y, &mut t, 1.0, &[1e-10], 100, |_, _| [f64::NAN]),
+            Err(IntegrationError::InvalidEvaluation(_))
+        ));
+        assert_eq!(t, 0.0);
+        assert_eq!(y, [1.0]);
+        assert!(matches!(
+            solver.try_advance_to(&mut y, &mut t, 1.0, &[1e-10], 1, |_, y| [-y[0]]),
+            Err(IntegrationError::StepLimit(_))
+        ));
+        let (mut y, mut t) = ([1e308], 0.0);
+        let overflow = DormandPrince54::new(1e-10, 1e308, 1e-8, 0.01);
+        assert_eq!(
+            overflow.try_advance_to(&mut y, &mut t, 1.0, &[1e-10], 100, |_, _| [0.0]),
+            Err(IntegrationError::InvalidSettings)
+        );
+    }
+
+    #[test]
+    fn strict_never_passes_overflowed_internal_states_to_dynamics() {
+        let solver = DormandPrince54::new(1.0, 0.0, 1.0, 1.0);
+        let (mut y, mut t) = ([1e308], 0.0);
+        let result = solver.try_advance_to(&mut y, &mut t, 1.0, &[1.0], 100, |_, y| {
+            assert!(y.iter().all(|v| v.is_finite()));
+            [1e308]
+        });
+        assert!(matches!(
+            result,
+            Err(IntegrationError::InvalidEvaluation(_))
+        ));
+        assert_eq!(y, [1e308]);
+        assert_eq!(t, 0.0);
+    }
+
+    #[test]
+    fn strict_stops_at_event_and_preserves_mass_jump_across_output_grids() {
+        let solver = DormandPrince54::new(1e-10, 1e-11, 1e-9, 0.2);
+        let event: f64 = 0.373;
+        for dt in [0.13, 0.07, 0.31] {
+            let (mut y, mut t) = ([1000.0, 0.0, 0.0], 0.0);
+            while t < event {
+                let target = (t + dt).min(event);
+                solver
+                    .try_advance_to(
+                        &mut y,
+                        &mut t,
+                        target,
+                        &[1e-9, 1e-10, 1e-10],
+                        1000,
+                        |_, y| [-2.0, y[2], 3.0],
+                    )
+                    .unwrap();
+            }
+            assert_eq!(t, event);
+            y[0] -= 100.0;
+            solver
+                .try_advance_to(&mut y, &mut t, 1.0, &[1e-9, 1e-10, 1e-10], 1000, |_, y| {
+                    [0.0, y[2], 0.0]
+                })
+                .unwrap();
+            assert_eq!(t, 1.0);
+            assert!((y[0] - (900.0 - 2.0 * event)).abs() < 1e-9);
+            assert!((y[1] - (1.5 * event * event + 3.0 * event * (1.0 - event))).abs() < 1e-10);
+            assert!((y[2] - 3.0 * event).abs() < 1e-10);
+        }
+    }
 
     #[test]
     fn test_simple_exponential_decay() {

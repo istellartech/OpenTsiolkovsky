@@ -6,13 +6,16 @@
   "scripts": {
     "dev": "(test -f src/wasm/openTsiolkovsky.js || vp run build:wasm) && vp dev",
     "build:wasm": "bash ../scripts/wasm_build.sh",
-    "build": "vp run build:wasm && vp check && vp build",
+    "build:optimization": "bash ../scripts/optimization_wasm_build.sh",
+    "dev:optimization": "vp run build:optimization && vp run dev",
+    "build": "vp run build:wasm && vp run build:optimization && vp check && vp build",
     "vercel-build": "vp run build",
     "preview": "vp preview"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5",
     "@fontsource/ibm-plex-sans-jp": "^5",
+    "ajv": "^8.20.0",
     "cesium": "1.146.0",
     "chart.js": "^4.5.0",
     "clsx": "^2.1.1",
@@ -27,6 +30,7 @@
     "@types/react": "^18.3.24",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6",
+    "fake-indexeddb": "^6.2.6",
     "tailwindcss": "^4.1.13",
     "typescript": "^5.9.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@1.3.0",

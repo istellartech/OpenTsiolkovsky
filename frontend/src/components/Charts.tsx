@@ -1,6 +1,7 @@
+import { ChartTools } from './ChartTools'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Chart, type ChartConfiguration, type Plugin } from 'chart.js/auto'
-import { Download, Maximize2, RotateCcw, X } from 'lucide-react'
+import { RotateCcw, X } from 'lucide-react'
 import { sampleAt, type Track, type TrackSample } from '../lib/trajectory'
 import { playback } from '../lib/playback'
 import { fmt } from '../lib/format'
@@ -534,10 +535,6 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
     a.click()
   }
 
-  const iconBtn =
-    'flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-3 transition-opacity hover:bg-surface-2 hover:text-ink'
-  const revealOnHover = 'opacity-0 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
-
   return (
     <figure
       className={
@@ -564,26 +561,7 @@ function ChartView({ spec, track, reference = null, large = false, onExpand }: C
             <RotateCcw className="h-3 w-3" /> {tr('全体を表示', 'Show all')}
           </button>
         )}
-        <button
-          type="button"
-          onClick={download}
-          aria-label={tr(`${spec.title}をPNGで保存`, `Save ${spec.title} as PNG`)}
-          title={tr('PNGで保存', 'Save as PNG')}
-          className={`${iconBtn} ${large ? '' : `-mr-1 ${revealOnHover}`}`}
-        >
-          <Download className="h-3.5 w-3.5" />
-        </button>
-        {!large && onExpand && (
-          <button
-            type="button"
-            onClick={onExpand}
-            aria-label={tr(`${spec.title}を拡大`, `Enlarge ${spec.title}`)}
-            title={tr('拡大（ダブルクリックでも開きます）', 'Enlarge (or double-click)')}
-            className={`${iconBtn} -mr-1 ${revealOnHover}`}
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <ChartTools title={spec.title} onDownload={download} onExpand={!large ? onExpand : undefined} />
       </figcaption>
       <div
         className="relative min-h-0 flex-1 cursor-crosshair touch-pan-y"

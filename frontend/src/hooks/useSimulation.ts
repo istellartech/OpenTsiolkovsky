@@ -7,37 +7,54 @@ import { validateConfig } from '../lib/validation'
 import type { Track } from '../lib/trajectory'
 import { commit, initHistory, redo as redoHistory, undo as undoHistory, type History } from '../lib/history'
 import { tr, useLang } from '../lib/i18n'
+import { useLatest } from './useLatest'
+import { editedSimulationCase, newCase, readCaseContext, readCaseFile, type CaseContext } from '../lib/case'
 
 const LOCALSTORAGE_KEY = 'openTsiolkovsky_config'
 const LOCALSTORAGE_PRESET_KEY = 'openTsiolkovsky_preset'
+const CASE_KEY = 'openTsiolkovsky_case'
+const ENTRY_KEY = 'openTsiolkovsky_case_entry'
 const RUN_DEBOUNCE_MS = 250
 
 interface Entry {
   config: Config
+  context: CaseContext
   /** Preset the config came from unchanged, or 'custom' */
   presetId: string
 }
 
 function loadStored(): Entry | null {
   try {
+    const entry = localStorage.getItem(ENTRY_KEY)
+    if (entry) {
+      const saved = JSON.parse(entry) as Entry
+      if (isConfig(saved.config) && typeof saved.presetId === 'string') {
+        const preset = PRESET_OPTIONS.find((p) => p.id === saved.presetId)
+        return { ...saved, config: preset ? preset.create() : saved.config, context: readCaseContext(saved.context) }
+      }
+    }
     const stored = localStorage.getItem(LOCALSTORAGE_KEY)
     if (!stored) return null
     const presetId = localStorage.getItem(LOCALSTORAGE_PRESET_KEY) ?? 'custom'
+    const meta = localStorage.getItem(CASE_KEY)
+    const context = meta ? readCaseContext(JSON.parse(meta)) : null
     // An unedited preset is rebuilt from code so fixes to presets take effect.
     const preset = PRESET_OPTIONS.find((p) => p.id === presetId)
-    if (preset) return { config: preset.create(), presetId }
+    if (preset) return { config: preset.create(), presetId, context: context ?? newCase(preset.create().name) }
     const config = JSON.parse(stored)
     if (!isConfig(config)) return null
-    return { config, presetId: 'custom' }
+    return { config, presetId: 'custom', context: context ?? newCase(config.name) }
   } catch {
     return null
   }
 }
 
-function store(config: Config, presetId: string) {
+function store(config: Config, presetId: string, context: CaseContext) {
   try {
+    localStorage.setItem(ENTRY_KEY, JSON.stringify({ config, presetId, context }))
     localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(config))
     localStorage.setItem(LOCALSTORAGE_PRESET_KEY, presetId)
+    localStorage.setItem(CASE_KEY, JSON.stringify(context))
   } catch {
     /* storage may be unavailable */
   }
@@ -51,6 +68,9 @@ export interface ImportResult {
 }
 
 export interface SimulationResult {
+  caseId: string
+  context: CaseContext
+  config: Config
   track: Track
   /** Wall-clock solve time [ms] */
   ms: number
@@ -58,9 +78,16 @@ export interface SimulationResult {
 
 export function useSimulation() {
   const [history, setHistory] = useState<History<Entry>>(() =>
-    initHistory(loadStored() ?? { config: PRESET_OPTIONS[0].create(), presetId: PRESET_OPTIONS[0].id }),
+    initHistory(
+      loadStored() ?? {
+        config: PRESET_OPTIONS[0].create(),
+        presetId: PRESET_OPTIONS[0].id,
+        context: newCase(PRESET_OPTIONS[0].create().name),
+      },
+    ),
   )
-  const { config, presetId } = history.present
+  const { config, presetId, context } = history.present
+  const contextRef = useLatest(context)
   const [status, setStatus] = useState<RunStatus>('running')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SimulationResult | null>(null)
@@ -76,27 +103,40 @@ export function useSimulation() {
   const patch = useCallback((fn: (c: Config) => Config) => {
     setHistory((h) => {
       const next = fn(h.present.config)
-      return next === h.present.config ? h : commit(h, { config: next, presetId: 'custom' }, { key: 'edit' })
+      return next === h.present.config
+        ? h
+        : commit(
+            h,
+            { config: next, presetId: 'custom', context: editedSimulationCase(h.present.context, h.present.config, next) },
+            { key: 'edit' },
+          )
     })
   }, [])
 
   /** Replace the whole config (preset, file, shared link) as one undo step. */
-  const load = useCallback((config: Config, presetId = 'custom') => {
-    setHistory((h) => commit(h, { config, presetId }))
+  const load = useCallback((config: Config, presetId = 'custom', context = newCase(config.name)) => {
+    setHistory((h) => commit(h, { config, presetId, context }))
   }, [])
 
   const undo = useCallback(() => setHistory(undoHistory), [])
   const redo = useCallback(() => setHistory(redoHistory), [])
 
+  const updateContext = useCallback((context: CaseContext) => {
+    setHistory((h) => commit(h, { ...h.present, context: { ...context, revision: h.present.context.revision + 1 } }))
+  }, [])
+  useEffect(() => {
+    store(config, presetId, context)
+  }, [config, presetId, context])
+
   // Persist and re-run on every change (debounced). The solver is fast enough
   // that results follow the inputs without an explicit "run" step.
   useEffect(() => {
-    store(config, presetId)
+    const seq = ++runSeq.current
+    const inputContext = contextRef.current
     if (issues.length > 0) {
       setStatus('invalid')
       return
     }
-    const seq = ++runSeq.current
     setStatus('running')
     const timer = window.setTimeout(async () => {
       const t0 = performance.now()
@@ -110,7 +150,7 @@ export function useSimulation() {
               'Not enough output data points. Check the simulation time and output interval.',
             ),
           )
-        setResult({ track, ms: Math.round(performance.now() - t0) })
+        setResult({ track, caseId: inputContext.id, context: inputContext, config, ms: Math.round(performance.now() - t0) })
         setError(null)
         setStatus('ok')
       } catch (err) {
@@ -120,10 +160,16 @@ export function useSimulation() {
       }
     }, RUN_DEBOUNCE_MS)
     return () => window.clearTimeout(timer)
-  }, [config, issues.length, presetId])
+  }, [config, issues.length, presetId, context.id, contextRef])
 
   const startBlank = useCallback(() => {
-    setHistory((h) => commit(h, { config: createBlankConfig(h.present.config.launch), presetId: 'custom' }))
+    setHistory((h) =>
+      commit(h, {
+        config: createBlankConfig(h.present.config.launch),
+        presetId: 'custom',
+        context: newCase(createBlankConfig(h.present.config.launch).name),
+      }),
+    )
   }, [])
 
   const applyPreset = useCallback(
@@ -162,6 +208,16 @@ export function useSimulation() {
       let parsed: unknown
       try {
         parsed = JSON.parse(await file.text())
+        const envelope = readCaseFile(parsed)
+        if (envelope) {
+          if (envelope.workspace !== 'simulate' || !isConfig(envelope.data))
+            throw new Error(tr('軌道計算のケースを選んでください。', 'Select a simulation case.'))
+          load(envelope.data, 'custom', envelope.context)
+          return {
+            ok: true,
+            message: tr('質量内訳・変換履歴を含むケースを読み込みました。', 'Case loaded with its mass breakdown and conversion history.'),
+          }
+        }
       } catch {
         return { ok: false, message: tr(`「${file.name}」はJSONとして読めませんでした。`, `Could not parse "${file.name}" as JSON.`) }
       }
@@ -236,6 +292,8 @@ export function useSimulation() {
 
   return {
     config,
+    context,
+    updateContext,
     patch,
     load,
     undo,

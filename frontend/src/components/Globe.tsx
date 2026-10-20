@@ -26,6 +26,7 @@ import {
 } from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import { indexAt, sampleAt, type FallSample, type FallTrack, type Track } from '../lib/trajectory'
+import { pointOnPath, type GeographicPath } from '../lib/globe-path'
 import { playback } from '../lib/playback'
 import { Segmented } from './primitives'
 import { cssVar, readStageColor, useTheme, type Theme } from '../lib/theme'
@@ -160,6 +161,7 @@ interface Built {
   vehicle: Entity
   sphere: BoundingSphere
   heading: number
+  overviewPitch?: number
 }
 
 /** Position of a falling body at time t (linear between samples). */
@@ -372,6 +374,85 @@ function buildScene(viewer: Viewer, track: Track, reference: Track | null, layer
   return { vehicle, sphere: BoundingSphere.fromPoints(positions), heading }
 }
 
+/** Render recorded geographic samples without synthesizing simulator telemetry. */
+function buildRecordedPath(viewer: Viewer, path: GeographicPath, reference: GeographicPath | null, time: () => number): Built {
+  viewer.entities.removeAll()
+  const { ink, halo } = palette()
+  const positions = path.points.map((p) => Cartesian3.fromDegrees(p.lon, p.lat, p.alt))
+  if (reference)
+    viewer.entities.add({
+      polyline: {
+        positions: reference.points.map((p) => Cartesian3.fromDegrees(p.lon, p.lat, p.alt)),
+        width: 2,
+        material: new PolylineDashMaterialProperty({ color: ink.withAlpha(0.45), dashLength: 8 }),
+      },
+    })
+  viewer.entities.add({
+    polyline: {
+      positions: path.points.map((p) => Cartesian3.fromDegrees(p.lon, p.lat, 0)),
+      width: 1.5,
+      clampToGround: true,
+      material: ink.withAlpha(0.35),
+    },
+  })
+  let first = 0
+  for (let i = 1; i <= path.points.length; i++) {
+    const start = path.points[first],
+      next = path.points[i]
+    if (next && next.stage === start.stage && next.powered === start.powered) continue
+    const color = Color.fromCssColorString(readStageColor(start.stage))
+    const segment = positions.slice(first, Math.min(i + 1, positions.length))
+    if (segment.length > 1)
+      viewer.entities.add({
+        polyline: {
+          positions: segment,
+          width: 3,
+          material: start.powered ? color : new PolylineDashMaterialProperty({ color, dashLength: 10 }),
+        },
+      })
+    first = i
+  }
+  for (const marker of path.markers)
+    viewer.entities.add({
+      position: Cartesian3.fromDegrees(marker.lon, marker.lat, marker.alt),
+      point: { pixelSize: 7, color: ink, outlineColor: halo, outlineWidth: 2, disableDepthTestDistance: Infinity },
+      label: {
+        text: marker.label,
+        font: '500 12px "IBM Plex Sans JP", sans-serif',
+        fillColor: ink,
+        outlineColor: halo,
+        outlineWidth: 4,
+        style: LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cartesian2(10, -12),
+        horizontalOrigin: HorizontalOrigin.LEFT,
+        disableDepthTestDistance: Infinity,
+        translucencyByDistance: new NearFarScalar(2e6, 1, 2e7, 0),
+      },
+    })
+  const vehicle = viewer.entities.add({
+    position: new CallbackPositionProperty(() => {
+      const p = pointOnPath(path.points, time())
+      return p ? Cartesian3.fromDegrees(p.lon, p.lat, p.alt) : undefined
+    }, false),
+    point: {
+      pixelSize: 12,
+      color: Color.fromCssColorString(cssVar('--signal')),
+      outlineColor: halo,
+      outlineWidth: 2.5,
+      disableDepthTestDistance: Infinity,
+    },
+  })
+  vehicle.viewFrom = new ConstantProperty(new Cartesian3(-30000, -60000, 30000)) as unknown as Entity['viewFrom']
+  const a = path.points[0],
+    b = path.points[path.points.length - 1]
+  return {
+    vehicle,
+    sphere: BoundingSphere.fromPoints(positions),
+    heading: CesiumMath.toRadians(bearingDeg(a.lat, a.lon, b.lat, b.lon) - 90),
+    overviewPitch: -50,
+  }
+}
+
 function addFallBody(viewer: Viewer, body: FallTrack, halo: Color, ink: Color, presentation?: FlightPresentation) {
   const color = Color.fromCssColorString(readStageColor(body.stage))
   const label = fallBodyLabel(body, presentation)
@@ -470,10 +551,11 @@ function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number) {
   return CesiumMath.toDegrees(Math.atan2(y, x))
 }
 
-function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
+/** Fit the whole flight into view; false when the canvas is hidden and nothing was framed. */
+function frameOverview(viewer: Viewer, built: Built, duration = 1.2): boolean {
   viewer.trackedEntity = undefined
   // A hidden canvas has no view to fit (Cesium throws on the zero-size frustum).
-  if (viewer.canvas.clientWidth === 0 || viewer.canvas.clientHeight === 0) return
+  if (viewer.canvas.clientWidth === 0 || viewer.canvas.clientHeight === 0) return false
   const radius = Math.max(built.sphere.radius, 20000)
   // Fit the whole trajectory into the narrower field of view, with margin.
   const frustum = viewer.camera.frustum as PerspectiveFrustum
@@ -483,9 +565,10 @@ function frameOverview(viewer: Viewer, built: Built, duration = 1.2) {
   const fovNarrow = 2 * Math.atan(Math.tan(fov / 2) * (aspect >= 1 ? 1 / aspect : aspect))
   const range = (radius / Math.sin(fovNarrow / 2)) * 1.12
   viewer.camera.flyToBoundingSphere(built.sphere, {
-    offset: new HeadingPitchRange(built.heading, CesiumMath.toRadians(-20), range),
+    offset: new HeadingPitchRange(built.heading, CesiumMath.toRadians(built.overviewPitch ?? -20), range),
     duration,
   })
+  return true
 }
 
 /** Turn the view so north is up, keeping the point being looked at (or the tracked vehicle) in place. */
@@ -511,6 +594,9 @@ interface GlobeProps {
   track: Track | null
   reference?: Track | null
   dispersion?: DispersionOverlay | null
+  recordedPath?: GeographicPath | null
+  recordedReference?: GeographicPath | null
+  recordedTime?: number
 }
 
 function loadLayers(): Layers {
@@ -522,11 +608,22 @@ function loadLayers(): Layers {
   }
 }
 
-export default function Globe({ track, reference = null, dispersion = null }: GlobeProps) {
+export default function Globe({
+  track,
+  reference = null,
+  dispersion = null,
+  recordedPath = null,
+  recordedReference = null,
+  recordedTime = 0,
+}: GlobeProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const builtRef = useRef<Built | null>(null)
   const launchKeyRef = useRef<string>('')
+  /** Whether the camera has been fitted to a flight at least once (false while the map was hidden). */
+  const framedRef = useRef(false)
+  const recordedTimeRef = useRef(recordedTime)
+  recordedTimeRef.current = recordedTime
   const [mode, setMode] = useState<CameraMode>('overview')
   // Camera heading [deg] for the compass, updated only when it moves noticeably
   const [heading, setHeading] = useState(0)
@@ -591,25 +688,35 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
 
   useEffect(() => {
     const viewer = viewerRef.current
-    if (!viewer || !track) return
-    const built = buildScene(viewer, track, reference, layers, dispersion)
+    if (!viewer || (!track && !recordedPath)) return
+    const built = recordedPath
+      ? buildRecordedPath(viewer, recordedPath, recordedReference, () => recordedTimeRef.current)
+      : buildScene(viewer, track!, reference, layers, dispersion)
     builtRef.current = built
 
     // Only move the camera when the flight itself moved somewhere else;
     // tweaking a parameter should not yank the view around.
-    const f = track.samples[0]
-    const l = track.samples[track.samples.length - 1]
-    const key = `${f.lat.toFixed(2)},${f.lon.toFixed(2)},${Math.round(l.downrange / 50)},${Math.round(track.summary.apogee / 50000)}`
+    const f = track?.samples[0]
+    const l = track?.samples[track.samples.length - 1]
+    const key = recordedPath
+      ? recordedPath.id
+      : `${f!.lat.toFixed(2)},${f!.lon.toFixed(2)},${Math.round(l!.downrange / 50)},${Math.round(track!.summary.apogee / 50000)}`
     if (key !== launchKeyRef.current) {
-      const isFirst = launchKeyRef.current === ''
+      const isFirst = !framedRef.current
       launchKeyRef.current = key
-      if (mode === 'follow') viewer.trackedEntity = built.vehicle
-      else frameOverview(viewer, built, isFirst ? 0 : 1.4)
+      if (mode === 'follow') {
+        viewer.trackedEntity = built.vehicle
+        framedRef.current = true
+      } else {
+        // While hidden (the other workspace, or another view on phones) the
+        // resize observer frames it as soon as the map gets a size.
+        framedRef.current = frameOverview(viewer, built, isFirst ? 0 : 1.4)
+      }
     } else if (mode === 'follow') {
       viewer.trackedEntity = built.vehicle
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [track, reference, theme, lang, layers, dispersion])
+  }, [track, reference, theme, lang, layers, dispersion, recordedPath, recordedReference])
 
   // Restyle the scene when the colour theme changes (track entities are rebuilt above).
   const styledTheme = useRef(theme)
@@ -632,8 +739,18 @@ export default function Globe({ track, reference = null, dispersion = null }: Gl
     const ro = new ResizeObserver(() => {
       const w = el.clientWidth
       const h = el.clientHeight
-      // Hidden (another view is showing on phones/tablets): nothing to frame.
+      // Hidden (another workspace or view is showing): nothing to frame.
       if (w === 0 || h === 0) return
+      const viewer = viewerRef.current
+      const built = builtRef.current
+      // First time the map has a size for a flight built while hidden: jump
+      // straight to it rather than flying in from Cesium's whole-Earth view.
+      if (viewer && built && !framedRef.current && modeRef.current === 'overview') {
+        last = { w, h }
+        window.clearTimeout(timer)
+        framedRef.current = frameOverview(viewer, built, 0)
+        return
+      }
       if (Math.abs(w - last.w) < 24 && Math.abs(h - last.h) < 24) return
       last = { w, h }
       window.clearTimeout(timer)

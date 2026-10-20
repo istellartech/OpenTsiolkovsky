@@ -1,10 +1,13 @@
 import { phaseLabel, structureLabel } from '../../lib/presentation'
 import { StructureFields } from './PresentationFields'
 import type { InspectorNav } from '../Inspector'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Target } from 'lucide-react'
+import { optimizationKindFor } from '../../lib/optimization-bridge'
+import { sampleOptimizationStatus } from '../../lib/optimization-presets'
 import type { Config } from '../../lib/config'
 import { curveRows, curveValue, isRows, launchDate } from '../../lib/config'
 import { PRESET_OPTIONS } from '../../config/presets'
+import { PresetReview } from '../PresetReview'
 
 import type { VehicleSpec } from '../../lib/specs'
 import { fmt, fmtForce, fmtMass } from '../../lib/format'
@@ -18,12 +21,15 @@ export function Overview({
   presetId,
   specs,
   onNav,
+  onOptimize,
 }: {
   config: Config
   patch: Patch
   presetId: string
   specs: VehicleSpec
   onNav: (n: InspectorNav) => void
+  /** Turn this vehicle into an optimization case; absent while a solve runs */
+  onOptimize?: () => void
 }) {
   const preset = PRESET_OPTIONS.find((p) => p.id === presetId)
   const { launch } = config
@@ -34,7 +40,7 @@ export function Overview({
   const figures: [string, string, string?][] = [
     [tr('全備質量', 'Liftoff mass'), fmtMass(specs.liftoffMass)],
     [tr('離昇推力', 'Liftoff thrust'), fmtForce(specs.liftoffThrust), tr('真空', 'vacuum')],
-    [tr('推力重量比', 'Thrust-to-weight'), fmt(specs.thrustToWeight, 2)],
+    [tr('推力重量比（真空）', 'Thrust-to-weight (vacuum)'), fmt(specs.thrustToWeight, 2)],
     [tr('理想 Δv', 'Ideal Δv'), `${fmt(specs.dvTotal / 1000, 2)} km/s`, tr('損失なし', 'no losses')],
   ]
 
@@ -50,6 +56,7 @@ export function Overview({
         {structureLabel(config.presentation, config.stages.length)} · {preset ? preset.site : tr('カスタム設定', 'Custom configuration')}
       </p>
       {preset && <p className="mt-2 text-[12px] leading-relaxed text-ink-2">{preset.description}</p>}
+      {preset && <PresetReview preset={preset} />}
 
       <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-[8px] border border-line bg-line">
         {figures.map(([k, v, sub]) => (
@@ -73,6 +80,8 @@ export function Overview({
           ))}
         </ul>
       )}
+
+      <OptimizeCard config={config} presetId={presetId} onOptimize={onOptimize} />
 
       <div className="mt-5">
         <StructureFields config={config} patch={patch} />
@@ -176,6 +185,65 @@ export function Overview({
         </>
       )}
     </div>
+  )
+}
+
+/** Hand-off to the optimization workspace, with what to expect for this vehicle. */
+function OptimizeCard({ config, presetId, onOptimize }: { config: Config; presetId: string; onOptimize?: () => void }) {
+  const kind = optimizationKindFor(config)
+  const status = sampleOptimizationStatus(presetId)
+  const goal =
+    kind === 'single_stage'
+      ? tr('目標頂点高度まで運べる追加ペイロードを最大化します。', 'Maximizes the extra payload to a target apogee.')
+      : tr('円軌道へ投入できる衛星質量を最大化します。', 'Maximizes the satellite mass to a circular orbit.')
+  const expect = !kind
+    ? tr(
+        `計算区間が${config.stages.length}個のため使えません（単段か2〜4段に対応）。`,
+        `Not available: ${config.stages.length} calculation intervals (one or 2–4 are supported).`,
+      )
+    : status === 'validated'
+      ? tr(
+          'この計算モデルでは、既定の設定で最適化が収束し、条件チェックにも合格しています。',
+          'Optimization converges and passes the condition checks for this model with the default settings.',
+        )
+      : status === 'refine'
+        ? tr(
+            'このサンプルは収束します。検証に「メッシュを細かくして再実行」が必要なことがあります。',
+            'This sample converges; the check may need a re-run with a finer mesh.',
+          )
+        : status === 'unsolved'
+          ? tr(
+              'このサンプルは既定の設定では収束しません。目標・拘束条件の調整が必要です。',
+              'This sample does not converge with the default settings; adjust the target or limits.',
+            )
+          : tr(
+              '収束は確認していません。目標・拘束条件の調整が必要なことがあります。',
+              'Not tested; the target or limits may need adjusting.',
+            )
+  return (
+    <section className="mt-4 rounded-[8px] border border-line px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[12px] font-semibold">{tr('軌道最適化', 'Trajectory optimization')}</h3>
+        <button
+          type="button"
+          disabled={!kind || !onOptimize}
+          onClick={onOptimize}
+          className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] border border-line-strong px-2.5 text-[12px] font-medium hover:bg-surface-2 disabled:opacity-40"
+        >
+          <Target className="h-3.5 w-3.5" />
+          {tr('この機体で最適化', 'Optimize this vehicle')}
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-ink-2">
+        {kind ? `${goal} ` : ''}
+        <span className={status === 'unsolved' || !kind ? 'text-danger' : status === 'validated' ? 'text-[var(--ok)]' : undefined}>
+          {expect}
+        </span>
+        {status === 'validated' && (
+          <> {tr('実機データの確かさを示すものではありません。', 'This does not verify the real vehicle data.')}</>
+        )}
+      </p>
+    </section>
   )
 }
 

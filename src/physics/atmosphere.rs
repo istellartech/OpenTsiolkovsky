@@ -69,11 +69,11 @@ pub struct AtmosphereModel {
 
 /// Atmospheric conditions at a specific altitude
 #[derive(Debug, Clone)]
-pub struct AtmosphericConditions {
-    pub temperature: f64,    // [K]
-    pub pressure: f64,       // [Pa]
-    pub density: f64,        // [kg/m³]
-    pub speed_of_sound: f64, // [m/s]
+pub struct AtmosphericConditions<T = f64> {
+    pub temperature: T,    // [K]
+    pub pressure: T,       // [Pa]
+    pub density: T,        // [kg/m³]
+    pub speed_of_sound: T, // [m/s]
 }
 
 impl Default for AtmosphereModel {
@@ -114,17 +114,25 @@ impl AtmosphereModel {
     /// # Returns
     /// Atmospheric conditions (temperature, pressure, density, speed of sound)
     pub fn conditions(&self, altitude: f64) -> AtmosphericConditions {
+        self.conditions_scalar(altitude)
+    }
+
+    pub fn conditions_scalar<T: super::Scalar>(&self, altitude: T) -> AtmosphericConditions<T> {
         // Handle negative altitude (below sea level) by using sea level conditions
-        let altitude = altitude.max(0.0);
+        let altitude = if altitude.re() < 0.0 {
+            T::from(0.0)
+        } else {
+            altitude
+        };
         let effective_altitude = match self.kind {
             AtmosphereKind::Legacy => altitude,
-            AtmosphereKind::Ussa1976 if altitude >= USSA1976_UPPER[0][0] => {
+            AtmosphereKind::Ussa1976 if altitude.re() >= USSA1976_UPPER[0][0] => {
                 return self.upper_conditions(altitude);
             }
-            AtmosphereKind::Ussa1976 => R0_GEOPOTENTIAL * altitude / (R0_GEOPOTENTIAL + altitude),
+            AtmosphereKind::Ussa1976 => altitude * R0_GEOPOTENTIAL / (altitude + R0_GEOPOTENTIAL),
         };
 
-        let layer_index = self.determine_layer(effective_altitude);
+        let layer_index = self.determine_layer(effective_altitude.re());
 
         let h = effective_altitude;
         let h_base = self.height_layers[layer_index];
@@ -133,23 +141,23 @@ impl AtmosphereModel {
         let lapse_rate = self.lapse_rates[layer_index];
 
         // Temperature calculation
-        let temperature = t_base + lapse_rate * (h - h_base);
+        let temperature = T::from(t_base) + (h - h_base) * lapse_rate;
 
         // Pressure calculation
         let pressure = if lapse_rate.abs() < 1e-10 {
             // Isothermal layer (zero lapse rate)
-            p_base * (-(G0 / self.gas_constant) * (h - h_base) / t_base).exp()
+            ((h - h_base) * -(G0 / self.gas_constant) / t_base).exp() * p_base
         } else {
             // Non-isothermal layer
             let temp_ratio = temperature / t_base;
-            p_base * temp_ratio.powf(-G0 / (lapse_rate * self.gas_constant))
+            temp_ratio.powf(-G0 / (lapse_rate * self.gas_constant)) * p_base
         };
 
         // Density from ideal gas law
-        let density = pressure / (self.gas_constant * temperature);
+        let density = pressure / (temperature * self.gas_constant);
 
         // Speed of sound
-        let speed_of_sound = (self.gamma * self.gas_constant * temperature).sqrt();
+        let speed_of_sound = (temperature * (self.gamma * self.gas_constant)).sqrt();
 
         AtmosphericConditions {
             temperature,
@@ -161,23 +169,26 @@ impl AtmosphereModel {
 
     /// USSA 1976 above 86 km: log-linear in pressure and density,
     /// linear in temperature; extrapolated with the last segment
-    fn upper_conditions(&self, altitude: f64) -> AtmosphericConditions {
+    fn upper_conditions<T: super::Scalar>(&self, altitude: T) -> AtmosphericConditions<T> {
         let t = &USSA1976_UPPER;
         let n = t.len();
-        let i = t.partition_point(|row| row[0] <= altitude).clamp(1, n - 1) - 1;
+        let i = t
+            .partition_point(|row| row[0] <= altitude.re())
+            .clamp(1, n - 1)
+            - 1;
         let (a, b) = (t[i], t[i + 1]);
         let f = (altitude - a[0]) / (b[0] - a[0]);
-        let temperature = if f <= 1.0 {
-            a[1] + f * (b[1] - a[1])
+        let temperature = if f.re() <= 1.0 {
+            T::from(a[1]) + f * (b[1] - a[1])
         } else {
-            b[1]
+            T::from(b[1])
         };
-        let log_interp = |x0: f64, x1: f64| (x0.ln() + f * (x1.ln() - x0.ln())).exp();
+        let log_interp = |x0: f64, x1: f64| (T::from(x0.ln()) + f * (x1.ln() - x0.ln())).exp();
         AtmosphericConditions {
             temperature,
             pressure: log_interp(a[2], b[2]),
             density: log_interp(a[3], b[3]),
-            speed_of_sound: (self.gamma * self.gas_constant * temperature).sqrt(),
+            speed_of_sound: (temperature * (self.gamma * self.gas_constant)).sqrt(),
         }
     }
 
@@ -202,9 +213,13 @@ impl AtmosphereModel {
     }
 
     /// Conditions with the density scaled by `1 + percent / 100`
-    pub fn conditions_with_percent(&self, altitude: f64, percent: f64) -> AtmosphericConditions {
-        let mut conditions = self.conditions(altitude);
-        conditions.density *= 1.0 + percent / 100.0;
+    pub fn conditions_with_percent<T: super::Scalar>(
+        &self,
+        altitude: T,
+        percent: T,
+    ) -> AtmosphericConditions<T> {
+        let mut conditions = self.conditions_scalar(altitude);
+        conditions.density *= T::from(1.0) + percent / 100.0;
         conditions
     }
 
@@ -216,14 +231,14 @@ impl AtmosphereModel {
     ///
     /// # Returns
     /// Atmospheric conditions with modified density
-    pub fn conditions_with_variation(
+    pub fn conditions_with_variation<T: super::Scalar>(
         &self,
-        altitude: f64,
+        altitude: T,
         variation_percent: f64,
-    ) -> AtmosphericConditions {
-        let mut conditions = self.conditions(altitude);
+    ) -> AtmosphericConditions<T> {
+        let mut conditions = self.conditions_scalar(altitude);
         let variation_coeff = self.density_variation_coefficient(altitude, variation_percent);
-        conditions.density *= 1.0 + variation_coeff;
+        conditions.density *= T::from(1.0) + variation_coeff;
         conditions
     }
 
@@ -245,9 +260,13 @@ impl AtmosphereModel {
     ///
     /// # Returns
     /// Density variation coefficient [-1.0 to +1.0]
-    fn density_variation_coefficient(&self, altitude: f64, input_percent: f64) -> f64 {
+    fn density_variation_coefficient<T: super::Scalar>(
+        &self,
+        altitude: T,
+        input_percent: f64,
+    ) -> T {
         if input_percent.abs() < 1e-10 {
-            return 0.0;
+            return T::from(0.0);
         }
 
         // Data from U.S. Standard Atmosphere - negative variation
@@ -288,26 +307,26 @@ impl AtmosphereModel {
 ///
 /// # Returns
 /// Interpolated x-value
-fn linear_interpolate(y: f64, y_array: &[f64], x_array: &[f64]) -> f64 {
+fn linear_interpolate<T: super::Scalar>(y: T, y_array: &[f64], x_array: &[f64]) -> T {
     let n = y_array.len();
 
     // Handle boundary cases
-    if y <= y_array[0] {
-        return x_array[0];
+    if y.re() <= y_array[0] {
+        return T::from(x_array[0]);
     }
-    if y >= y_array[n - 1] {
-        return x_array[n - 1];
+    if y.re() >= y_array[n - 1] {
+        return T::from(x_array[n - 1]);
     }
 
     // Find interval for interpolation
     for i in 0..n - 1 {
-        if y >= y_array[i] && y <= y_array[i + 1] {
+        if y.re() >= y_array[i] && y.re() <= y_array[i + 1] {
             let t = (y - y_array[i]) / (y_array[i + 1] - y_array[i]);
-            return x_array[i] + t * (x_array[i + 1] - x_array[i]);
+            return T::from(x_array[i]) + t * (x_array[i + 1] - x_array[i]);
         }
     }
 
-    x_array[n - 1]
+    T::from(x_array[n - 1])
 }
 
 #[cfg(test)]

@@ -367,3 +367,6 @@ export function samplesToCsv(samples: Sample[]): string {
   const rows = samples.map((s) => header.map((k) => s[k] ?? '').join(','))
   return [header.join(','), ...rows].join('\n')
 }
+
+/** Minimum trajectory view shared by the two result players. */
+export type TimelineTrack = Pick<Track, 't0' | 't1' | 'events' | 'stages' | 'presentation'>

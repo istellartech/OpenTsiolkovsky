@@ -35,6 +35,10 @@ impl GravityModel {
     /// # Returns
     /// Gravity acceleration vector in ECI coordinates [m/s²]
     pub fn gravity_eci(&self, pos_eci: &Vector3<f64>) -> Vector3<f64> {
+        self.gravity_scalar(pos_eci)
+    }
+
+    pub fn gravity_scalar<T: super::Scalar>(&self, pos_eci: &Vector3<T>) -> Vector3<T> {
         let x = pos_eci.x;
         let y = pos_eci.y;
         let z = pos_eci.z;
@@ -42,7 +46,7 @@ impl GravityModel {
         let r = (x * x + y * y + z * z).sqrt();
 
         // Handle degenerate case
-        if r < 1e-10 {
+        if r.re() < 1e-10 {
             return Vector3::zeros();
         }
 
@@ -58,22 +62,23 @@ impl GravityModel {
         let b = a * (1.0 - f); // Polar radius
 
         // Ensure position is above Earth surface
-        let effective_r = if r < b { b } else { r };
+        let effective_r = if r.re() < b { T::from(b) } else { r };
 
         // Normalized associated Legendre function \bar{P}_{20} and its derivative
-        let bar_p20 = (5.0_f64).sqrt() * (3.0 * irz * irz - 1.0) * 0.5;
-        let bar_p20_d = (5.0_f64).sqrt() * 3.0 * irz;
+        let bar_p20 = (irz * irz * 3.0 - 1.0) * 5.0_f64.sqrt() * 0.5;
+        let bar_p20_d = irz * (5.0_f64.sqrt() * 3.0);
 
         // Gravity components
         let mu = MU_EARTH;
-        let a_over_r_squared = (a / effective_r).powi(2);
+        let a_over_r_squared = (T::from(a) / effective_r).powi(2);
 
         // Radial component of gravity
-        let g_ir = -mu / (effective_r * effective_r)
-            * (1.0 + self.bar_c20 * a_over_r_squared * (3.0 * bar_p20 + irz * bar_p20_d));
+        let g_ir = T::from(-mu) / (effective_r * effective_r)
+            * (T::from(1.0) + a_over_r_squared * self.bar_c20 * (bar_p20 * 3.0 + irz * bar_p20_d));
 
         // Z-component contribution from J2
-        let g_iz = mu / (effective_r * effective_r) * a_over_r_squared * self.bar_c20 * bar_p20_d;
+        let g_iz =
+            T::from(mu) / (effective_r * effective_r) * a_over_r_squared * self.bar_c20 * bar_p20_d;
 
         Vector3::new(g_ir * irx, g_ir * iry, g_ir * irz + g_iz)
     }

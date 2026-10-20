@@ -176,7 +176,7 @@ export function Summary({ track, reference }: { track: Track; reference?: Track 
     [tr('最高高度', 'Apogee'), fmt(s.apogee / 1000, 1), 'km', `T+${fmt(s.apogeeTime, 0)} s`, r && signed((s.apogee - r.apogee) / 1000, 1)],
     [tr('最大速度', 'Max speed'), fmt(s.maxSpeed, 0), 'm/s', `M ${fmt(s.maxMach, 1)}`, r && signed(s.maxSpeed - r.maxSpeed, 0)],
     [tr('最大動圧', 'Max-Q'), fmt(s.maxQ / 1000, 1), 'kPa', `T+${fmt(s.maxQTime, 0)} s`, r && signed((s.maxQ - r.maxQ) / 1000, 1)],
-    [tr('最大加速度', 'Max accel.'), fmt(s.maxAccel, 1), 'G', undefined, r && signed(s.maxAccel - r.maxAccel, 1)],
+    [tr('最大機軸加速度', 'Max axial accel.'), fmt(s.maxAccel, 1), 'G', undefined, r && signed(s.maxAccel - r.maxAccel, 1)],
     [
       s.landed ? tr('落下距離', 'Impact range') : tr('到達距離', 'Range'),
       fmt(s.range, 1),

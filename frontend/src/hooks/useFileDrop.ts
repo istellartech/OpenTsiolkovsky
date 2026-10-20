@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useLatest } from './useLatest'
 
 /** Accept files dropped anywhere on the window. Returns whether a drag is over it. */
-export function useFileDrop(onFiles: (files: File[]) => void) {
+export function useFileDrop(onFiles: (files: File[]) => void, enabled = true) {
   const [dragging, setDragging] = useState(false)
   const latest = useLatest(onFiles)
   useEffect(() => {
+    if (!enabled) return
     let depth = 0
     const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
     const enter = (e: DragEvent) => {
@@ -38,7 +39,8 @@ export function useFileDrop(onFiles: (files: File[]) => void) {
       window.removeEventListener('dragleave', leave)
       window.removeEventListener('dragover', over)
       window.removeEventListener('drop', drop)
+      setDragging(false)
     }
-  }, [latest])
-  return dragging
+  }, [latest, enabled])
+  return enabled && dragging
 }

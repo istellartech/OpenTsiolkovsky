@@ -6,6 +6,8 @@
 pub mod config;
 pub mod math;
 pub mod montecarlo;
+#[cfg(feature = "optimization")]
+pub mod optimization;
 pub mod output;
 pub mod physics;
 pub mod sim;

@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "input": {
+    "schema_version": 1,
+    "run_id": "hs071-reference",
+    "problem": {
+      "kind": "hs071"
+    },
+    "solver": {
+      "max_iterations": 300,
+      "tolerance": 1e-8,
+      "derivative_test": true,
+      "stop_after_iteration": null
+    }
+  },
+  "solver_version": "pounce 0.12.0 (FERAL, L-BFGS)",
+  "code_revision": "a8bea8987f94",
+  "solver_status": "Solve_Succeeded",
+  "solver_status_code": 0,
+  "converged": true,
+  "model_fidelity": "analytic_numerical_benchmark; no rocket performance claim",
+  "variable_names": ["x1", "x2", "x3", "x4"],
+  "constraint_names": ["product_minimum", "squared_norm"],
+  "nlp_layout": {
+    "variables": ["x1", "x2", "x3", "x4"],
+    "constraints": ["product_minimum", "squared_norm"],
+    "x_lower": [1.0, 1.0, 1.0, 1.0],
+    "x_upper": [5.0, 5.0, 5.0, 5.0],
+    "g_lower": [25.0, 40.0],
+    "g_upper": [1e19, 40.0],
+    "initial": [1.0, 5.0, 5.0, 1.0],
+    "jacobian": [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [1, 0],
+      [1, 1],
+      [1, 2],
+      [1, 3]
+    ]
+  },
+  "hessian_calls": 0,
+  "iterations": [
+    {
+      "iteration": 0,
+      "restoration": false,
+      "objective": 16.109693,
+      "primal_infeasibility": 11.243400000000001,
+      "dual_infeasibility": 0.5275979386623801
+    },
+    {
+      "iteration": 1,
+      "restoration": false,
+      "objective": 17.42070896057694,
+      "primal_infeasibility": 0.8400266517475572,
+      "dual_infeasibility": 23.959573825698595
+    },
+    {
+      "iteration": 2,
+      "restoration": false,
+      "objective": 17.120452603949023,
+      "primal_infeasibility": 0.2141047549481172,
+      "dual_infeasibility": 0.20033836062104127
+    },
+    {
+      "iteration": 3,
+      "restoration": false,
+      "objective": 16.979032870189165,
+      "primal_infeasibility": 0.2145083361329192,
+      "dual_infeasibility": 0.08494849611784924
+    },
+    {
+      "iteration": 4,
+      "restoration": false,
+      "objective": 16.97255390419626,
+      "primal_infeasibility": 0.07810431119063566,
+      "dual_infeasibility": 0.012024813217144298
+    },
+    {
+      "iteration": 5,
+      "restoration": false,
+      "objective": 17.013661582482673,
+      "primal_infeasibility": 0.0006942704353818385,
+      "dual_infeasibility": 0.009499776838684228
+    },
+    {
+      "iteration": 6,
+      "restoration": false,
+      "objective": 17.01401773354008,
+      "primal_infeasibility": 1.958671930424316e-6,
+      "dual_infeasibility": 0.00034937457029548174
+    },
+    {
+      "iteration": 7,
+      "restoration": false,
+      "objective": 17.014017301055485,
+      "primal_infeasibility": 1.4725429764439468e-9,
+      "dual_infeasibility": 7.423442100288679e-7
+    },
+    {
+      "iteration": 8,
+      "restoration": false,
+      "objective": 17.014017289176305,
+      "primal_infeasibility": 3.552713678800501e-15,
+      "dual_infeasibility": 6.871150984065188e-9
+    }
+  ],
+  "solution": {
+    "x": [1.0000000000091949, 4.742999637280709, 3.8211499841656713, 1.379408293163182],
+    "z_lower": [1.0878712323905093, 2.671653889432668e-12, 3.544655335665266e-12, 2.635647076509708e-11],
+    "z_upper": [2.499997666128453e-12, 3.8910476781259385e-11, 8.482834475270813e-12, 2.761983423717336e-12],
+    "constraints": [25.000000000018108, 40.0],
+    "lambda": [-0.5522936602783699, 0.1614685671454946],
+    "objective": 17.014017289176305,
+    "solver_return": "Success"
+  },
+  "validation": {
+    "status": "passed",
+    "method": "HS071 bounds and known objective (not a flight validation)",
+    "max_bound_violation": 0.0,
+    "reference_objective_error": 4.030553668599168e-11,
+    "reference_objective_tolerance": 0.00001,
+    "tolerance": 1e-6,
+    "trajectory": null,
+    "error": null,
+    "flight": null,
+    "multi_stage": null
+  },
+  "effective_options": "hessian_approximation limited-memory\nnlp_scaling_method none\npresolve no\nl1_fallback_on_restoration_failure no\nmu_strategy_fallback no\ndual_divergence_retry no\nprint_level 0\nmax_iter 300\ntol 0.00000001\nacceptable_iter 0\nbound_relax_factor 0\nderivative_test first-order\n",
+  "flight_scaling": null,
+  "physical_scaling": null
+}

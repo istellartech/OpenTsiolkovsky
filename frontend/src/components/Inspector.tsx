@@ -67,9 +67,10 @@ interface Props {
   nav: InspectorNav
   onNav: (nav: InspectorNav) => void
   issueFields: string[]
+  onOptimize?: () => void
 }
 
-export function Inspector({ config, patch, presetId, specs, nav, onNav, issueFields }: Props) {
+export function Inspector({ config, patch, presetId, specs, nav, onNav, issueFields, onOptimize }: Props) {
   const tabsWithIssues = new Set(issueFields.map((f) => navForField(f).tab))
   return (
     <div className="flex min-h-full flex-col">
@@ -98,7 +99,9 @@ export function Inspector({ config, patch, presetId, specs, nav, onNav, issueFie
         ))}
       </div>
       <div className="flex-1 px-4 pb-10 pt-3">
-        {nav.tab === 'overview' && <Overview config={config} patch={patch} presetId={presetId} specs={specs} onNav={onNav} />}
+        {nav.tab === 'overview' && (
+          <Overview config={config} patch={patch} presetId={presetId} specs={specs} onNav={onNav} onOptimize={onOptimize} />
+        )}
         {nav.tab === 'launch' && (
           <>
             <LaunchTab config={config} patch={patch} />

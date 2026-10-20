@@ -6,6 +6,7 @@ target/
 pkg/
 wasm-pack.log
 frontend/src/wasm/
+frontend/public/optimization/
 
 # Simulation output (default output directories)
 /output/

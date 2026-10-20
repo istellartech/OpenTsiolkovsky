@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { CircleHelp, FolderOpen, Globe as GlobeIcon, LineChart, SlidersHorizontal } from 'lucide-react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FolderOpen } from 'lucide-react'
 import { useSimulation } from './hooks/useSimulation'
 import { useMonteCarlo } from './hooks/useMonteCarlo'
 import { useMediaQuery } from './hooks/useMediaQuery'
@@ -8,17 +8,16 @@ import { usePlayerKeys, usePlayerTrack } from './hooks/usePlayer'
 import { useUndoKeys } from './hooks/useUndoKeys'
 import { useOpenSharedLink } from './hooks/useShareLink'
 import { Inspector, navForField, type InspectorNav } from './components/Inspector'
-import { FieldContext, IconButton } from './components/primitives'
+import { FieldContext } from './components/primitives'
 import { PlaybackBar } from './components/Playback'
-import { Header } from './components/Header'
+import { Header, type Workspace } from './components/Header'
 import type { FileActions } from './components/FileMenu'
 import { LayoutSwitch, SplitView, useSplitRatio } from './components/SplitView'
 import { BottomPanel, MobileResults, type CompareProps, type McProps, type PanelTab, type Reference } from './components/BottomPanel'
 import type { DispersionOverlay } from './components/Globe'
 import { GlobeStage } from './components/GlobeStage'
 import { Toast, useToast } from './components/Toast'
-import { ThemeToggle } from './components/ThemeToggle'
-import { LangToggle } from './components/LangToggle'
+import { AppMenu } from './components/AppMenu'
 import { HelpDialog } from './components/HelpDialog'
 import { samplesToCsv } from './lib/trajectory'
 import { computeSpecs } from './lib/specs'
@@ -28,9 +27,23 @@ import { buildShareUrl } from './lib/share'
 import { DEFAULT_ELLIPSE } from './lib/montecarlo'
 import { cn } from './lib/cn'
 import type { ValidationIssue } from './lib/validation'
+import type { Config } from './lib/config'
+import { CaseDetails } from './components/CaseDetails'
+import { WorkspaceNav } from './components/WorkspaceNav'
+import { caseFile, type CaseContext } from './lib/case'
+import type { OptimizationControls } from './lib/workspace'
 import { tr, useLang } from './lib/i18n'
 
 type MobileView = 'params' | 'globe' | 'charts'
+const OptimizationWorkspace = lazy(() => import('./components/OptimizationWorkspace').then((m) => ({ default: m.OptimizationWorkspace })))
+const WORKSPACE_KEY = 'ot-workspace'
+function storedWorkspace(): Workspace {
+  try {
+    return localStorage.getItem(WORKSPACE_KEY) === 'optimize' ? 'optimize' : 'simulate'
+  } catch {
+    return 'simulate'
+  }
+}
 
 export default function App() {
   // Every string is picked at render time, so re-render the tree on a language switch.
@@ -48,16 +61,51 @@ export default function App() {
   const split = useSplitRatio()
   const { toast, show: showToast, dismiss: dismissToast } = useToast()
 
-  usePlayerTrack(track)
   const [helpOpen, setHelpOpen] = useState(false)
-  usePlayerKeys(() => setHelpOpen((v) => !v))
-  useUndoKeys(sim.undo, sim.redo)
+  // Trajectory simulation and optimization are two workspaces on one vehicle
+  // model. The optimizer stays mounted once opened, so a solve keeps running
+  // while the simulation is shown.
+  const [workspace, setWorkspaceState] = useState<Workspace>(storedWorkspace)
+  const [optimizerMounted, setOptimizerMounted] = useState(workspace === 'optimize')
+  const setWorkspace = (w: Workspace) => {
+    setWorkspaceState(w)
+    if (w === 'optimize') setOptimizerMounted(true)
+    try {
+      localStorage.setItem(WORKSPACE_KEY, w)
+    } catch {
+      // Private mode: the choice lasts for this page only.
+    }
+  }
+  const [optControls, setOptControls] = useState<OptimizationControls | null>(null)
+  const [caseDetails, setCaseDetails] = useState(false)
+  const [pendingOptimization, setPendingOptimization] = useState(false)
+  const optimizeSimulation = () => {
+    setWorkspace('optimize')
+    if (optControls?.running) optControls.showResults()
+    else setPendingOptimization(true)
+  }
+  useEffect(() => {
+    if (pendingOptimization && optControls && (result?.config === config || sim.status === 'invalid' || sim.status === 'error')) {
+      setPendingOptimization(false)
+      optControls.fromSimulation()
+    }
+  }, [pendingOptimization, optControls, result, config, sim.status])
+  const simulating = workspace === 'simulate'
+  usePlayerTrack(track, result?.caseId, simulating)
+  const optimizationWasRunning = useRef(false)
+  useEffect(() => {
+    if (optimizationWasRunning.current && optControls && !optControls.running && simulating)
+      showToast(optControls.status, optControls.resultPassed ? 'ok' : 'error')
+    optimizationWasRunning.current = optControls?.running ?? false
+  }, [optControls, simulating, showToast])
+  usePlayerKeys(() => setHelpOpen((v) => !v), simulating)
+  useUndoKeys(sim.undo, sim.redo, simulating)
   useOpenSharedLink(sim.load, showToast)
 
   const [reference, setReference] = useState<Reference | null>(null)
   const compare: CompareProps = {
     reference,
-    onPin: () => track && setReference({ track, label: config.name || tr('カスタム', 'Custom') }),
+    onPin: () => track && setReference({ track, label: result?.context.name || tr('カスタム', 'Custom') }),
     onUnpin: () => setReference(null),
   }
 
@@ -117,10 +165,11 @@ export default function App() {
   const files: FileActions = {
     base,
     open: openFiles,
+    saveCase: () => saveFile(`${base}.otcase.json`, caseFile('simulate', sim.context, config), 'application/json'),
     saveJson: () => saveFile(`${base}.json`, JSON.stringify(config, null, 2), 'application/json'),
     copyLink: async () => {
       try {
-        const url = await buildShareUrl(window.location.href, config, sim.presetId)
+        const url = await buildShareUrl(window.location.href, config, sim.presetId, sim.context)
         await navigator.clipboard.writeText(url)
         showToast(
           url.length > 8000
@@ -138,7 +187,20 @@ export default function App() {
     saveCsv: () => track && saveFile(`${base}_trajectory.csv`, samplesToCsv(track.raw), 'text/csv'),
     saveKml: () => track && saveFile(`${base}_trajectory.kml`, generateKML(track, config.name), 'application/vnd.google-earth.kml+xml'),
   }
-  const dragging = useFileDrop(openFiles)
+  const dragging = useFileDrop(openFiles, simulating)
+  const openOptimized = (optimized: Config, notes: string[], context?: CaseContext) => {
+    sim.load(optimized, 'custom', context)
+    setNav({ tab: 'overview', stage: 0 })
+    setWorkspace('simulate')
+    showToast(
+      tr(
+        '軌道計算のケースを作成しました。近似・質量内訳はケース情報で確認できます。',
+        'Simulation case created. Case details retain approximations and the mass breakdown.',
+      ),
+      'ok',
+    )
+    void notes
+  }
 
   const inspector = (
     <FieldContext.Provider value={fieldCtx}>
@@ -150,6 +212,7 @@ export default function App() {
         nav={nav}
         onNav={setNav}
         issueFields={sim.issues.map((i) => i.field)}
+        onOptimize={optControls?.running ? undefined : optimizeSimulation}
       />
     </FieldContext.Provider>
   )
@@ -166,8 +229,13 @@ export default function App() {
   )
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="fixed inset-0 flex flex-col">
       <Header
+        workspace={workspace}
+        context={sim.context}
+        optimization={optControls}
+        onCaseDetails={() => setCaseDetails(true)}
+        onWorkspace={setWorkspace}
         name={config.name}
         presetId={sim.presetId}
         onPreset={(id) => {
@@ -180,25 +248,17 @@ export default function App() {
           revealParams()
         }}
         files={files}
-        hasResult={!!track}
+        hasResult={!!track && result?.config === config}
         status={sim.status}
         error={sim.error}
         issues={sim.issues}
         onIssue={focusIssue}
         compact={isPhone}
         history={{ canUndo: sim.canUndo, canRedo: sim.canRedo, undo: sim.undo, redo: sim.redo }}
-        actions={
-          <>
-            <IconButton label={tr('ヘルプ (?)', 'Help (?)')} onClick={() => setHelpOpen(true)}>
-              <CircleHelp className="h-4 w-4" />
-            </IconButton>
-            <LangToggle />
-            <ThemeToggle />
-          </>
-        }
+        actions={<AppMenu onHelp={() => setHelpOpen(true)} />}
       />
 
-      <div className="relative flex min-h-0 flex-1">
+      <div className={cn('relative flex min-h-0 flex-1', !simulating && 'hidden')}>
         {/* Parameters */}
         {isDesktop && (
           <aside className="scroll-quiet w-[372px] shrink-0 overflow-y-auto border-r border-line bg-surface">{inspector}</aside>
@@ -211,6 +271,12 @@ export default function App() {
 
         {/* Main stage */}
         <main className="flex min-w-0 flex-1 flex-col">
+          {result && result.config !== config ? (
+            <p role="status" className="shrink-0 border-b border-line bg-surface-2 px-3 py-1 text-[11px] text-ink-2">
+              {tr('前の入力の結果を表示中', 'Showing the previous input’s result')}: {result.context.name} · {result.context.id.slice(0, 6)}{' '}
+              · r{result.context.revision}
+            </p>
+          ) : null}
           {isMobile ? (
             <>
               <div className={cn('min-h-0 flex-1', mobileView !== 'globe' && 'hidden')}>{globe}</div>
@@ -246,6 +312,38 @@ export default function App() {
         </main>
       </div>
 
+      {optimizerMounted && (
+        <div className={cn('min-h-0 flex-1', simulating && 'hidden')}>
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-ink-3">{tr('読み込み中…', 'Loading…')}</div>}>
+            <OptimizationWorkspace
+              simConfig={config}
+              simContext={sim.context}
+              simFlight={
+                track && result?.config === config
+                  ? {
+                      apogeeM: track.summary.apogee,
+                      apogeeTimeS: track.summary.apogeeTime,
+                      maxQPa: track.summary.maxQ,
+                      trajectory: track.raw,
+                    }
+                  : undefined
+              }
+              active={!simulating}
+              onControls={setOptControls}
+              onOpenInSimulation={openOptimized}
+            />
+          </Suspense>
+        </div>
+      )}
+
+      {caseDetails && (simulating || optControls) ? (
+        <CaseDetails
+          context={simulating ? sim.context : optControls!.context}
+          config={simulating ? config : undefined}
+          onChange={simulating ? sim.updateContext : undefined}
+          onClose={() => setCaseDetails(false)}
+        />
+      ) : null}
       <Toast toast={toast} onDismiss={dismissToast} />
       {helpOpen && <HelpDialog onClose={() => setHelpOpen(false)} showShortcuts={!isPhone} />}
       {dragging && (
@@ -260,33 +358,7 @@ export default function App() {
         </div>
       )}
 
-      {isMobile && (
-        <nav className="grid grid-cols-3 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)]">
-          {(
-            [
-              ['params', tr('パラメータ', 'Parameters'), SlidersHorizontal],
-              ['globe', '3D', GlobeIcon],
-              ['charts', tr('グラフ', 'Charts'), LineChart],
-            ] as const
-          ).map(([id, label, Icon]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMobileView(id)}
-              className={cn(
-                'flex h-12 flex-col items-center justify-center gap-0.5 text-[11px]',
-                mobileView === id ? 'text-ink' : 'text-ink-3',
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-              {id === 'params' && sim.issues.length > 0 && (
-                <span className="sr-only">{tr('（入力エラーあり）', ' (has input errors)')}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-      )}
+      {isMobile && simulating ? <WorkspaceNav value={mobileView} onChange={setMobileView} /> : null}
     </div>
   )
 }

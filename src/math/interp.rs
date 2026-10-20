@@ -52,13 +52,20 @@ impl Linear {
     }
 
     pub fn eval(&self, x: f64) -> f64 {
-        match bracket(&self.x, x) {
-            None => 0.0,
-            Some((i, a)) => match self.y.get(i + 1) {
-                Some(next) => self.y[i] + a * (next - self.y[i]),
-                None => self.y[i],
-            },
+        self.eval_scalar(x)
+    }
+
+    /// Choose a piece by its real value, preserving derivatives inside it.
+    /// At an interior knot use the right derivative; outside the table it is zero.
+    pub fn eval_scalar<T: crate::physics::Scalar>(&self, x: T) -> T {
+        let Some((i, _)) = bracket(&self.x, x.re()) else {
+            return T::from(0.0);
+        };
+        if self.x.len() == 1 || x.re() <= self.x[0] || i + 1 >= self.x.len() {
+            return T::from(self.y[i]);
         }
+        T::from(self.y[i])
+            + (x - self.x[i]) / (self.x[i + 1] - self.x[i]) * (self.y[i + 1] - self.y[i])
     }
 
     pub fn is_constant(&self) -> bool {
@@ -135,19 +142,29 @@ impl Grid2D {
     /// each grid cell is split into four triangles around its centre.
     /// Outside the grid the nearest edge is used.
     pub fn eval(&self, x: f64, y: f64) -> f64 {
+        self.eval_scalar(x, y)
+    }
+
+    pub fn eval_scalar<T: crate::physics::Scalar>(&self, x: T, y: T) -> T {
         let (m, n) = (self.x.len(), self.y.len());
         if m < 2 || n < 2 {
-            return 0.0;
+            return T::from(0.0);
         }
-        let cell = |axis: &[f64], v: f64| -> (usize, f64) {
+        let cell = |axis: &[f64], v: T| -> (usize, T) {
             let len = axis.len();
-            let v = v.clamp(axis[0], axis[len - 1]);
-            let i = (axis.partition_point(|&a| a <= v).max(1) - 1).min(len - 2);
+            let v = if v.re() <= axis[0] {
+                T::from(axis[0])
+            } else if v.re() >= axis[len - 1] {
+                T::from(axis[len - 1])
+            } else {
+                v
+            };
+            let i = (axis.partition_point(|&a| a <= v.re()).max(1) - 1).min(len - 2);
             let d = axis[i + 1] - axis[i];
             (
                 i,
                 if d.abs() < 1e-12 {
-                    0.0
+                    T::from(0.0)
                 } else {
                     (v - axis[i]) / d
                 },
@@ -155,16 +172,16 @@ impl Grid2D {
         };
         let (i, dx) = cell(&self.x, x);
         let (j, dy) = cell(&self.y, y);
-        let f = |ii: usize, jj: usize| self.z[ii][jj];
-        if dx < 0.5 {
-            if dy < 0.5 {
+        let f = |ii: usize, jj: usize| T::from(self.z[ii][jj]);
+        if dx.re() < 0.5 {
+            if dy.re() < 0.5 {
                 f(i, j) + (f(i + 1, j) - f(i, j)) * dx + (f(i, j + 1) - f(i, j)) * dy
             } else {
                 f(i, j + 1)
                     + (f(i + 1, j + 1) - f(i, j + 1)) * dx
                     + (f(i, j + 1) - f(i, j)) * (dy - 1.0)
             }
-        } else if dy < 0.5 {
+        } else if dy.re() < 0.5 {
             f(i + 1, j)
                 + (f(i + 1, j) - f(i, j)) * (dx - 1.0)
                 + (f(i + 1, j + 1) - f(i + 1, j)) * dy

@@ -1,3 +1,4 @@
+import { readCaseContext, type CaseContext } from '../lib/case'
 import { useEffect } from 'react'
 import { PRESET_OPTIONS } from '../config/presets'
 import { isConfig, type Config } from '../lib/config'
@@ -9,7 +10,10 @@ import { useLatest } from './useLatest'
  * On startup, open the config a shared link points to, then drop the
  * fragment so later edits are not confused with the shared state.
  */
-export function useOpenSharedLink(load: (config: Config, presetId?: string) => void, notify: (text: string, kind: 'ok' | 'error') => void) {
+export function useOpenSharedLink(
+  load: (config: Config, presetId?: string, context?: CaseContext) => void,
+  notify: (text: string, kind: 'ok' | 'error') => void,
+) {
   const latest = useLatest({ load, notify })
   useEffect(() => {
     const target = parseShareHash(window.location.hash)
@@ -17,9 +21,13 @@ export function useOpenSharedLink(load: (config: Config, presetId?: string) => v
     // Cleared synchronously so a second mount (React StrictMode) does not load it again.
     history.replaceState(null, '', window.location.pathname + window.location.search)
     const { load, notify } = latest.current
+    const caseContext = target.context ? decodePayload(target.context).then(readCaseContext) : Promise.resolve(undefined)
     if (target.kind === 'preset') {
       const preset = PRESET_OPTIONS.find((p) => p.id === target.id)
-      if (preset) load(preset.create(), preset.id)
+      if (preset)
+        void caseContext
+          .then((context) => load(preset.create(), preset.id, context))
+          .catch(() => notify(tr('ケース情報を読み込めません。', 'Could not load case metadata.'), 'error'))
       else
         notify(
           tr(`リンク先のサンプル機体「${target.id}」が見つかりません。`, `Sample vehicle "${target.id}" from the link was not found.`),
@@ -27,10 +35,10 @@ export function useOpenSharedLink(load: (config: Config, presetId?: string) => v
         )
       return
     }
-    decodePayload(target.data)
-      .then((parsed) => {
+    Promise.all([decodePayload(target.data), caseContext])
+      .then(([parsed, context]) => {
         if (!isConfig(parsed)) throw new Error('invalid')
-        load(parsed)
+        load(parsed, 'custom', context)
         notify(
           tr(
             '共有リンクの設定を開きました。⌘Z / Ctrl+Z で元の設定に戻せます。',

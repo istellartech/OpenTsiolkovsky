@@ -9,6 +9,7 @@ import { fmtForce, fmtMass } from '../lib/format'
 import { cn } from '../lib/cn'
 import { tr } from '../lib/i18n'
 import { Segmented } from './primitives'
+import { PresetReview } from './PresetReview'
 
 const PRESET_SPECS = new Map(PRESET_OPTIONS.map((p) => [p.id, computeSpecs(p.create())]))
 const countryLabel = (c: PresetCountry) => PRESET_COUNTRIES.find((x) => x.id === c)?.label ?? c
@@ -35,16 +36,16 @@ export function VehiclePicker({
   useDismiss(ref, open, close)
 
   return (
-    <div ref={ref} className="relative min-w-0 flex-1 sm:flex-none">
+    <div ref={ref} className="relative min-w-0 flex-1">
       <button
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[6px] px-2 text-left hover:bg-surface-2 sm:w-auto"
+        className="flex h-9 w-full min-w-0 items-center gap-2 rounded-[6px] px-2 text-left hover:bg-surface-2 max-w-full"
       >
         <span className="min-w-0 truncate text-[13px] font-medium">{current ? current.label : name || tr('カスタム', 'Custom')}</span>
-        <span className="hidden truncate text-[12px] text-ink-3 md:inline">
+        <span className="hidden truncate text-[12px] text-ink-3 2xl:inline">
           {current ? current.kind : tr('編集中の設定', 'Edited settings')}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-3" />
@@ -313,7 +314,10 @@ function PresetRow({
         <span className="shrink-0 text-[11px] text-ink-3">{countryLabel(preset.country)}</span>
         {selected && <Check className="ml-auto h-3.5 w-3.5 shrink-0 self-center text-ink" />}
       </span>
-      <span className="mt-0.5 block truncate text-[11px] text-ink-2">{preset.kind}</span>
+      <span className="mt-0.5 flex items-center gap-2 text-[11px] text-ink-2">
+        <span className="truncate">{preset.kind}</span>
+        <span className="shrink-0 rounded border border-line-strong px-1 text-[10px]">{tr('要確認の情報あり', 'Data needs checking')}</span>
+      </span>
       {/* Phones and tablets have no detail pane: show the key figures inline */}
       <span className="num mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-ink-3 md:hidden">
         <SpecFigures specs={specs} />
@@ -368,10 +372,11 @@ function PresetDetail({
         ))}
       </dl>
       <p className="mt-3 text-[12px] leading-relaxed text-ink-2">{preset.description}</p>
+      <PresetReview preset={preset} />
       <p className="mt-2 text-[11px] text-ink-3">
         {tr(
-          `出典 ${preset.sources.length} 件・モデル化の注記は概要タブに表示されます`,
-          `${preset.sources.length} source${preset.sources.length === 1 ? '' : 's'}; modelling notes are in the Overview tab`,
+          '公表値と調整値の内訳、出典リンクは「概要」の「数値の根拠」で確認できます。',
+          'Published values, tuned parameters and source links are listed under Sources in the Overview tab.',
         )}
       </p>
       <button

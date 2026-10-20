@@ -42,22 +42,22 @@ type LayoutValue = (typeof LAYOUTS)[number]['value'] | 'custom'
 
 const clampRatio = (r: number) => Math.min(Math.max(r, 0.15), 0.85)
 
-export function useSplitRatio() {
+export function useSplitRatio(key = SPLIT_KEY, initialRatio = 0.58) {
   const [ratio, setRatio] = useState(() => {
     try {
-      const v = Number(localStorage.getItem(SPLIT_KEY))
-      return v >= 0.15 && v <= 0.85 ? v : 0.58
+      const v = Number(localStorage.getItem(key))
+      return v >= 0.15 && v <= 0.85 ? v : initialRatio
     } catch {
-      return 0.58
+      return initialRatio
     }
   })
   useEffect(() => {
     try {
-      localStorage.setItem(SPLIT_KEY, String(ratio))
+      localStorage.setItem(key, String(ratio))
     } catch {
       /* ignore */
     }
-  }, [ratio])
+  }, [ratio, key])
   const layout: LayoutValue = LAYOUTS.find((l) => Math.abs(l.ratio - ratio) < 0.015)?.value ?? 'custom'
   return { ratio, setRatio, layout }
 }

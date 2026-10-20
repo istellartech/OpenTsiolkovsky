@@ -1,0 +1,1456 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OptimizationRequest",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "problem": {
+      "$ref": "#/$defs/Problem"
+    },
+    "solver": {
+      "$ref": "#/$defs/SolverSettings",
+      "default": {
+        "max_iterations": 300,
+        "tolerance": 1e-8,
+        "derivative_test": false,
+        "stop_after_iteration": null
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "problem"],
+  "$defs": {
+    "Problem": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "hs071"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["kind"]
+        },
+        {
+          "description": "Analytic optimal-control benchmark: min integral a^2 dt + time_cost*T,\nx'=v, v'=a, (x,v)(0)=(0,0), (x,v)(T)=(distance,0).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "double_integrator"
+            },
+            "distance_m": {
+              "type": "number",
+              "format": "double"
+            },
+            "duration_s": {
+              "$ref": "#/$defs/DurationBounds"
+            },
+            "time_cost": {
+              "type": "number",
+              "format": "double"
+            },
+            "intervals": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "degree": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "position_tolerance_m": {
+              "description": "Physical validation limits, independent of NLP scaling and solver tol.",
+              "type": "number",
+              "format": "double"
+            },
+            "velocity_tolerance_m_s": {
+              "type": "number",
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "distance_m",
+            "duration_s",
+            "time_cost",
+            "intervals",
+            "degree",
+            "position_tolerance_m",
+            "velocity_tolerance_m_s"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "single_stage"
+            },
+            "vehicle": {
+              "description": "Inline simulator configuration; external CSV files are not read.",
+              "$ref": "#/$defs/Config"
+            },
+            "data_source": {
+              "type": "string"
+            },
+            "dry_mass_kg": {
+              "description": "Base dry mass includes all carried hardware; additional payload is separate.",
+              "type": "number",
+              "format": "double"
+            },
+            "propellant_mass_kg": {
+              "type": "number",
+              "format": "double"
+            },
+            "reserve_propellant_kg": {
+              "type": "number",
+              "format": "double"
+            },
+            "additional_payload_kg": {
+              "$ref": "#/$defs/DurationBounds"
+            },
+            "coast_duration_s": {
+              "$ref": "#/$defs/DurationBounds"
+            },
+            "vertical_ascent_s": {
+              "type": "number",
+              "format": "double"
+            },
+            "azimuth_deg": {
+              "type": "number",
+              "format": "double"
+            },
+            "target_apogee_altitude_m": {
+              "type": "number",
+              "format": "double"
+            },
+            "minimum_downrange_m": {
+              "type": "number",
+              "format": "double"
+            },
+            "minimum_pitch_deg": {
+              "type": "number",
+              "format": "double"
+            },
+            "initial_pitch_end_deg": {
+              "type": "number",
+              "format": "double"
+            },
+            "max_dynamic_pressure_pa": {
+              "type": "number",
+              "format": "double"
+            },
+            "max_angle_of_attack_deg": {
+              "type": "number",
+              "format": "double"
+            },
+            "max_specific_force_m_s2": {
+              "type": "number",
+              "format": "double"
+            },
+            "max_pitch_rate_deg_s": {
+              "type": "number",
+              "format": "double"
+            },
+            "burn_intervals": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "coast_intervals": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "degree": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "validation": {
+              "$ref": "#/$defs/FlightTolerances"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "vehicle",
+            "data_source",
+            "dry_mass_kg",
+            "propellant_mass_kg",
+            "reserve_propellant_kg",
+            "additional_payload_kg",
+            "coast_duration_s",
+            "vertical_ascent_s",
+            "azimuth_deg",
+            "target_apogee_altitude_m",
+            "minimum_downrange_m",
+            "minimum_pitch_deg",
+            "initial_pitch_end_deg",
+            "max_dynamic_pressure_pa",
+            "max_angle_of_attack_deg",
+            "max_specific_force_m_s2",
+            "max_pitch_rate_deg_s",
+            "burn_intervals",
+            "coast_intervals",
+            "degree",
+            "validation"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "multi_stage"
+            },
+            "vehicle": {
+              "$ref": "#/$defs/Config"
+            },
+            "data_source": {
+              "type": "string"
+            },
+            "stages": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StageInventory"
+              }
+            },
+            "net_payload_kg": {
+              "$ref": "#/$defs/DurationBounds"
+            },
+            "payload_adapter_kg": {
+              "type": "number",
+              "format": "double"
+            },
+            "fairing_kg": {
+              "type": "number",
+              "format": "double"
+            },
+            "fairing_off_area_scale": {
+              "type": "number",
+              "format": "double"
+            },
+            "fairing_release_min_altitude_m": {
+              "type": "number",
+              "format": "double"
+            },
+            "phases": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Phase"
+              }
+            },
+            "orbit": {
+              "$ref": "#/$defs/OrbitTarget"
+            },
+            "degree": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "initial_azimuth_deg": {
+              "type": "number",
+              "format": "double"
+            },
+            "azimuth_bounds_deg": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "elevation_bounds_deg": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "max_dynamic_pressure_pa": {
+              "type": "number",
+              "format": "double"
+            },
+            "max_azimuth_rate_deg_s": {
+              "type": "number",
+              "format": "double"
+            },
+            "max_elevation_rate_deg_s": {
+              "type": "number",
+              "format": "double"
+            },
+            "max_inertial_direction_rate_deg_s": {
+              "type": "number",
+              "format": "double"
+            },
+            "validation": {
+              "$ref": "#/$defs/FlightTolerances"
+            },
+            "initial_guess": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/InitialGuess"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "vehicle",
+            "data_source",
+            "stages",
+            "net_payload_kg",
+            "payload_adapter_kg",
+            "fairing_kg",
+            "fairing_off_area_scale",
+            "fairing_release_min_altitude_m",
+            "phases",
+            "orbit",
+            "degree",
+            "initial_azimuth_deg",
+            "azimuth_bounds_deg",
+            "elevation_bounds_deg",
+            "max_dynamic_pressure_pa",
+            "max_azimuth_rate_deg_s",
+            "max_elevation_rate_deg_s",
+            "max_inertial_direction_rate_deg_s",
+            "validation"
+          ]
+        }
+      ]
+    },
+    "DurationBounds": {
+      "type": "object",
+      "properties": {
+        "initial": {
+          "type": "number",
+          "format": "double"
+        },
+        "lower": {
+          "type": "number",
+          "format": "double"
+        },
+        "upper": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["initial", "lower", "upper"]
+    },
+    "Config": {
+      "description": "A vehicle and the flight to simulate",
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "description": "JSON Schema reference for editors (ignored)",
+          "type": ["string", "null"]
+        },
+        "name": {
+          "description": "Vehicle or case name",
+          "type": "string"
+        },
+        "simulation": {
+          "$ref": "#/$defs/Simulation"
+        },
+        "launch": {
+          "$ref": "#/$defs/Launch"
+        },
+        "atmosphere": {
+          "$ref": "#/$defs/Atmosphere"
+        },
+        "wind": {
+          "$ref": "#/$defs/Wind"
+        },
+        "attitude": {
+          "$ref": "#/$defs/Attitude",
+          "default": {
+            "azimuth_deg": 0.0,
+            "elevation_deg": 90.0
+          }
+        },
+        "presentation": {
+          "description": "Display-only vehicle structure; never used by the solver",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VehiclePresentation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stages": {
+          "description": "Calculation intervals in flight order (ordinary serial stages are one interval each)",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Stage"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": ["name", "simulation", "launch", "stages"]
+    },
+    "Simulation": {
+      "type": "object",
+      "properties": {
+        "end_time_s": {
+          "description": "Simulation end time from launch [s]; the flight also ends at ground impact",
+          "type": "number",
+          "format": "double"
+        },
+        "output_step_s": {
+          "description": "Interval of the output samples [s]",
+          "type": "number",
+          "format": "double",
+          "default": 1.0
+        },
+        "integrator": {
+          "$ref": "#/$defs/Integrator"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["end_time_s"]
+    },
+    "Integrator": {
+      "description": "Integration method of the equations of motion",
+      "oneOf": [
+        {
+          "description": "Classic Runge-Kutta, fixed step; intervals are split evenly so the\nsteps end exactly on events and output times",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "rk4"
+            },
+            "step_s": {
+              "description": "Step size [s] (default: half the output step)",
+              "type": ["number", "null"],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["method"]
+        },
+        {
+          "description": "Dormand-Prince 5(4), adaptive step",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "const": "rk45"
+            },
+            "abs_tol": {
+              "description": "Absolute tolerance (all state components: kg, m, m/s)",
+              "type": "number",
+              "format": "double",
+              "default": 1e-9
+            },
+            "rel_tol": {
+              "description": "Relative tolerance",
+              "type": "number",
+              "format": "double",
+              "default": 1e-9
+            }
+          },
+          "additionalProperties": false,
+          "required": ["method"]
+        }
+      ]
+    },
+    "Launch": {
+      "type": "object",
+      "properties": {
+        "latitude_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "longitude_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "altitude_m": {
+          "description": "Height above the WGS84 ellipsoid [m]",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "time_utc": {
+          "description": "Launch time, ISO 8601 (`2024-07-01T01:00:00Z`; an offset such as\n`+09:00` is converted to UTC)",
+          "$ref": "#/$defs/UtcTime",
+          "default": "2000-01-01T00:00:00Z"
+        },
+        "velocity_ned_mps": {
+          "description": "Initial Earth-relative velocity: north, east, down [m/s]. At rest the\nvehicle is held on the pad until the thrust lifts it; otherwise (air\nlaunch, restart in flight) it flies free from the start",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "rail_length_m": {
+          "description": "Launcher rail length along the initial attitude [m]; 0: pad only",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["latitude_deg", "longitude_deg"]
+    },
+    "UtcTime": {
+      "description": "ISO 8601 date-time; without an offset it is UTC",
+      "type": "string",
+      "format": "date-time",
+      "examples": ["2024-07-01T01:00:00Z"]
+    },
+    "Atmosphere": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "description": "Standard atmosphere model",
+          "$ref": "#/$defs/AtmosphereKind",
+          "default": "ussa1976"
+        },
+        "seasonal_variation_percent": {
+          "description": "Seasonal density variation [%] (-100 to 100), applied along the\nU.S. Standard Atmosphere variation profile (the sign flips between\nlow and high altitude)",
+          "type": "number",
+          "format": "double"
+        },
+        "density_deviation": {
+          "description": "Density deviation [%] over altitude [m], rows `[altitude_m, percent]`;\nreplaces the seasonal variation",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Table"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AtmosphereKind": {
+      "description": "Which standard atmosphere `AtmosphereModel` evaluates",
+      "oneOf": [
+        {
+          "description": "U.S. Standard Atmosphere 1976: layers in geopotential altitude\nup to 86 km, tabulated values (log-linear) from 86 to 1000 km",
+          "type": "string",
+          "const": "ussa1976"
+        },
+        {
+          "description": "As the C++ simulator: the 1976 layers evaluated at the geometric\naltitude, isothermal (186.95 K) above 84.852 km",
+          "type": "string",
+          "const": "legacy"
+        }
+      ]
+    },
+    "Table": {
+      "description": "Rows given inline or read from a CSV file",
+      "anyOf": [
+        {
+          "description": "Rows of numbers",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        {
+          "description": "CSV file (header rows are skipped)",
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "columns": {
+              "description": "Columns to read, 0-based (default: the first ones)",
+              "type": ["array", "null"],
+              "items": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              }
+            }
+          },
+          "required": ["file"]
+        }
+      ]
+    },
+    "Wind": {
+      "description": "Wind blowing from `direction_deg` (meteorological convention)",
+      "type": "object",
+      "properties": {
+        "speed_mps": {
+          "description": "Constant wind speed [m/s]",
+          "type": "number",
+          "format": "double"
+        },
+        "direction_deg": {
+          "description": "Direction the constant wind blows from, clockwise from north [deg]",
+          "type": "number",
+          "format": "double"
+        },
+        "profile": {
+          "description": "Wind over altitude, rows `[altitude_m, speed_mps, direction_deg]`,\ninterpolated in north/east components; replaces the constant wind",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Table2"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Table2": {
+      "description": "Rows given inline or read from a CSV file",
+      "anyOf": [
+        {
+          "description": "Rows of numbers",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        {
+          "description": "CSV file (header rows are skipped)",
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "columns": {
+              "description": "Columns to read, 0-based (default: the first ones)",
+              "type": ["array", "null"],
+              "items": {
+                "type": "integer",
+                "format": "uint",
+                "minimum": 0
+              }
+            }
+          },
+          "required": ["file"]
+        }
+      ]
+    },
+    "Attitude": {
+      "description": "Attitude program of the vehicle (time from launch)",
+      "type": "object",
+      "properties": {
+        "azimuth_deg": {
+          "description": "Azimuth of the body axis, clockwise from north [deg]",
+          "$ref": "#/$defs/Curve",
+          "default": 0.0
+        },
+        "elevation_deg": {
+          "description": "Elevation of the body axis above the horizon [deg] (90: vertical)",
+          "$ref": "#/$defs/Curve",
+          "default": 90.0
+        },
+        "roll_deg": {
+          "description": "Roll angle [deg]",
+          "$ref": "#/$defs/Curve"
+        },
+        "yaw_offset_deg": {
+          "description": "Body misalignment from the program, applied about Z, then Y, then X [deg]",
+          "type": "number",
+          "format": "double"
+        },
+        "pitch_offset_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "roll_offset_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "gyro_bias_deg_h": {
+          "description": "Gyro bias about body X, Y, Z [deg/h]: the attitude drifts linearly from launch",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "additionalProperties": false
+    },
+    "Curve": {
+      "description": "Constant or a table of `[x, y]` rows (piecewise linear, clamped at the ends)",
+      "anyOf": [
+        {
+          "type": "number",
+          "format": "double"
+        },
+        {
+          "$ref": "#/$defs/Table"
+        }
+      ]
+    },
+    "VehiclePresentation": {
+      "description": "Public vehicle terminology, independent of the number of calculation intervals.",
+      "type": "object",
+      "properties": {
+        "stage_count": {
+          "description": "Published stage count (uses the vehicle's own naming convention)",
+          "type": ["integer", "null"],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "booster_count": {
+          "description": "Number of strap-on boosters, whether or not counted as a numbered stage",
+          "type": ["integer", "null"],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Stage": {
+      "type": "object",
+      "properties": {
+        "presentation": {
+          "description": "Display-only interval and released-body names; never used by the solver",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PhasePresentation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mass_initial_kg": {
+          "description": "Mass allocated to this calculation interval, excluding later intervals [kg].\nFor ordinary serial stages, the initial mass of this stage alone.",
+          "type": "number",
+          "format": "double"
+        },
+        "mass_dry_kg": {
+          "description": "Mass without propellant [kg]; the burn ends when the propellant\n(initial minus dry mass) runs out. Unset: the whole stage may burn",
+          "type": ["number", "null"],
+          "format": "double"
+        },
+        "engine": {
+          "description": "Rocket engine; unset: no thrust",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Engine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "aero": {
+          "$ref": "#/$defs/Aero",
+          "default": {
+            "diameter_m": 0.5,
+            "ca": 0.0,
+            "ballistic_coefficient_kg_m2": 100.0
+          }
+        },
+        "free_flight": {
+          "description": "Motion after burnout",
+          "$ref": "#/$defs/FreeFlight",
+          "default": "ballistic"
+        },
+        "separation_time_s": {
+          "description": "Separation of the upper stages, from this stage's start [s]; required\nfor every stage but the last",
+          "type": ["number", "null"],
+          "format": "double"
+        },
+        "jettisons": {
+          "description": "Bodies released during this stage's flight (fairings, ...)",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Jettison"
+          }
+        },
+        "thrust_trim": {
+          "description": "Gimbal the thrust to balance the aerodynamic moment",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ThrustTrim"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": ["mass_initial_kg"]
+    },
+    "PhasePresentation": {
+      "description": "Names for one calculation interval and the body released at its end.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisplayName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "separation_name": {
+          "description": "Name of the separated body/group, e.g. \"SRB-A ×2\" (not an output ID)",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisplayName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engine_continues": {
+          "description": "A core engine continues across this interval's separation boundary.\nOnly hides coincident synthetic burnout/ignition markers in the UI.",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DisplayName": {
+      "description": "A user name in every language, or a pair of Japanese / English names.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ja": {
+              "type": "string"
+            },
+            "en": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["ja", "en"]
+        }
+      ]
+    },
+    "Engine": {
+      "description": "Rocket engine of a stage. Thrust = vacuum thrust - exit area x ambient\npressure (never negative); mass flow = vacuum thrust / (vacuum Isp x g0)",
+      "type": "object",
+      "properties": {
+        "thrust_vac_n": {
+          "description": "Vacuum thrust over stage time [N]",
+          "$ref": "#/$defs/Curve"
+        },
+        "isp_vac_s": {
+          "description": "Vacuum specific impulse over stage time [s]",
+          "$ref": "#/$defs/Curve"
+        },
+        "burn_start_s": {
+          "description": "Ignition, from the stage start [s]",
+          "type": "number",
+          "format": "double",
+          "default": 0.0
+        },
+        "burn_end_s": {
+          "description": "End of the burn, from the stage start [s]",
+          "type": "number",
+          "format": "double"
+        },
+        "nozzle_exit_area_m2": {
+          "description": "Nozzle exit area [m²], for the ambient pressure loss",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["thrust_vac_n", "isp_vac_s", "burn_end_s"]
+    },
+    "Aero": {
+      "description": "Aerodynamics of a stage (and everything above it)",
+      "type": "object",
+      "properties": {
+        "diameter_m": {
+          "description": "Reference diameter [m]; reference area = pi/4 x diameter²",
+          "type": "number",
+          "format": "double",
+          "default": 0.5
+        },
+        "ca": {
+          "description": "Axial force coefficient over Mach",
+          "$ref": "#/$defs/Curve",
+          "default": 0.0
+        },
+        "ca_power_off": {
+          "description": "Axial force coefficient over Mach while the engine is off (base\ndrag); unset: `ca`",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Curve"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cn_alpha_per_rad": {
+          "description": "Normal force slope CN-alpha over Mach [1/rad]; normal force =\nCN-alpha x angle of attack [rad] x dynamic pressure x reference area",
+          "$ref": "#/$defs/Curve"
+        },
+        "cn_table": {
+          "description": "Normal force coefficient over Mach x angle of attack; replaces\n`cn_alpha_per_rad`",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Surface"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ballistic_coefficient_kg_m2": {
+          "description": "Ballistic coefficient for `free_flight: \"ballistic\"` [kg/m²]\n(drag deceleration = dynamic pressure / coefficient)",
+          "type": "number",
+          "format": "double",
+          "default": 100.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Surface": {
+      "description": "Values over Mach number x angle of attack [deg]",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "mach": {
+              "description": "Mach numbers (ascending)",
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "alpha_deg": {
+              "description": "Angles of attack [deg] (ascending, 0 to 90, or 180 for flow from behind)",
+              "type": "array",
+              "items": {
+                "type": "number",
+                "format": "double"
+              }
+            },
+            "values": {
+              "description": "`values[i][j]` at `mach[i]`, `alpha_deg[j]`",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "format": "double"
+                }
+              }
+            }
+          },
+          "required": ["mach", "alpha_deg", "values"]
+        },
+        {
+          "description": "CSV file: first row `-, alpha_1, alpha_2, ...`, then `mach, value_1, value_2, ...`",
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          },
+          "required": ["file"]
+        }
+      ]
+    },
+    "FreeFlight": {
+      "description": "Motion of a stage while its engine is off",
+      "oneOf": [
+        {
+          "description": "Drag from the ballistic coefficient",
+          "type": "string",
+          "const": "ballistic"
+        },
+        {
+          "description": "Body aligned with the airflow: axial force only",
+          "type": "string",
+          "const": "aero_stable"
+        },
+        {
+          "description": "Body follows the attitude program (axial and normal force)",
+          "type": "string",
+          "const": "attitude_program"
+        }
+      ]
+    },
+    "Jettison": {
+      "description": "A body released from a stage",
+      "type": "object",
+      "properties": {
+        "display_name": {
+          "description": "Display-only name; the output name/ID stays unchanged",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DisplayName"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "Name in the output (default `jettison<N>`)",
+          "type": "string"
+        },
+        "time_s": {
+          "description": "Release time from the stage start [s]; must be before the separation",
+          "type": "number",
+          "format": "double"
+        },
+        "mass_kg": {
+          "description": "Mass, part of the stage's dry mass [kg]",
+          "type": "number",
+          "format": "double"
+        },
+        "ballistic_coefficient_kg_m2": {
+          "description": "Ballistic coefficient of the released body [kg/m²]",
+          "type": "number",
+          "format": "double",
+          "default": 100.0
+        },
+        "delta_v_ned_mps": {
+          "description": "Velocity added at release: north, east, down [m/s]",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "additionalProperties": false,
+      "required": ["time_s", "mass_kg"]
+    },
+    "ThrustTrim": {
+      "description": "Thrust direction that balances the aerodynamic moment about the CG\n(the C++ simulator's 3DoF \"neutrality\"). Positions are STA [m]: distance\naft of the nose. Offsets move the CG, centre of pressure and thrust\npoint in body axes (X forward) [m].",
+      "type": "object",
+      "properties": {
+        "cg_sta_m": {
+          "description": "Centre of gravity STA over stage time [m]",
+          "$ref": "#/$defs/Curve"
+        },
+        "gimbal_sta_m": {
+          "description": "Gimbal (thrust point) STA over stage time [m]",
+          "$ref": "#/$defs/Curve"
+        },
+        "cp_sta_m": {
+          "description": "Centre of pressure STA over Mach x angle of attack [m]",
+          "$ref": "#/$defs/Surface"
+        },
+        "cg_offset_m": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "cp_offset_m": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "gimbal_offset_m": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "additionalProperties": false,
+      "required": ["cg_sta_m", "gimbal_sta_m", "cp_sta_m"]
+    },
+    "FlightTolerances": {
+      "type": "object",
+      "properties": {
+        "position_m": {
+          "type": "number",
+          "format": "double"
+        },
+        "velocity_m_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "mass_kg": {
+          "type": "number",
+          "format": "double"
+        },
+        "dynamic_pressure_pa": {
+          "type": "number",
+          "format": "double"
+        },
+        "angle_of_attack_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "specific_force_m_s2": {
+          "type": "number",
+          "format": "double"
+        },
+        "pitch_rate_deg_s": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "position_m",
+        "velocity_m_s",
+        "mass_kg",
+        "dynamic_pressure_pa",
+        "angle_of_attack_deg",
+        "specific_force_m_s2",
+        "pitch_rate_deg_s"
+      ]
+    },
+    "StageInventory": {
+      "type": "object",
+      "properties": {
+        "dry_kg": {
+          "type": "number",
+          "format": "double"
+        },
+        "propellant_kg": {
+          "type": "number",
+          "format": "double"
+        },
+        "reserve_kg": {
+          "type": "number",
+          "format": "double"
+        },
+        "max_total_burn_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "max_ignitions": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["dry_kg", "propellant_kg", "reserve_kg", "max_total_burn_s", "max_ignitions", "source"]
+    },
+    "Phase": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "mode": {
+          "$ref": "#/$defs/PhaseMode"
+        },
+        "duration_s": {
+          "$ref": "#/$defs/DurationBounds"
+        },
+        "intervals": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "vertical": {
+          "type": "boolean"
+        },
+        "end_event": {
+          "$ref": "#/$defs/EndEvent"
+        },
+        "max_angle_of_attack_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "max_specific_force_m_s2": {
+          "type": "number",
+          "format": "double"
+        },
+        "min_altitude_m": {
+          "type": "number",
+          "format": "double"
+        },
+        "initial_attitude_end_deg": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "stage",
+        "mode",
+        "duration_s",
+        "intervals",
+        "vertical",
+        "end_event",
+        "max_angle_of_attack_deg",
+        "max_specific_force_m_s2",
+        "min_altitude_m",
+        "initial_attitude_end_deg"
+      ]
+    },
+    "PhaseMode": {
+      "type": "string",
+      "enum": ["burn", "coast"]
+    },
+    "EndEvent": {
+      "type": "string",
+      "enum": ["none", "separate_stage", "jettison_fairing", "deploy_payload"]
+    },
+    "OrbitTarget": {
+      "type": "object",
+      "properties": {
+        "reference_radius_m": {
+          "type": "number",
+          "format": "double"
+        },
+        "altitude_m": {
+          "type": "number",
+          "format": "double"
+        },
+        "inclination_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "radius_tolerance_m": {
+          "type": "number",
+          "format": "double"
+        },
+        "speed_tolerance_m_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "radial_velocity_tolerance_m_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "inclination_tolerance_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "apsis_tolerance_m": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "reference_radius_m",
+        "altitude_m",
+        "inclination_deg",
+        "radius_tolerance_m",
+        "speed_tolerance_m_s",
+        "radial_velocity_tolerance_m_s",
+        "inclination_tolerance_deg",
+        "apsis_tolerance_m"
+      ]
+    },
+    "InitialGuess": {
+      "description": "A trajectory to start from instead of integrating the attitude seed, e.g.\nthe reintegrated samples of an earlier run of the same phase layout.\nSamples are interpolated in each phase's normalized time, so durations may\ndiffer from this problem's initial values.",
+      "type": "object",
+      "properties": {
+        "net_payload_kg": {
+          "type": "number",
+          "format": "double"
+        },
+        "phase_durations_s": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GuessSample"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": ["net_payload_kg", "phase_durations_s", "samples"]
+    },
+    "GuessSample": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "time_s": {
+          "description": "Time since launch [s].",
+          "type": "number",
+          "format": "double"
+        },
+        "state_eci": {
+          "description": "`[m, r_ECI(3), v_ECI(3)]` in kg, m, m/s.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          },
+          "minItems": 7,
+          "maxItems": 7
+        },
+        "azimuth_deg": {
+          "type": "number",
+          "format": "double"
+        },
+        "elevation_deg": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": ["phase", "time_s", "state_eci", "azimuth_deg", "elevation_deg"]
+    },
+    "SolverSettings": {
+      "type": "object",
+      "properties": {
+        "max_iterations": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0,
+          "default": 300
+        },
+        "tolerance": {
+          "type": "number",
+          "format": "double",
+          "default": 1e-8
+        },
+        "derivative_test": {
+          "type": "boolean",
+          "default": false
+        },
+        "stop_after_iteration": {
+          "description": "Deterministic callback cancellation, also used to test the WASI ABI.",
+          "type": ["integer", "null"],
+          "format": "uint32",
+          "minimum": 0,
+          "default": null
+        },
+        "scaling": {
+          "$ref": "#/$defs/ScalingSettings"
+        },
+        "hessian": {
+          "$ref": "#/$defs/HessianMethod"
+        },
+        "kkt_scaling": {
+          "$ref": "#/$defs/KktScaling"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScalingSettings": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "$ref": "#/$defs/ScalingStrategy",
+          "default": "s0"
+        },
+        "floor": {
+          "type": "number",
+          "format": "double",
+          "default": 1e-6
+        },
+        "cap": {
+          "type": "number",
+          "format": "double",
+          "default": 1000000.0
+        },
+        "gradient_max": {
+          "type": "number",
+          "format": "double",
+          "default": 100.0
+        },
+        "gradient_min": {
+          "type": "number",
+          "format": "double",
+          "default": 1e-8
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScalingStrategy": {
+      "type": "string",
+      "enum": ["s0", "s1_bounds", "s1_guess", "s2", "s3"]
+    },
+    "HessianMethod": {
+      "type": "string",
+      "enum": ["limited_memory", "exact"]
+    },
+    "KktScaling": {
+      "type": "string",
+      "enum": ["upstream_default", "none", "ruiz", "slack_based"]
+    }
+  }
+}
