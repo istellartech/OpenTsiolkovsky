@@ -66,5 +66,12 @@ jobs:
           cargo build --locked --release --features optimization --bin openTsiolkovsky-optimize
           bun scripts/test_optimization_wasm.ts
         working-directory: .
+      - name: Save optimization comparison results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: optimization-parity
+          path: out/optimization/wasm-parity/
+          if-no-files-found: ignore
       - name: Build
         run: vp build
