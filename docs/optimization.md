@@ -155,6 +155,8 @@ cd frontend && bunx vp check && bunx vp test run && bun run build
 
 `verify_*`は固定条件・メッシュ・3初期推定・不適合例の入力と全結果を`out/optimization/`へ保存する。native/WASI照合は全主双対とSI軌道を確認し、inactive不等式の値には一致を要求しない。多段ヤコビアン146,995成分の中心差分監査は最大規格化誤差2.33e-8。尺度・Hessianを変えた全条件は[PR 3の比較記録](optimization-numerics.md#2026-10-19の比較結果)にまとめる。
 
+225 t多段例の制約乗数の比較は、差を`max(1, |native値|)`で割って3e-3以下とする。[Linux x64/WASIの全結果](https://github.com/istellartech/OpenTsiolkovsky/actions/runs/39523038952/artifacts/12311577994)では、この規格化差が最大2.192e-3で、従来の3e-4を超える。nativeは175反復、WASIは162反復で収束し、双対残差はそれぞれ8.82e-8・7.51e-8以下、両方の独立検証も合格し、搭載質量の差は1.92e-6 kgだった。自由な軌道位相・昇交点赤経がある問題で、近い飛行でも乗数の一致は主変数より弱い。両環境の収束・独立検証・双対残差を確認し、目的値・主変数・飛行の許容差は維持する。CIは比較結果を`optimization-parity`アーティファクトとして保存する。
+
 ## ライセンス
 
 本体はMIT、pounceはEPL-2.0。最適化WASMにはEPL本文と[固定版ソース](https://crates.io/crates/pounce-algorithm/0.12.0)の入手先を同梱する。

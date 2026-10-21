@@ -14,9 +14,9 @@ console.log('WASI imports:', WebAssembly.Module.imports(module).map((i) => `${i.
 let progress = 0
 const optimizer = await instantiateOptimizer(bytes, () => { progress++ })
 
-function near(actual: number, expected: number, tolerance = 2e-5) {
+function near(actual: number, expected: number, tolerance = 2e-5, context = '') {
   assert(Number.isFinite(actual) && Number.isFinite(expected))
-  assert(Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${actual} != ${expected}`)
+  assert(Math.abs(actual - expected) <= tolerance * Math.max(1, Math.abs(expected)), `${context}: ${actual} != ${expected}`)
 }
 
 for (const name of ['hs071', 'double_integrator', 'single_stage_100km', 'two_stage_500km_43deg']) {
@@ -26,6 +26,8 @@ for (const name of ['hs071', 'double_integrator', 'single_stage_100km', 'two_sta
   assert.equal(run.exitCode, 0, new TextDecoder().decode(run.stderr))
   const reference = JSON.parse(new TextDecoder().decode(run.stdout))
   const result = optimizer.solve(input) as typeof reference
+  assert.equal(reference.converged, true)
+  assert.equal(reference.validation.status, 'passed')
   assert.equal(result.solver_status, reference.solver_status)
   assert.equal(result.converged, true)
   assert.equal(result.validation.status, 'passed')
@@ -77,8 +79,12 @@ for (const name of ['hs071', 'double_integrator', 'single_stage_100km', 'two_sta
         assert(v >= result.nlp_layout.g_lower[i] - 1e-6 && v <= result.nlp_layout.g_upper[i] + 1e-6)
         if (equality || active) near(v, expected)
       } else {
-        const tolerance = multi && key === 'lambda' ? 3e-4 : 2e-5
-        near(v, expected, tolerance)
+        // The orbital example has free phase/RAAN: its multipliers vary more
+        // than its objective or flight. Full Linux x64/WASI vectors differ
+        // by up to 2.20e-3 / max(1, |native|); see the recorded CI comparison
+        // in docs/optimization.md. Primal, feasibility and KKT checks remain.
+        const tolerance = multi && key === 'lambda' ? 3e-3 : 2e-5
+        near(v, expected, tolerance, `${name}.${key}[${i}] ${key === 'lambda' ? reference.constraint_names[i] : ''}`)
         maxima[key] = Math.max(maxima[key] ?? 0, Math.abs(v - expected) / Math.max(1, Math.abs(expected)))
       }
     })
@@ -86,6 +92,8 @@ for (const name of ['hs071', 'double_integrator', 'single_stage_100km', 'two_sta
   if (multi) {
     const last = result.iterations[result.iterations.length - 1]
     assert(last.dual_infeasibility <= input.solver.tolerance)
+    const nativeLast = reference.iterations[reference.iterations.length - 1]
+    assert(nativeLast.dual_infeasibility <= input.solver.tolerance)
     await Bun.write(resolve(root, 'out/optimization/wasm-parity/differences.json'), JSON.stringify(maxima, null, 2))
     console.log('Multi-stage maximum native/WASI differences:', maxima)
   }

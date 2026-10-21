@@ -309,7 +309,7 @@ impl CoordinateTransform {
         vel_ecef + omega_cross_r
     }
 
-    /// Surface distance between two LLH points using ECEF chord angle
+    /// Surface distance between two LLH points using the ECEF central angle.
     pub fn distance_surface(pos_llh0: &Vector3<f64>, pos_llh1: &Vector3<f64>) -> f64 {
         let pos0_ecef = Self::pos_llh_to_ecef(pos_llh0);
         let pos1_ecef = Self::pos_llh_to_ecef(pos_llh1);
@@ -319,8 +319,9 @@ impl CoordinateTransform {
         if n0 <= 0.0 || n1 <= 0.0 {
             return 0.0;
         }
-        let cos_theta = (dot / (n0 * n1)).clamp(-1.0, 1.0);
-        let theta = cos_theta.acos();
+        // acos(dot / (n0 * n1)) loses precision near coincident points:
+        // roundoff can turn a zero distance into roughly 0.1 m.
+        let theta = pos0_ecef.cross(&pos1_ecef).norm().atan2(dot);
         WGS84_A * theta
     }
 
@@ -482,6 +483,42 @@ mod tests {
             assert_relative_eq!(back.x, llh.x, epsilon = 1e-8);
             assert_relative_eq!(back.z, llh.z, epsilon = 1e-3);
         }
+    }
+
+    #[test]
+    fn surface_distance_resolves_coincident_and_millimetre_separations() {
+        for llh in [
+            [31.0, 131.0, 0.0],
+            [-60.0, -120.0, 400_000.0],
+            [90.0, 10.0, 0.0],
+        ] {
+            let llh = Vector3::from(llh);
+            assert_eq!(CoordinateTransform::distance_surface(&llh, &llh), 0.0);
+            let back =
+                CoordinateTransform::pos_ecef_to_llh(&CoordinateTransform::pos_llh_to_ecef(&llh));
+            let distance = CoordinateTransform::distance_surface(&llh, &back);
+            assert!(distance < 1e-3, "{llh:?} -> {back:?}: {distance} m");
+        }
+        let origin = Vector3::zeros();
+        for distance_m in [0.001, 1.0, WGS84_A * std::f64::consts::FRAC_PI_2] {
+            let other = Vector3::new(0.0, rad2deg(distance_m / WGS84_A), 0.0);
+            assert_relative_eq!(
+                CoordinateTransform::distance_surface(&origin, &other),
+                distance_m,
+                epsilon = 1e-8
+            );
+            assert_relative_eq!(
+                CoordinateTransform::distance_surface(&other, &origin),
+                distance_m,
+                epsilon = 1e-8
+            );
+        }
+        let antipode = Vector3::new(0.0, 180.0, 0.0);
+        assert_relative_eq!(
+            CoordinateTransform::distance_surface(&origin, &antipode),
+            WGS84_A * std::f64::consts::PI,
+            epsilon = 1e-8
+        );
     }
 
     #[test]
