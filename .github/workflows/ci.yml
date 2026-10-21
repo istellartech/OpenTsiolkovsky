@@ -63,7 +63,7 @@ jobs:
         run: vp test run
       - name: Native and browser-WASI optimization parity
         run: |
-          cargo build --locked --features optimization --bin openTsiolkovsky-optimize
+          cargo build --locked --release --features optimization --bin openTsiolkovsky-optimize
           bun scripts/test_optimization_wasm.ts
         working-directory: .
       - name: Build
