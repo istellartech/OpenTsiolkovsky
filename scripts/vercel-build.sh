@@ -24,9 +24,9 @@ if ! rustup show active-toolchain >/dev/null 2>&1; then
   rustup default stable
 fi
 
-# Add wasm32 target
-echo "[VERCEL BUILD] Adding wasm32-unknown-unknown target..."
-rustup target add wasm32-unknown-unknown
+# Add wasm32 targets (wasip1 is used by the trajectory optimizer)
+echo "[VERCEL BUILD] Adding wasm32-unknown-unknown and wasm32-wasip1 targets..."
+rustup target add wasm32-unknown-unknown wasm32-wasip1
 
 # Install wasm-pack if not present
 if ! command -v wasm-pack >/dev/null 2>&1; then
@@ -40,6 +40,11 @@ fi
 # Build WASM package using existing script
 echo "[VERCEL BUILD] Building WASM package..."
 bash scripts/wasm_build.sh
+
+# frontend/public/optimization is not committed; without it the SPA rewrite
+# serves index.html for optimizer.wasm.
+echo "[VERCEL BUILD] Building optimizer WASM..."
+bash scripts/optimization_wasm_build.sh
 
 # Build frontend
 echo "[VERCEL BUILD] Building frontend..."
