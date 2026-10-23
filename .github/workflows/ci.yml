@@ -45,6 +45,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown, wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Build WASM
@@ -61,11 +62,25 @@ jobs:
         run: vp check
       - name: Test
         run: vp test run
-      - name: Native and browser-WASI optimization parity
+      - name: Build
+        run: vp build
+
+  # Separate from frontend so the native release build and the solves run in parallel.
+  optimization-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build native and WASI optimizer
         run: |
+          bash scripts/optimization_wasm_build.sh
           cargo build --locked --release --features optimization --bin openTsiolkovsky-optimize
-          bun scripts/test_optimization_wasm.ts
-        working-directory: .
+      - uses: oven-sh/setup-bun@v2
+      - name: Native and browser-WASI optimization parity
+        run: bun scripts/test_optimization_wasm.ts
       - name: Save optimization comparison results
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,5 +88,3 @@ jobs:
           name: optimization-parity
           path: out/optimization/wasm-parity/
           if-no-files-found: ignore
-      - name: Build
-        run: vp build
