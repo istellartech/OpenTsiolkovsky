@@ -12,8 +12,14 @@ self.onmessage = async (event: MessageEvent<OptimizationWorkerRequest>) => {
   try {
     const response = await fetch(wasmUrl)
     if (!response.ok) throw new Error(`Optimizer WASM could not be loaded (${response.status}); run build:optimization`)
+    const bytes = await response.arrayBuffer()
+    // A missing file can come back as the SPA's index.html with status 200.
+    const magic = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength))
+    if (magic.length < 4 || magic[0] !== 0x00 || magic[1] !== 0x61 || magic[2] !== 0x73 || magic[3] !== 0x6d) {
+      throw new Error('Optimizer WASM is missing from this deployment; run build:optimization')
+    }
     let lastProgress = -Infinity
-    const optimizer = await instantiateOptimizer(await response.arrayBuffer(), (value) => {
+    const optimizer = await instantiateOptimizer(bytes, (value) => {
       const record = value as ProgressRecord
       const now = performance.now()
       // Trajectory snapshots are already rate-limited by the solver; keep them all.
